@@ -14,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExcludeDependency, Excludes,
-    ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DependencyModifiers, DryRun,
+    ExcludeDependency, Excludes, ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -336,19 +336,18 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     )
     .map_err(anyhow::Error::from)?;
     let excludes = Excludes::from_entries(excludes);
+    let modifiers = DependencyModifiers::new(overrides, excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
             let constraints = constraints.clone().with_recorder(recorder.clone());
-            let overrides = overrides.clone().with_recorder(recorder.clone());
-            let excludes = excludes.clone().with_recorder(recorder.clone());
+            let modifiers = modifiers.clone().with_recorder(recorder.clone());
             let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
-                &overrides,
-                &excludes,
+                &modifiers,
                 &hasher,
                 index,
                 DistributionDatabase::new(
@@ -374,8 +373,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let manifest = Manifest::new(
         requirements,
         constraints,
-        overrides,
-        excludes,
+        modifiers,
         preferences,
         project,
         workspace_members,

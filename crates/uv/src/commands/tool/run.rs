@@ -16,7 +16,10 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, DependencyMode, GitLfsSetting, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraints, DependencyMode, DependencyModifiers, Excludes, GitLfsSetting,
+    Overrides, TargetTriple,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -1022,7 +1025,7 @@ async fn get_or_create_environment(
         client_builder,
     )
     .await?;
-    let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
+    let exclusions = Excludes::from_entries(spec.excludes.iter().cloned());
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -1128,8 +1131,10 @@ async fn get_or_create_environment(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
-                            &uv_configuration::Overrides::from_requirements(overrides.clone()),
-                            &exclusions,
+                            &DependencyModifiers::new(
+                                Overrides::from_requirements(overrides.clone()),
+                                exclusions,
+                            ),
                             dependency_metadata,
                             DependencyMode::Transitive,
                             InstallationStrategy::Permissive,

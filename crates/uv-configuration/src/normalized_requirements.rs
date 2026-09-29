@@ -552,7 +552,9 @@ mod tests {
     use uv_pep508::{MarkerTree, Requirement as Pep508Requirement};
     use uv_pypi_types::VerbatimParsedUrl;
 
-    use crate::{ExcludeDependency, Excludes, Overrides};
+    use crate::{
+        DependencyModifierScope, DependencyModifiers, ExcludeDependency, Excludes, Overrides,
+    };
 
     use super::{
         NormalizedExcludes, NormalizedRequirements, allows_prereleases, allows_yanked,
@@ -575,10 +577,13 @@ mod tests {
     fn overridden_optional_requirements() -> Result<()> {
         let original = requirements(&["a; extra == 'x'", "a; extra == 'y'"])?;
         let normalized = NormalizedRequirements::from(original.clone());
-        let overrides = Overrides::from_requirements(requirements(&["a>=2"])?);
+        let modifiers = DependencyModifiers::new(
+            Overrides::from_requirements(requirements(&["a>=2"])?),
+            Excludes::default(),
+        );
         let overridden = |requirements: &[Requirement]| {
-            overrides
-                .apply(requirements)
+            modifiers
+                .apply(DependencyModifierScope::Global, requirements)
                 .fold(MarkerTree::FALSE, |marker, requirement| {
                     marker.or(requirement.marker)
                 })

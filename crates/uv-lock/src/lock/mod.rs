@@ -21,11 +21,12 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, ExcludeNewer,
-    ExcludeNewerPackage, Excludes, ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget,
-    NormalizedConstraints, NormalizedExcludes, NormalizedOverrideEntries, NormalizedRequirements,
-    Override, Overrides, PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage,
-    ResolutionMode, ScopedOverrideSourceError,
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, DependencyModifierScope,
+    DependencyModifiers, ExcludeDependency, ExcludeNewer, ExcludeNewerPackage, Excludes,
+    ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget, NormalizedConstraints,
+    NormalizedExcludes, NormalizedOverrideEntries, NormalizedRequirements, Override, Overrides,
+    PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
+    ScopedOverrideSourceError,
 };
 use uv_distribution::{
     DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
@@ -1638,8 +1639,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         provides_extra: &'lock [ExtraName],
         dependency_groups: &BTreeMap<GroupName, BTreeSet<Requirement>>,
         source_requirements: &'lock DependencySources<'lock>,
-        overrides: &Overrides,
-        excludes: &Excludes,
+        modifiers: &DependencyModifiers,
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
         package: &'lock Package,
@@ -1648,14 +1648,19 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         declarations_preprocessed: bool,
     ) -> Self {
         let package_context = package_version.map(|version| (&package.id.name, version));
+        let package_scope = package_context
+            .map_or(DependencyModifierScope::Global, |(name, version)| {
+                DependencyModifierScope::Package(name, version)
+            });
+        let dependency_group_scope = package_context
+            .map_or(DependencyModifierScope::Global, |(name, version)| {
+                DependencyModifierScope::DependencyGroup(name, version)
+            });
         let declarations = if declarations_preprocessed {
             declarations.clone()
         } else {
-            overrides
-                .apply_for_package(package_context, declarations)
-                .filter(|requirement| {
-                    !excludes.contains_for_package(package_context, &requirement.name)
-                })
+            modifiers
+                .apply(package_scope, declarations)
                 .map(Cow::into_owned)
                 .collect::<BTreeSet<_>>()
         };
@@ -1664,11 +1669,8 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .map(|(group, requirements)| {
                 // Groups inherit global overrides but are not distribution dependencies, so
                 // overrides scoped to the owning package must not rewrite their requirements.
-                let requirements = overrides
-                    .apply_for_package(None, requirements)
-                    .filter(|requirement| {
-                        !excludes.contains_for_package(package_context, &requirement.name)
-                    })
+                let requirements = modifiers
+                    .apply(dependency_group_scope, requirements)
                     .map(Cow::into_owned)
                     .collect::<BTreeSet<_>>();
                 (group.clone(), requirements)
@@ -3734,8 +3736,7 @@ impl Lock {
         provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
         source_requirements: &DependencySources<'_>,
-        overrides: &Overrides,
-        excludes: &Excludes,
+        modifiers: &DependencyModifiers,
         package_requires_python: Option<&VersionSpecifiers>,
         package_version: Option<&Version>,
         package: &'lock Package,
@@ -3767,8 +3768,7 @@ impl Lock {
                     package_version,
                     &requires_dist,
                     DependencyContext::Production,
-                    overrides,
-                    excludes,
+                    modifiers,
                 )
             } else {
                 FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
@@ -3845,8 +3845,7 @@ impl Lock {
                 provides_extra,
                 &expected_groups,
                 source_requirements,
-                overrides,
-                excludes,
+                modifiers,
                 package_requires_python,
                 package_version,
                 package,
@@ -4239,37 +4238,31 @@ impl Lock {
             }
         }
 
-        let dependency_overrides = if allow_missing_package_metadata {
-            Overrides::from_entries(normalized_overrides)
-                .map_err(LockErrorKind::InvalidScopedOverride)?
+        let dependency_modifiers = if allow_missing_package_metadata {
+            DependencyModifiers::new(
+                Overrides::from_entries(normalized_overrides)
+                    .map_err(LockErrorKind::InvalidScopedOverride)?,
+                Excludes::from_entries(excludes.iter().cloned()),
+            )
         } else {
-            Overrides::default()
-        };
-        let dependency_excludes = if allow_missing_package_metadata {
-            Excludes::from_entries(excludes.iter().cloned())
-        } else {
-            Excludes::default()
+            DependencyModifiers::default()
         };
         // Projectless workspace groups and scripts are root declarations, so apply only
         // global overrides and exclusions before using them for sources or validation.
-        let root_requirements = dependency_overrides
-            .apply_for_package(
-                None,
+        let root_requirements = dependency_modifiers
+            .apply(
+                DependencyModifierScope::Global,
                 requirements
                     .iter()
                     .chain(dependency_groups.values().flatten()),
             )
-            .filter(|requirement| {
-                !dependency_excludes.contains_for_package(None, &requirement.name)
-            })
             .collect::<Vec<_>>();
         let dependency_sources = if allow_missing_package_metadata {
             Box::pin(self.collect_dependency_sources(
                 normalized_constraints,
                 &root_requirements,
                 dependency_metadata,
-                &dependency_overrides,
-                &dependency_excludes,
+                &dependency_modifiers,
                 root,
                 tags,
                 markers,
@@ -4517,8 +4510,7 @@ impl Lock {
                             &metadata.provides_extra,
                             metadata.dependency_groups,
                             &dependency_sources,
-                            &dependency_overrides,
-                            &dependency_excludes,
+                            &dependency_modifiers,
                             requires_python.as_ref(),
                             Some(version),
                             package,
@@ -4584,8 +4576,7 @@ impl Lock {
                         &metadata.provides_extra,
                         metadata.dependency_groups,
                         &dependency_sources,
-                        &dependency_overrides,
-                        &dependency_excludes,
+                        &dependency_modifiers,
                         metadata.requires_python.as_ref(),
                         Some(&metadata.version),
                         package,
@@ -4609,9 +4600,7 @@ impl Lock {
                 // even if the version is dynamic, we can still extract the requirements without
                 // performing a build, unlike in the database where we typically construct a "complete"
                 // metadata object.
-                let metadata = if dependency_overrides.has_scoped_package(&package.id.name)
-                    || dependency_excludes.has_scoped_package(&package.id.name)
-                {
+                let metadata = if dependency_modifiers.has_scoped_package(&package.id.name) {
                     // Package-scoped rules depend on the actual dynamic version, which is only
                     // available from the built distribution metadata.
                     None
@@ -4655,8 +4644,7 @@ impl Lock {
                         &metadata.provides_extra,
                         metadata.dependency_groups,
                         &dependency_sources,
-                        &dependency_overrides,
-                        &dependency_excludes,
+                        &dependency_modifiers,
                         requires_python.as_ref(),
                         None,
                         package,
@@ -4721,8 +4709,7 @@ impl Lock {
                         &metadata.provides_extra,
                         metadata.dependency_groups,
                         &dependency_sources,
-                        &dependency_overrides,
-                        &dependency_excludes,
+                        &dependency_modifiers,
                         metadata.requires_python.as_ref(),
                         Some(&metadata.version),
                         package,
@@ -4837,19 +4824,19 @@ impl Lock {
         package_version: Option<&Version>,
         requirements: &[Requirement],
         context: DependencyContext<'_>,
-        overrides: &Overrides,
-        excludes: &Excludes,
+        modifiers: &DependencyModifiers,
     ) -> Vec<Requirement> {
-        let package_context = package_version.map(|version| (package_name, version));
-        let override_context = match context {
-            DependencyContext::Group(_) => None,
-            DependencyContext::Production | DependencyContext::Extra(_) => package_context,
-        };
-        let requirements = overrides
-            .apply_for_package(override_context, requirements)
-            .filter(|requirement| {
-                !excludes.contains_for_package(package_context, &requirement.name)
-            })
+        let scope =
+            package_version.map_or(DependencyModifierScope::Global, |version| match context {
+                DependencyContext::Group(_) => {
+                    DependencyModifierScope::DependencyGroup(package_name, version)
+                }
+                DependencyContext::Production | DependencyContext::Extra(_) => {
+                    DependencyModifierScope::Package(package_name, version)
+                }
+            });
+        let requirements = modifiers
+            .apply(scope, requirements)
             .map(Cow::into_owned)
             .collect::<Box<[_]>>();
 
@@ -4871,8 +4858,7 @@ impl Lock {
         requirements: &[Requirement],
         group: Option<&GroupName>,
         package_markers: &PackageMarkers<'_>,
-        dependency_overrides: &Overrides,
-        dependency_excludes: &Excludes,
+        dependency_modifiers: &DependencyModifiers,
         root: &Path,
         source_requirements: &mut BTreeSet<Requirement>,
         pending_sources: &mut Vec<Requirement>,
@@ -4890,8 +4876,7 @@ impl Lock {
             group
                 .map(DependencyContext::Group)
                 .unwrap_or(DependencyContext::Production),
-            dependency_overrides,
-            dependency_excludes,
+            dependency_modifiers,
         );
 
         for requirement in requirements {
@@ -4943,8 +4928,7 @@ impl Lock {
         reachability: &mut DependencySourceReachability<'lock>,
         source_requirements: &BTreeSet<Requirement>,
         dependency_metadata: &DependencyMetadata,
-        dependency_overrides: &Overrides,
-        dependency_excludes: &Excludes,
+        dependency_modifiers: &DependencyModifiers,
         root: &Path,
         tags: &Tags,
         markers: &MarkerEnvironment,
@@ -4990,8 +4974,7 @@ impl Lock {
                     && metadata
                         .as_ref()
                         .is_none_or(|metadata| metadata.version.is_none())
-                    && (dependency_overrides.has_scoped_package(&package.id.name)
-                        || dependency_excludes.has_scoped_package(&package.id.name))
+                    && dependency_modifiers.has_scoped_package(&package.id.name)
                 {
                     // Scoped rules need the resolved version before this authorized tree can
                     // expose any dependency sources.
@@ -5089,8 +5072,7 @@ impl Lock {
                         version.as_ref(),
                         &requirements,
                         requirement_context,
-                        dependency_overrides,
-                        dependency_excludes,
+                        dependency_modifiers,
                     );
                     for requirement in requirements {
                         let requirement_marker =
@@ -5270,8 +5252,7 @@ impl Lock {
         mut source_requirements: BTreeSet<Requirement>,
         root_requirements: &[Cow<'_, Requirement>],
         dependency_metadata: &DependencyMetadata,
-        dependency_overrides: &Overrides,
-        dependency_excludes: &Excludes,
+        dependency_modifiers: &DependencyModifiers,
         root: &Path,
         tags: &Tags,
         markers: &MarkerEnvironment,
@@ -5283,12 +5264,9 @@ impl Lock {
     ) -> Result<DependencySources<'_>, LockError> {
         // Global URL overrides authorize sources and replace competing URL constraints.
         // Scoped overrides cannot grant this privilege, and excluded packages stay inactive.
-        let global_source_overrides = dependency_overrides
-            .global_requirements()
-            .filter(|requirement| {
-                !matches!(requirement.source, RequirementSource::Registry { .. })
-                    && !dependency_excludes.contains(&requirement.name)
-            })
+        let global_source_overrides = dependency_modifiers
+            .global_overrides()
+            .filter(|requirement| !matches!(requirement.source, RequirementSource::Registry { .. }))
             .cloned()
             .collect::<Vec<_>>();
         if !global_source_overrides.is_empty() {
@@ -5371,8 +5349,7 @@ impl Lock {
             &mut reachability,
             &source_candidates,
             dependency_metadata,
-            dependency_overrides,
-            dependency_excludes,
+            dependency_modifiers,
             root,
             tags,
             markers,
@@ -5494,8 +5471,7 @@ impl Lock {
                         &mut reachability,
                         &source_candidates,
                         dependency_metadata,
-                        dependency_overrides,
-                        dependency_excludes,
+                        dependency_modifiers,
                         root,
                         tags,
                         markers,
@@ -5623,8 +5599,7 @@ impl Lock {
                 &direct_requirements,
                 None,
                 &reachability.package_markers,
-                dependency_overrides,
-                dependency_excludes,
+                dependency_modifiers,
                 root,
                 &mut source_requirements,
                 &mut pending_sources,
@@ -5638,8 +5613,7 @@ impl Lock {
                     &requirements,
                     Some(&group),
                     &reachability.package_markers,
-                    dependency_overrides,
-                    dependency_excludes,
+                    dependency_modifiers,
                     root,
                     &mut source_requirements,
                     &mut pending_sources,

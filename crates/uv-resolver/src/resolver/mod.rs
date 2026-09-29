@@ -19,7 +19,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, DependencyModifiers};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -122,8 +122,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
-    overrides: Overrides,
-    excludes: Excludes,
+    modifiers: DependencyModifiers,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -258,8 +257,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             constraints: manifest
                 .constraints
                 .with_recorder(manifest.recorder.clone()),
-            overrides: manifest.overrides.with_recorder(manifest.recorder.clone()),
-            excludes: manifest.excludes.with_recorder(manifest.recorder.clone()),
+            modifiers: manifest.modifiers.with_recorder(manifest.recorder.clone()),
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -867,7 +865,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.workspace_members,
             self.requirements.clone(),
             self.constraints.clone(),
-            self.overrides.clone(),
+            self.modifiers.clone(),
             &self.preferences,
             &self.hasher,
             &self.index,
@@ -1801,13 +1799,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
-        let expander = RequirementExpander::new(
-            &self.constraints,
-            &self.overrides,
-            &self.excludes,
-            env,
-            python_requirement,
-        );
+        let expander =
+            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);
