@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
-use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
+use uv_fs::{ClearNonVirtualenv, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
@@ -256,7 +256,8 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        uv_fs::remove_virtualenv(environment_path.as_path()).map_err(uv_virtualenv::Error::from)?;
+        uv_fs::remove_virtualenv(environment_path.as_path(), ClearNonVirtualenv::Allow)
+            .map_err(uv_virtualenv::Error::from)?;
 
         Ok(())
     }
@@ -329,7 +330,7 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match uv_fs::remove_virtualenv(&environment_path) {
+        match uv_fs::remove_virtualenv(&environment_path, ClearNonVirtualenv::Allow) {
             Ok(()) => {
                 debug!(
                     "Removed existing environment for tool `{name}`: {}",
