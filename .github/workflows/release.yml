@@ -25,7 +25,7 @@ on:
       dry-run:
         description: Build release artifacts without publishing
         required: true
-        default: true
+        default: false
         type: boolean
 
 env:

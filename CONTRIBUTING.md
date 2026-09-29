@@ -375,7 +375,7 @@ Then, open a pull request, e.g., `Bump version to ...`.
 Binary builds will automatically be tested for the release.
 
 After merging the pull request, run the
-[release workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml) with `dry-run`
-disabled. The workflow reads the version from project metadata and rejects versions that already
-have a GitHub release. The release will automatically be created on GitHub after everything else
-publishes.
+[release workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml). The workflow
+reads the version from project metadata and rejects versions that already have a GitHub release.
+Enable `dry-run` to build artifacts without publishing. Otherwise, the release will automatically be
+created on GitHub after everything else publishes.
