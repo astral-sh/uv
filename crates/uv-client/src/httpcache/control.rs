@@ -1,62 +1,125 @@
 use std::collections::HashSet;
 
+use rkyv::primitive::{ArchivedU16, ArchivedU64};
+
 /// Represents values for relevant cache-control directives.
 ///
 /// This does include some directives that we don't use mostly because they are
 /// trivial to support. (For example, `must-understand` at time of writing is
 /// not used in our HTTP cache semantics. Neither is `proxy-revalidate` since
 /// we are not a proxy.)
+///
+/// Endian-aware integers let the same packed representation serve both parsed and archived
+/// directives. Flags record boolean directives and distinguish absent values from zero.
 #[derive(
     Clone,
     Debug,
     Default,
     Eq,
     PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
     rkyv::Archive,
     rkyv::Deserialize,
+    rkyv::Portable,
     rkyv::Serialize,
+    bytecheck::CheckBytes,
 )]
-#[rkyv(derive(Debug))]
+#[rkyv(as = Self)]
+#[repr(C)]
 pub struct CacheControl {
-    // directives for requests and responses
-    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age>
-    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age-2>
-    pub max_age_seconds: Option<u64>,
-    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-cache>
-    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-cache-2>
-    pub no_cache: bool,
-    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-store>
-    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-store-2>
-    pub no_store: bool,
+    max_age_seconds: ArchivedU64,
+    max_stale_seconds: ArchivedU64,
+    min_fresh_seconds: ArchivedU64,
+    s_maxage_seconds: ArchivedU64,
+    // The low ten bits encode boolean directives. The remaining bits record the presence of
+    // optional integers, retaining both zero and u64::MAX as valid values.
+    flags: ArchivedU16,
+}
+
+impl CacheControl {
+    const NO_CACHE: u16 = 1 << 0;
+    const NO_STORE: u16 = 1 << 1;
     /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-transform>
     /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-transform-2>
-    pub no_transform: bool,
-
-    // request-only directives
-    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-stale>
-    pub max_stale_seconds: Option<u64>,
-    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-min-fresh>
-    pub min_fresh_seconds: Option<u64>,
-
-    // response-only directives
+    const NO_TRANSFORM: u16 = 1 << 2;
     /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-only-if-cached>
-    pub only_if_cached: bool,
-    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-must-revalidate>
-    pub must_revalidate: bool,
+    const ONLY_IF_CACHED: u16 = 1 << 3;
+    const MUST_REVALIDATE: u16 = 1 << 4;
     /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-must-understand>
-    pub must_understand: bool,
-    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-private>
-    pub private: bool,
+    const MUST_UNDERSTAND: u16 = 1 << 5;
+    const PRIVATE: u16 = 1 << 6;
     /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-proxy-revalidate>
-    pub proxy_revalidate: bool,
+    const PROXY_REVALIDATE: u16 = 1 << 7;
+    const PUBLIC: u16 = 1 << 8;
+    const IMMUTABLE: u16 = 1 << 9;
+    const MAX_AGE_SECONDS: u16 = 1 << 10;
+    const MAX_STALE_SECONDS: u16 = 1 << 11;
+    const MIN_FRESH_SECONDS: u16 = 1 << 12;
+    const S_MAXAGE_SECONDS: u16 = 1 << 13;
+
+    fn contains(&self, flag: u16) -> bool {
+        self.flags.to_native() & flag != 0
+    }
+
+    fn insert(&mut self, flag: u16) {
+        self.flags = (self.flags.to_native() | flag).into();
+    }
+
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-cache>
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-cache-2>
+    pub fn no_cache(&self) -> bool {
+        self.contains(Self::NO_CACHE)
+    }
+
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-store>
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-no-store-2>
+    pub fn no_store(&self) -> bool {
+        self.contains(Self::NO_STORE)
+    }
+
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-must-revalidate>
+    pub fn must_revalidate(&self) -> bool {
+        self.contains(Self::MUST_REVALIDATE)
+    }
+
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-private>
+    pub fn private(&self) -> bool {
+        self.contains(Self::PRIVATE)
+    }
+
     /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-public>
-    pub public: bool,
-    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-s-maxage>
-    pub s_maxage_seconds: Option<u64>,
+    pub fn public(&self) -> bool {
+        self.contains(Self::PUBLIC)
+    }
+
     /// <https://httpwg.org/specs/rfc8246.html>
-    pub immutable: bool,
+    pub fn immutable(&self) -> bool {
+        self.contains(Self::IMMUTABLE)
+    }
+
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age>
+    /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age-2>
+    pub fn max_age_seconds(&self) -> Option<u64> {
+        self.contains(Self::MAX_AGE_SECONDS)
+            .then_some(self.max_age_seconds.to_native())
+    }
+
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-stale>
+    pub fn max_stale_seconds(&self) -> Option<u64> {
+        self.contains(Self::MAX_STALE_SECONDS)
+            .then_some(self.max_stale_seconds.to_native())
+    }
+
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-min-fresh>
+    pub fn min_fresh_seconds(&self) -> Option<u64> {
+        self.contains(Self::MIN_FRESH_SECONDS)
+            .then_some(self.min_fresh_seconds.to_native())
+    }
+
+    /// <https://www.rfc-editor.org/rfc/rfc9111.html#name-s-maxage>
+    pub fn s_maxage_seconds(&self) -> Option<u64> {
+        self.contains(Self::S_MAXAGE_SECONDS)
+            .then_some(self.s_maxage_seconds.to_native())
+    }
 }
 
 impl<'b, B: 'b + ?Sized + AsRef<[u8]>> FromIterator<&'b B> for CacheControl {
@@ -85,12 +148,15 @@ impl FromIterator<CacheControlDirective> for CacheControl {
             match &*ccd.name {
                 // request + response directives
                 "max-age" => match parse_int(&ccd.value) {
-                    None => cc.must_revalidate = true,
-                    Some(seconds) => cc.max_age_seconds = Some(seconds),
+                    None => cc.insert(Self::MUST_REVALIDATE),
+                    Some(seconds) => {
+                        cc.max_age_seconds = seconds.into();
+                        cc.insert(Self::MAX_AGE_SECONDS);
+                    }
                 },
-                "no-cache" => cc.no_cache = true,
-                "no-store" => cc.no_store = true,
-                "no-transform" => cc.no_transform = true,
+                "no-cache" => cc.insert(Self::NO_CACHE),
+                "no-store" => cc.insert(Self::NO_STORE),
+                "no-transform" => cc.insert(Self::NO_TRANSFORM),
                 // request-only directives
                 "max-stale" => {
                     // As per [RFC 9111 S5.2.1.2], "If no value is assigned to
@@ -99,30 +165,40 @@ impl FromIterator<CacheControlDirective> for CacheControl {
                     // number of seconds.
                     //
                     // [RFC 9111 S5.2.1.2]: https://www.rfc-editor.org/rfc/rfc9111.html#section-5.2.1.2
-                    if ccd.value.is_empty() {
-                        cc.max_stale_seconds = Some(u64::MAX);
+                    let seconds = if ccd.value.is_empty() {
+                        Some(u64::MAX)
                     } else {
-                        match parse_int(&ccd.value) {
-                            None => cc.must_revalidate = true,
-                            Some(seconds) => cc.max_stale_seconds = Some(seconds),
+                        parse_int(&ccd.value)
+                    };
+                    match seconds {
+                        None => cc.insert(Self::MUST_REVALIDATE),
+                        Some(seconds) => {
+                            cc.max_stale_seconds = seconds.into();
+                            cc.insert(Self::MAX_STALE_SECONDS);
                         }
                     }
                 }
                 "min-fresh" => match parse_int(&ccd.value) {
-                    None => cc.must_revalidate = true,
-                    Some(seconds) => cc.min_fresh_seconds = Some(seconds),
+                    None => cc.insert(Self::MUST_REVALIDATE),
+                    Some(seconds) => {
+                        cc.min_fresh_seconds = seconds.into();
+                        cc.insert(Self::MIN_FRESH_SECONDS);
+                    }
                 },
-                "only-if-cached" => cc.only_if_cached = true,
-                "must-revalidate" => cc.must_revalidate = true,
-                "must-understand" => cc.must_understand = true,
-                "private" => cc.private = true,
-                "proxy-revalidate" => cc.proxy_revalidate = true,
-                "public" => cc.public = true,
+                "only-if-cached" => cc.insert(Self::ONLY_IF_CACHED),
+                "must-revalidate" => cc.insert(Self::MUST_REVALIDATE),
+                "must-understand" => cc.insert(Self::MUST_UNDERSTAND),
+                "private" => cc.insert(Self::PRIVATE),
+                "proxy-revalidate" => cc.insert(Self::PROXY_REVALIDATE),
+                "public" => cc.insert(Self::PUBLIC),
                 "s-maxage" => match parse_int(&ccd.value) {
-                    None => cc.must_revalidate = true,
-                    Some(seconds) => cc.s_maxage_seconds = Some(seconds),
+                    None => cc.insert(Self::MUST_REVALIDATE),
+                    Some(seconds) => {
+                        cc.s_maxage_seconds = seconds.into();
+                        cc.insert(Self::S_MAXAGE_SECONDS);
+                    }
                 },
-                "immutable" => cc.immutable = true,
+                "immutable" => cc.insert(Self::IMMUTABLE),
                 _ => {}
             }
         }
@@ -439,20 +515,54 @@ impl CacheControlDirective {
 
 #[cfg(test)]
 mod tests {
+    use crate::rkyvutil::OwnedArchive;
+
     use super::*;
+
+    #[test]
+    fn archived_cache_control_preserves_optional_values() {
+        let mut values = [None, Some(0), Some(42), Some(u64::MAX)];
+        for _ in 0..values.len() {
+            let directives = ["max-age", "max-stale", "min-fresh", "s-maxage"]
+                .into_iter()
+                .zip(values)
+                .filter_map(|(name, value)| value.map(|value| format!("{name}={value}")))
+                .collect::<Vec<_>>();
+            let control = directives.iter().collect::<CacheControl>();
+            let bytes =
+                rkyv::to_bytes::<rkyv::rancor::Error>(&control).expect("archive cache control");
+            let archived =
+                OwnedArchive::<CacheControl>::new(bytes).expect("validate cache control");
+            assert_eq!(OwnedArchive::deserialize(&archived), control);
+            assert_eq!(
+                [
+                    archived.max_age_seconds(),
+                    archived.max_stale_seconds(),
+                    archived.min_fresh_seconds(),
+                    archived.s_maxage_seconds(),
+                ],
+                values,
+            );
+            values.rotate_left(1);
+        }
+
+        let control = ["max-stale"].into_iter().collect::<CacheControl>();
+        let archived = OwnedArchive::from_unarchived(&control).expect("archive cache control");
+        assert_eq!(archived.max_stale_seconds(), Some(u64::MAX));
+    }
 
     #[test]
     fn cache_control_token() {
         let cc: CacheControl = CacheControlParser::new(["no-cache"]).collect();
-        assert!(cc.no_cache);
-        assert!(!cc.must_revalidate);
+        assert!(cc.no_cache());
+        assert!(!cc.must_revalidate());
     }
 
     #[test]
     fn cache_control_max_age() {
         let cc: CacheControl = CacheControlParser::new(["max-age=60"]).collect();
-        assert_eq!(Some(60), cc.max_age_seconds);
-        assert!(!cc.must_revalidate);
+        assert_eq!(Some(60), cc.max_age_seconds());
+        assert!(!cc.must_revalidate());
     }
 
     // [RFC 9111 S5.2.1.1] says that client MUST NOT quote max-age, but we
@@ -462,40 +572,40 @@ mod tests {
     #[test]
     fn cache_control_max_age_quoted() {
         let cc: CacheControl = CacheControlParser::new([r#"max-age="60""#]).collect();
-        assert_eq!(Some(60), cc.max_age_seconds);
-        assert!(!cc.must_revalidate);
+        assert_eq!(Some(60), cc.max_age_seconds());
+        assert!(!cc.must_revalidate());
     }
 
     #[test]
     fn cache_control_max_age_invalid() {
         let cc: CacheControl = CacheControlParser::new(["max-age=6a0"]).collect();
-        assert_eq!(None, cc.max_age_seconds);
-        assert!(cc.must_revalidate);
+        assert_eq!(None, cc.max_age_seconds());
+        assert!(cc.must_revalidate());
     }
 
     #[test]
     fn cache_control_immutable() {
         let cc: CacheControl = CacheControlParser::new(["max-age=31536000, immutable"]).collect();
-        assert_eq!(Some(31_536_000), cc.max_age_seconds);
-        assert!(cc.immutable);
-        assert!(!cc.must_revalidate);
+        assert_eq!(Some(31_536_000), cc.max_age_seconds());
+        assert!(cc.immutable());
+        assert!(!cc.must_revalidate());
     }
 
     #[test]
     fn cache_control_unrecognized() {
         let cc: CacheControl = CacheControlParser::new(["lion,max-age=60,zebra"]).collect();
-        assert_eq!(Some(60), cc.max_age_seconds);
+        assert_eq!(Some(60), cc.max_age_seconds());
     }
 
     #[test]
     fn cache_control_invalid_squashes_remainder() {
         let cc: CacheControl = CacheControlParser::new(["no-cache,\x00,max-age=60"]).collect();
         // The invalid data doesn't impact things before it.
-        assert!(cc.no_cache);
+        assert!(cc.no_cache());
         // The invalid data precludes parsing anything after.
-        assert_eq!(None, cc.max_age_seconds);
+        assert_eq!(None, cc.max_age_seconds());
         // The invalid contents should force revalidation.
-        assert!(cc.must_revalidate);
+        assert!(cc.must_revalidate());
     }
 
     #[test]
@@ -503,13 +613,13 @@ mod tests {
         let cc: CacheControl =
             CacheControlParser::new(["no-cache,\x00,max-age=60", "max-stale=30"]).collect();
         // The invalid data doesn't impact things before it.
-        assert!(cc.no_cache);
+        assert!(cc.no_cache());
         // The invalid data precludes parsing anything after
         // in the same header value, but not in other
         // header values.
-        assert_eq!(Some(30), cc.max_stale_seconds);
+        assert_eq!(Some(30), cc.max_stale_seconds());
         // The invalid contents should force revalidation.
-        assert!(cc.must_revalidate);
+        assert!(cc.must_revalidate());
     }
 
     #[test]
