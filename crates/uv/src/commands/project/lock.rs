@@ -1,6 +1,7 @@
 #![expect(clippy::single_match_else)]
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error;
 use std::fmt::{self, Write};
 use std::path::Path;
 use std::sync::Arc;
@@ -21,7 +22,7 @@ use uv_distribution_types::{
     DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
     RequiresPython, ResolutionRecorder, UnresolvedRequirementSpecification,
 };
-use uv_errors::Hints;
+use uv_errors::{Hinted, Hints};
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
@@ -1128,9 +1129,11 @@ async fn do_lock(
                             RequirementsError::Dist(..) | RequirementsError::Distribution(_),
                         ) = &error
                         && let Some(ValidatedLock::MismatchedRequirements(_, reason)) =
-                            &existing_lock
+                            existing_lock
                     {
-                        let _ = writeln!(printer.stderr(), "{}", Hints::from(reason.to_string()));
+                        return Err(ProjectError::OperationWithMismatch(Box::new(
+                            LockRequirementsError { error, reason },
+                        )));
                     }
                     return Err(error.into());
                 }
@@ -1220,13 +1223,47 @@ impl fmt::Display for RequirementsMismatch {
             "The lockfile needs to be updated because the requirements for `{}` have changed:",
             self.name
         )?;
-        for requirement in self.expected.difference(&self.actual) {
-            write!(f, "\n  Added: `{requirement}`")?;
-        }
         for requirement in self.actual.difference(&self.expected) {
-            write!(f, "\n  Removed: `{requirement}`")?;
+            write!(f, "\n  {} {requirement}", "Remove".red().bold())?;
+        }
+        for requirement in self.expected.difference(&self.actual) {
+            write!(f, "\n  {} {requirement}", "Add".green().bold())?;
         }
         Ok(())
+    }
+}
+
+/// An operation error accompanied by a lockfile requirements mismatch.
+#[derive(Debug)]
+pub(crate) struct LockRequirementsError {
+    error: OperationError,
+    reason: RequirementsMismatch,
+}
+
+impl LockRequirementsError {
+    pub(crate) fn is_user_failure(&self) -> bool {
+        self.error.is_user_failure()
+    }
+}
+
+impl fmt::Display for LockRequirementsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.error, f)
+    }
+}
+
+impl Error for LockRequirementsError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        // The operation error's message is already displayed by this wrapper.
+        self.error.source()
+    }
+}
+
+impl Hinted for LockRequirementsError {
+    fn hints(&self) -> Hints<'_> {
+        let mut hints = self.error.hints();
+        hints.push(self.reason.to_string());
+        hints
     }
 }
 

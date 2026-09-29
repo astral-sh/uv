@@ -308,6 +308,9 @@ pub(crate) enum ProjectError {
     Operation(#[from] pip::operations::Error),
 
     #[error(transparent)]
+    OperationWithMismatch(Box<lock::LockRequirementsError>),
+
+    #[error(transparent)]
     Interpreter(#[from] uv_python::InterpreterError),
 
     #[error(transparent)]
@@ -414,6 +417,7 @@ impl uv_errors::Hinted for ProjectError {
             Self::Lock(err) => err.hints(),
             Self::Python(err) => err.hints(),
             Self::Operation(err) => err.hints(),
+            Self::OperationWithMismatch(err) => err.hints(),
             Self::Client(err) => uv_errors::Hinted::hints(err),
             _ => uv_errors::Hints::none(),
         }
