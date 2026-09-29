@@ -276,10 +276,12 @@ fn native_bytecode_recompile() -> Result<()> {
     let package = context.site_packages().join("example");
     let bytecode = package.join("__pycache__/module.cpython-312.pyc");
     let compiled = fs_err::metadata(&bytecode)?.modified()?;
+    // An empty SOURCE_DATE_EPOCH retains timestamp invalidation.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--compile-bytecode")
-        .arg("--preview-features").arg("native-bytecode"), @"
+        .arg("--preview-features").arg("native-bytecode")
+        .env("SOURCE_DATE_EPOCH", ""), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
