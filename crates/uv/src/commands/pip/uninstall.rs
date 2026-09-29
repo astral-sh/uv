@@ -18,7 +18,7 @@ use uv_python::{EnvironmentPreference, PythonPreference};
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
-use crate::commands::pip::operations::{LongSpecifier, report_target_environment};
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 
@@ -243,7 +243,7 @@ pub(crate) async fn pip_uninstall(
             " {} {}{}",
             "-".red(),
             distribution.name().as_ref().bold(),
-            LongSpecifier::InstalledVersion(distribution.installed_version()).dimmed()
+            distribution.installed_version().to_string().dimmed()
         )?;
     }
 

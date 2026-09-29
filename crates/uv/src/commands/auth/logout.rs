@@ -75,7 +75,7 @@ pub(crate) async fn logout(
 
     writeln!(
         printer.stderr(),
-        "Removed credentials for `{}`",
+        "Removed credentials for {}",
         display_url.bold().cyan()
     )?;
 

@@ -1516,7 +1516,7 @@ impl BuildMessage {
             } => {
                 writeln!(
                     printer.stderr(),
-                    "Successfully built `{}`",
+                    "Successfully built {}",
                     output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }

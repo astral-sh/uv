@@ -62,7 +62,7 @@ fn build_warns_cache_inside_source() -> Result<()> {
     ----- stderr -----
     warning: The cache directory `project/.uv-cache` is inside the build source directory `project` and may be included in distributions
     Building source distribution...
-    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built project/dist/project-0.1.0.tar.gz
     ");
 
     project
@@ -114,7 +114,7 @@ fn build_warns_symlinked_cache_inside_source() -> Result<()> {
     ----- stderr -----
     warning: The cache directory `cache-link` is inside the build source directory `project` and may be included in distributions
     Building source distribution...
-    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built project/dist/project-0.1.0.tar.gz
     ");
 
     project
@@ -159,7 +159,7 @@ fn build_allows_cache_outside_selected_source() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
-    Successfully built `dist/member-0.1.0.tar.gz`
+    Successfully built dist/member-0.1.0.tar.gz
     ");
 
     workspace

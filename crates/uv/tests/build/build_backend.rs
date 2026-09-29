@@ -1338,8 +1338,8 @@ fn warn_on_redundant_module_names() -> Result<()> {
     Building source distribution...
     warning: Ignoring redundant module names in `tool.uv.build-backend.module-name`: `foo.bar`, `foo`, `foo.bar.baz`, `foobar.baz`
     Building wheel from source distribution...
-    Successfully built `dist/project-0.1.0.tar.gz`
-    Successfully built `dist/project-0.1.0-py3-none-any.whl`
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
 
     // But warnings shouldn't be printed in cases when the user might not
@@ -1350,8 +1350,8 @@ fn warn_on_redundant_module_names() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built `dist/project-0.1.0.tar.gz`
-    Successfully built `dist/project-0.1.0-py3-none-any.whl`
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
 
     Ok(())
@@ -1639,8 +1639,8 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     Building source distribution...
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
     Building wheel from source distribution...
-    Successfully built `dist/project-0.1.0.tar.gz`
-    Successfully built `dist/project-0.1.0-py3-none-any.whl`
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
@@ -1700,8 +1700,8 @@ fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
     Building source distribution...
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
     Building wheel from source distribution...
-    Successfully built `project/dist/project-0.1.0.tar.gz`
-    Successfully built `project/dist/project-0.1.0-py2.py3-none-any.whl`
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py2.py3-none-any.whl
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(project.path()), @r"
@@ -1752,8 +1752,8 @@ fn tool_uv_build_backend_in_tree_backend() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built `project/dist/project-0.1.0.tar.gz`
-    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");
 
     Ok(())
@@ -1785,8 +1785,8 @@ fn warn_on_license_classifier() -> Result<()> {
     Building source distribution...
     warning: Found license classifier `License :: OSI Approved :: MIT License`. License classifiers are ambiguous and deprecated per PEP 639; projects should use `project.license` and `project.license-files` instead.
     Building wheel from source distribution...
-    Successfully built `dist/foo-1.0.0.tar.gz`
-    Successfully built `dist/foo-1.0.0-py3-none-any.whl`
+    Successfully built dist/foo-1.0.0.tar.gz
+    Successfully built dist/foo-1.0.0-py3-none-any.whl
     ");
 
     Ok(())
@@ -1819,8 +1819,8 @@ fn rewrite_toml_1_1_by_default() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built `dist/foo-1.0.0.tar.gz`
-    Successfully built `dist/foo-1.0.0-py3-none-any.whl`
+    Successfully built dist/foo-1.0.0.tar.gz
+    Successfully built dist/foo-1.0.0-py3-none-any.whl
     ");
 
     Ok(())
