@@ -349,6 +349,19 @@ impl RequirementsTxt {
         visited: &mut VisitedFiles<'_>,
         cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtParserError> {
+        // Detect if the content looks like a uv lockfile (uv.lock), which starts with
+        // `version = ` on the first line. If so, return a helpful error instead of the
+        // cryptic "no such comparison operator" parse failure.
+        if content.starts_with("version = ") {
+            return Err(RequirementsTxtParserError::Parser {
+                message: "The provided file appears to be a uv lockfile (`uv.lock`), not a requirements file. \
+                    Use `uv export` to convert it to a requirements format, e.g., `uv export -o requirements.txt`"
+                    .to_string(),
+                line: 1,
+                column: 1,
+            });
+        }
+
         let mut s = Scanner::new(content);
 
         let mut data = Self::default();
