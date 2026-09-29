@@ -53,6 +53,7 @@ use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCac
 use uv_scripts::{OverrideDependency, Pep723Metadata};
 use uv_warnings::warn_user;
 
+use crate::sources::format_requirement_parse_error;
 use crate::{RequirementsSource, SourceTree};
 
 #[derive(Debug, Default, Clone)]
@@ -571,7 +572,7 @@ impl RequirementsSpecification {
             if let Some(pylock) = source.pylock {
                 if let Some(existing) = spec.pylock {
                     return Err(anyhow::anyhow!(
-                        "Multiple `pylock.toml` files specified: {} vs. `{}`",
+                        "Multiple `pylock.toml` files specified: `{}` vs. `{}`",
                         existing.user_display(),
                         pylock.user_display(),
                     ));
@@ -590,7 +591,7 @@ impl RequirementsSpecification {
                         != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: {existing} vs. {index_url}",
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
                     ));
                 }
                 spec.index_url = Some(index_url);
@@ -630,7 +631,7 @@ impl RequirementsSpecification {
                         != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: {existing} vs. {index_url}",
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
                     ));
                 }
                 spec.index_url = Some(index_url);
@@ -658,7 +659,7 @@ impl RequirementsSpecification {
                         != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: {existing} vs. {index_url}",
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
                     ));
                 }
                 spec.index_url = Some(index_url);
@@ -696,7 +697,7 @@ impl RequirementsSpecification {
     /// Parse an individual package requirement.
     pub fn parse_package(name: &str) -> Result<UnresolvedRequirementSpecification> {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: {name}"))?;
+            .with_context(|| format_requirement_parse_error(name))?;
         Ok(UnresolvedRequirementSpecification::from(requirement))
     }
 

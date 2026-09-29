@@ -1034,19 +1034,20 @@ pub fn validate_and_heal_record<'a>(
     // that weren't removed from files.
     if !extra_record_entries.is_empty() {
         debug!(
-            "`RECORD` contains files not in wheel archive for {}: {}",
-            dist,
+            "Files `{}` are listed in `RECORD` but missing from the wheel archive for `{dist}`",
             extra_record_entries
                 .iter()
                 .map(Simplified::simplified_display)
-                .join(", ")
+                .join("`, `")
         );
     }
     if !files.is_empty() {
         debug!(
-            "Wheel archive contains files not in `RECORD` for {}: {}",
-            dist,
-            files.keys().map(Simplified::simplified_display).join(", ")
+            "Files `{}` are in the wheel archive for `{dist}` but missing from `RECORD`",
+            files
+                .keys()
+                .map(Simplified::simplified_display)
+                .join("`, `")
         );
     }
     let healed = !extra_record_entries.is_empty() || !files.is_empty();

@@ -213,7 +213,7 @@ impl RequirementsSource {
         }
 
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: {name}"))?;
+            .with_context(|| format_requirement_parse_error(name))?;
 
         Ok(Self::Package(requirement))
     }
@@ -263,7 +263,7 @@ impl RequirementsSource {
         }
 
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: {name}"))?;
+            .with_context(|| format_requirement_parse_error(name))?;
 
         Ok(Self::Package(requirement))
     }
@@ -271,7 +271,7 @@ impl RequirementsSource {
     /// Parse an editable [`RequirementsSource`] (e.g., `uv pip install -e .`).
     pub fn from_editable(name: &str) -> Result<Self> {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, true)
-            .with_context(|| format!("Failed to parse: {name}"))?;
+            .with_context(|| format_requirement_parse_error(name))?;
 
         Ok(Self::Editable(requirement))
     }
@@ -279,7 +279,7 @@ impl RequirementsSource {
     /// Parse a package [`RequirementsSource`] (e.g., `uv pip install ruff`).
     pub fn from_package(name: &str) -> Result<Self> {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: {name}"))?;
+            .with_context(|| format_requirement_parse_error(name))?;
 
         Ok(Self::Package(requirement))
     }
@@ -307,6 +307,15 @@ impl std::fmt::Display for RequirementsSource {
                 path.display().fmt(f)
             }
         }
+    }
+}
+
+/// Format a requirement without losing trailing whitespace in the rendered error.
+pub(crate) fn format_requirement_parse_error(name: &str) -> String {
+    if name.is_empty() || name.trim_end() != name {
+        format!("Failed to parse: {name:?}")
+    } else {
+        format!("Failed to parse: {name}")
     }
 }
 

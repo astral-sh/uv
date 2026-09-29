@@ -288,7 +288,7 @@ pub enum WorkspaceErrorKind {
     NestedWorkspace(PathBuf),
     #[error("The workspace does not have a member {}: {}", _0, _1.simplified_display())]
     NoSuchMember(PackageName, PathBuf),
-    #[error("Two workspace members are both named `{name}`: {} and {}", first.simplified_display(), second.simplified_display())]
+    #[error("Two workspace members are both named `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
     DuplicatePackage {
         name: PackageName,
         first: PathBuf,
@@ -3677,7 +3677,7 @@ foo_bar = ["iniconfig"]
         insta::with_settings!({filters => filters}, {
             assert_snapshot!(
                 error,
-            @"Two workspace members are both named `seeds`: [ROOT]/packages/seeds and [ROOT]/packages/seeds2");
+            @"Two workspace members are both named `seeds`: `[ROOT]/packages/seeds` and `[ROOT]/packages/seeds2`");
         });
 
         Ok(())

@@ -1370,7 +1370,7 @@ impl Display for RequirementsTxtFileError {
                 line,
                 column,
             } => {
-                write!(f, "{message} at `{file}`:{line}:{column}")
+                write!(f, "{message}: {file}:{line}:{column}")
             }
             RequirementsTxtParserError::UnsupportedRequirement { start, .. } => {
                 write!(f, "Unsupported requirement in `{file}` at position {start}")
@@ -1927,7 +1927,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @"`--no-binary` must be followed by an argument at `<REQUIREMENTS_TXT>`:3:1");
+            insta::assert_snapshot!(errors, @"`--no-binary` must be followed by an argument: <REQUIREMENTS_TXT>:3:1");
         });
 
         Ok(())
@@ -2229,7 +2229,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @"Nested `requirements` file contains conflicting `--index-url` at `<REQUIREMENTS_TXT>`:2:13");
+            insta::assert_snapshot!(errors, @"Nested `requirements` file contains conflicting `--index-url`: <REQUIREMENTS_TXT>:2:13");
         });
 
         Ok(())
@@ -2838,7 +2838,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @"Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at `<REQUIREMENTS_TXT>`:2:3");
+            insta::assert_snapshot!(errors, @"Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement: <REQUIREMENTS_TXT>:2:3");
         });
 
         Ok(())
@@ -2860,7 +2860,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @"Expected '=' or whitespace, found Some('-') at `<REQUIREMENTS_TXT>`:1:20");
+            insta::assert_snapshot!(errors, @"Expected '=' or whitespace, found Some('-'): <REQUIREMENTS_TXT>:1:20");
         });
 
         Ok(())
