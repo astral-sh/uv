@@ -392,6 +392,19 @@ impl PythonEnvironment {
             return Ok(());
         }
 
+        // An upgradeable venv can use a minor-version link instead of the selected base
+        // interpreter. Python may report different base paths when started through that link.
+        if let Some(home) = self.cfg()?.home
+            && self
+                .interpreter()
+                .to_base_python()?
+                .parent()
+                .is_some_and(|base| base.simplified() != home.simplified())
+        {
+            Interpreter::clear_cache(self.interpreter().sys_executable(), cache)?;
+            return Ok(());
+        }
+
         let info = InterpreterInfo::from_virtualenv(self.interpreter())?;
         info.cache(self.interpreter().sys_executable(), cache)?;
         Ok(())
