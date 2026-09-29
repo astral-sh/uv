@@ -1224,10 +1224,10 @@ impl fmt::Display for RequirementsMismatch {
             self.name
         )?;
         for requirement in self.expected.difference(&self.actual) {
-            write!(f, "\n  Added: `{requirement}`")?;
+            write!(f, "\n  Added {requirement}")?;
         }
         for requirement in self.actual.difference(&self.expected) {
-            write!(f, "\n  Removed: `{requirement}`")?;
+            write!(f, "\n  Removed {requirement}")?;
         }
         Ok(())
     }
