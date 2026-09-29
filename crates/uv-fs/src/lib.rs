@@ -498,15 +498,21 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
     let path = path.as_ref();
     let mut temp_file = tempfile_in(path.parent().expect("Write path must have a parent"))?;
-    if cfg!(target_os = "linux") && fs_err::symlink_metadata(path).is_ok() {
-        // Reopen with truncation so ext4's `auto_da_alloc` starts writeback on close, before
-        // rename takes the directory lock. Only do this for replacements: new files can keep
-        // their delayed allocation. Existence is a performance hint; rename remains atomic if
-        // another writer creates or removes the destination after this check.
-        fs_err::write(&temp_file, data)?;
-    } else {
-        temp_file.write_all(data.as_ref())?;
-    }
+    temp_file.write_all(data.as_ref())?;
+
+    #[cfg(target_os = "linux")]
+    let temp_file = match temp_file.persist_noclobber(path) {
+        // Publish new files without a separate existence check, retaining delayed allocation.
+        Ok(()) => return Ok(()),
+        Err(error) => {
+            // Reopen with truncation so ext4's `auto_da_alloc` starts writeback on close, before
+            // the replacing rename takes the directory lock. Also use this fallback when the
+            // filesystem does not support no-clobber persistence.
+            fs_err::write(&error.file, data)?;
+            error.file
+        }
+    };
+
     persist_with_retry_sync(temp_file, path)
 }
 
