@@ -2632,6 +2632,11 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
+        let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
+            lock.prune_constraints()
+        } else {
+            lock
+        };
         Ok(if metadata_free {
             lock.without_package_metadata()
         } else {
@@ -4101,15 +4106,25 @@ impl Lock {
         }
 
         let filter = ManifestFilter::from_lock(self);
+        let omit_constraints = uv_preview::is_enabled(PreviewFeature::ResolutionInputs);
 
         let normalized_constraints = {
             let expected = normalizer.constraints(
                 constraints
                     .iter()
-                    .filter(|entry| filter.includes_constraint(entry))
+                    .filter(|entry| {
+                        filter.includes_constraint(entry)
+                            && (!omit_constraints || !self.can_omit_constraint(entry))
+                    })
                     .cloned(),
             )?;
-            let actual = normalizer.constraints(self.manifest.constraints.iter().cloned())?;
+            let actual = normalizer.constraints(
+                self.manifest
+                    .constraints
+                    .iter()
+                    .filter(|entry| !omit_constraints || !self.can_omit_constraint(entry))
+                    .cloned(),
+            )?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(
                     expected.into_iter().collect(),
@@ -6074,7 +6089,11 @@ impl ResolverManifest {
                 requirements,
                 normalize,
             ),
-            constraints: normalize_collection::<_, NormalizedConstraints>(constraints, normalize),
+            // Prune individual constraints before combining their bounds in preview mode.
+            constraints: normalize_collection::<_, NormalizedConstraints>(
+                constraints,
+                normalize && !uv_preview::is_enabled(PreviewFeature::ResolutionInputs),
+            ),
             overrides: normalize_collection::<_, NormalizedOverrideEntries>(overrides, normalize),
             excludes: normalize_collection::<_, NormalizedExcludes>(excludes, normalize),
             build_constraints: build_constraints.into_iter().collect(),
