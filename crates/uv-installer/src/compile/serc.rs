@@ -102,7 +102,7 @@ impl SercCompiler {
                     });
                 }
             },
-            None if env::var_os("SOURCE_DATE_EPOCH").is_some() => {
+            None if env::var_os("SOURCE_DATE_EPOCH").is_some_and(|value| !value.is_empty()) => {
                 InvalidationMode::Hash { checked: true }
             }
             None => InvalidationMode::Timestamp,
