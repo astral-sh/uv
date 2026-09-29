@@ -11,7 +11,10 @@ use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
-use rustc_hash::FxHashMap;
+use rkyv::api::deserialize_using;
+use rkyv::de::Pool;
+use rkyv::rancor::Error as RkyvError;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
 use url::Url;
@@ -24,7 +27,7 @@ use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
     IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
-    RegistryBuiltWheel,
+    RegistryBuiltWheel, UrlString,
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
@@ -1393,20 +1396,25 @@ pub struct VersionFiles {
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: &DistFilename, file: File) {
-        let file = CachedFile::from(file);
+    fn push(&mut self, filename: &DistFilename, file: CachedFile) {
         match filename {
             DistFilename::WheelFilename(_) => self.wheels.push(file),
             DistFilename::SourceDistFilename(_) => self.source_dists.push(file),
         }
     }
+}
 
-    pub fn all(self, package_name: &PackageName) -> impl Iterator<Item = (DistFilename, File)> {
+impl ArchivedVersionFiles {
+    /// Materialize each file directly from the archive, retaining shared Python requirements.
+    pub fn all(&self, package_name: &PackageName) -> impl Iterator<Item = (DistFilename, File)> {
+        let mut pool = Pool::new();
         self.source_dists
-            .into_iter()
-            .chain(self.wheels)
-            .filter_map(|file| {
-                let file = File::from(file);
+            .iter()
+            .chain(self.wheels.iter())
+            .filter_map(move |file| {
+                let file = file
+                    .to_file(&mut pool)
+                    .expect("archived version files always deserializes");
                 let filename = DistFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
@@ -1416,15 +1424,15 @@ impl VersionFiles {
 /// A compact, cache-local representation of a registry file from the Simple API.
 ///
 /// Filenames recoverable from the URL and false `yanked` markers are omitted, while optional
-/// scalar values use presence bits. Converting back to [`File`] restores equivalent Simple API
-/// metadata.
+/// scalar values use presence bits. URL bases and prefixes are shared across the response.
+/// Converting back to [`File`] restores equivalent Simple API metadata.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct CachedFile {
     size: u64,
     upload_time_utc_ms: i64,
     hashes: CachedHashDigests,
-    url: FileLocation,
+    url: CachedFileLocation,
     requires_python: Option<Arc<VersionSpecifiers>>,
     #[rkyv(with = rkyv::with::Niche)]
     filename: Option<Box<SmallString>>,
@@ -1438,6 +1446,45 @@ pub struct CachedFile {
 }
 
 impl ArchivedCachedFile {
+    /// Materialize a file without allocating intermediate URL prefixes or suffixes.
+    fn to_file(&self, pool: &mut Pool) -> Result<File, RkyvError> {
+        let url = FileLocation::from(&self.url);
+        let filename = self
+            .filename
+            .as_deref()
+            .map_or_else(|| url.raw_filename(), |filename| filename.as_str())
+            .into();
+        let dist_info_metadata = if self.dist_info_metadata {
+            Some(
+                self.metadata_hashes
+                    .as_deref()
+                    .map(|hashes| {
+                        deserialize_using::<CachedHashDigests, _, RkyvError>(hashes, pool)
+                            .map(HashDigests::from)
+                    })
+                    .transpose()?
+                    .unwrap_or_else(HashDigests::empty),
+            )
+        } else {
+            None
+        };
+        let hashes: CachedHashDigests = deserialize_using(&self.hashes, pool)?;
+        Ok(File {
+            dist_info_metadata,
+            filename,
+            hashes: HashDigests::from(hashes),
+            requires_python: deserialize_using(&self.requires_python, pool)?,
+            size: self.has_size.then_some(self.size.to_native()),
+            upload_time_utc_ms: self.upload_time_utc_ms(),
+            url,
+            yanked: self
+                .yanked
+                .as_ref()
+                .map(|yanked| deserialize_using(yanked, pool))
+                .transpose()?,
+        })
+    }
+
     /// Returns the upload time in UTC milliseconds, if it was present in the index metadata.
     pub fn upload_time_utc_ms(&self) -> Option<i64> {
         self.has_upload_time
@@ -1457,10 +1504,9 @@ impl CachedFile {
     pub fn hashes(&self) -> HashDigests {
         HashDigests::from(&self.hashes)
     }
-}
 
-impl From<File> for CachedFile {
-    fn from(file: File) -> Self {
+    /// Compact a file's metadata, sharing URL prefixes with other files from the same response.
+    fn new(file: File, urls: &mut CachedUrlPrefixes) -> Self {
         let filename =
             (file.url.raw_filename() != file.filename.as_ref()).then(|| Box::new(file.filename));
         let has_size = file.size.is_some();
@@ -1481,28 +1527,85 @@ impl From<File> for CachedFile {
             upload_time_utc_ms: file.upload_time_utc_ms.unwrap_or_default(),
             has_size,
             has_upload_time,
-            url: file.url,
+            url: urls.location(file.url),
             yanked: file.yanked.filter(|yanked| yanked.is_yanked()),
         }
     }
 }
 
-impl From<CachedFile> for File {
-    fn from(file: CachedFile) -> Self {
-        let filename = SmallString::from(file.filename());
-        let dist_info_metadata = file.dist_info_metadata.then(|| {
-            file.metadata_hashes
-                .map_or_else(HashDigests::empty, |hashes| HashDigests::from(*hashes))
-        });
-        Self {
-            dist_info_metadata,
-            filename,
-            hashes: HashDigests::from(file.hashes),
-            requires_python: file.requires_python,
-            size: file.has_size.then_some(file.size),
-            upload_time_utc_ms: file.has_upload_time.then_some(file.upload_time_utc_ms),
-            url: file.url,
-            yanked: file.yanked,
+/// A cache-local URL whose base or literal prefix is shared across a Simple API response.
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+enum CachedFileLocation {
+    RelativeUrl(Arc<str>, SmallString),
+    AbsoluteUrl(Arc<str>, SmallString),
+}
+
+impl CachedFileLocation {
+    /// Returns the final raw path component, without percent-decoding or resolving relative URLs.
+    fn raw_filename(&self) -> &str {
+        let path = match self {
+            Self::RelativeUrl(_, path) | Self::AbsoluteUrl(_, path) => path.as_ref(),
+        };
+        let path = path.split_once(['?', '#']).map_or(path, |(path, _)| path);
+        path.rsplit_once('/').map_or(path, |(_, filename)| filename)
+    }
+}
+
+impl From<&ArchivedCachedFileLocation> for FileLocation {
+    fn from(location: &ArchivedCachedFileLocation) -> Self {
+        match location {
+            ArchivedCachedFileLocation::RelativeUrl(base, path) => {
+                Self::RelativeUrl(base.as_ref().into(), path.as_str().into())
+            }
+            ArchivedCachedFileLocation::AbsoluteUrl(prefix, path) => {
+                // Concatenate the original text instead of joining URLs, which could normalize it.
+                let url = SmallString::init_with(prefix.len() + path.len(), |output| {
+                    let (output_prefix, output_path) = output.split_at_mut(prefix.len());
+                    output_prefix.copy_from_slice(prefix.as_bytes());
+                    output_path.copy_from_slice(path.as_bytes());
+                })
+                .expect("concatenating UTF-8 strings produces valid UTF-8");
+                Self::AbsoluteUrl(UrlString::new(url))
+            }
+        }
+    }
+}
+
+/// Intern URL prefixes as shared pointers so rkyv writes each prefix only once.
+#[derive(Default)]
+struct CachedUrlPrefixes(FxHashSet<Arc<str>>);
+
+impl CachedUrlPrefixes {
+    /// Reuse the same allocation for identical prefix strings.
+    fn intern(&mut self, prefix: &str) -> Arc<str> {
+        if let Some(prefix) = self.0.get(prefix) {
+            return Arc::clone(prefix);
+        }
+        let prefix = Arc::from(prefix);
+        self.0.insert(Arc::clone(&prefix));
+        prefix
+    }
+
+    /// Split absolute URLs before the path or share the complete base of relative URLs.
+    fn location(&mut self, location: FileLocation) -> CachedFileLocation {
+        match location {
+            FileLocation::RelativeUrl(base, path) => {
+                CachedFileLocation::RelativeUrl(self.intern(&base), path)
+            }
+            FileLocation::AbsoluteUrl(url) => {
+                let url = url.as_ref();
+                // Share the scheme and authority, keeping the full path in the suffix.
+                // Work with the original bytes, stopping before queries and fragments. Leave
+                // opaque URLs and URLs without a path intact so filename recovery is unchanged.
+                let path = url.split_once(['?', '#']).map_or(url, |(path, _)| path);
+                let prefix_length = path.split_once("://").and_then(|(_, rest)| {
+                    let suffix = &rest[rest.find('/')?..];
+                    Some(path.len() - suffix.len())
+                });
+                let (prefix, path) = url.split_at(prefix_length.unwrap_or_default());
+                CachedFileLocation::AbsoluteUrl(self.intern(prefix), path.into())
+            }
         }
     }
 }
@@ -1649,6 +1752,7 @@ impl SimpleDetailMetadata {
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
+        let mut urls = CachedUrlPrefixes::default();
 
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
@@ -1674,6 +1778,7 @@ impl SimpleDetailMetadata {
                     continue;
                 }
             };
+            let file = CachedFile::new(file, &mut urls);
             match version_map.entry(filename.version().clone()) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     entry.get_mut().push(&filename, file);
@@ -1817,22 +1922,23 @@ impl Connectivity {
 mod tests {
     use std::assert_matches;
     use std::str::FromStr;
+    use std::sync::Arc;
 
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{HashDigest, HashDigests, PypiSimpleDetail};
+    use uv_pypi_types::{HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchStrategy};
 
     use crate::{
         BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
-        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        SimpleDetailMetadata, SimpleDetailMetadatum,
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-        IndexUrl, ToUrlError,
+        File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
+        IndexMetadataRef, IndexUrl, UrlString,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
@@ -2184,12 +2290,24 @@ mod tests {
                     "core-metadata": {
                         "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
                     },
-                    "hashes": {},
+                    "hashes": {
+                        "sha512": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+                    },
+                    "requires-python": ">=3.8",
+                    "size": 0,
+                    "upload-time": "1969-12-31T23:59:59.999Z",
+                    "yanked": "Incorrect metadata",
                     "url": "https://files.pythonhosted.org/example_1-1.0.0-py3-none-any.whl"
                 },
                 {
                     "filename": "example-1-1.0.0.tar.gz",
-                    "hashes": {},
+                    "hashes": {
+                        "md5": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+                        "sha384": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+                    },
+                    "requires-python": ">=3.8",
+                    "size": 18446744073709551615,
+                    "upload-time": "1970-01-01T00:00:00Z",
                     "url": "https://files.pythonhosted.org/example-1-1.0.0.tar.gz"
                 }
             ]
@@ -2198,20 +2316,36 @@ mod tests {
         let package_name = PackageName::from_str("example-1")?;
         let data: PypiSimpleDetail = serde_json::from_str(response)?;
         let base = DisplaySafeUrl::parse("https://pypi.org/simple/example-1/")?;
+        let expected = data
+            .files
+            .iter()
+            .rev()
+            .cloned()
+            .map(|file| File::try_from_pypi(file, &SmallString::from(base.as_str())))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert!(Arc::ptr_eq(
+            expected[0]
+                .requires_python
+                .as_ref()
+                .expect("requires-python"),
+            expected[1]
+                .requires_python
+                .as_ref()
+                .expect("requires-python"),
+        ));
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &package_name,
             data.project_status,
             &base,
         );
-        let archived = super::OwnedArchive::from_unarchived(&simple_metadata)?;
-        let simple_metadata = super::OwnedArchive::deserialize(&archived);
-
-        let files: Vec<_> = simple_metadata
-            .versions
-            .into_iter()
-            .flat_map(|datum| datum.files.all(&package_name))
-            .collect();
+        let files: Vec<_> = {
+            let archived = super::OwnedArchive::from_unarchived(&simple_metadata)?;
+            archived
+                .iter()
+                .flat_map(|datum| datum.files.all(&package_name))
+                .collect()
+        };
         let filenames: Vec<_> = files
             .iter()
             .map(|(filename, _)| filename.to_string())
@@ -2220,15 +2354,143 @@ mod tests {
             filenames,
             ["example_1-1.0.0.tar.gz", "example_1-1.0.0-py3-none-any.whl"]
         );
-        assert!(files[0].1.dist_info_metadata.is_none());
-        let metadata_hashes = HashDigests::from(HashDigest::from_str(
-            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        )?);
+        assert!(Arc::ptr_eq(
+            files[0]
+                .1
+                .requires_python
+                .as_ref()
+                .expect("requires-python"),
+            files[1]
+                .1
+                .requires_python
+                .as_ref()
+                .expect("requires-python"),
+        ));
         assert_eq!(
-            files[1].1.dist_info_metadata.as_ref(),
-            Some(&metadata_hashes)
+            files.into_iter().map(|(_, file)| file).collect::<Vec<_>>(),
+            expected
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn cached_file_urls_round_trip() -> Result<(), Error> {
+        let base = SmallString::from("https://example.org/simple/example");
+        let mut prefixes = super::CachedUrlPrefixes::default();
+        let locations = [
+            "example-1.tar.gz",
+            "../example-1.tar.gz?download=/file#fragment/path",
+            "//other.example.org/example-1.tar.gz",
+            "https://user:p%40ss@EXAMPLE.org:443/packages/example-1.tar.gz",
+            "https://example.org/packages/example%2F1.tar.gz?download=/file#fragment/path",
+            "https://example.org/packages/example-1.tar.gz#fragment/path?query=/file",
+            "https://example.org/packages/",
+            "https://example.org/?download=/file#fragment/path",
+            "https://example.org?download=/file#fragment/path",
+            "https://example.org",
+            "file:///tmp/packages/example-1.tar.gz",
+            "custom:example-1.tar.gz?download=/file#fragment/path",
+            "custom:directory/example-1.tar.gz",
+            "https://[::1]:8443/packages/example-1.tar.gz",
+            "https://example.org/λ/example-1.tar.gz",
+        ]
+        .map(|url| FileLocation::new(url.into(), &base));
+        let mut expected = Vec::new();
+        let mut cached = Vec::new();
+        for location in locations
+            .into_iter()
+            .chain([FileLocation::AbsoluteUrl(UrlString::new(
+                "not/an/absolute/url".into(),
+            ))])
+        {
+            for filename in [location.raw_filename(), "different-1.tar.gz"] {
+                let file = File {
+                    dist_info_metadata: None,
+                    filename: filename.into(),
+                    hashes: HashDigests::empty(),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: location.clone(),
+                    yanked: None,
+                };
+                expected.push(file.clone());
+                cached.push(super::CachedFile::new(file, &mut prefixes));
+            }
+        }
+        let actual = {
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&cached)?;
+            let archived = rkyv::access::<
+                rkyv::Archived<Vec<super::CachedFile>>,
+                rkyv::rancor::Error,
+            >(&bytes)?;
+            let mut pool = super::Pool::new();
+            archived
+                .iter()
+                .map(|file| file.to_file(&mut pool))
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        assert_eq!(actual, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn simple_url_prefixes_are_shared() -> Result<(), Error> {
+        let package_name = PackageName::from_str("example")?;
+        let base = DisplaySafeUrl::parse("https://example.org/simple/example/")?;
+        let response = serde_json::json!({
+            "files": (1..=4).map(|version| {
+                let filename = format!("example-{version}.tar.gz");
+                let url = if version <= 2 {
+                    format!("../packages/{filename}")
+                } else {
+                    format!("https://files.example.org/{version}/{filename}")
+                };
+                serde_json::json!({"filename": filename, "url": url, "hashes": {}})
+            }).collect::<Vec<_>>()
+        });
+        let data: PypiSimpleDetail = serde_json::from_value(response)?;
+        let expected = data
+            .files
+            .iter()
+            .cloned()
+            .map(|file| File::try_from_pypi(file, &SmallString::from(base.as_str())))
+            .collect::<Result<Vec<_>, _>>()?;
+        let metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &package_name,
+            data.project_status,
+            &base,
+        );
+        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&metadata)?;
+        for prefix in [base.as_str(), "https://files.example.org"] {
+            assert_eq!(
+                bytes
+                    .windows(prefix.len())
+                    .filter(|bytes| *bytes == prefix.as_bytes())
+                    .count(),
+                1,
+            );
+        }
+        let actual = {
+            let archived = super::OwnedArchive::<SimpleDetailMetadata>::new(bytes)?;
+            // Materialize one version at a time, including prefixes first encountered in
+            // another version's files. The returned files must outlive the archive.
+            archived
+                .iter()
+                .map(|datum| {
+                    datum
+                        .files
+                        .all(&package_name)
+                        .map(|(_, file)| file)
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
+        for (expected, files) in expected.into_iter().zip(actual) {
+            assert_eq!(files, [expected]);
+        }
         Ok(())
     }
 
@@ -2297,9 +2559,8 @@ mod tests {
                                     "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
                                 ),
                                 url: AbsoluteUrl(
-                                    UrlString(
-                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
-                                    ),
+                                    "https://files.pythonhosted.org",
+                                    "/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
                                 ),
                                 requires_python: Some(
                                     VersionSpecifiers(
@@ -2369,9 +2630,8 @@ mod tests {
                                     "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
                                 ),
                                 url: AbsoluteUrl(
-                                    UrlString(
-                                        "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
-                                    ),
+                                    "https://files.pythonhosted.org",
+                                    "/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
                                 ),
                                 requires_python: Some(
                                     VersionSpecifiers(
@@ -2403,7 +2663,7 @@ mod tests {
     ///
     /// See: <https://github.com/astral-sh/uv/issues/1388>
     #[test]
-    fn relative_urls_code_artifact() -> Result<(), ToUrlError> {
+    fn relative_urls_code_artifact() -> Result<(), Error> {
         let text = r#"
         <!DOCTYPE html>
         <html>
@@ -2425,22 +2685,30 @@ mod tests {
         // Note the lack of a trailing `/` here is important for coverage of url-join behavior
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
-        let SimpleDetailHTML {
-            project_status: _,
-            base,
-            files,
-        } = SimpleDetailHTML::parse(text, &base).unwrap();
-        let base = SmallString::from(base.as_str());
-
-        // Test parsing of the file urls
-        let urls = files
-            .into_iter()
-            .map(|file| FileLocation::new(file.url, &base).to_url())
-            .collect::<Result<Vec<_>, _>>()?;
-        let urls = urls
-            .iter()
-            .map(DisplaySafeUrl::to_string)
-            .collect::<Vec<_>>();
+        let mut cached_urls = Vec::new();
+        for (text, base) in [
+            (text.to_string(), base.clone()),
+            (
+                text.replace("<head>", &format!("<head><base href=\"{base}\">")),
+                DisplaySafeUrl::parse("https://other.example.org/simple/flask/")?,
+            ),
+        ] {
+            let package_name = PackageName::from_str("flask")?;
+            let metadata = SimpleDetailMetadata::from_html(&text, &package_name, &base)?;
+            let archived = super::OwnedArchive::from_unarchived(&metadata)?;
+            let urls = archived
+                .iter()
+                .flat_map(|datum| datum.files.all(&package_name))
+                .map(|(_, file)| file.url.to_url())
+                .collect::<Result<Vec<_>, _>>()?;
+            let urls = urls
+                .iter()
+                .map(DisplaySafeUrl::to_string)
+                .collect::<Vec<_>>();
+            cached_urls.push(urls);
+        }
+        assert_eq!(cached_urls[0], cached_urls[1]);
+        let urls = &cached_urls[0];
         insta::assert_debug_snapshot!(urls, @r#"
         [
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz",

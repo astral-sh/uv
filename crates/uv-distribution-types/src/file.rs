@@ -164,8 +164,8 @@ impl Display for FileLocation {
 pub struct UrlString(SmallString);
 
 impl UrlString {
-    /// Create a new [`UrlString`] from a [`String`].
-    fn new(url: SmallString) -> Self {
+    /// Create a new [`UrlString`] without parsing or normalizing its contents.
+    pub fn new(url: SmallString) -> Self {
         Self(url)
     }
 
