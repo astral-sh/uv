@@ -52,7 +52,7 @@ use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingService
 
 #[derive(Error, Debug)]
 pub enum PublishError {
-    #[error("The publish path is not a valid glob pattern: {0}")]
+    #[error("The publish path `{0}` is not a valid glob pattern")]
     Pattern(String, #[source] PatternError),
     /// [`GlobError`] is a wrapped io error.
     #[error(transparent)]
