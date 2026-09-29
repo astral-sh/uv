@@ -9,7 +9,9 @@ pub enum PortableGlobError {
     /// Shows the failing glob in the error message.
     #[error(transparent)]
     GlobError(#[from] globset::Error),
-    #[error("The parent directory operator (..) at position {pos} is not allowed in glob: {glob}")]
+    #[error(
+        "The parent directory operator (`..`) at position {pos} is not allowed in glob: {glob}"
+    )]
     ParentDirectory { glob: String, pos: usize },
     #[error("Invalid character `{invalid}` at position {pos} in glob: {glob}")]
     InvalidCharacter {
@@ -231,11 +233,11 @@ mod tests {
         };
         assert_snapshot!(
             parse_err(".."),
-            @"The parent directory operator (..) at position 0 is not allowed in glob: .."
+            @"The parent directory operator (`..`) at position 0 is not allowed in glob: .."
         );
         assert_snapshot!(
             parse_err("licenses/.."),
-            @"The parent directory operator (..) at position 9 is not allowed in glob: licenses/.."
+            @"The parent directory operator (`..`) at position 9 is not allowed in glob: licenses/.."
         );
         assert_snapshot!(
             parse_err("licenses/LICEN!E.txt"),
