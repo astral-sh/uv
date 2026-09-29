@@ -490,8 +490,6 @@ fn move_folder_recorded(
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else {
-            validate_data_script_destination(&target, scripts)?;
-            rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
                 .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
@@ -499,6 +497,8 @@ fn move_folder_recorded(
                     relative: relative_to_site_packages.to_path_buf(),
                     absolute: src.to_path_buf(),
                 })?;
+            validate_data_script_destination(&target, scripts)?;
+            rename_or_copy.rename_or_copy(src, &target)?;
             entry.path = relative_to(&target, site_packages)?
                 .portable_display()
                 .to_string();
@@ -554,6 +554,16 @@ fn install_script(
         })?;
 
     let path = file.path();
+    let relative_to_site_packages = path
+        .strip_prefix(site_packages)
+        .expect("prefix must not change");
+    let entry = record
+        .iter_mut()
+        .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
+        .ok_or_else(|| Error::RecordFile {
+            relative: relative_to_site_packages.to_path_buf(),
+            absolute: path.clone(),
+        })?;
     let mut script = BufReader::new(File::open(&path)?);
 
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
@@ -692,21 +702,6 @@ fn install_script(
 
         None
     };
-
-    // Find the existing entry in the `RECORD`.
-    let relative_to_site_packages = path
-        .strip_prefix(site_packages)
-        .expect("Prefix must no change");
-    let entry = record
-        .iter_mut()
-        .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
-        .ok_or_else(|| {
-            // It should not be possible to error at this point, but filesystems and such.
-            Error::RecordFile {
-                relative: relative_to_site_packages.to_path_buf(),
-                absolute: path.clone(),
-            }
-        })?;
 
     // Update the entry in the `RECORD`.
     entry.path = script_relative.portable_display().to_string();

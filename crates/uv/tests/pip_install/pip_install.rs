@@ -28,7 +28,7 @@ use wiremock::{
 };
 
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
-use uv_fs::{PortablePath, Simplified};
+use uv_fs::{PortablePath, Simplified, create_symlink};
 use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
@@ -14882,6 +14882,61 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
         .venv
         .child("share/man/man1/foo.1")
         .assert("foo manual\n");
+
+    Ok(())
+}
+
+/// A merged `.data` tree cannot install aliases or rewrite scripts absent from the wheel's `RECORD`.
+#[test]
+fn reject_unrecorded_merged_wheel_data_entry() -> Result<()> {
+    allow_duplicates! {
+        for directory in ["data", "scripts"] {
+            let context = uv_test::test_context!("3.12").with_filter((
+                r"foo-0\.1\.0\.data[/\\](?:data|scripts)[/\\]unrecorded",
+                "foo-0.1.0.data/[SCHEME]/unrecorded",
+            ));
+            let outside = context.temp_dir.child("outside");
+            outside.child("payload.txt").write_str("outside sentinel")?;
+            let staged = context.site_packages().join(format!("foo-0.1.0.data/{directory}"));
+            fs::create_dir_all(&staged)?;
+            let destination = if directory == "scripts" {
+                fs::write(staged.join("unrecorded"), "#!python\nprint('stale')\n")?;
+                venv_bin_path(&context.venv).join("unrecorded")
+            } else {
+                create_symlink(outside.path(), staged.join("unrecorded"))?;
+                context.venv.join("unrecorded")
+            };
+            let (filename, wheel) = generate_wheel_with_files(
+                &"foo".parse()?,
+                &"0.1.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[(
+                    &format!("foo-0.1.0.data/{directory}/safe.txt"),
+                    "wheel payload",
+                )],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .args(["--link-mode", "copy"])
+                .arg(&filename), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+              cause: RECORD file doesn't match wheel contents, could not find entry for: foo-0.1.0.data/[SCHEME]/unrecorded ([SITE_PACKAGES]/foo-0.1.0.data/[SCHEME]/unrecorded)
+            ");
+
+            outside.child("payload.txt").assert("outside sentinel");
+            assert!(!destination.exists());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
 
     Ok(())
 }
