@@ -83,7 +83,8 @@ fn create_venv_caches_interpreter() -> Result<()> {
     // It should cache for both a system interpreter and when starting from another venv.
     for python in [Path::new("3.12"), context.venv.path()] {
         let root = tempfile::tempdir_in(context.temp_dir.path())?;
-        // On Windows, canonicalization returns a verbatim path.
+        // Check that cached metadata matches Python's output even when the venv path has
+        // a Windows verbatim prefix.
         let root_path = root.path().canonicalize()?;
         context
             .venv()
