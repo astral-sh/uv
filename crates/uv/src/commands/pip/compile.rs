@@ -595,6 +595,7 @@ pub(crate) async fn pip_compile(
         &build_dispatch,
         &concurrency,
         options,
+        None,
         Box::new(DefaultResolveLogger),
         printer,
     )

@@ -17,6 +17,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_test::package_server::PackageServer;
 use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
@@ -307,6 +308,69 @@ fn sync_relocatable_envs_default() -> Result<()> {
     ----- stdout -----
     black, 24.3.0 (compiled: yes)
     Python (CPython) 3.12.[X]
+    ");
+
+    Ok(())
+}
+
+/// Moving a relocatable environment with its editable project leaves a stale source path.
+#[test]
+fn sync_relocatable_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project_dir = context.temp_dir.child("project");
+    project_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv-build"]
+        build-backend = "uv_build"
+    "#})?;
+    project_dir
+        .child("src/project/__init__.py")
+        .write_str("VALUE = 'hello'\n")?;
+
+    context
+        .venv()
+        .current_dir(project_dir.path())
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(project_dir.path())
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(project_dir.path())
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "python", "-I", "-c", "import project; print(project.VALUE)"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    hello
+    ");
+
+    let relocated_dir = context.temp_dir.child("relocated");
+    fs_err::rename(project_dir.path(), relocated_dir.path())?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(relocated_dir.path())
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "python", "-I", "-c", "import project; print(project.VALUE)"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Traceback (most recent call last):
+      File \"<string>\", line 1, in <module>
+    ModuleNotFoundError: No module named 'project'
     ");
 
     Ok(())
@@ -5714,6 +5778,132 @@ fn no_install_project() -> Result<()> {
     Ok(())
 }
 
+/// Exclude the current project when syncing every workspace member.
+#[test]
+fn no_install_project_all_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Exclude the root project while retaining the child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-install-project").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // From the child, exclude the child even though the root depends on it.
+    uv_snapshot!(context.filters(), context.sync().current_dir(child.path()).arg("--all-packages").arg("--no-install-project").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - child==0.1.0 (from file://[TEMP_DIR]/child)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // The inverse filter should select the current project.
+    uv_snapshot!(context.filters(), context.sync().current_dir(child.path()).arg("--all-packages").arg("--only-install-project").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
+/// A virtual workspace root has no current project to exclude.
+#[test]
+fn no_install_project_all_packages_virtual_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["alpha", "beta"]
+        "#,
+    )?;
+
+    for name in ["alpha", "beta"] {
+        let member = context.temp_dir.child(name);
+        member.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+            "#,
+        ))?;
+        member.child(format!("src/{name}/__init__.py")).touch()?;
+    }
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-install-project").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + alpha==0.1.0 (from file://[TEMP_DIR]/alpha)
+     + beta==0.1.0 (from file://[TEMP_DIR]/beta)
+    ");
+
+    // From a member, only that member is the current project.
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("alpha")).arg("--all-packages").arg("--no-install-project").arg("--frozen").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - alpha==0.1.0 (from file://[TEMP_DIR]/alpha)
+    ");
+
+    Ok(())
+}
+
 /// Avoid syncing workspace members and the project when `--no-install-workspace` is provided, but
 /// include all dependencies.
 #[test]
@@ -6133,25 +6323,77 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     let build_backend = context.temp_dir.child("build_backend.py");
     build_backend.write_str(indoc! {r#"
         import pathlib
+        from textwrap import dedent
 
         def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
             pathlib.Path("validation-hook-called").write_text("called")
             dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
             dist_info.mkdir()
-            dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.1\n"
-                "Name: project\n"
-                "Version: 0.1.0\n"
-                "Requires-Dist: anyio==3.7.0\n"
-            )
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+                Requires-Dist: anyio==3.7.0
+            """).lstrip())
             return dist_info.name
     "#})?;
+
+    let marker = context.temp_dir.child("validation-hook-called");
+
+    // Excluding the project also applies when no lockfile exists.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-package")
+        .arg("project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("example")
+        .arg("--group")
+        .arg("dev")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to add dependencies
+      cause: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
+    ");
+
+    uv_snapshot!(context.filters(), context.check()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!marker.exists());
 
     // Generate a lockfile, then remove the cached metadata so validation would need to invoke the
     // build backend again if it ignored `--no-build`.
     context.lock().assert().success();
 
-    let marker = context.temp_dir.child("validation-hook-called");
     assert!(marker.exists());
     fs_err::remove_file(marker.path())?;
     fs_err::remove_dir_all(&context.cache_dir)?;
@@ -6166,6 +6408,167 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     ");
 
     assert!(!marker.exists());
+
+    Ok(())
+}
+
+/// Exclude the current project from metadata builds when syncing all workspace packages.
+#[test]
+fn no_install_project_all_packages_no_build_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [dependency-groups]
+        dev = []
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+        from textwrap import dedent
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            pathlib.Path("metadata-hook-called").write_text("called")
+            dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+            """).lstrip())
+            return dist_info.name
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    let marker = context.temp_dir.child("metadata-hook-called");
+
+    // Resolving without a lockfile must not execute the excluded project's backend.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-packages")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!marker.exists());
+
+    context.lock().arg("--offline").assert().success();
+    assert!(marker.exists());
+    fs_err::remove_file(marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // Nor may lock validation execute the backend after cached metadata is removed.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-packages")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+    assert!(!marker.exists());
+
+    // Group-only selection can still execute the backend to validate the lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked in [TIME]
+    ");
+    assert!(marker.exists());
+
+    Ok(())
+}
+
+/// A first-party backend without a metadata hook can build a wheel to provide metadata.
+#[test]
+fn sync_no_build_first_party_wheel_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version", "dependencies"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+        import zipfile
+        from textwrap import dedent
+
+        def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+            pathlib.Path("wheel-hook-called").write_text("called")
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory, filename), "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", dedent("""
+                    Metadata-Version: 2.1
+                    Name: project
+                    Version: 0.1.0
+                """).lstrip())
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", dedent("""
+                    Wheel-Version: 1.0
+                    Generator: test
+                    Root-Is-Purelib: true
+                    Tag: py3-none-any
+                """).lstrip())
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    assert!(context.temp_dir.child("wheel-hook-called").exists());
 
     Ok(())
 }
@@ -15286,38 +15689,11 @@ async fn sync_deprecated_zstd_wheel() -> Result<()> {
 /// extension (e.g., `.tar.bz2`). The resolver should reject it as incompatible.
 #[tokio::test]
 async fn sync_non_pep625_sdist() -> Result<()> {
-    use serde_json::json;
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path},
-    };
-
     let context = uv_test::test_context!("3.13");
-    let server = MockServer::start().await;
-
-    let sdist_url = format!("{}/files/basic_package-0.1.0.tar.bz2", server.uri());
-
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "basic-package",
-        "files": [{
-            "filename": "basic_package-0.1.0.tar.bz2",
-            "url": sdist_url,
-            "hashes": {
-                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
-            }
-        }]
-    });
-
-    Mock::given(method("GET"))
-        .and(path("/simple/basic-package/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string().into_bytes(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
+    let server = PackageServer::new(&"basic-package".parse()?).await;
+    // The unsupported filename must be rejected before the archive is downloaded.
+    server
+        .serve("basic_package-0.1.0.tar.bz2", b"", Some(&"0".repeat(64)))
         .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -15333,9 +15709,9 @@ async fn sync_non_pep625_sdist() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-registry"
-        url = "{}/simple"
+        url = "{}"
         "#,
-        server.uri()
+        server.index_url()
     })?;
 
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"

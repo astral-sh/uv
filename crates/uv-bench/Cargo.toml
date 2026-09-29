@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.85"
+version = "0.0.87"
 description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }
@@ -29,6 +29,16 @@ path = "benches/workspace_discovery.rs"
 harness = false
 
 [[bench]]
+name = "atomic_write"
+path = "benches/atomic_write.rs"
+harness = false
+
+[[bench]]
+name = "cached_client"
+path = "benches/cached_client.rs"
+harness = false
+
+[[bench]]
 name = "uv_pep440"
 path = "benches/uv_pep440.rs"
 harness = false
@@ -49,6 +59,7 @@ uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
+uv-fs = { workspace = true, features = ["tokio"] }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
@@ -65,10 +76,12 @@ anyhow = { workspace = true }
 async_zip = { workspace = true }
 clap = { workspace = true }
 criterion = { version = "5.0.1", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
+fastrand = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 jiff = { workspace = true }
+reqwest = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tar-codec = { workspace = true }
@@ -76,3 +89,4 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
+wiremock = { workspace = true }

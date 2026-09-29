@@ -1385,14 +1385,14 @@ pub(crate) enum ProjectInterpreter {
 impl ProjectInterpreter {
     /// Discover an existing project environment without selecting or downloading an interpreter.
     pub(crate) fn discover_existing(
-        workspace: &Workspace,
+        install_path: &Path,
         active: ActiveEnvironment,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, ProjectError> {
-        let selection = workspace.environment_selection(active);
+        let selection = ProjectEnvironmentSelection::from_install_path(install_path, active);
         let root = selection
             .explicit_path()
-            .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
+            .map_or_else(|| install_path.join(".venv"), Path::to_path_buf);
         let root = read_environment_path_file(&root).unwrap_or(root);
         let centralized = centralized_environments_enabled(&selection, cache)
             || is_centralized_environment_reference(&root, cache);
@@ -2724,6 +2724,7 @@ pub(crate) async fn resolve_environment(
         &resolve_dispatch,
         concurrency,
         options,
+        None,
         logger,
         printer,
     )
@@ -3121,6 +3122,7 @@ pub(crate) async fn update_environment(
         &build_dispatch,
         concurrency,
         options,
+        None,
         resolve,
         printer,
     )

@@ -5891,6 +5891,33 @@ fn tool_install_locks_are_preview() {
 }
 
 #[test]
+fn tool_install_lock_repeated_requirements() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+
+    uv_snapshot!(context.filters(), context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok>=1", "--with", "ok>=2"])
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + ok==2.0.0
+     + simple-launcher==0.1.0
+    Installed 1 executable: simple_launcher
+    ");
+}
+
+#[test]
 fn tool_install_lock_supports_local_wheel() {
     let context = uv_test::test_context!("3.12").with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
@@ -6132,6 +6159,58 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// Equivalent requirements reuse a tool lock and record the requested receipt inputs.
+#[test]
+fn tool_install_lock_reuses_equivalent_requirements() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+
+    context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok>=1", "--with", "ok>=2"])
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    let original_lock = context.read("tools/simple-launcher/uv.lock");
+
+    context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok>=2"])
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    assert_eq!(context.read("tools/simple-launcher/uv.lock"), original_lock);
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [
+            { name = "simple-launcher" },
+            { name = "ok", specifier = ">=2" },
+        ]
+        entrypoints = [
+            { name = "simple_launcher", install-path = "[TEMP_DIR]/bin/simple_launcher", from = "simple-launcher" },
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = ["file://[WORKSPACE]/test/links"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
 }
 
 #[test]

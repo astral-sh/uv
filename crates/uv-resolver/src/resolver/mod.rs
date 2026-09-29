@@ -19,13 +19,14 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, DependencyModifiers};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
     IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    RequiresPython, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    RequiresPython, ResolutionRecorder, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -117,11 +118,11 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 /// State that is shared between the prefetcher and the PubGrub solver during
 /// resolution, across all forks.
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
+    recorder: Option<ResolutionRecorder>,
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
-    overrides: Overrides,
-    excludes: Excludes,
+    modifiers: DependencyModifiers,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -249,12 +250,14 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
+            recorder: manifest.recorder.clone(),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
-            constraints: manifest.constraints,
-            overrides: manifest.overrides,
-            excludes: manifest.excludes,
+            constraints: manifest
+                .constraints
+                .with_recorder(manifest.recorder.clone()),
+            modifiers: manifest.modifiers.with_recorder(manifest.recorder.clone()),
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -296,7 +299,8 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         // Channel size is set large to accommodate batch prefetching.
         let (request_sink, request_stream) = mpsc::channel(300);
-        let requests = MetadataRequests::new(state.index.clone(), request_sink);
+        let requests =
+            MetadataRequests::new(state.index.clone(), request_sink, state.recorder.clone());
 
         // Run the fetcher.
         let requests_fut = state.clone().fetch(provider.clone(), request_stream).fuse();
@@ -861,7 +865,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.workspace_members,
             self.requirements.clone(),
             self.constraints.clone(),
-            self.overrides.clone(),
+            self.modifiers.clone(),
             &self.preferences,
             &self.hasher,
             &self.index,
@@ -1795,13 +1799,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
-        let expander = RequirementExpander::new(
-            &self.constraints,
-            &self.overrides,
-            &self.excludes,
-            env,
-            python_requirement,
-        );
+        let expander =
+            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);

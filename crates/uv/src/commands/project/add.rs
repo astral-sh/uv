@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
 use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::io;
 use std::path::Path;
@@ -1088,6 +1088,17 @@ async fn lock_and_sync(
     preview: Preview,
     malware_settings: &MalwareCheckSettings,
 ) -> Result<(), ProjectError> {
+    let install_options = InstallOptions::new(
+        no_install_project,
+        only_install_project,
+        no_install_workspace,
+        only_install_workspace,
+        no_install_local,
+        only_install_local,
+        no_install_package,
+        only_install_package,
+    );
+    let first_party_exclusions = target.first_party_exclusions(&install_options);
     let mut lock = Box::pin(
         project::lock::LockOperation::new(
             if let LockCheck::Enabled(lock_check) = lock_check {
@@ -1108,6 +1119,7 @@ async fn lock_and_sync(
             preview,
         )
         .with_constraints(constraints)
+        .with_first_party_exclusions(first_party_exclusions.clone())
         .execute((&target).into()),
     )
     .await?
@@ -1202,18 +1214,17 @@ async fn lock_and_sync(
             // Update the `pypackage.toml` in-memory.
             target = target.update(&content, &WorkspaceCache::default())?;
 
-            // Invalidate the project metadata.
+            // Invalidate any cached project metadata. Reusing a metadata-free lock may not
+            // populate the in-memory index.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let distribution_id = url.distribution_id();
-                let existing = lock_state
+                lock_state
                     .index_mut()
                     .distributions_mut()
                     .context("Cannot invalidate project metadata while the cache is in use")?
                     .remove(&distribution_id);
-                // TODO: Allow an absent entry after reusing a metadata-free lock.
-                debug_assert!(existing.is_some(), "distribution should exist");
             }
 
             // If the file was modified, we have to lock again, though the only expected change is
@@ -1237,6 +1248,7 @@ async fn lock_and_sync(
                     printer,
                     preview,
                 )
+                .with_first_party_exclusions(first_party_exclusions)
                 .execute((&target).into()),
             )
             .await?
@@ -1273,16 +1285,7 @@ async fn lock_and_sync(
         extras,
         groups,
         None,
-        InstallOptions::new(
-            no_install_project,
-            only_install_project,
-            no_install_workspace,
-            only_install_workspace,
-            no_install_local,
-            only_install_local,
-            no_install_package,
-            only_install_package,
-        ),
+        install_options,
         Modifications::Sufficient,
         None,
         settings.into(),
@@ -1387,6 +1390,16 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 }
 
 impl AddTarget {
+    /// Return workspace members excluded from the first-party build exemption.
+    fn first_party_exclusions(&self, install_options: &InstallOptions) -> BTreeSet<PackageName> {
+        match self {
+            Self::Project(project, _) => {
+                project::sync::first_party_exclusions(project, false, &[], install_options)
+            }
+            Self::Script(..) => BTreeSet::new(),
+        }
+    }
+
     /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
     /// modifications.
     pub(super) async fn acquire_lock(&self) -> Result<LockedFile, LockedFileError> {

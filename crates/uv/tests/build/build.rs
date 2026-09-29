@@ -13,12 +13,9 @@ use std::env::current_dir;
 use std::path::Path;
 use url::Url;
 use uv_static::EnvVars;
+use uv_test::package_server::PackageServer;
 use uv_test::packse::generate_wheel;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
-use wiremock::{
-    Mock, MockServer, ResponseTemplate,
-    matchers::{method, path as url_path},
-};
 
 fn zip_file_names(path: &Path) -> Result<Vec<String>> {
     block_on(async {
@@ -152,6 +149,152 @@ fn build_basic() -> Result<()> {
         .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Global lazy imports are opt-in on supported build interpreters.
+#[test]
+fn build_lazy_imports() -> Result<()> {
+    let context = uv_test::test_context!("3.15");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("unused_module.py").write_str("VALUE = 1\n")?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import sys
+        import unused_module
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            import pathlib
+            import zipfile
+
+            pathlib.Path("mode").write_text(
+                "eager" if "unused_module" in sys.modules else "lazy"
+            )
+            name = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory) / name, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--preview-features").arg("build-lazy-imports").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("lazy");
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        preview-features = ["build-lazy-imports"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("lazy");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--no-preview").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    Ok(())
+}
+
+/// Global lazy imports remain disabled on unsupported build interpreters.
+#[test]
+fn build_lazy_imports_unsupported_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("unused_module.py").write_str("VALUE = 1\n")?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import sys
+        import unused_module
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            import pathlib
+            import zipfile
+
+            pathlib.Path("mode").write_text(
+                "eager" if "unused_module" in sys.modules else "lazy"
+            )
+            name = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory) / name, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--preview-features").arg("build-lazy-imports").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        preview-features = ["build-lazy-imports"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--no-preview").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
 
     Ok(())
 }
@@ -1942,25 +2085,23 @@ fn build_sha() -> Result<()> {
 async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
-    let ok_wheel = current_dir()?.join("../../test/links/ok-1.0.0-py3-none-any.whl");
-    let validation_wheel =
-        current_dir()?.join("../../test/links/validation-1.0.0-py3-none-any.whl");
-    let server = MockServer::start().await;
-    let ok_wheel_url = Url::parse(&format!("{}/ok-1.0.0-py3-none-any.whl", server.uri()))?;
-    let validation_wheel_url = Url::parse(&format!(
-        "{}/validation-1.0.0-py3-none-any.whl",
-        server.uri()
-    ))?;
+    let links = context.workspace_root.join("test/links");
+    let ok_filename = "ok-1.0.0-py3-none-any.whl";
+    let validation_filename = "validation-1.0.0-py3-none-any.whl";
+    let ok_server = PackageServer::new(&"ok".parse()?).await;
+    let validation_server = PackageServer::new(&"validation".parse()?).await;
+    let ok_wheel_url = ok_server.file_url(ok_filename);
+    let validation_wheel_url = validation_server.file_url(validation_filename);
 
-    Mock::given(method("GET"))
-        .and(url_path("/ok-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(ok_wheel)?))
-        .mount(&server)
+    ok_server
+        .serve(ok_filename, &fs_err::read(links.join(ok_filename))?, None)
         .await;
-    Mock::given(method("GET"))
-        .and(url_path("/validation-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(validation_wheel)?))
-        .mount(&server)
+    validation_server
+        .serve(
+            validation_filename,
+            &fs_err::read(links.join(validation_filename))?,
+            None,
+        )
         .await;
 
     let project = context.temp_dir.child("project");

@@ -3,9 +3,84 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.20
+
+Released on 2026-09-28.
+
+### Enhancements
+
+- Reuse lockfiles when dependency declarations are semantically equivalent ([#21951](https://github.com/astral-sh/uv/pull/21951))
+- Preserve second-line encoding declarations when installing wheel scripts with CRLF shebangs ([#21990](https://github.com/astral-sh/uv/pull/21990))
+
+### Preview features
+
+- Write normalized requirement declarations with the `lockfile-normalization` preview feature ([#21951](https://github.com/astral-sh/uv/pull/21951))
+- Honor synthetic default groups when installing or syncing from `pylock.toml` ([#22003](https://github.com/astral-sh/uv/pull/22003))
+- Resolve local paths in exported `pylock.toml` files relative to the output file ([#22042](https://github.com/astral-sh/uv/pull/22042))
+- Install each package only once when repeated `tool-install-locks` requirements resolve to the same package ([#22000](https://github.com/astral-sh/uv/pull/22000))
+- Reuse `lock-without-metadata` lockfiles for conflicting groups with distinct base and extra requirement specifiers ([#22055](https://github.com/astral-sh/uv/pull/22055))
+- Use consistent root-package paths in `uv workspace metadata` and `uv tree --format json` output ([#22050](https://github.com/astral-sh/uv/pull/22050))
+
+### Configuration
+
+- Continue searching `XDG_CONFIG_DIRS` after empty entries ([#21987](https://github.com/astral-sh/uv/pull/21987))
+
+### Performance
+
+- Restore the previous HTTP cache-write scheduling while investigating severe cache-revalidation stalls on ext4 filesystems ([#22051](https://github.com/astral-sh/uv/pull/22051))
+
+### Bug fixes
+
+- Apply hash constraints to every repeated requirement under `--require-hashes` and `--verify-hashes` ([#21996](https://github.com/astral-sh/uv/pull/21996))
+- Allow metadata builds for first-party workspace projects under `--no-build` ([#21988](https://github.com/astral-sh/uv/pull/21988))
+- Honor project exclusion flags with `--all-packages`, including `--no-install-project` and `--no-emit-project` ([#21994](https://github.com/astral-sh/uv/pull/21994))
+- Restore `pyproject.toml` if `uv upgrade` fails or is interrupted ([#21983](https://github.com/astral-sh/uv/pull/21983))
+- Generate working Nushell activation scripts for relocatable virtual environments ([#21979](https://github.com/astral-sh/uv/pull/21979))
+- Prevent commands from running and changing state after displaying `--show-settings` ([#21989](https://github.com/astral-sh/uv/pull/21989))
+- Treat UTF-16 requirements files containing only a byte-order mark as empty ([#21991](https://github.com/astral-sh/uv/pull/21991))
+- Ignore unrecognized managed-Python implementation directories during `uv python list` and `uv python upgrade` instead of panicking ([#22033](https://github.com/astral-sh/uv/pull/22033))
+- Avoid panics and incorrect rewriting when managed Python sysconfig paths merely start with `/install` ([#22036](https://github.com/astral-sh/uv/pull/22036))
+- Report whitespace-only non-ASCII requirements as invalid instead of panicking ([#22035](https://github.com/astral-sh/uv/pull/22035))
+- Avoid a resolver panic when trace logging an always-false constraint ([#22034](https://github.com/astral-sh/uv/pull/22034))
+
+## 0.12.19
+
+Released on 2026-09-24.
+
+### Python
+
+- Add PyPy 3.11.16 and 3.12.14 ([#21847](https://github.com/astral-sh/uv/pull/21847))
+- Update GraalPy 3.13.0 to build 25.4.4 ([#21847](https://github.com/astral-sh/uv/pull/21847))
+
+### Enhancements
+
+- Format upload URLs with backticks in `uv publish` errors ([#21934](https://github.com/astral-sh/uv/pull/21934))
+
+### Preview features
+
+- Run build-backend hooks with lazy imports on CPython 3.15 and later using the `build-lazy-imports` preview feature ([#21967](https://github.com/astral-sh/uv/pull/21967))
+- Omit unused resolution settings from `uv.lock` and ignore changes to them when checking lockfile freshness with the `resolution-inputs` preview feature ([#21913](https://github.com/astral-sh/uv/pull/21913))
+
+### Bug fixes
+
+- Preserve signed and encoded query parameters in direct-URL metadata to avoid reinstalling unchanged packages ([#21971](https://github.com/astral-sh/uv/pull/21971))
+- Recognize `1.0.0` as satisfying `===1` during installed-package checks, matching resolution ([#21931](https://github.com/astral-sh/uv/pull/21931))
+- Avoid collisions between Git checkout readiness markers and `.ok` files in dependencies ([#21891](https://github.com/astral-sh/uv/pull/21891))
+- Preserve always-false `python_version` markers when parsing their serialized form ([#21939](https://github.com/astral-sh/uv/pull/21939))
+
+### Rust API
+
+- Restore the public `FlatDistributions` export and its `BTreeMap` conversion for downstream resolvers ([#21965](https://github.com/astral-sh/uv/pull/21965))
+
+### Documentation
+
+- Make individual preview-feature reference entries linkable by name ([#21950](https://github.com/astral-sh/uv/pull/21950))
+
 ## 0.12.18
 
 Released on 2026-09-22.
+
+This release addresses [GHSA-2cv4-cqwr-gwf7](https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7), which is a path traversal weakness during wheel installation on Windows. No other platforms are affected by this advisory.
 
 ### Enhancements
 

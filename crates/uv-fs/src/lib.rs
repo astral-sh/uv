@@ -190,6 +190,10 @@ pub fn read_stdin_to_string_transcode() -> std::io::Result<String> {
 
 #[cfg(feature = "tokio")]
 fn transcode_to_string(raw: &[u8], source: &str) -> std::io::Result<String> {
+    // The decoder needs three bytes to detect a BOM, so handle empty UTF-16 files explicitly.
+    if raw == [0xff, 0xfe] || raw == [0xfe, 0xff] {
+        return Ok(String::new());
+    }
     let mut buf = String::with_capacity(1024);
     DecodeReaderBytes::new(raw)
         .read_to_string(&mut buf)
@@ -1033,6 +1037,37 @@ mod tests {
     use std::assert_matches;
 
     use super::*;
+
+    #[cfg(feature = "tokio")]
+    #[test]
+    fn transcodes_bom_marked_input() -> io::Result<()> {
+        // Include a surrogate pair and an interior BOM that must remain part of the text.
+        let contents = "# café 🐍\u{feff} end\r\npackage==1.0\n";
+        let utf8 = contents.as_bytes().to_vec();
+        let utf8_bom = [b"\xef\xbb\xbf".as_slice(), contents.as_bytes()].concat();
+        let utf16_le = [0xff, 0xfe]
+            .into_iter()
+            .chain(contents.encode_utf16().flat_map(u16::to_le_bytes))
+            .collect::<Vec<_>>();
+        let utf16_be = [0xfe, 0xff]
+            .into_iter()
+            .chain(contents.encode_utf16().flat_map(u16::to_be_bytes))
+            .collect::<Vec<_>>();
+
+        for (source, encoded, expected) in [
+            ("utf8", utf8, contents),
+            ("utf8-bom", utf8_bom, contents),
+            ("utf16-le", utf16_le, contents),
+            ("utf16-be", utf16_be, contents),
+            ("empty", vec![], ""),
+            ("utf8-bom-only", b"\xef\xbb\xbf".to_vec(), ""),
+            ("utf16-le-bom-only", b"\xff\xfe".to_vec(), ""),
+            ("utf16-be-bom-only", b"\xfe\xff".to_vec(), ""),
+        ] {
+            assert_eq!(transcode_to_string(&encoded, source)?, expected, "{source}");
+        }
+        Ok(())
+    }
 
     #[test]
     fn remove_symlink_removes_directory_link_without_removing_target() -> io::Result<()> {

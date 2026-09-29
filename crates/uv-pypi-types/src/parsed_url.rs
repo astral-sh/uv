@@ -590,7 +590,8 @@ impl From<&ParsedDirectoryUrl> for DirectUrl {
 impl From<&ParsedArchiveUrl> for DirectUrl {
     fn from(value: &ParsedArchiveUrl) -> Self {
         Self::ArchiveUrl {
-            url: value.url.to_string(),
+            // Query parameters identify the source, so only strip username and password credentials.
+            url: value.url.without_credentials().to_string(),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,

@@ -798,6 +798,7 @@ pub(crate) async fn run(
                         if all_packages {
                             InstallTarget::Workspace {
                                 workspace: project.workspace(),
+                                project_name: Some(project.project_name()),
                                 lock: result.lock(),
                             }
                         } else if let Some(package) = package.as_ref() {

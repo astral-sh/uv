@@ -165,6 +165,7 @@ pub(crate) async fn metadata(
             let install_target = match target {
                 LockTarget::Workspace(workspace) => InstallTarget::Workspace {
                     workspace,
+                    project_name: None,
                     lock: &lock,
                 },
                 LockTarget::Script(script) => InstallTarget::Script {
@@ -212,9 +213,11 @@ pub(crate) async fn metadata(
                 })
             } else {
                 match target {
-                    LockTarget::Workspace(workspace) => {
-                        ProjectInterpreter::discover_existing(workspace, active, cache)?
-                    }
+                    LockTarget::Workspace(workspace) => ProjectInterpreter::discover_existing(
+                        workspace.install_path(),
+                        active,
+                        cache,
+                    )?,
                     LockTarget::Script(script) => {
                         ScriptInterpreter::discover_existing(script.into(), active, cache)
                     }
@@ -264,7 +267,9 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
         | InstallTarget::Projects {
             workspace, lock, ..
         }
-        | InstallTarget::Workspace { workspace, lock }
+        | InstallTarget::Workspace {
+            workspace, lock, ..
+        }
         | InstallTarget::NonProjectWorkspace { workspace, lock } => {
             Ok(Metadata::from_lock(workspace, lock)?)
         }

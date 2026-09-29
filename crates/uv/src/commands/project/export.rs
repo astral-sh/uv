@@ -17,7 +17,8 @@ use uv_configuration::{
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
-use uv_lock::{Installable, Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
+use uv_fs::CWD;
+use uv_lock::{Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
@@ -458,6 +459,7 @@ async fn render_export<'output>(
             if all_packages {
                 InstallTarget::Workspace {
                     workspace: project.workspace(),
+                    project_name: Some(project.project_name()),
                     lock,
                 }
             } else {
@@ -633,8 +635,14 @@ async fn render_export<'output>(
             write!(writer, "{export}")?;
         }
         ExportFormat::PylockToml => {
+            let output_file = output_file.map(std::path::absolute).transpose()?;
+            let output_dir = output_file
+                .as_deref()
+                .and_then(Path::parent)
+                .unwrap_or(&CWD);
             let mut export = PylockToml::from_lock(
                 &target,
+                output_dir,
                 prune,
                 extras,
                 groups,
@@ -650,7 +658,7 @@ async fn render_export<'output>(
                     .index_locations(settings.index_locations.clone())
                     .build()?;
                 export
-                    .generate_missing_hashes(&client, concurrency.downloads, target.install_path())
+                    .generate_missing_hashes(&client, concurrency.downloads, output_dir)
                     .await?;
             }
 

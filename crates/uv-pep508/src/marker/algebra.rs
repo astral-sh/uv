@@ -1837,6 +1837,11 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
             Operator::GreaterThan => {
                 VersionSpecifier::greater_than_equal_version(Version::new([major, minor + 1]))
             }
+            // `python_version` contains only release segments, whose minimum is `0.0`.
+            // In particular, this recognizes the serialized representation of a false marker.
+            Operator::LessThan if major == 0 && minor == 0 => return Err(NodeId::FALSE),
+            Operator::GreaterThanEqual if major == 0 && minor == 0 => return Err(NodeId::TRUE),
+
             // `python_version < 3.7` is equivalent to `python_full_version < 3.7`.
             Operator::LessThan => specifier,
             // `python_version >= 3.7` is equivalent to `python_full_version >= 3.7`.

@@ -3326,6 +3326,39 @@ mod test {
     }
 
     #[test]
+    fn false_marker_roundtrip() -> serde_json::Result<()> {
+        let serialized = serde_json::to_string(&MarkerTree::FALSE.contents())?;
+        assert_snapshot!(serialized, @r#""python_version < '0'""#);
+        assert_eq!(
+            serde_json::from_str::<MarkerTree>(&serialized)?,
+            MarkerTree::FALSE,
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn python_version_minimum() {
+        for version in ["0", "0.0", "0.0.0"] {
+            assert_false(&format!("python_version < '{version}'"));
+            assert_false(&format!("'{version}' > python_version"));
+            assert_true(&format!("python_version >= '{version}'"));
+            assert_true(&format!("'{version}' <= python_version"));
+        }
+        assert_eq!(
+            m("python_version < '0' or sys_platform == 'win32'"),
+            m("sys_platform == 'win32'"),
+        );
+        assert_eq!(
+            m("python_version >= '0' and sys_platform == 'win32'"),
+            m("sys_platform == 'win32'"),
+        );
+        assert!(!m("python_version <= '0'").is_true());
+        assert!(!m("python_version > '0'").is_false());
+        assert!(!m("python_full_version < '0'").is_false());
+        assert!(!m("implementation_version < '0'").is_false());
+    }
+
+    #[test]
     fn test_is_false() {
         assert!(m("python_version < '3.10' and python_version >= '3.10'").is_false());
         assert!(
@@ -3335,7 +3368,7 @@ mod test {
         );
 
         assert!(!m("python_version < '3.10'").is_false());
-        assert!(!m("python_version < '0'").is_false());
+        assert!(m("python_version < '0'").is_false());
         assert!(!m("python_version < '3.10' and python_version >= '3.9'").is_false());
         assert!(!m("python_version < '3.10' or python_version >= '3.11'").is_false());
     }

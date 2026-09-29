@@ -75,7 +75,7 @@ impl FlatIndex {
 /// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
 /// by [`Version`].
 #[derive(Debug, Clone, Default)]
-pub(crate) struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
+pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 
 impl FlatDistributions {
     /// Rank the entries for a package using the resolver's platform and hash policies.
@@ -262,5 +262,11 @@ impl IntoIterator for FlatDistributions {
 impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
     fn from(distributions: FlatDistributions) -> Self {
         distributions.0
+    }
+}
+
+impl From<BTreeMap<Version, PrioritizedDist>> for FlatDistributions {
+    fn from(distributions: BTreeMap<Version, PrioritizedDist>) -> Self {
+        Self(distributions)
     }
 }

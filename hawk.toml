@@ -79,6 +79,14 @@ reason = "used by Pixi to inspect cached registry wheels"
 [[override]]
 lint = "hawk::unnecessary_public"
 crate = "uv_resolver"
+item = "FlatDistributions"
+kind = "reexport"
+level = "expect"
+reason = "used by Pixi to construct a `VersionMap` from custom distributions"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
 item = "python_requirement::PythonRequirement::from_marker_environment"
 kind = "inherent_method"
 level = "expect"

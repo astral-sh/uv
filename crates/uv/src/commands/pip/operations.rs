@@ -14,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExcludeDependency, Excludes,
-    ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DependencyModifiers, DryRun,
+    ExcludeDependency, Excludes, ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -23,8 +23,8 @@ use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
     ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
     NameRequirementSpecification, PackageConfigSettings, Requirement, RequirementScope,
-    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
-    VersionOrUrlRef,
+    ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
+    UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
 use uv_distribution_types::{
     DerivationChain, DistributionMetadata, InstalledMetadata, Name, Resolution,
@@ -129,6 +129,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     build_dispatch: &BuildDispatch<'_>,
     concurrency: &Concurrency,
     options: Options,
+    recorder: Option<ResolutionRecorder>,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
 ) -> Result<(ResolverOutput, HashStrategy), Error> {
@@ -159,7 +160,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         client,
                         build_dispatch,
                         concurrency.downloads_semaphore.clone(),
-                    ),
+                    )
+                    .with_recorder(recorder.clone()),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -177,7 +179,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     client,
                     build_dispatch,
                     concurrency.downloads_semaphore.clone(),
-                ),
+                )
+                .with_recorder(recorder.clone()),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter())
@@ -306,7 +309,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         client,
                         build_dispatch,
                         concurrency.downloads_semaphore.clone(),
-                    ),
+                    )
+                    .with_recorder(recorder.clone()),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -332,24 +336,26 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     )
     .map_err(anyhow::Error::from)?;
     let excludes = Excludes::from_entries(excludes);
+    let modifiers = DependencyModifiers::new(overrides, excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
+            let constraints = constraints.clone().with_recorder(recorder.clone());
+            let modifiers = modifiers.clone().with_recorder(recorder.clone());
             let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
-                &overrides,
-                &excludes,
-                build_dispatch.dependency_metadata(),
+                &modifiers,
                 &hasher,
                 index,
                 DistributionDatabase::new(
                     client,
                     build_dispatch,
                     concurrency.downloads_semaphore.clone(),
-                ),
+                )
+                .with_recorder(recorder.clone()),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
@@ -367,14 +373,14 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let manifest = Manifest::new(
         requirements,
         constraints,
-        overrides,
-        excludes,
+        modifiers,
         preferences,
         project,
         workspace_members,
         exclusions,
         lookaheads,
-    );
+    )
+    .with_recorder(recorder.clone());
 
     // Resolve the dependencies.
     let resolution = {
@@ -403,7 +409,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 client,
                 build_dispatch,
                 concurrency.downloads_semaphore.clone(),
-            ),
+            )
+            .with_recorder(recorder.clone()),
         )?
         .with_reporter(Arc::new(reporter));
 

@@ -3,7 +3,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolvedDistRef,
+    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
+    ResolvedDistRef,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
@@ -19,6 +20,7 @@ use crate::{PythonRequirement, ResolveError};
 pub(crate) struct MetadataRequests {
     index: InMemoryIndex,
     sender: Sender<Request>,
+    recorder: Option<ResolutionRecorder>,
 }
 
 /// A distribution request whose cache identity is derived from the requested distribution.
@@ -86,8 +88,16 @@ impl RegisteredMetadata<'_> {
 }
 
 impl MetadataRequests {
-    pub(crate) fn new(index: InMemoryIndex, sender: Sender<Request>) -> Self {
-        Self { index, sender }
+    pub(crate) fn new(
+        index: InMemoryIndex,
+        sender: Sender<Request>,
+        recorder: Option<ResolutionRecorder>,
+    ) -> Self {
+        Self {
+            index,
+            sender,
+            recorder,
+        }
     }
 
     /// Schedule a package version request without retaining a handle.
@@ -96,6 +106,9 @@ impl MetadataRequests {
         name: &PackageName,
         index: Option<&IndexMetadata>,
     ) -> Result<(), ResolveError> {
+        if let Some(recorder) = &self.recorder {
+            recorder.exclude_newer(name);
+        }
         let registered = if let Some(index) = index {
             self.index
                 .explicit()
@@ -116,6 +129,9 @@ impl MetadataRequests {
         name: &PackageName,
         index: Option<&IndexMetadata>,
     ) -> Result<PendingVersions<'_>, ResolveError> {
+        if let Some(recorder) = &self.recorder {
+            recorder.exclude_newer(name);
+        }
         if let Some(index) = index {
             let entry = match self
                 .index
@@ -148,6 +164,9 @@ impl MetadataRequests {
         &self,
         request: MetadataRequest<'_>,
     ) -> Result<(), ResolveError> {
+        if let Some(recorder) = &self.recorder {
+            recorder.dependency_metadata(request.name());
+        }
         if self.index.distributions().register(request.id()) {
             self.sender.blocking_send(request.into_request())?;
         }
@@ -162,6 +181,9 @@ impl MetadataRequests {
         request: MetadataRequest<'_>,
         validate: impl FnOnce(&MetadataRequest<'_>) -> Result<(), ResolveError>,
     ) -> Result<RegisteredMetadata<'_>, ResolveError> {
+        if let Some(recorder) = &self.recorder {
+            recorder.dependency_metadata(request.name());
+        }
         let entry = match self.index.distributions().register_entry(request.id()) {
             Registration::New(entry) => {
                 validate(&request)?;
@@ -190,6 +212,9 @@ impl MetadataRequests {
 
     /// Acquire metadata registered during input preparation or package visitation.
     pub(crate) fn metadata(&self, dist: &Dist) -> Result<RegisteredMetadata<'_>, ResolveError> {
+        if let Some(recorder) = &self.recorder {
+            recorder.dependency_metadata(dist.name());
+        }
         self.index
             .distributions()
             .get_registered(dist.distribution_id())

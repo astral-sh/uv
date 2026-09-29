@@ -39,6 +39,7 @@ use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
@@ -1290,7 +1291,15 @@ impl PythonRunner {
 
         let _permit = self.concurrent_build_slots.acquire().await.unwrap();
 
-        let mut child = Command::new(venv.python_executable())
+        let mut command = Command::new(venv.python_executable());
+        if uv_preview::is_enabled(PreviewFeature::BuildLazyImports)
+            && venv.interpreter().implementation_name() == "cpython"
+            && venv.interpreter().python_tuple() >= (3, 15)
+        {
+            command.args(["-X", "lazy_imports=all"]);
+        }
+
+        let mut child = command
             .args(["-c", script])
             .current_dir(source_tree.simplified())
             .envs(environment_variables)

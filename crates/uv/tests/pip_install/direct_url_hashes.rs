@@ -5,15 +5,12 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use fs_err as fs;
-use fs_err::File;
-use indoc::indoc;
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::MockServer;
 
-use uv_test::archive::write_tar_gz;
+use uv_test::archive::generate_source_archive;
 use uv_test::packse::{generate_wheel, mount_mismatched_distribution};
 use uv_test::{TestContext as UvTestContext, uv_snapshot};
 
@@ -46,42 +43,14 @@ impl DirectUrlHashTestContext {
 
         let source = inner.temp_dir.child("ok-1.0.0.tar.gz");
         let backend_marker = inner.temp_dir.child("backend-marker");
-        let child_wheel = inner
-            .workspace_root
-            .join("test/links/ok-1.0.0-py3-none-any.whl");
-        let inner = inner
-            .with_env("WHEEL_METADATA_MARKER", backend_marker.path())
-            .with_env("WHEEL_METADATA_CHILD_WHEEL", child_wheel);
-        write_tar_gz(
-            File::create(source.path())?,
-            &[
-                (
-                    "ok-1.0.0/pyproject.toml",
-                    indoc! {r#"
-                        [build-system]
-                        requires = []
-                        build-backend = "backend"
-                        backend-path = ["."]
-                    "#},
-                ),
-                (
-                    "ok-1.0.0/backend.py",
-                    indoc! {r#"
-                        import os
-                        import shutil
-                        from pathlib import Path
-
-                        Path(os.environ["WHEEL_METADATA_MARKER"]).write_text("executed")
-
-                        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                            wheel = Path(os.environ["WHEEL_METADATA_CHILD_WHEEL"])
-                            shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
-                            return wheel.name
-                    "#},
-                ),
-            ],
+        let archive = generate_source_archive(
+            &"ok".parse()?,
+            &"1.0.0".parse()?,
+            "",
+            Some(backend_marker.path()),
         )?;
-        let source_hash = hex::encode(Sha256::digest(fs::read(source.path())?));
+        source.write_binary(&archive)?;
+        let source_hash = hex::encode(Sha256::digest(&archive));
         let inner = inner.with_filter((source_hash.clone(), "[SOURCE_HASH]"));
         let source_url =
             Url::from_file_path(source.path()).expect("source path is an absolute path");

@@ -2,7 +2,9 @@ use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
+use indoc::indoc;
 
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
 
 #[test]
@@ -37,6 +39,86 @@ fn check_compatible_packages() -> Result<()> {
     All installed packages are compatible
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn check_arbitrary_equality() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "arbitrary-equality"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.package-a.versions."1.0.0"]
+        sdist = false
+        requires = ["package-b===1"]
+
+        [packages.package-b.versions."1.0.0"]
+        sdist = false
+
+        [packages.package-b.versions."1.0.0+local"]
+        sdist = false
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("package-a")
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==1.0.0
+    ");
+
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["package-a", "package-b===1.0"])
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("package-b==1.0.0+local")
+        .arg("--no-deps")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - package-b==1.0.0
+     + package-b==1.0.0+local
+    ");
+
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    Found 1 incompatibility
+    The package `package-a` requires `package-b===1`, but `1.0.0+local` is installed
+    ");
 
     Ok(())
 }

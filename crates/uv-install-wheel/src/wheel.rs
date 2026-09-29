@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -551,7 +551,7 @@ fn install_script(
         })?;
 
     let path = file.path();
-    let mut script = File::open(&path)?;
+    let mut script = BufReader::new(File::open(&path)?);
 
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
     // > In wheel, scripts are packaged in {distribution}-{version}.data/scripts/.
@@ -578,7 +578,13 @@ fn install_script(
         loop {
             match script.read_exact(&mut byte) {
                 Ok(()) => {
-                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                    if byte[0] == b'\n' {
+                        break;
+                    }
+                    if byte[0] == b'\r' {
+                        if script.fill_buf()?.first() == Some(&b'\n') {
+                            script.consume(1);
+                        }
                         break;
                     }
 

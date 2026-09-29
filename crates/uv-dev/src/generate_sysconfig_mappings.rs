@@ -11,7 +11,7 @@ use crate::ROOT_DIR;
 use crate::generate_all::Mode;
 
 /// Contains current supported targets
-const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20260901/cpython-unix/targets.yml";
+const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20260924/cpython-unix/targets.yml";
 
 // Preserve compiler paths embedded in older downloadable python-build-standalone releases.
 const HISTORICAL_CC_VALUES: [&str; 3] = [
@@ -101,7 +101,7 @@ async fn generate() -> Result<String> {
     println!("Downloading python-build-standalone cpython-unix/targets.yml ...");
     let body = reqwest::get(TARGETS_YML_URL).await?.text().await?;
 
-    let parsed: BTreeMap<String, TargetConfig> = serde_yaml::from_str(&body)?;
+    let parsed: BTreeMap<String, TargetConfig> = yaml_serde::from_str(&body)?;
 
     let mut replacements: BTreeMap<&str, BTreeMap<String, String>> = BTreeMap::new();
 
@@ -159,7 +159,7 @@ async fn generate() -> Result<String> {
     output.push_str("//! DO NOT EDIT\n");
     output.push_str("//!\n");
     output.push_str("//! Generated with `cargo run dev generate-sysconfig-metadata`\n");
-    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260901/cpython-unix/targets.yml>\n");
+    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260924/cpython-unix/targets.yml>\n");
     output.push_str("//!\n");
 
     // Disable clippy/fmt

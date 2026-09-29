@@ -2427,6 +2427,7 @@ fn check_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer for package `ty`
     Using ty 0.0.16
     ");
 

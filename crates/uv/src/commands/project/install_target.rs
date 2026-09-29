@@ -42,6 +42,7 @@ pub(crate) enum InstallTarget<'lock> {
     /// An entire workspace.
     Workspace {
         workspace: &'lock Workspace,
+        project_name: Option<&'lock PackageName>,
         lock: &'lock Lock,
     },
     /// An entire workspace with a non-project root.
@@ -178,17 +179,16 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         match self {
             Self::Project { name, .. } => Some(name),
             Self::Projects { .. } => None,
-            Self::Workspace { lock, .. } => {
-                // If the workspace contains a single member at the root, it will be omitted from
-                // the list of workspace members encoded in the lockfile. In that case, identify
-                // the root project by its source so that install options (e.g.,
-                // `--no-emit-workspace`) can filter it correctly.
+            Self::Workspace {
+                project_name, lock, ..
+            } => project_name.or_else(|| {
+                // A single-member workspace omits the member list from the lockfile.
                 if lock.members().is_empty() {
                     lock.root().map(Package::name)
                 } else {
                     None
                 }
-            }
+            }),
             Self::NonProjectWorkspace { .. } => None,
             Self::Script { .. } => None,
         }
@@ -482,7 +482,9 @@ impl<'lock> InstallTarget<'lock> {
             | Self::Projects {
                 lock, workspace, ..
             }
-            | Self::Workspace { lock, workspace }
+            | Self::Workspace {
+                lock, workspace, ..
+            }
             | Self::NonProjectWorkspace { lock, workspace } => {
                 let metadata_free_lock = lock.supports_missing_package_metadata();
                 // Validate inherited root groups even when `--no-group` excludes them from
