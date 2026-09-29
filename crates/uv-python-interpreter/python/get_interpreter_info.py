@@ -5,6 +5,7 @@ The script will exit with status 0 on known error that are turned into rust erro
 """
 
 import importlib.machinery
+import importlib.util
 import json
 import os
 import platform
@@ -694,6 +695,8 @@ def main() -> None:
         "sys_path": sys.path[1:],
         "site_packages": site.getsitepackages(),
         "stdlib": sysconfig.get_path("stdlib"),
+        "cache_tag": sys.implementation.cache_tag,
+        "bytecode_magic_number": list(importlib.util.MAGIC_NUMBER),
         "extension_suffixes": importlib.machinery.EXTENSION_SUFFIXES,
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
