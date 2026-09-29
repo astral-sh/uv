@@ -126,7 +126,7 @@ pub enum Error {
     RemotePythonDownloadsJSONClient(Box<uv_client::Error>),
     #[error(transparent)]
     ClientBuild(Box<ClientBuildError>),
-    #[error("An offline Python installation was requested, but `{file}` (from {url}) is missing in `{}`", python_builds_dir.user_display())]
+    #[error("An offline Python installation was requested, but `{file}` (from `{url}`) is missing in `{}`", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
         url: Box<DisplaySafeUrl>,

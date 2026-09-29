@@ -248,7 +248,7 @@ fn whitespace_only_requirement() {
                 .arg("--dry-run"), @"
             exit_code: 2 (failure)
             ----- stderr -----
-            error: Failed to parse: `[WHITESPACE]`
+            error: Failed to parse:
               cause: Empty field is not allowed for PEP508
 
                      ^

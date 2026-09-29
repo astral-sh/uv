@@ -192,7 +192,7 @@ fn build_lazy_imports() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
     project.child("mode").assert("eager");
 
@@ -200,7 +200,7 @@ fn build_lazy_imports() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
     project.child("mode").assert("lazy");
 
@@ -211,7 +211,7 @@ fn build_lazy_imports() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
     project.child("mode").assert("lazy");
 
@@ -219,7 +219,7 @@ fn build_lazy_imports() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
     project.child("mode").assert("eager");
 
@@ -265,7 +265,7 @@ fn build_lazy_imports_unsupported_python() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
     project.child("mode").assert("eager");
 
@@ -273,7 +273,7 @@ fn build_lazy_imports_unsupported_python() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
     project.child("mode").assert("eager");
 
@@ -284,7 +284,7 @@ fn build_lazy_imports_unsupported_python() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
     project.child("mode").assert("eager");
 
@@ -292,7 +292,7 @@ fn build_lazy_imports_unsupported_python() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
     project.child("mode").assert("eager");
 
