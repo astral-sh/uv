@@ -3,6 +3,27 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.21
+
+Released on 2026-09-29.
+
+### Enhancements
+
+- Omit compatible prerelease version constraints ([#22068](https://github.com/astral-sh/uv/pull/22068))
+- Omit redundant runtime constraints from lockfiles ([#22004](https://github.com/astral-sh/uv/pull/22004))
+
+### Bug fixes
+
+- Allow an empty metadata cache when adding lower bounds ([#21225](https://github.com/astral-sh/uv/pull/21225))
+- Fix post-release matching for exclusive version bounds ([#22049](https://github.com/astral-sh/uv/pull/22049))
+
+### Other changes
+
+- Omit empty manifest headers from lockfiles ([#22070](https://github.com/astral-sh/uv/pull/22070))
+- Replace serde_yaml with yaml_serde ([#22069](https://github.com/astral-sh/uv/pull/22069))
+- Sync latest Python releases ([#22076](https://github.com/astral-sh/uv/pull/22076))
+- protect global .python-versions from removal without --global flag ([#21992](https://github.com/astral-sh/uv/pull/21992))
+
 ## 0.12.20
 
 Released on 2026-09-28.
