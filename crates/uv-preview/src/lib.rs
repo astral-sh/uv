@@ -342,6 +342,7 @@ pub enum PreviewFeature {
     MissingExcludeNewerPackageLock,
     /// Records runtime configuration consultations and omits unused constraints, overrides, exclusions,
     /// dependency metadata, and package-specific upload cutoffs from the lockfile.
+    /// Also omits redundant absolute upload cutoffs from wheel-only locks.
     ResolutionInputs,
     /// Allows using `uv export --batch`.
     BatchExport,

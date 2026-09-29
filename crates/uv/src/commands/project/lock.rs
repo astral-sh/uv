@@ -1254,7 +1254,9 @@ impl ValidatedLock {
         // Stored cutoffs can belong to packages considered during backtracking. New cutoffs for
         // packages outside the lock take effect when another change triggers resolution.
         let exclude_newer = lock.filter_exclude_newer(options.exclude_newer.clone());
-        if let Some(change) = lock.exclude_newer().compare(&exclude_newer) {
+        if let Some(change) =
+            lock.compare_exclude_newer(&exclude_newer, install_path, index_locations)?
+        {
             // If a relative value is used, we won't invalidate on every tick of the clock unless
             // the span duration changed or some other operation causes a new resolution
             if !change.is_relative_timestamp_change() {

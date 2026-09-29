@@ -81,6 +81,7 @@ pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
 
+mod cutoffs;
 mod deserialize;
 pub(crate) mod export;
 mod inputs;
@@ -2630,6 +2631,11 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
+        let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
+            lock.without_redundant_exclude_newer(root, index_locations)?
+        } else {
+            lock
+        };
         Ok(if metadata_free {
             lock.without_package_metadata()
         } else {

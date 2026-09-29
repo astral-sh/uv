@@ -19533,6 +19533,969 @@ fn lock_upgrade_with_relaxed_exclude_newer_package() -> Result<()> {
     Ok(())
 }
 
+/// Fixed global cutoffs can be checked against the upload times in a wheel-only lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_global_cutoff() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-global-cutoff"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."0.9.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-22T00:00:00Z" }
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-23T00:00:00Z" }
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-24T00:00:00Z" }
+    "#})?;
+
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2024-03-24T00:00:00Z")
+        .with_filters(
+            server
+                .files()
+                .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+        );
+
+    // Select the middle version and omit the cutoff that its wheel already satisfies.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-any.whl]", upload-time = "2024-03-23T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // Unchanged inputs need no cached metadata.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // A stricter cutoff is still compatible when it falls after the recorded upload.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--exclude-newer")
+        .arg("2024-03-23T12:00:00Z")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Removing the cutoff leaves the pinned version in place.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--exclude-newer")
+        .arg("false")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // An upload exactly at the cutoff is excluded.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--exclude-newer")
+        .arg("2024-03-23T00:00:00Z")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to addition of global exclude newer 2024-03-23T00:00:00Z
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Resolution can downgrade to an eligible artifact.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer")
+        .arg("2024-03-23T00:00:00Z")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolving despite existing lockfile due to addition of global exclude newer 2024-03-23T00:00:00Z
+    Resolved 2 packages in [TIME]
+    Updated a v1.0.0 -> v0.9.0
+    ");
+
+    // An upgrade uses the current cutoff and can select a newly eligible version.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--upgrade")
+        .arg("--exclude-newer")
+        .arg("2024-03-26T00:00:00Z")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated a v0.9.0 -> v2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Package cutoffs are omitted separately, while exceptions to the global cutoff remain recorded.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_package_cutoffs() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-package-cutoffs"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-23T00:00:00Z" }
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-24T00:00:00Z" }
+
+        [packages.b.versions."1.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-22T00:00:00Z" }
+    "#})?;
+
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2024-03-24T00:00:00Z")
+        .with_filters(
+            server
+                .files()
+                .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+        );
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // The cutoff for a permits a wheel excluded by the global cutoff; b needs no exception.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a", "b"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+
+        [tool.uv.exclude-newer-package]
+        a = "2024-03-26T00:00:00Z"
+        b = "2024-03-23T00:00:00Z"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-24T00:00:00Z"
+
+        [options.exclude-newer-package]
+        a = "2024-03-26T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:b-1.0.0-py3-none-any.whl]", upload-time = "2024-03-22T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a" },
+            { name = "b" },
+        ]
+        "#);
+    });
+
+    // The retained exception and omitted cutoff both validate without cached metadata.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Changing b's omitted cutoff does not change a's retained exception.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a", "b"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+
+        [tool.uv.exclude-newer-package]
+        a = "2024-03-26T00:00:00Z"
+        b = "2024-03-22T12:00:00Z"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Removing a's exception reapplies the global cutoff and requires a downgrade.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a", "b"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+
+        [tool.uv.exclude-newer-package]
+        b = "2024-03-22T12:00:00Z"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer for package `a`
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Resolving without the exception selects a version allowed by the global cutoff.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer for package `a`
+    Resolved 3 packages in [TIME]
+    Updated a v2.0.0 -> v1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Removing a package exception must restore the cutoff inherited from its index.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_index_cutoff() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-index-cutoff"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-23T00:00:00Z" }
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-24T00:00:00Z" }
+    "#})?;
+
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("false")
+        .with_filters(
+            server
+                .files()
+                .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+        );
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // A disabled package cutoff overrides the index cutoff and must remain recorded.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "index-exclude-newer"]
+        exclude-newer-package = {{ a = false }}
+
+        [[tool.uv.index]]
+        url = "{index}"
+        default = true
+        exclude-newer = "2024-03-24T00:00:00Z"
+    "#, index = server.index_url()})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+
+        [options.exclude-newer-package]
+        a = false
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // The recorded package exception allows offline reuse with the same index cutoff.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Disabled package and index cutoffs allow the lock to be reused without metadata.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "index-exclude-newer"]
+        exclude-newer-package = {{ a = false }}
+
+        [[tool.uv.index]]
+        url = "{index}"
+        default = true
+        exclude-newer = false
+    "#, index = server.index_url()})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // With no global or package cutoff, the index cutoff becomes effective.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "index-exclude-newer"]
+
+        [[tool.uv.index]]
+        url = "{index}"
+        default = true
+        exclude-newer = "2024-03-24T00:00:00Z"
+    "#, index = server.index_url()})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer for package `a`
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Resolving without the package exception applies the index cutoff.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer for package `a`
+    Resolved 2 packages in [TIME]
+    Updated a v2.0.0 -> v1.0.0
+    ");
+
+    // Introducing an earlier index cutoff also invalidates a lock with no recorded cutoffs.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "index-exclude-newer"]
+
+        [[tool.uv.index]]
+        url = "{index}"
+        default = true
+        exclude-newer = "2024-03-23T00:00:00Z"
+    "#, index = server.index_url()})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to an artifact for `a` being excluded by the upload cutoff
+    error: No solution found when resolving dependencies
+      cause: Because there are no versions of a and a==1.0.0 was published after the exclude newer time, we can conclude that all versions of a cannot be used.
+             And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// Missing timestamps, prereleases, and relative cutoffs retain their declarations.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_retained_cutoffs() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-retained-cutoffs"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-22T00:00:00Z" }
+
+        [packages.preview.versions."1.0.0a1"]
+        sdist = false
+    "#})?;
+
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    let links = context.workspace_root.join("test/links");
+
+    // ok's flat-index wheel has no upload timestamp, while preview is a prerelease.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a", "ok", "preview"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        prerelease = "allow"
+
+        [tool.uv.exclude-newer-package]
+        a = "P1D"
+        ok = "2024-03-25T00:00:00Z"
+        preview = "2024-03-25T00:00:00Z"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--find-links")
+        .arg(&links)
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        prerelease-mode = "allow"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [options.exclude-newer-package]
+        a = { timestamp = "0001-01-01T00:00:00Z", span = "P1D" }
+        ok = "2024-03-25T00:00:00Z"
+        preview = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-any.whl]", upload-time = "2024-03-22T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "preview"
+        version = "1.0.0a1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/preview-1.0.0a1-py3-none-any.whl", hash = "sha256:[SHA256:preview-1.0.0a1-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "ok" },
+            { name = "preview" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a" },
+            { name = "ok" },
+            { name = "preview" },
+        ]
+        "#);
+    });
+
+    // Keeping the exceptional declarations lets unchanged inputs validate without metadata.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--find-links")
+        .arg(&links)
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // A changed relative duration still requires a new lock.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--exclude-newer-package")
+        .arg("a=P2D")
+        .arg("--find-links")
+        .arg(&links)
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P2D` for package `a`
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Relative global cutoffs retain their duration even when every artifact predates the cutoff.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_relative_global_cutoff() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-relative-global-cutoff"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel = { upload_time = "2024-03-22T00:00:00Z" }
+    "#})?;
+
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("P1D")
+        .with_filters(
+            server
+                .files()
+                .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+        );
+
+    // Keep the relative duration in the lock instead of inferring it from today's timestamp.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+        exclude-newer-span = "P1D"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-any.whl]", upload-time = "2024-03-22T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // The same duration remains valid without fetching metadata.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Changing the duration still invalidates the recorded configuration.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--exclude-newer")
+        .arg("P2D")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P2D`
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Cutoffs remain recorded when source builds could use dependencies absent from the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_source_build_cutoffs() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-source-build-cutoffs"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+    "#})?;
+
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+
+    // Both artifacts predate the cutoffs, but the sdist permits a build with unrecorded inputs.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        exclude-newer-package = { a = "2024-03-25T00:00:00Z" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [options.exclude-newer-package]
+        a = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:[SHA256:a-1.0.0.tar.gz]", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // Unchanged cutoffs allow offline reuse even though source artifacts remain in the lock.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Even a tighter cutoff satisfied by the runtime artifacts must keep normal validation.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--exclude-newer")
+        .arg("2024-03-24T12:00:00Z")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T12:00:00Z`
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.
@@ -44675,19 +45638,18 @@ fn lock_resolution_inputs_prune_unused_inputs() -> Result<()> {
         unused = "2020-01-01T00:00:00Z"
         excluded = "2020-01-01T00:00:00Z"
     "#})?;
+
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         excludes = ["excluded"]
@@ -44727,7 +45689,12 @@ fn lock_resolution_inputs_prune_unused_inputs() -> Result<()> {
         other = "2021-01-01T00:00:00Z"
         excluded = "2021-01-01T00:00:00Z"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-preview"), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -44758,7 +45725,10 @@ fn lock_resolution_inputs_prune_unused_inputs() -> Result<()> {
         unused = "2020-01-01T00:00:00Z"
         excluded = "2020-01-01T00:00:00Z"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
@@ -44766,6 +45736,7 @@ fn lock_resolution_inputs_prune_unused_inputs() -> Result<()> {
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
+
     Ok(())
 }
 
@@ -44929,9 +45900,12 @@ fn lock_resolution_inputs_new_exclusion() -> Result<()> {
 fn lock_resolution_inputs_empty_scopes() -> Result<()> {
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-empty-scopes"
+
         [root]
+
         [expected]
         satisfiable = true
+
         [packages.child.versions."1.0"]
         sdist = false
     "#})?;
@@ -44961,19 +45935,20 @@ fn lock_resolution_inputs_empty_scopes() -> Result<()> {
             { package = { name = "project", version = "1.0" }, dependencies = [] },
         ]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         overrides = [
@@ -45005,7 +45980,13 @@ fn lock_resolution_inputs_empty_scopes() -> Result<()> {
         requires-dist = [{ name = "child" }]
         "#);
     });
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--index-url").arg(server.index_url()), @"
+
+    // The empty exact scopes continue to shadow the versionless settings when reusing the lock.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45030,7 +46011,12 @@ fn lock_resolution_inputs_empty_scopes() -> Result<()> {
             { package = { name = "project", version = "1.0" }, dependencies = [] },
         ]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45038,6 +46024,7 @@ fn lock_resolution_inputs_empty_scopes() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     Ok(())
 }
 
@@ -45546,16 +46533,20 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         name = "resolution-inputs-backtracking"
 
         [root]
+
         [expected]
         satisfiable = true
 
         [packages.a.versions."1.0.0"]
         sdist = false
+
         [packages.a.versions."2.0.0"]
         requires = ["discarded==1.0.0"]
         sdist = false
+
         [packages.discarded.versions."1.0.0"]
         sdist = false
+
         [packages.leaf.versions."1.0.0"]
         sdist = false
     "#})?;
@@ -45586,7 +46577,10 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.tree().arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0
@@ -45595,17 +46589,12 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [options.exclude-newer-package]
-        discarded = "2025-01-01T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "leaf", specifier = ">=2" }]
@@ -45637,7 +46626,13 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         requires-dist = [{ name = "a" }]
         "#);
     });
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--index-url").arg(server.index_url()), @"
+
+    // The recorded inputs allow offline reuse without revisiting the rejected candidate.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45673,7 +46668,14 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         discarded = "2025-01-01T00:00:00Z"
         leaf = "2020-01-01T00:00:00Z"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-preview").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-preview")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45699,7 +46701,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45728,7 +46734,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45757,7 +46767,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45786,7 +46800,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf>=1"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45818,7 +46836,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
             { name = "discarded", version = "1.0.0", requires-dist = ["leaf"] },
         ]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -45827,7 +46849,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     hint: To update the lockfile, run `uv lock`.
     ");
 
-    // Upload cutoffs consulted for packages absent from the final graph remain relevant.
+    // A cutoff for a rejected candidate does not invalidate the selected artifacts.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -45847,14 +46869,14 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2024-03-25T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2025-01-01T00:00:00Z` to `2024-03-25T00:00:00Z` for package `discarded`
-    Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
-    hint: To update the lockfile, run `uv lock`.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     ");
 
     // An upgrade applies the previously ignored exclusion and selects the discarded branch.
@@ -45878,7 +46900,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.tree().arg("--upgrade").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--upgrade")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0
@@ -45888,6 +46914,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     Ok(())
 }
 

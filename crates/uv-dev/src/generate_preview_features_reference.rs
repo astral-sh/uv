@@ -158,6 +158,7 @@ mod tests {
         - <a id="relocatable-envs-default" href="#relocatable-envs-default"><code>relocatable-envs-default</code></a>: Creates relocatable virtual environments by default.
         - <a id="resolution-inputs" href="#resolution-inputs"><code>resolution-inputs</code></a>: Records runtime configuration consultations and omits unused constraints, overrides, exclusions,
           dependency metadata, and package-specific upload cutoffs from the lockfile.
+          Also omits redundant absolute upload cutoffs from wheel-only locks.
         - <a id="s3-endpoint" href="#s3-endpoint"><code>s3-endpoint</code></a>: Allows signing requests to configured S3-compatible endpoints.
         - <a id="sbom-export" href="#sbom-export"><code>sbom-export</code></a>: Allows using `uv export --format=cyclonedx1.5`.
         - <a id="special-conda-env-names" href="#special-conda-env-names"><code>special-conda-env-names</code></a>: Stops treating Conda environments named `base` or `root` as special.
