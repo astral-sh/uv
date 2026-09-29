@@ -76,6 +76,7 @@ anyhow = { workspace = true }
 async_zip = { workspace = true }
 clap = { workspace = true }
 criterion = { version = "5.0.1", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
+fastrand = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }

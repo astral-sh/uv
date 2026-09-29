@@ -16,6 +16,7 @@ use criterion::{
     BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main,
     measurement::WallTime,
 };
+use fastrand::Rng;
 use flate2::write::GzEncoder;
 use futures::TryStreamExt;
 use futures::executor::block_on;
@@ -94,22 +95,27 @@ fn hash_reader(criterion: &mut Criterion<WallTime>) {
                 BenchmarkId::new(format!("finish_{case}"), chunk_size),
                 algorithms,
                 |benchmark, algorithms| {
+                    // Use the same sequence of shuffled inputs for each benchmark.
+                    let mut random = Rng::with_seed(0);
                     benchmark.iter_batched(
                         || {
-                            inputs
+                            let mut inputs = inputs
                                 .iter()
-                                .map(|_| {
-                                    algorithms
+                                .map(|bytes| {
+                                    let hashers = algorithms
                                         .iter()
                                         .copied()
                                         .map(Hasher::from)
-                                        .collect::<Vec<_>>()
+                                        .collect::<Vec<_>>();
+                                    (bytes, hashers)
                                 })
-                                .collect::<Vec<_>>()
+                                .collect::<Vec<_>>();
+                            random.shuffle(&mut inputs);
+                            inputs
                         },
-                        |mut hashers| {
+                        |mut inputs| {
                             runtime.block_on(async {
-                                for (bytes, hashers) in inputs.iter().zip(&mut hashers) {
+                                for (bytes, hashers) in &mut inputs {
                                     let stream =
                                         hash_reader_stream(black_box(bytes.as_slice()), chunk_size);
                                     let mut reader = HashReader::new(stream, hashers);
@@ -120,7 +126,7 @@ fn hash_reader(criterion: &mut Criterion<WallTime>) {
                                     black_box(reader.bytes_read());
                                 }
                             });
-                            black_box(hashers);
+                            black_box(inputs);
                         },
                         BatchSize::SmallInput,
                     );
