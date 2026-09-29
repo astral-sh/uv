@@ -87,7 +87,7 @@ jobs:
             -f query="query(\$owner: String!, \$name: String!, \$tag: String!) { repository(owner: \$owner, name: \$name) { release(tagName: \$tag) { id } } }" \
             --jq '.data.repository | if . == null then error("Repository not found") else .release != null end')"
           if [[ "$release_exists" != "false" ]]; then
-            echo "::error::Release $tag already exists. Merge the version bump before releasing."
+            echo "::error::Release $tag already exists"
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
