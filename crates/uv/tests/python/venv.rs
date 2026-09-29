@@ -120,6 +120,57 @@ fn create_venv_caches_interpreter() -> Result<()> {
     Ok(())
 }
 
+/// An upgradeable venv must discard cached metadata when its base path changes.
+#[test]
+#[cfg(feature = "test-python-managed")]
+fn create_venv_caches_upgradeable_interpreter() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    context.python_install().arg("3.12.9").assert().success();
+
+    let output = context.python_find().arg("3.12.9").assert().success();
+    let python = std::str::from_utf8(&output.get_output().stdout)?.trim();
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    let site_packages = site_packages_path(context.venv.path(), "python3.12");
+    fs_err::write(
+        site_packages.join("sitecustomize.py"),
+        indoc! {r#"
+            from pathlib import Path
+
+            Path(__file__).with_name("interpreter-started").touch()
+        "#},
+    )?;
+    let startup_marker = site_packages.join("interpreter-started");
+    let cache = Cache::from_path(context.cache_dir.path().to_path_buf())
+        .init_no_wait()?
+        .context("Interpreter cache is locked")?;
+    PythonEnvironment::from_root(context.venv.path(), &cache)?;
+    assert!(!startup_marker.exists());
+
+    context
+        .venv()
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg(python)
+        .assert()
+        .success();
+
+    let fresh_cache = Cache::temp()?
+        .init_no_wait()?
+        .context("Fresh interpreter cache is locked")?;
+    let cached = PythonEnvironment::from_root(context.venv.path(), &cache)?;
+    assert!(startup_marker.is_file());
+    let queried = PythonEnvironment::from_root(context.venv.path(), &fresh_cache)?;
+    assert_eq!(cached, queried);
+
+    Ok(())
+}
+
 #[test]
 fn create_venv_preview_skips_distutils_patch_on_py310_plus() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
