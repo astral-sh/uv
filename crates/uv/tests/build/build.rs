@@ -3240,7 +3240,7 @@ fn build_unconfigured_setuptools() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + greet==0.1.0 (from `file://[TEMP_DIR]/`)
+     + greet==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import greet"), @"

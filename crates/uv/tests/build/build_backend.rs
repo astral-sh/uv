@@ -805,9 +805,9 @@ fn complex_namespace_packages() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - complex-project-part-a==1.0.0
-     + complex-project-part-a==1.0.0 (from `file://[TEMP_DIR]/complex-project-part_a`)
+     + complex-project-part-a==1.0.0 (from file://[TEMP_DIR]/complex-project-part_a)
      - complex-project-part-b==1.0.0
-     + complex-project-part-b==1.0.0 (from `file://[TEMP_DIR]/complex-project-part_b`)
+     + complex-project-part-b==1.0.0 (from file://[TEMP_DIR]/complex-project-part_b)
     "
     );
 
@@ -964,7 +964,7 @@ fn symlinked_file() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==1.0.0 (from `file://[TEMP_DIR]/project-1.0.0-py3-none-any.whl`)
+     + project==1.0.0 (from file://[TEMP_DIR]/project-1.0.0-py3-none-any.whl)
     ");
 
     // Check that we included the actual license text and not a broken symlink.
@@ -1650,7 +1650,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from `file://[TEMP_DIR]/`)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     // Ensure that the warning isn't shown for registry dependencies.
@@ -1661,7 +1661,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from `file://[TEMP_DIR]/`)
+     - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0
     ");
 
@@ -1711,7 +1711,7 @@ fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from `file://[TEMP_DIR]/project`)
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
     ");
 
     Ok(())

@@ -457,7 +457,7 @@ impl std::fmt::Display for ShortSpecifier<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Version(version) => version.fmt(f),
-            Self::Url(url) => write!(f, " @ `{url}`"),
+            Self::Url(url) => write!(f, " @ {url}"),
         }
     }
 }
@@ -472,11 +472,8 @@ pub(crate) enum LongSpecifier<'a> {
 impl std::fmt::Display for LongSpecifier<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InstalledVersion(InstalledVersion::Version(version)) => write!(f, "=={version}"),
-            Self::InstalledVersion(InstalledVersion::Url(url, version)) => {
-                write!(f, "=={version} (from `{url}`)")
-            }
-            Self::Url(url) => write!(f, " @ `{url}`"),
+            Self::InstalledVersion(version) => version.fmt(f),
+            Self::Url(url) => write!(f, " @ {url}"),
         }
     }
 }

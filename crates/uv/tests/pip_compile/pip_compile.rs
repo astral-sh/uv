@@ -13384,7 +13384,7 @@ fn local_version_of_remote_package() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     "
     );
 
@@ -18067,7 +18067,7 @@ fn pep_751_compile_directory() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from `file://[TEMP_DIR]/foo`)
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -18116,7 +18116,7 @@ fn pep_751_compile_git() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "
     );
 
@@ -18175,7 +18175,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.3.0 (from `https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`)
+     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -18228,7 +18228,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + a==1.0.0 (from `http://[LOCALHOST]/files/a-1.0.0.tar.gz`)
+     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
     "
     );
 
@@ -18336,7 +18336,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from `file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`)
+     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl)
     "
     );
 
@@ -18412,7 +18412,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from `file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`)
+     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz)
     "
     );
 

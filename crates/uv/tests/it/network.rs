@@ -1352,7 +1352,7 @@ fn assert_wheel_download(
         WARN Streaming failed for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`; downloading wheel to disk (I/O operation failed during extraction)
         Prepared 1 package in [TIME]
         Installed 1 package in [TIME]
-         + build-tag==1.0.0 (from `http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`)
+         + build-tag==1.0.0 (from http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl)
         ");
     }
     assert_eq!(requests.full.load(Ordering::Relaxed), full_requests);

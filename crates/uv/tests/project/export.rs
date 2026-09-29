@@ -2278,9 +2278,9 @@ fn requirements_txt_relative_path() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + dependency==0.1.0 (from `file://[TEMP_DIR]/dependency`)
+     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
      + iniconfig==2.0.0
-     + project==0.1.0 (from `file://[TEMP_DIR]/project`)
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
     ");
 
     Ok(())

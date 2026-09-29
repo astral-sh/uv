@@ -415,7 +415,7 @@ fn prune_stale_revision() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from `file://[TEMP_DIR]/`)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     uv_snapshot!(context.filters(), context
@@ -428,7 +428,7 @@ fn prune_stale_revision() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ project==0.1.0 (from `file://[TEMP_DIR]/`)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     // Pruning should remove the unused revision.
@@ -453,7 +453,7 @@ fn prune_stale_revision() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - project==0.1.0 (from `file://[TEMP_DIR]/`)
+     - project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     uv_snapshot!(context.filters(), context
@@ -464,7 +464,7 @@ fn prune_stale_revision() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from `file://[TEMP_DIR]/`)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())
@@ -516,7 +516,7 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from `file://[TEMP_DIR]/`)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     uv_snapshot!(context.filters(), context
@@ -530,7 +530,7 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ project==0.1.0 (from `file://[TEMP_DIR]/`)
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     // Pruning should remove the unused revision but retain the shared archive.
@@ -554,7 +554,7 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - project==0.1.0 (from `file://[TEMP_DIR]/`)
+     - project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     uv_snapshot!(context.filters(), context
@@ -566,7 +566,7 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from `file://[TEMP_DIR]/`)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())
