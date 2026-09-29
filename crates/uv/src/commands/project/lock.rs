@@ -1223,11 +1223,11 @@ impl fmt::Display for RequirementsMismatch {
             "The lockfile needs to be updated because the requirements for `{}` have changed:",
             self.name
         )?;
-        for requirement in self.actual.difference(&self.expected) {
-            write!(f, "\n  {} {requirement}", "Remove".red().bold())?;
-        }
         for requirement in self.expected.difference(&self.actual) {
-            write!(f, "\n  {} {requirement}", "Add".green().bold())?;
+            write!(f, "\n  Added: `{requirement}`")?;
+        }
+        for requirement in self.actual.difference(&self.expected) {
+            write!(f, "\n  Removed: `{requirement}`")?;
         }
         Ok(())
     }

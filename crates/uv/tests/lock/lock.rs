@@ -1372,8 +1372,8 @@ fn lock_check_mismatched_requirements() -> Result<()> {
       cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
 
     hint: The lockfile needs to be updated because the requirements for `project` have changed:
-      Remove project>=0.0.1
-      Add project>=0.1.0
+      Added: `project>=0.1.0`
+      Removed: `project>=0.0.1`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--offline").arg("--no-cache").arg("--quiet"), @"
@@ -1383,8 +1383,8 @@ fn lock_check_mismatched_requirements() -> Result<()> {
       cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
 
     hint: The lockfile needs to be updated because the requirements for `project` have changed:
-      Remove project>=0.0.1
-      Add project>=0.1.0
+      Added: `project>=0.1.0`
+      Removed: `project>=0.0.1`
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-cache"), @"
