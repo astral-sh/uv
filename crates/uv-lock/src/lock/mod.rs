@@ -88,6 +88,7 @@ mod installable;
 mod map;
 mod requirements;
 mod serialize;
+mod sources;
 mod tree;
 
 /// The current version of the lockfile format.
@@ -2607,16 +2608,17 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
-        let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
-            lock.prune_constraints()
-        } else {
-            lock
-        };
-        Ok(if metadata_free {
+        let lock = if metadata_free {
             lock.without_package_metadata()
         } else {
             lock
-        })
+        };
+        let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
+            lock.prune_constraints(root)
+        } else {
+            lock
+        };
+        Ok(lock)
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -4092,7 +4094,7 @@ impl Lock {
                     .iter()
                     .filter(|entry| {
                         filter.includes_constraint(entry)
-                            && (!omit_constraints || !self.can_omit_constraint(entry))
+                            && (!omit_constraints || !self.can_omit_constraint(entry, root))
                     })
                     .cloned(),
             )?;
@@ -4100,7 +4102,7 @@ impl Lock {
                 self.manifest
                     .constraints
                     .iter()
-                    .filter(|entry| !omit_constraints || !self.can_omit_constraint(entry))
+                    .filter(|entry| !omit_constraints || !self.can_omit_constraint(entry, root))
                     .cloned(),
             )?;
             if expected != actual {
@@ -4462,20 +4464,30 @@ impl Lock {
                 // If the distribution is a source tree, attempt to validate it from statically
                 // available `pyproject.toml` metadata before converting it to an installable
                 // distribution. This avoids requiring build permission for static local packages.
-                let statically_satisfied = if let Some(source_tree) =
-                    package.id.source.as_source_tree()
-                    && let Some(SourceTreeRequiresDist {
-                        version: static_version,
-                        requires_python,
-                        metadata,
-                    }) = Self::source_tree_requires_dist_cached(
-                        source_tree,
-                        root,
-                        package,
-                        database,
-                        &mut source_tree_metadata,
-                    )
-                    .await?
+                let source_tree_metadata =
+                    if let Some(source_tree) = package.id.source.as_source_tree() {
+                        match Self::source_tree_requires_dist_cached(
+                            source_tree,
+                            root,
+                            package,
+                            database,
+                            &mut source_tree_metadata,
+                        )
+                        .await
+                        {
+                            Ok(metadata) => metadata,
+                            Err(error) => {
+                                return self.source_metadata_error(package, root, error);
+                            }
+                        }
+                    } else {
+                        None
+                    };
+                let statically_satisfied = if let Some(SourceTreeRequiresDist {
+                    version: static_version,
+                    requires_python,
+                    metadata,
+                }) = source_tree_metadata
                 {
                     // If this local package has become dynamic, the locked package should
                     // no longer contain a version.
@@ -4533,7 +4545,7 @@ impl Lock {
                 if !statically_satisfied {
                     // For a non-dynamic package without usable static metadata, fetch the metadata
                     // from the distribution database.
-                    let metadata = Self::package_metadata(
+                    let metadata = match Self::package_metadata(
                         package,
                         root,
                         tags,
@@ -4543,7 +4555,13 @@ impl Lock {
                         index,
                         database,
                     )
-                    .await?;
+                    .await
+                    {
+                        Ok(metadata) => metadata,
+                        Err(error) => {
+                            return self.source_metadata_error(package, root, error);
+                        }
+                    };
 
                     // If this is a local package, validate that it hasn't become dynamic (in which
                     // case, we'd expect the version to be omitted).
@@ -4608,14 +4626,20 @@ impl Lock {
                     // available from the built distribution metadata.
                     None
                 } else {
-                    Self::source_tree_requires_dist_cached(
+                    match Self::source_tree_requires_dist_cached(
                         source_tree,
                         root,
                         package,
                         database,
                         &mut source_tree_metadata,
                     )
-                    .await?
+                    .await
+                    {
+                        Ok(metadata) => metadata,
+                        Err(error) => {
+                            return self.source_metadata_error(package, root, error);
+                        }
+                    }
                 };
 
                 let satisfied = metadata.is_some_and(|SourceTreeRequiresDist {
@@ -4680,7 +4704,7 @@ impl Lock {
                 // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
                 // extras, while `setuptools` will not.
                 if !satisfied {
-                    let metadata = Self::package_metadata(
+                    let metadata = match Self::package_metadata(
                         package,
                         root,
                         tags,
@@ -4690,7 +4714,13 @@ impl Lock {
                         index,
                         database,
                     )
-                    .await?;
+                    .await
+                    {
+                        Ok(metadata) => metadata,
+                        Err(error) => {
+                            return self.source_metadata_error(package, root, error);
+                        }
+                    };
 
                     // Validate that the package is still dynamic.
                     if !metadata.dynamic {
@@ -5907,6 +5937,8 @@ pub enum SatisfiesResult<'lock> {
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
+    /// Metadata for a previously selected source could not be refreshed.
+    MismatchedSourceMetadata(&'lock PackageName),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,

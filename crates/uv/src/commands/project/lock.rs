@@ -1528,6 +1528,12 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedSourceMetadata(name) => {
+                debug!(
+                    "Resolving despite existing lockfile because source metadata for `{name}` could not be refreshed"
+                );
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
