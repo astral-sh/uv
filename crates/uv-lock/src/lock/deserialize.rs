@@ -466,6 +466,17 @@ impl<'de> DocumentMapAccess<'_, 'de> {
             (MapKind::Root, "[manifest]") => {
                 Some(("manifest", Pending::Map(MapKind::Manifest), "[manifest]"))
             }
+            (
+                MapKind::Root,
+                "[manifest.dependency-groups]" | "[[manifest.dependency-metadata]]",
+            ) => {
+                // The manifest map consumes the first subtable when its parent is implicit.
+                self.track_key("manifest")?;
+                self.pending = Some(Pending::Map(MapKind::Manifest));
+                return seed
+                    .deserialize(de::value::BorrowedStrDeserializer::new("manifest"))
+                    .map(Some);
+            }
             (MapKind::Root, "[[package]]") => Some((
                 "package",
                 Pending::Sequence(SequenceKind::Packages),
@@ -963,6 +974,38 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let actual = from_str(input).expect("valid nested canonical lock");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn implicit_manifest_matches_toml() {
+        for subtable in [
+            r#"[manifest.dependency-groups]
+dev = [{ name = "dependency", specifier = ">=1" }]
+"#,
+            r#"[[manifest.dependency-metadata]]
+name = "dependency"
+version = "1.0.0"
+"#,
+            r#"[manifest.dependency-groups]
+dev = [{ name = "dependency", specifier = ">=1" }]
+
+[[manifest.dependency-metadata]]
+name = "dependency"
+version = "1.0.0"
+"#,
+        ] {
+            let input =
+                format!("version = 1\nrevision = 3\nrequires-python = \">=3.12\"\n\n{subtable}");
+            let expected: Lock =
+                toml::from_str(&input).expect("valid TOML lock with an implicit manifest");
+            let actual = from_str(&input).expect("implicit manifest uses the direct parser");
+
+            assert_eq!(actual, expected);
+            assert_eq!(
+                actual.to_toml().expect("lock serializes canonically"),
+                input
+            );
+        }
     }
 
     #[test]
