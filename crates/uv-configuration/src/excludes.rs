@@ -3,6 +3,7 @@ use std::str::FromStr;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::de::Error;
 
+use uv_distribution_types::ResolutionRecorder;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -33,6 +34,13 @@ pub struct PackageExclusionTarget {
     version: Option<Version>,
 }
 
+impl PackageExclusion {
+    /// Return the parent package selected by this exclusion.
+    pub fn package(&self) -> &PackageName {
+        &self.package.name
+    }
+}
+
 /// An exclusion, either global or scoped to a specific package version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
@@ -61,6 +69,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeDependency {
 /// A set of packages to exclude from resolution.
 #[derive(Debug, Default, Clone)]
 pub struct Excludes {
+    recorder: Option<ResolutionRecorder>,
     global: FxHashSet<PackageName>,
     scoped: FxHashMap<PackageName, Vec<ScopedExclusions>>,
 }
@@ -72,6 +81,13 @@ struct ScopedExclusions {
 }
 
 impl Excludes {
+    /// Record which settings are consulted while resolving runtime dependencies.
+    #[must_use]
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
+        self.recorder = recorder;
+        self
+    }
+
     /// Create an indexed set of exclusions.
     pub fn from_entries(entries: impl IntoIterator<Item = ExcludeDependency>) -> Self {
         let mut excludes = Self::default();
@@ -99,8 +115,37 @@ impl Excludes {
         excludes
     }
 
+    /// Return sorted declarations, combining duplicate exclusions within each package scope.
+    ///
+    /// Retain empty version-specific scopes: they shadow exclusions from a versionless scope.
+    pub(crate) fn into_entries(self) -> Vec<ExcludeDependency> {
+        let mut entries = self
+            .global
+            .into_iter()
+            .map(ExcludeDependency::Dependency)
+            .collect::<Vec<_>>();
+        for (name, packages) in self.scoped {
+            for package in packages {
+                let mut dependencies = package.excludes.into_iter().collect::<Vec<_>>();
+                dependencies.sort();
+                entries.push(ExcludeDependency::Package(PackageExclusion {
+                    package: PackageExclusionTarget {
+                        name: name.clone(),
+                        version: package.version,
+                    },
+                    dependencies: dependencies.into_boxed_slice(),
+                }));
+            }
+        }
+        entries.sort();
+        entries
+    }
+
     /// Check if a package is excluded.
     pub(crate) fn contains(&self, name: &PackageName) -> bool {
+        if let Some(recorder) = &self.recorder {
+            recorder.exclusion(name);
+        }
         self.global.contains(name)
     }
 
@@ -156,29 +201,24 @@ impl Excludes {
     }
 
     /// Check if a dependency is excluded with optional package-version context.
-    fn contains_for_package(
+    pub(crate) fn contains_for_package(
         &self,
         package: Option<(&PackageName, &Version)>,
         dependency: &PackageName,
     ) -> bool {
         self.contains(dependency)
-            || package
-                .and_then(|(package, version)| self.scoped_exclusions_for(package, version))
-                .is_some_and(|excludes| excludes.contains(dependency))
-    }
-
-    /// Return the scoped exclusions that apply to this package version.
-    pub(crate) fn scoped_exclusions_for(
-        &self,
-        package: &PackageName,
-        version: &Version,
-    ) -> Option<&FxHashSet<PackageName>> {
-        let entries = self.scoped.get(package)?;
-        entries
-            .iter()
-            .find(|entry| entry.version.as_ref() == Some(version))
-            .or_else(|| entries.iter().find(|entry| entry.version.is_none()))
-            .map(|entry| &entry.excludes)
+            || package.is_some_and(|(package, version)| {
+                if let Some(recorder) = &self.recorder {
+                    recorder.scoped_exclusion(package);
+                }
+                self.scoped.get(package).is_some_and(|entries| {
+                    entries
+                        .iter()
+                        .find(|entry| entry.version.as_ref() == Some(version))
+                        .or_else(|| entries.iter().find(|entry| entry.version.is_none()))
+                        .is_some_and(|entry| entry.excludes.contains(dependency))
+                })
+            })
     }
 }
 

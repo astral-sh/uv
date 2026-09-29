@@ -23,7 +23,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, DependencyModifierScope,
     DependencyModifiers, ExcludeDependency, ExcludeNewer, ExcludeNewerPackage, Excludes,
-    ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget, Override, Overrides,
+    ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget, NormalizedConstraints,
+    NormalizedExcludes, NormalizedOverrideEntries, NormalizedRequirements, Override, Overrides,
     PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
     ScopedOverrideSourceError,
 };
@@ -4118,51 +4119,39 @@ impl Lock {
             expected.into_iter().collect()
         };
 
-        // Validate that the lockfile was generated with the same overrides.
         let normalized_overrides = {
-            let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
-                match entry {
-                    Override::Requirement(requirement) => Ok(Override::Requirement(
-                        normalize_requirement(requirement, root, &self.requires_python)?,
-                    )),
-                    Override::Package(package) => Ok(Override::Package(PackageOverride {
-                        package: package.package,
-                        dependencies: package
-                            .dependencies
-                            .into_vec()
-                            .into_iter()
-                            .map(|requirement| {
-                                normalize_requirement(requirement, root, &self.requires_python)
-                            })
-                            .collect::<Result<Vec<_>, _>>()?
-                            .into_boxed_slice(),
-                    })),
-                }
-            };
-            let expected: BTreeSet<_> = overrides
-                .iter()
-                .cloned()
-                .map(normalize)
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeSet<_> = self
-                .manifest
-                .overrides
-                .iter()
-                .cloned()
-                .map(normalize)
-                .collect::<Result<_, _>>()?;
+            let expected = normalizer.overrides(
+                overrides
+                    .iter()
+                    .filter(|entry| filter.includes_override(entry))
+                    .cloned(),
+            )?;
+            let actual = normalizer.overrides(self.manifest.overrides.iter().cloned())?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
+                return Ok(SatisfiesResult::MismatchedOverrides(
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
+                ));
             }
-            expected
+            expected.into_inner()
         };
 
-        // Validate that the lockfile was generated with the same excludes.
         {
-            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
-            let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
+            let expected = NormalizedExcludes::from(
+                excludes
+                    .iter()
+                    .filter(|entry| filter.includes_exclusion(entry))
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            );
+            let actual = NormalizedExcludes::from(
+                self.manifest.excludes.iter().cloned().collect::<Vec<_>>(),
+            );
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
+                return Ok(SatisfiesResult::MismatchedExcludes(
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
+                ));
             }
         }
 
@@ -4251,7 +4240,7 @@ impl Lock {
 
         let dependency_modifiers = if allow_missing_package_metadata {
             DependencyModifiers::new(
-                Overrides::from_entries(normalized_overrides.into_iter().collect())
+                Overrides::from_entries(normalized_overrides)
                     .map_err(LockErrorKind::InvalidScopedOverride)?,
                 Excludes::from_entries(excludes.iter().cloned()),
             )
@@ -6078,12 +6067,16 @@ impl ResolverManifest {
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
+        let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
         Self {
             members: members.into_iter().collect(),
-            requirements: requirements.into_iter().collect(),
-            constraints: constraints.into_iter().collect(),
-            overrides: overrides.into_iter().collect(),
-            excludes: excludes.into_iter().collect(),
+            requirements: normalize_collection::<_, NormalizedRequirements>(
+                requirements,
+                normalize,
+            ),
+            constraints: normalize_collection::<_, NormalizedConstraints>(constraints, normalize),
+            overrides: normalize_collection::<_, NormalizedOverrideEntries>(overrides, normalize),
+            excludes: normalize_collection::<_, NormalizedExcludes>(excludes, normalize),
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()

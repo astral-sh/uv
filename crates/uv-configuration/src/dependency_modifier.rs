@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -25,6 +25,14 @@ pub enum DependencyModifierScope<'a> {
 }
 
 impl DependencyModifiers {
+    /// Record which settings are consulted while resolving runtime dependencies.
+    #[must_use]
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
+        self.overrides = self.overrides.with_recorder(recorder.clone());
+        self.excludes = self.excludes.with_recorder(recorder);
+        self
+    }
+
     pub fn new(overrides: Overrides, excludes: Excludes) -> Self {
         Self {
             overrides,
@@ -90,11 +98,11 @@ impl DependencyModifiers {
     }
 
     /// Apply dependency overrides and exclusions in the given scope.
-    pub fn apply<'a, I>(
+    pub fn apply<'a, 'scope, I>(
         &'a self,
-        scope: DependencyModifierScope<'_>,
+        scope: DependencyModifierScope<'scope>,
         requirements: I,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, 'scope, I>
     where
         I: IntoIterator<Item = &'a Requirement>,
     {
@@ -107,13 +115,12 @@ impl DependencyModifiers {
                 (None, Some((package, version)))
             }
         };
-        let excludes = excludes
-            .and_then(|(package, version)| self.excludes.scoped_exclusions_for(package, version));
         self.overrides
             .apply_for_package(overrides, requirements)
             .filter(move |requirement| {
-                !self.excludes.contains(&requirement.name)
-                    && !excludes.is_some_and(|excludes| excludes.contains(&requirement.name))
+                !self
+                    .excludes
+                    .contains_for_package(excludes, &requirement.name)
             })
     }
 }

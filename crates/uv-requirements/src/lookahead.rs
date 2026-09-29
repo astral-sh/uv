@@ -36,8 +36,6 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     constraints: &'a Constraints,
     /// The dependency modifiers for the project.
     modifiers: &'a DependencyModifiers,
-    /// The metadata explicitly provided by the user.
-    dependency_metadata: &'a DependencyMetadata,
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -52,7 +50,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         modifiers: &'a DependencyModifiers,
-        dependency_metadata: &'a DependencyMetadata,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -61,7 +58,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             requirements,
             constraints,
             modifiers,
-            dependency_metadata,
             hasher,
             index,
             database,

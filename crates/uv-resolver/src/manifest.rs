@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use either::Either;
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 

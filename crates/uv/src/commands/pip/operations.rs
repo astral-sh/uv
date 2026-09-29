@@ -343,13 +343,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
             let constraints = constraints.clone().with_recorder(recorder.clone());
-            let overrides = overrides.clone().with_recorder(recorder.clone());
-            let excludes = excludes.clone().with_recorder(recorder.clone());
+            let modifiers = modifiers.clone().with_recorder(recorder.clone());
             let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
                 &modifiers,
-                build_dispatch.dependency_metadata(),
                 &hasher,
                 index,
                 DistributionDatabase::new(

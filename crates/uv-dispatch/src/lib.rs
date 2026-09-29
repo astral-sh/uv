@@ -333,7 +333,6 @@ impl BuildContext for BuildDispatch<'_> {
             requirements,
             self.constraints,
             &modifiers,
-            self.dependency_metadata,
             &hasher,
             &self.shared_state.index,
             DistributionDatabase::new(

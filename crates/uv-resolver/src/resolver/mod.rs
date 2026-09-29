@@ -254,8 +254,10 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
-            constraints: manifest.constraints,
-            modifiers: manifest.modifiers,
+            constraints: manifest
+                .constraints
+                .with_recorder(manifest.recorder.clone()),
+            modifiers: manifest.modifiers.with_recorder(manifest.recorder.clone()),
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
