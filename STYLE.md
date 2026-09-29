@@ -9,13 +9,13 @@ documentation_.
 1. Em-dashes are okay, but not recommended when using monospace fonts. Use "—", not "--" or "-".
 1. Always wrap em-dashes in spaces, e.g., "hello — world" not "hello—world".
 1. Hyphenate compound words, e.g., use "platform-specific" not "platform specific".
-1. Use backticks to escape: commands, code expressions, package names, and file paths.
+1. If a message ends with a single relevant value, precede it with a colon, e.g.,
+   `This is the value: value`.
+1. Use backticks to escape commands, code expressions, package names, URL, and file paths, except if
+   it is a single value after a colon. User-facing summaries may omit backticks.
 1. Use less than and greater than symbols to wrap bare URLs, e.g., `<https://astral.sh>` (unless it
    is an example; then, use backticks).
 1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.
-1. If a message ends with a single relevant value, precede it with a colon, e.g.,
-   `This is the value: value`. If the value is a literal, wrap it in backticks.
-1. Markdown files should be wrapped at 100 characters.
 1. Use a space, not an equals sign, for command-line arguments with a value, e.g.
    `--resolution lowest`, not `--resolution=lowest`.
 
@@ -97,9 +97,6 @@ The documentation is divided into:
 
 ### Colors and style
 
-1. Wrap URLs and file paths in backticks when they are part of a sentence. Omit the backticks when
-   introducing the value with a colon, e.g., `Failed to read: path/to/file` instead of
-   ``Failed to read: `path/to/file` ``. User-facing summaries may omit backticks.
 1. All CLI output must be interpretable and understandable _without_ the use of color and other
    styling. (For example: even if a command is rendered in green, wrap it in backticks.)
 1. `NO_COLOR` must be respected when using any colors or styling.
