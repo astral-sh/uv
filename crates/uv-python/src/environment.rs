@@ -393,7 +393,7 @@ impl PythonEnvironment {
         }
 
         let info = InterpreterInfo::from_virtualenv(self.interpreter())?;
-        info.cache(cache)?;
+        info.cache(self.interpreter().sys_executable(), cache)?;
         Ok(())
     }
 }

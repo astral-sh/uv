@@ -1001,23 +1001,35 @@ pub(crate) struct InterpreterInfo {
 impl InterpreterInfo {
     /// Build metadata for virtual environment discovery without querying Python or using the cache.
     pub(crate) fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
-        let mut scheme = interpreter.scheme.clone();
-        // Joining the empty relative data path adds a trailing separator that sysconfig omits.
-        scheme.data = scheme.data.components().collect();
+        // Python reports ordinary Windows paths even when the venv was created with a verbatim path.
+        let scheme = Scheme {
+            purelib: interpreter.scheme.purelib.simplified().to_path_buf(),
+            platlib: interpreter.scheme.platlib.simplified().to_path_buf(),
+            scripts: interpreter.scheme.scripts.simplified().to_path_buf(),
+            // Joining the empty relative data path adds a trailing separator that sysconfig omits.
+            data: interpreter.scheme.data.simplified().components().collect(),
+            include: interpreter.scheme.include.simplified().to_path_buf(),
+        };
         Ok(Self {
             platform: interpreter.platform.clone(),
             markers: (*interpreter.markers).clone(),
             scheme,
             virtualenv: interpreter.virtualenv.clone(),
             manylinux_compatible: interpreter.manylinux_compatible,
-            sys_prefix: interpreter.sys_prefix.clone(),
+            sys_prefix: interpreter.sys_prefix.simplified().to_path_buf(),
             // These fields are unused by `Interpreter`, but retained in the cache format.
             sys_base_exec_prefix: PathBuf::new(),
             sys_path: Vec::new(),
             sys_base_prefix: interpreter.sys_base_prefix.clone(),
             sys_base_executable: interpreter.sys_base_executable.clone(),
-            sys_executable: std::path::absolute(interpreter.sys_executable())?,
-            site_packages: interpreter.site_packages.clone(),
+            sys_executable: std::path::absolute(interpreter.sys_executable())?
+                .simplified()
+                .to_path_buf(),
+            site_packages: interpreter
+                .site_packages
+                .iter()
+                .map(|path| path.simplified().to_path_buf())
+                .collect(),
             stdlib: interpreter.stdlib.clone(),
             extension_suffixes: interpreter.extension_suffixes.clone(),
             standalone: interpreter.standalone,
@@ -1028,8 +1040,9 @@ impl InterpreterInfo {
     }
 
     /// Cache already prepared metadata for this executable.
-    pub(crate) fn cache(&self, cache: &Cache) -> Result<(), Error> {
-        let absolute = std::path::absolute(&self.sys_executable)?;
+    pub(crate) fn cache(&self, executable: &Path, cache: &Cache) -> Result<(), Error> {
+        // The lookup must use the original path, which may differ from Python's `sys.executable`.
+        let absolute = std::path::absolute(executable)?;
         let canonical = canonicalize_executable(&absolute)?;
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
         let modified = Timestamp::from_path(&canonical)?;
