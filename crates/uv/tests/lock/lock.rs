@@ -31205,7 +31205,7 @@ async fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Resu
     ----- stderr -----
     warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` or provide a username
     error: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/iniconfig/
-      cause: Missing credentials for `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
+      cause: Missing credentials for: http://[LOCALHOST]/basic-auth/simple/iniconfig/
     ");
 
     Ok(())

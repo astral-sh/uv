@@ -509,7 +509,7 @@ impl Middleware for AuthMiddleware {
             Ok(response)
         } else {
             Err(Error::Middleware(format_err!(
-                "Missing credentials for `{url}`"
+                "Missing credentials for: {url}"
             )))
         }
     }

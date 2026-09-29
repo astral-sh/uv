@@ -190,7 +190,7 @@ fn no_credentials() {
     Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
       cause: Failed to send POST request
-      cause: Missing credentials for `https://test.pypi.org/legacy/`
+      cause: Missing credentials for: https://test.pypi.org/legacy/
     "
     );
 }
@@ -536,7 +536,7 @@ async fn read_index_credential_env_vars_for_check_url() {
     Uploading `astral_test_private-0.1.0-py3-none-any.whl` ([SIZE]KiB)
     error: Failed to publish `dist/astral_test_private-0.1.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
       cause: Failed to send POST request
-      cause: Missing credentials for `http://[LOCALHOST]/upload`
+      cause: Missing credentials for: http://[LOCALHOST]/upload
     "
     );
     // Test that it works with credentials

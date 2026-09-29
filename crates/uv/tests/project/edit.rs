@@ -13961,7 +13961,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: https://pypi.org/simple/anyio/
-      cause: Missing credentials for `https://pypi.org/simple/anyio/`
+      cause: Missing credentials for: https://pypi.org/simple/anyio/
     "
     );
 
@@ -13969,7 +13969,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: https://pypi.org/simple/black/
-      cause: Missing credentials for `https://pypi.org/simple/black/`
+      cause: Missing credentials for: https://pypi.org/simple/black/
     "
     );
     Ok(())

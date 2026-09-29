@@ -1589,7 +1589,7 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     ----- stderr -----
     error: Failed to upgrade executable-application
       cause: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/executable-application/
-      cause: Missing credentials for `http://[LOCALHOST]/basic-auth/simple/executable-application/`
+      cause: Missing credentials for: http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     Ok(())
