@@ -59,7 +59,7 @@ fn bytecode_files(package: &Path) -> Result<BTreeMap<PathBuf, SystemTime>> {
 fn native_bytecode() -> Result<()> {
     allow_duplicates! {
         for python_version in ["3.12", "3.13", "3.14"] {
-            for optimization in ["0", "1", "2", "3"] {
+            for optimization in ["0", "1", "2", "3", " 2", "2 "] {
                 let context = uv_test::test_context!(python_version);
                 let wheel = bytecode_wheel(&context)?;
                 uv_snapshot!(context.filters(), context.pip_install()
