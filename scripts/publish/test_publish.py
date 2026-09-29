@@ -26,17 +26,17 @@ uv run --locked scripts/publish/test_publish.py local
 # Setup
 
 **pypi-token**
-Set the `UV_TEST_PUBLISH_TOKEN` environment variables.
+Set the `UV_TEST_PUBLISH_TOKEN` environment variable.
 
 **pypi-password-env**
 Set the `UV_TEST_PUBLISH_PASSWORD` environment variable.
 This project also uses token authentication since it's the only thing that PyPI
-supports, but they both CLI options.
+supports, but this tests the username and password CLI options.
 
 **pypi-keyring**
 Set `UV_TEST_PUBLISH_KEYRING` to the dedicated TestPyPI token. The harness stores it
 in a temporary keyring.
-The query parameter a horrible hack stolen from
+The query parameter is a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
 
@@ -44,7 +44,7 @@ to prevent the other projects from implicitly using the same credentials.
 ```console
 uv auth login https://test.pypi.org/legacy/?astral-test-text-store --token <token>
 ```
-The query parameter a horrible hack stolen from
+The query parameter is a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
 
@@ -68,24 +68,22 @@ Docs: https://forgejo.org/docs/latest/user/packages/pypi/
 
 import logging
 import os
-import re
+import shlex
 import shutil
 import sys
 import time
+import traceback
 from argparse import ArgumentParser
+from collections.abc import Iterator
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from pathlib import Path
-from shutil import rmtree
-from subprocess import PIPE, CalledProcessError, check_call, run
-from tempfile import TemporaryDirectory, gettempdir
-from time import sleep
+from subprocess import CalledProcessError, CompletedProcess, check_call, run
+from tempfile import SpooledTemporaryFile, TemporaryDirectory, gettempdir
+from typing import IO
 
 import httpx
 from keyrings.alt.file import PlaintextKeyring
-from packaging.utils import (
-    parse_sdist_filename,
-    parse_wheel_filename,
-)
 from packaging.version import Version
 from pypi_attestations import Attestation, Distribution
 from sigstore import oidc
@@ -93,17 +91,16 @@ from sigstore.models import ClientTrustConfig
 from sigstore.sign import SigningContext
 
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
+TEST_PYPI_INDEX_URL = "https://test.pypi.org/simple/"
 PYTHON_VERSION = os.environ.get("UV_TEST_PUBLISH_PYTHON_VERSION", "3.12")
-# `pyproject.toml` contents using all supported metadata fields, except for the
-# generated header with `[project]`, name and version.
-PYPROJECT_TAIL = """
+# Static `pyproject.toml` contents using all supported metadata fields.
+PYPROJECT_METADATA = """
 authors = [{ name = "konstin", email = "konstin@mailbox.org" }]
 classifiers = ["Topic :: Software Development :: Testing"]
 # Empty for simplicity with the `uv compile` check, anyio still tests,
 # optional-dependencies still test the `Requires-Dist` field.
 dependencies = []
 description = "Add your description here"
-dynamic = ["gui-scripts", "scripts"]
 keywords = ["test", "publish"]
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE*"]
@@ -113,30 +110,31 @@ readme = "README.md"
 requires-python = ">=3.12"
 urls = { "github" = "https://github.com/astral-sh/uv" }
 
-# https://github.com/pypa/hatch/issues/1828
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
 """.lstrip()
 
-cwd = Path(__file__).parent
+SCRIPT_DIR = Path(__file__).parent
+REPOSITORY_ROOT = SCRIPT_DIR.parent.parent
 
 
-@dataclass
-class TargetConfiguration:
+@dataclass(frozen=True, slots=True)
+class Target:
+    """Configuration for a publish test target."""
+
     project_name: str
     publish_url: str
     index_url: str
     index: str | None = None
+    publish_args: tuple[str, ...] = ()
+    environment: tuple[tuple[str, str], ...] = ()
+    secrets: tuple[tuple[str, str], ...] = ()
+    keyring_variable: str | None = None
     attestations: bool = False
-    """
-    The strategy to use to obtain a fresh version for upload.
-
-    'latest' means to query the index and select the next unused version.
-
-    'timestamp' means to synthesize a version based on the current timestamp,
-    e.g. 0.YYYYMMDDHHMMSS.NNN, where NNN is milliseconds.
-    """
+    reusable_credentials: bool = True
+    local: bool = True
+    ci: bool = True
 
     def index_declaration(self) -> str | None:
         if not self.index:
@@ -149,334 +147,562 @@ class TargetConfiguration:
         )
 
 
-@dataclass
-class Plan:
-    uv: Path
-    """
-    The uv executable to use.
-    """
+@dataclass(frozen=True, slots=True)
+class BuiltProject:
+    """A built publish fixture."""
 
-    target: str
-    """
-    The test target.
-    """
-
-    configuration: TargetConfiguration
-    """
-    The target's configuration.
-    """
-
-    extra_args: list[str]
-    """
-    Target-specific extra arguments to `uv publish`.
-    """
-
-    env: dict[str, str]
-    """
-    Target-specific environment variables.
-
-    These get merged into `os.environ` when running `uv publish`, and take
-    precedence over it.
-    """
-
-    def full_env(self) -> dict[str, str]:
-        """Return the full environment for running uv publish."""
-        return {**os.environ, **self.env}
+    root: Path
+    version: Version
+    filenames: tuple[str, ...]
 
 
-# Map CLI target name to package name and index url.
-# Trusted publishing can only be tested on GitHub Actions, so we have separate local
-# and all targets.
-local_targets: dict[str, TargetConfiguration] = {
-    "pypi-token": TargetConfiguration(
+# Map each CLI target to its registry, credentials, and test capabilities.
+TARGETS: dict[str, Target] = {
+    "pypi-token": Target(
         "astral-test-token",
         TEST_PYPI_PUBLISH_URL,
-        "https://test.pypi.org/simple/",
-        "test-pypi",
+        TEST_PYPI_INDEX_URL,
+        index="test-pypi",
+        secrets=(("UV_PUBLISH_TOKEN", "UV_TEST_PUBLISH_TOKEN"),),
     ),
-    "pypi-password-env": TargetConfiguration(
+    "pypi-password-env": Target(
         "astral-test-password",
         TEST_PYPI_PUBLISH_URL,
-        "https://test.pypi.org/simple/",
+        TEST_PYPI_INDEX_URL,
+        publish_args=("--username", "__token__"),
+        secrets=(("UV_PUBLISH_PASSWORD", "UV_TEST_PUBLISH_PASSWORD"),),
     ),
-    "pypi-keyring": TargetConfiguration(
+    "pypi-keyring": Target(
         "astral-test-keyring",
         "https://test.pypi.org/legacy/?astral-test-keyring",
-        "https://test.pypi.org/simple/",
+        TEST_PYPI_INDEX_URL,
+        publish_args=("--username", "__token__", "--keyring-provider", "subprocess"),
+        keyring_variable="UV_TEST_PUBLISH_KEYRING",
     ),
-    "pypi-text-store": TargetConfiguration(
+    "pypi-text-store": Target(
         "astral-test-text-store",
         "https://test.pypi.org/legacy/?astral-test-text-store",
-        "https://test.pypi.org/simple/",
+        TEST_PYPI_INDEX_URL,
+        publish_args=("--username", "__token__"),
     ),
-    "gitlab": TargetConfiguration(
+    "gitlab": Target(
         "astral-test-token",
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/",
+        publish_args=("--username", "astral-test-gitlab-pat"),
+        secrets=(("UV_PUBLISH_PASSWORD", "UV_TEST_PUBLISH_GITLAB_PAT"),),
     ),
-    "codeberg": TargetConfiguration(
+    "codeberg": Target(
         "astral-test-token",
         "https://codeberg.org/api/packages/astral-test-user/pypi",
         "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
+        environment=(("UV_PUBLISH_USERNAME", "astral-test-user"),),
+        secrets=(("UV_PUBLISH_PASSWORD", "UV_TEST_PUBLISH_CODEBERG_TOKEN"),),
+        # Temporarily disabled on CI due to unreliability.
+        ci=False,
     ),
-    "cloudsmith": TargetConfiguration(
+    "cloudsmith": Target(
         "astral-test-token",
         "https://python.cloudsmith.io/astral-test/astral-test-1/",
         "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
+        secrets=(("UV_PUBLISH_TOKEN", "UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"),),
     ),
-}
-
-all_targets: dict[str, TargetConfiguration] = local_targets | {
-    "pypi-trusted-publishing-github": TargetConfiguration(
+    "pypi-trusted-publishing-github": Target(
         "astral-test-trusted-publishing",
         TEST_PYPI_PUBLISH_URL,
-        "https://test.pypi.org/simple/",
-        index=None,
+        TEST_PYPI_INDEX_URL,
+        publish_args=("--trusted-publishing", "always"),
         attestations=True,
+        local=False,
     ),
-    "pypi-trusted-publishing-gitlab": TargetConfiguration(
+    "pypi-trusted-publishing-gitlab": Target(
         "astral-test-pypi-trusted-publishing-gitlab",
         publish_url=TEST_PYPI_PUBLISH_URL,
-        index_url="https://test.pypi.org/simple/",
-        index=None,
-        # We're impersonating GitLab, so we can't easily test attestations here.
+        index_url=TEST_PYPI_INDEX_URL,
+        publish_args=("--trusted-publishing", "always"),
+        environment=(
+            ("CI", "true"),
+            ("GITLAB_CI", "true"),
+            # The test can run in GitHub Actions, so explicitly disable detection.
+            ("GITHUB_ACTIONS", "false"),
+        ),
+        secrets=(("TESTPYPI_ID_TOKEN", "UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN"),),
+        # We're impersonating GitLab, so attestations remain disabled.
         # TODO: In principle we could test this by having GitLab issue us an `aud:sigstore`
         # OIDC token in addition to the `aud:testpypi` one.
-        attestations=False,
+        reusable_credentials=False,
+        local=False,
     ),
 }
 
-# Temporarily disable codeberg on CI due to unreliability.
-all_targets.pop("codeberg", None)
+LOCAL_TARGETS = tuple(name for name, target in TARGETS.items() if target.local)
+CI_TARGETS = tuple(name for name, target in TARGETS.items() if target.ci)
 
 
-def collect_versions(url: str, client: httpx.Client) -> set[Version]:
-    """Return all version from an index page."""
-    versions = set()
-    for filename in get_filenames(url, client):
-        if filename.endswith(".whl"):
-            [_name, version, _build, _tags] = parse_wheel_filename(filename)
+class TargetSession:
+    """Manage credentials, output, and subprocesses for one target."""
+
+    def __init__(self, name: str, uv: Path, keyring_directory: Path):
+        self.name = name
+        self.uv = uv
+        self.target = TARGETS[name]
+        self.keyring_directory = keyring_directory
+        self.failed = False
+
+        self._environment: dict[str, str] | None = None
+        self._grouped = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+        self._redirects = ExitStack()
+        self._output_stack = ExitStack()
+        self._root_logger = logging.getLogger()
+        self._previous_handlers: list[logging.Handler] = []
+        self._previous_level = self._root_logger.level
+        self._handler: logging.Handler | None = None
+        self.output: IO[str]
+
+    def __enter__(self):
+        self.output = self._output_stack.enter_context(
+            SpooledTemporaryFile(
+                max_size=1024 * 1024,
+                mode="w+",
+                encoding="utf-8",
+            )
+        )
+        if self._grouped:
+            print(f"::group::uv publish: {self.name}", flush=True)
         else:
-            [_name, version] = parse_sdist_filename(filename)
-        versions.add(version)
-    return versions
+            print(f"Testing uv publish target: {self.name}", flush=True)
+
+        self._previous_handlers = self._root_logger.handlers[:]
+        for handler in self._previous_handlers:
+            self._root_logger.removeHandler(handler)
+
+        self._handler = logging.StreamHandler(self.output)
+        self._handler.setFormatter(
+            logging.Formatter(
+                "%(levelname)s [%(asctime)s] %(name)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        self._root_logger.addHandler(self._handler)
+        self._root_logger.setLevel(logging.INFO)
+        self._redirects.enter_context(redirect_stdout(self.output))
+        self._redirects.enter_context(redirect_stderr(self.output))
+        return self
+
+    def __exit__(self, _exception_type, exception, _exception_traceback) -> bool:
+        self.failed = exception is not None
+        if self.failed:
+            traceback.print_exception(exception, file=self.output)
+
+        if self._handler is not None:
+            self._handler.flush()
+            self._root_logger.removeHandler(self._handler)
+        self._root_logger.setLevel(self._previous_level)
+        for handler in self._previous_handlers:
+            self._root_logger.addHandler(handler)
+        self._redirects.close()
+
+        if self.failed:
+            print(f"Target failed: {self.name}", flush=True)
+            self.output.flush()
+            self.output.seek(0)
+            shutil.copyfileobj(self.output, sys.stdout)
+            sys.stdout.flush()
+        else:
+            print(f"Target passed: {self.name}", flush=True)
+
+        self._output_stack.close()
+        if self._grouped:
+            print("::endgroup::", flush=True)
+
+        return isinstance(exception, Exception)
+
+    def run_command(
+        self,
+        command: list[str | Path],
+        *,
+        cwd: str | Path,
+        input: str | None = None,
+        check: bool = True,
+        use_credentials: bool = False,
+    ) -> CompletedProcess[str]:
+        """Run and record a subprocess without streaming its output."""
+        self.output.write(f"$ {shlex.join(str(argument) for argument in command)}\n")
+        try:
+            result = run(
+                command,
+                cwd=cwd,
+                env=self.full_environment() if use_credentials else None,
+                text=True,
+                input=input,
+                capture_output=True,
+                check=check,
+            )
+        except CalledProcessError as error:
+            self._write_process_output(error.stdout)
+            self._write_process_output(error.stderr)
+            raise
+
+        self._write_process_output(result.stdout)
+        self._write_process_output(result.stderr)
+        return result
+
+    def publish(
+        self,
+        project: BuiltProject,
+        destination: tuple[str, ...],
+        *,
+        check: bool = True,
+    ) -> CompletedProcess[str]:
+        """Run uv publish with the target's credentials and arguments."""
+        return self.run_command(
+            [self.uv, "publish", *destination, *self.target.publish_args],
+            cwd=project.root,
+            check=check,
+            use_credentials=True,
+        )
+
+    def full_environment(self) -> dict[str, str]:
+        """Return the process environment, resolving credentials on first use."""
+        if self._environment is None:
+            self._environment = dict(self.target.environment)
+            for variable, source_variable in self.target.secrets:
+                self._environment[variable] = os.environ[source_variable]
+
+            if self.target.keyring_variable:
+                keyring_file = str(self.keyring_directory / "keyring.cfg")
+                keyring = PlaintextKeyring().with_properties(file_path=keyring_file)
+                keyring.set_password(
+                    self.target.publish_url,
+                    "__token__",
+                    os.environ[self.target.keyring_variable],
+                )
+                self._environment.update(
+                    {
+                        "PYTHON_KEYRING_BACKEND": (
+                            "keyrings.alt.file.PlaintextKeyring"
+                        ),
+                        "KEYRING_PROPERTY_FILE_PATH": keyring_file,
+                    }
+                )
+
+        return {**os.environ, **self._environment}
+
+    def _write_process_output(self, content: str | None):
+        if not content:
+            return
+        self.output.write(content)
+        if not content.endswith("\n"):
+            self.output.write("\n")
 
 
-def get_filenames(url: str, client: httpx.Client) -> list[str]:
-    """Get the filenames (source dists and wheels) from an index URL."""
-    response = client.get(url, follow_redirects=True)
-    response.raise_for_status()
-    data = response.text
-    # Works for the indexes in the list
-    href_text = r"<a(?:\s*[\w-]+=(?:'[^']+'|\"[^\"]+\"))* *>([^<>]+)</a>"
-    return [m.group(1) for m in re.finditer(href_text, data)]
+class PublishTest:
+    """Exercise fresh and repeated uploads for one publish target."""
 
+    def __init__(self, session: TargetSession):
+        self.session = session
+        self.target = session.target
 
-def check_index_for_provenance(
-    plan: Plan,
-    version: Version,
-    client: httpx.Client,
-):
-    """Check that the index serves a provenance attribute on each of the
-    distributions for the given project and version.
+    def run(self):
+        """Run the publish scenarios in dependency order."""
+        project = self._publish_fresh()
+        self._verify_same_file_reupload(project)
+        self._verify_existing_files_skipped(project)
+        self._verify_modified_files_rejected(project)
 
-    This uses the PEP 691 JSON API for convenience. There shouldn't be
-    any PEP 740 implementations out there that don't also implement PEP 691.
-    """
+    def _publish_fresh(self) -> BuiltProject:
+        """Publish a new project version and verify its attestations."""
+        project_name = self.target.project_name
 
-    url = plan.configuration.index_url + plan.configuration.project_name + "/"
-    response = client.get(
-        url,
-        follow_redirects=True,
-        headers={"Accept": "application/vnd.pypi.simple.v1+json"},
-    )
-    response.raise_for_status()
+        print(f"\nPublish {project_name} for {self.session.name}", file=sys.stderr)
 
-    data = response.json()
-    for file in data["files"]:
-        if str(version) in file["filename"] and not file.get("provenance"):
+        project = self._build_project(self._fresh_version())
+
+        if self.target.attestations:
+            self._create_attestations(project)
+
+        print(
+            f"\n=== 1. Publishing a new version: "
+            f"{project_name} {project.version} {self.target.publish_url} ===",
+            file=sys.stderr,
+        )
+
+        self.session.publish(
+            project,
+            ("--publish-url", self.target.publish_url),
+        )
+
+        if self.target.attestations:
+            self._wait_for_index(project.version)
+            self._check_index_for_provenance(project)
+
+        return project
+
+    def _verify_same_file_reupload(self, project: BuiltProject):
+        """Test that re-uploading the same files works on PyPI."""
+        # PyPI is the only index known to have this behavior. GitLab Trusted
+        # Publishing uses a static OIDC token that cannot be reused.
+        if (
+            self.target.publish_url != TEST_PYPI_PUBLISH_URL
+            or not self.target.reusable_credentials
+        ):
+            return
+
+        print(
+            f"\n=== 2. Publishing {self.target.project_name} "
+            f"{project.version} again (PyPI) ===",
+            file=sys.stderr,
+        )
+        self._wait_for_index(project.version)
+        result = self.session.publish(
+            project,
+            ("--publish-url", self.target.publish_url),
+        )
+        output = result.stderr or ""
+        uploads, existing = self._publish_output_counts(output)
+        if (uploads, existing) != (len(project.filenames), 0):
             raise RuntimeError(
-                f"Missing provenance for {plan.configuration.project_name} {version} "
-                f"file {file['filename']}"
+                f"PyPI re-upload of the same files failed for {self.session.name} "
+                f"({self.target.publish_url}): "
+                f"{uploads} != {len(project.filenames)}, {existing} != 0\n"
+                f"---\n{output}\n---"
             )
 
+    def _verify_existing_files_skipped(self, project: BuiltProject):
+        """Test that a check URL or index skips existing files."""
+        if not self.target.reusable_credentials:
+            return
 
-def build_project_at_version(
-    target: str, version: Version, uv: Path, modified: bool = False
-) -> Path:
-    """Build a source dist and a wheel with the project name and an unclaimed
-    version."""
-    project_name = all_targets[target].project_name
-
-    if modified:
-        dir_name = f"{project_name}-modified"
-    else:
-        dir_name = project_name
-    project_root = cwd.joinpath(dir_name)
-
-    if project_root.exists():
-        rmtree(project_root)
-    check_call(
-        [
-            uv,
-            "init",
-            "-p",
-            PYTHON_VERSION,
-            "--lib",
-            "--no-workspace",
-            "--name",
-            project_name,
-            dir_name,
-        ],
-        cwd=cwd,
-    )
-    toml = (
-        "[project]\n"
-        + f'name = "{project_name}"\n'
-        # Set to an unclaimed version
-        + f'version = "{version}"\n'
-        # Add all supported metadata
-        + PYPROJECT_TAIL
-    )
-    project_root.joinpath("pyproject.toml").write_text(toml)
-    shutil.copy(
-        cwd.parent.parent.joinpath("LICENSE-APACHE"),
-        cwd.joinpath(dir_name).joinpath("LICENSE-APACHE"),
-    )
-    shutil.copy(
-        cwd.parent.parent.joinpath("LICENSE-MIT"),
-        cwd.joinpath(dir_name).joinpath("LICENSE-MIT"),
-    )
-
-    # Modify the code so we get a different source dist and wheel
-    if modified:
-        init_py = (
-            project_root.joinpath("src")
-            # dist info naming
-            .joinpath(project_name.replace("-", "_"))
-            .joinpath("__init__.py")
+        mode = "index" if self.target.index else "check URL"
+        print(
+            f"\n=== 3. Publishing {self.target.project_name} "
+            f"{project.version} again with {mode} ===",
+            file=sys.stderr,
         )
-        init_py.write_text("x = 1")
+        if index := self.target.index:
+            destination = ("--index", index)
+        else:
+            destination = (
+                "--publish-url",
+                self.target.publish_url,
+                "--check-url",
+                self.target.index_url,
+            )
 
-    check_call(
-        [
-            uv,
-            "build",
-            "--build-constraint",
-            cwd / "build-requirements.txt",
-            "--require-hashes",
-        ],
-        cwd=project_root,
-    )
-    # Publication-only indexes must not participate in building fixtures.
-    if index_declaration := all_targets[target].index_declaration():
-        project_root.joinpath("pyproject.toml").write_text(toml + index_declaration)
-    # Test that we ignore unknown any file.
-    project_root.joinpath("dist").joinpath(".DS_Store").touch()
+        output = ""
+        uploads = existing = 0
+        for _ in self._index_attempts(project.version, "check URL upload"):
+            result = self.session.publish(project, destination)
+            output = result.stderr or ""
+            uploads, existing = self._publish_output_counts(output)
+            if (uploads, existing) == (0, len(project.filenames)):
+                return
 
-    return project_root
+        raise RuntimeError(
+            f"Re-upload with check URL failed for {self.session.name} "
+            f"({self.target.publish_url}): "
+            f"{uploads} != 0, {existing} != {len(project.filenames)}\n"
+            f"---\n{output}\n---"
+        )
 
+    def _verify_modified_files_rejected(self, project: BuiltProject):
+        """Test that modified files at the same version are rejected."""
+        if not self.target.reusable_credentials:
+            return
 
-def wait_for_index(
-    plan: Plan,
-    version: Version,
-):
-    """Check that the index URL was updated, wait up to 100s if necessary.
+        modified_project = self._build_project(project.version, modified=True)
 
-    Often enough the index takes a few seconds until the index is updated after an
-    upload. We need to specifically run this through uv since to query the same cache
-    (invalidation) as the registry client in skip existing in uv publish will later,
-    just `get_filenames` fails non-deterministically.
+        print(
+            f"\n=== 4. Publishing modified {self.target.project_name} "
+            f"{project.version} again with skip existing (error test) ===",
+            file=sys.stderr,
+        )
+        destination = (
+            "--publish-url",
+            self.target.publish_url,
+            "--check-url",
+            self.target.index_url,
+        )
+        returncode = 0
+        output = ""
+        for _ in self._index_attempts(project.version, "modified file check"):
+            result = self.session.publish(
+                modified_project,
+                destination,
+                check=False,
+            )
+            returncode = result.returncode
+            output = result.stderr or ""
 
-    Require consecutive successful checks since index responses can briefly disagree
-    after an upload.
-    """
-    consecutive_successes = 0
-    for _ in range(50):
-        result = run(
+            if (
+                returncode != 0
+                and "Local file and index file do not match for" in output
+            ):
+                return
+
+        raise RuntimeError(
+            f"Re-upload with mismatching files should not have been started "
+            f"for {self.session.name} ({self.target.publish_url}): "
+            f"Exit code {returncode}\n"
+            f"---\n{output}\n---"
+        )
+
+    def _build_project(self, version: Version, modified: bool = False) -> BuiltProject:
+        """Build a source distribution and wheel at an unclaimed version."""
+        project_name = self.target.project_name
+        dir_name = f"{project_name}-modified" if modified else project_name
+        project_root = SCRIPT_DIR / dir_name
+
+        if project_root.exists():
+            shutil.rmtree(project_root)
+        self.session.run_command(
             [
-                plan.uv,
-                "pip",
-                "compile",
+                self.session.uv,
+                "init",
                 "-p",
                 PYTHON_VERSION,
-                "--index",
-                plan.configuration.index_url,
-                "--quiet",
-                "--generate-hashes",
-                "--no-header",
-                "--refresh-package",
-                plan.configuration.project_name,
-                "-",
+                "--lib",
+                "--no-workspace",
+                "--name",
+                project_name,
+                dir_name,
             ],
-            text=True,
-            input=f"{plan.configuration.project_name}=={version}",
-            stdout=PIPE,
-            env=plan.full_env(),
-            # The version was just published, so run outside the repository to avoid
-            # applying its exclude-newer setting.
-            cwd=gettempdir(),
-            check=False,
+            cwd=SCRIPT_DIR,
         )
-        # codeberg sometimes times out
-        if result.returncode != 0:
-            consecutive_successes = 0
+        toml = (
+            "[project]\n"
+            + f'name = "{project_name}"\n'
+            + f'version = "{version}"\n'
+            + PYPROJECT_METADATA
+        )
+        project_root.joinpath("pyproject.toml").write_text(toml)
+        shutil.copy(
+            REPOSITORY_ROOT / "LICENSE-APACHE",
+            project_root / "LICENSE-APACHE",
+        )
+        shutil.copy(
+            REPOSITORY_ROOT / "LICENSE-MIT",
+            project_root / "LICENSE-MIT",
+        )
+
+        if modified:
+            init_py = (
+                project_root / "src" / project_name.replace("-", "_") / "__init__.py"
+            )
+            init_py.write_text("x = 1")
+
+        self.session.run_command([self.session.uv, "build"], cwd=project_root)
+        # Publication-only indexes must not participate in building fixtures.
+        if index_declaration := self.target.index_declaration():
+            project_root.joinpath("pyproject.toml").write_text(toml + index_declaration)
+
+        dist = project_root / "dist"
+        # Test that uv ignores unknown files in the distribution directory.
+        dist.joinpath(".DS_Store").touch()
+
+        return BuiltProject(
+            root=project_root,
+            version=version,
+            filenames=tuple(
+                path.name
+                for path in dist.iterdir()
+                if path.name.endswith((".tar.gz", ".whl"))
+            ),
+        )
+
+    def _wait_for_index(self, version: Version):
+        """Wait for the index to consistently expose both distributions."""
+        consecutive_successes = 0
+        for _ in range(50):
+            result = self.session.run_command(
+                [
+                    self.session.uv,
+                    "pip",
+                    "compile",
+                    "-p",
+                    PYTHON_VERSION,
+                    "--index",
+                    self.target.index_url,
+                    "--quiet",
+                    "--generate-hashes",
+                    "--no-header",
+                    "--refresh-package",
+                    self.target.project_name,
+                    "-",
+                ],
+                input=f"{self.target.project_name}=={version}",
+                # Avoid applying the repository's exclude-newer setting to a
+                # version that was just published.
+                cwd=gettempdir(),
+                check=False,
+                use_credentials=True,
+            )
+            if result.returncode != 0:
+                consecutive_successes = 0
+            elif (
+                f"{self.target.project_name}=={version}" in result.stdout
+                and result.stdout.count("--hash") == 2
+            ):
+                consecutive_successes += 1
+                if consecutive_successes == 3:
+                    return
+            else:
+                consecutive_successes = 0
+
             print(
-                f"uv pip compile not updated, missing 2 files for {version}, "
-                + f"sleeping for 2s: `{plan.configuration.index_url}`:\n",
+                f"Index not ready for {self.target.project_name}=={version}; "
+                f"sleeping for 2s: {self.target.index_url}",
                 file=sys.stderr,
             )
-        elif (
-            f"{plan.configuration.project_name}=={version}" in result.stdout
-            and result.stdout.count("--hash") == 2
-        ):
-            consecutive_successes += 1
-            if consecutive_successes == 3:
-                return
-        else:
-            consecutive_successes = 0
-            print(
-                f"uv pip compile not updated, missing 2 files for {version}, "
-                + f"sleeping for 2s: `{plan.configuration.index_url}`:\n"
-                + "```\n"
-                + result.stdout.replace("\\\n    ", "")
-                + "```",
-                file=sys.stderr,
+            time.sleep(2)
+
+        raise RuntimeError(
+            f"Index did not consistently expose both files for "
+            f"{self.target.project_name}=={version}"
+        )
+
+    def _index_attempts(self, version: Version, operation: str) -> Iterator[None]:
+        """Wait for the index before retrying an index-dependent operation."""
+        for attempt in range(5):
+            self._wait_for_index(version)
+            yield
+            if attempt < 4:
+                print(
+                    f"Index returned inconsistent files for "
+                    f"{self.target.project_name}=={version}; "
+                    f"retrying {operation} ({attempt + 1}/4)",
+                    file=sys.stderr,
+                )
+
+    @staticmethod
+    def _publish_output_counts(output: str) -> tuple[int, int]:
+        """Count uploaded and skipped distributions."""
+        return output.count("Uploading"), output.count("already exists")
+
+    def _check_index_for_provenance(self, project: BuiltProject):
+        """Check that every uploaded distribution has provenance."""
+        url = self.target.index_url + self.target.project_name + "/"
+        with httpx.Client(timeout=120) as client:
+            response = client.get(
+                url,
+                follow_redirects=True,
+                headers={"Accept": "application/vnd.pypi.simple.v1+json"},
             )
-        sleep(2)
+            response.raise_for_status()
 
-    raise RuntimeError(
-        f"Index did not consistently expose both files for "
-        f"{plan.configuration.project_name}=={version}"
-    )
+        data = response.json()
+        for file_data in data["files"]:
+            if str(project.version) in file_data["filename"] and not file_data.get(
+                "provenance"
+            ):
+                raise RuntimeError(
+                    f"Missing provenance for {self.target.project_name} "
+                    f"{project.version} file {file_data['filename']}"
+                )
 
-
-def get_fresh_version(plan: Plan) -> Version:
-    """Get a fresh version."""
-    timestamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
-    milliseconds = int((time.time() % 1) * 1000)
-    return Version(f"0.{timestamp}.{milliseconds:03d}")
-
-
-def test_fresh_upload(
-    plan: Plan, client: httpx.Client
-) -> tuple[Version, Path, list[str]]:
-    project_name = plan.configuration.project_name
-
-    print(f"\nPublish {project_name} for {plan.target}", file=sys.stderr)
-
-    version = get_fresh_version(plan)
-    project_dir = build_project_at_version(plan.target, version, plan.uv)
-
-    # Upload configuration
-    publish_url = plan.configuration.publish_url
-    expected_filenames = [
-        path.name
-        for path in project_dir.joinpath("dist").iterdir()
-        if path.name.endswith((".tar.gz", ".whl"))
-    ]
-
-    if plan.configuration.attestations:
+    @staticmethod
+    def _create_attestations(project: BuiltProject):
+        """Create a Sigstore attestation for each distribution."""
         trust = ClientTrustConfig.production()
         identity = oidc.detect_credential()
 
@@ -487,336 +713,42 @@ def test_fresh_upload(
         context = SigningContext.from_trust_config(trust)
 
         with context.signer(identity_token=identity_token) as signer:
-            for dist_name in expected_filenames:
-                dist_path = project_dir / "dist" / dist_name
-
-                dist = Distribution.from_file(dist_path)
-                attestation = Attestation.sign(signer, dist)
-
+            for filename in project.filenames:
+                dist_path = project.root / "dist" / filename
+                distribution = Distribution.from_file(dist_path)
+                attestation = Attestation.sign(signer, distribution)
                 attestation_path = dist_path.with_suffix(
                     dist_path.suffix + ".publish.attestation"
                 )
                 attestation_path.write_text(attestation.model_dump_json())
 
-    print(
-        f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
-        file=sys.stderr,
-    )
-
-    args = [plan.uv, "publish", "--publish-url", publish_url, *plan.extra_args]
-    run(args, cwd=project_dir, env=plan.full_env(), check=True)
-
-    if plan.configuration.attestations:
-        wait_for_index(plan, version)
-        check_index_for_provenance(plan, version, client)
-
-    return version, project_dir, expected_filenames
+    @staticmethod
+    def _fresh_version() -> Version:
+        """Synthesize a unique version from the current time."""
+        timestamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
+        milliseconds = int((time.time() % 1) * 1000)
+        return Version(f"0.{timestamp}.{milliseconds:03d}")
 
 
-def test_reupload_same_files(
-    plan: Plan,
-    version: Version,
-    project_dir: Path,
-    expected_filenames: list[str],
-):
-    """Test that re-uploading the same files works on PyPI."""
-
-    # NOTE: Skip targets other than PyPI, the only index known to have the
-    # "same file" behavior tested below.
-    # Also skips Trusted Publishing with GitLab, since it uses
-    # a static OIDC token that can't be reused across `uv publish` invocations.
-    if (
-        plan.configuration.publish_url != TEST_PYPI_PUBLISH_URL
-        or plan.target == "pypi-trusted-publishing-gitlab"
-    ):
-        return
-
-    # Confirm pypi behaviour: Uploading the same file again is fine.
-    # This doesn't work for Trusted Publishing with GitLab, since
-    # there's a single static OIDC token that can't be reused.
-    print(
-        f"\n=== 2. Publishing {plan.configuration.project_name} {version} again (PyPI) ===",
-        file=sys.stderr,
-    )
-    wait_for_index(plan, version)
-    args = [
-        plan.uv,
-        "publish",
-        "--publish-url",
-        plan.configuration.publish_url,
-        *plan.extra_args,
-    ]
-    output = run(
-        args,
-        cwd=project_dir,
-        env=plan.full_env(),
-        text=True,
-        check=True,
-        stderr=PIPE,
-    ).stderr
-    if (
-        output.count("Uploading") != len(expected_filenames)
-        or output.count("already exists") != 0
-    ):
-        raise RuntimeError(
-            f"PyPI re-upload of the same files failed for {plan.target} "
-            f"({plan.configuration.publish_url}): "
-            f"{output.count('Uploading')} != {len(expected_filenames)}, "
-            f"{output.count('already exists')} != 0\n"
-            f"---\n{output}\n---"
-        )
+def select_targets(requested: list[str]) -> list[str]:
+    """Expand the local and CI target groups."""
+    if requested == ["local"]:
+        return list(LOCAL_TARGETS)
+    if requested == ["all"]:
+        return list(CI_TARGETS)
+    return requested
 
 
-def test_reupload_with_check_url(
-    plan: Plan,
-    version: Version,
-    project_dir: Path,
-    expected_filenames: list[str],
-):
-    """
-    Test that re-uploading with check URL or index skips existing files.
-    """
-
-    # NOTE: Skips:
-    #  - Trusted Publishing to PyPI with GitLab, since GitLab CI uses a static
-    #    OIDC token that can't be reused across `uv publish` invocations.
-    if plan.target == "pypi-trusted-publishing-gitlab":
-        return
-
-    mode = "index" if plan.configuration.index else "check URL"
-    print(
-        f"\n=== 3. Publishing {plan.configuration.project_name} {version} again with {mode} ===",
-        file=sys.stderr,
-    )
-    # Test twine-style and index-style uploads for different packages.
-    if index := plan.configuration.index:
-        args = [
-            plan.uv,
-            "publish",
-            "--index",
-            index,
-            *plan.extra_args,
-        ]
-    else:
-        args = [
-            plan.uv,
-            "publish",
-            "--publish-url",
-            plan.configuration.publish_url,
-            "--check-url",
-            plan.configuration.index_url,
-            *plan.extra_args,
-        ]
-    for attempt in range(5):
-        wait_for_index(plan, version)
-        output = run(
-            args,
-            cwd=project_dir,
-            env=plan.full_env(),
-            text=True,
-            check=True,
-            stderr=PIPE,
-        ).stderr
-
-        if output.count("Uploading") == 0 and output.count("already exists") == len(
-            expected_filenames
-        ):
-            return
-
-        if attempt < 4:
-            print(
-                f"Index returned inconsistent files for "
-                f"{plan.configuration.project_name}=={version}; "
-                f"retrying check URL upload ({attempt + 1}/4)",
-                file=sys.stderr,
-            )
-
-    raise RuntimeError(
-        f"Re-upload with check URL failed for {plan.target} "
-        f"({plan.configuration.publish_url}): "
-        f"{output.count('Uploading')} != 0, "
-        f"{output.count('already exists')} != {len(expected_filenames)}\n"
-        f"---\n{output}\n---"
-    )
-
-
-def test_reupload_modified_files(
-    plan: Plan,
-    version: Version,
-):
-    """Test that uploading modified files at the same version fails.
-
-    This verifies that the check URL properly detects when local files
-    don't match the files already on the index.
-    """
-
-    # NOTE: Skips:
-    # - Trusted Publishing to PyPI with GitLab, since GitLab CI uses a static
-    #   OIDC token that can't be reused across `uv publish` invocations.
-    if plan.target == "pypi-trusted-publishing-gitlab":
-        return
-
-    # Build a different source dist and wheel at the same version, so the upload fails
-    modified_project_dir = build_project_at_version(
-        plan.target, version, plan.uv, modified=True
-    )
-
-    print(
-        f"\n=== 4. Publishing modified {plan.configuration.project_name} {version} "
-        f"again with skip existing (error test) ===",
-        file=sys.stderr,
-    )
-    args = [
-        plan.uv,
-        "publish",
-        "--publish-url",
-        plan.configuration.publish_url,
-        "--check-url",
-        plan.configuration.index_url,
-        *plan.extra_args,
-    ]
-    for attempt in range(5):
-        wait_for_index(plan, version)
-        result = run(
-            args,
-            cwd=modified_project_dir,
-            env=plan.full_env(),
-            text=True,
-            stderr=PIPE,
-            check=False,
-        )
-
-        if (
-            result.returncode != 0
-            and "Local file and index file do not match for" in result.stderr
-        ):
-            return
-
-        if attempt < 4:
-            print(
-                f"Index returned inconsistent files for "
-                f"{plan.configuration.project_name}=={version}; "
-                f"retrying modified file check ({attempt + 1}/4)",
-                file=sys.stderr,
-            )
-
-    raise RuntimeError(
-        f"Re-upload with mismatching files should not have been started "
-        f"for {plan.target} ({plan.configuration.publish_url}): "
-        f"Exit code {result.returncode}\n"
-        f"---\n{result.stderr}\n---"
-    )
-
-
-def test_publish_project(plan: Plan, client: httpx.Client):
-    """Test that:
-
-    1. An upload with a fresh version succeeds. If the upload includes attestations,
-       we confirm that the index accepts and serves them.
-    2. If we're using PyPI, uploading the same files again succeeds.
-    3. Check URL works and reports the files as skipped.
-    4. Uploading modified files at the same version fails.
-    """
-    # 1. Test that a fresh upload works.
-    version, project_dir, expected_filenames = test_fresh_upload(plan, client)
-
-    # 2. Test that re-uploading the same files works on PyPI.
-    test_reupload_same_files(plan, version, project_dir, expected_filenames)
-
-    # 3. Test that re-uploading with check URL or index skips existing files.
-    test_reupload_with_check_url(plan, version, project_dir, expected_filenames)
-
-    # 4. Test that uploading modified files at the same version fails.
-    test_reupload_modified_files(plan, version)
-
-
-def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
-    if target == "pypi-token":
-        extra_args = []
-        env = {"UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_TOKEN"]}
-    elif target == "pypi-password-env":
-        extra_args = ["--username", "__token__"]
-        env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_PASSWORD"]}
-    elif target == "pypi-keyring":
-        extra_args = ["--username", "__token__", "--keyring-provider", "subprocess"]
-        env = {}
-    elif target == "pypi-text-store":
-        extra_args = ["--username", "__token__"]
-        env = {}
-    elif target == "pypi-trusted-publishing-github":
-        extra_args = ["--trusted-publishing", "always"]
-        env = {}
-    elif target == "pypi-trusted-publishing-gitlab":
-        extra_args = ["--trusted-publishing", "always"]
-        # We need to impersonate a Gitlab CI environment here.
-        # To do that, we set the CI environment variables accordingly.
-        env = {
-            "CI": "true",
-            "GITLAB_CI": "true",
-            # NOTE: We may or may not be running in GitHub Actions, so we explicitly toggle this off.
-            "GITHUB_ACTIONS": "false",
-            "TESTPYPI_ID_TOKEN": os.environ["UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN"],
-        }
-    elif target == "gitlab":
-        env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]}
-        extra_args = ["--username", "astral-test-gitlab-pat"]
-    elif target == "codeberg":
-        extra_args = []
-        env = {
-            "UV_PUBLISH_USERNAME": "astral-test-user",
-            "UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_CODEBERG_TOKEN"],
-        }
-    elif target == "cloudsmith":
-        extra_args = []
-        env = {
-            "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"],
-        }
-    else:
-        raise ValueError(f"Unknown target: {target}")
-    return env, extra_args
-
-
-def plan_test(target: str, uv: Path, keyring_directory: Path) -> Plan:
-    """
-    Create a test plan for the given target.
-    """
-    configuration = all_targets[target]
-    env, extra_args = target_configuration(target)
-    if target == "pypi-keyring":
-        keyring_file = str(keyring_directory / "keyring.cfg")
-        keyring = PlaintextKeyring().with_properties(file_path=keyring_file)
-        keyring.set_password(
-            configuration.publish_url,
-            "__token__",
-            os.environ["UV_TEST_PUBLISH_KEYRING"],
-        )
-        env.update(
-            {
-                "PYTHON_KEYRING_BACKEND": "keyrings.alt.file.PlaintextKeyring",
-                "KEYRING_PROPERTY_FILE_PATH": keyring_file,
-            }
-        )
-    return Plan(
-        uv=uv,
-        target=target,
-        configuration=configuration,
-        extra_args=extra_args,
-        env=env,
-    )
-
-
-def main():
-    logging.basicConfig(
-        format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.INFO,
-    )
-
+def main() -> int:
     parser = ArgumentParser()
-    target_choices = [*all_targets, "local", "all"]
+    target_choices = [*TARGETS, "local", "all"]
     parser.add_argument("targets", choices=target_choices, nargs="+")
     parser.add_argument("--uv")
     args = parser.parse_args()
+
+    # Keep the outer `uv run` quiet, then enable diagnostics for child uv commands.
+    if rust_log := os.environ.pop("UV_TEST_PUBLISH_RUST_LOG", None):
+        os.environ["RUST_LOG"] = rust_log
 
     if args.uv:
         # We change the working directory for the subprocess calls, so we have to
@@ -825,32 +757,21 @@ def main():
     else:
         check_call(["cargo", "build"])
         executable_suffix = ".exe" if os.name == "nt" else ""
-        uv = cwd.parent.parent.joinpath(f"target/debug/uv{executable_suffix}")
+        uv = REPOSITORY_ROOT.joinpath(f"target/debug/uv{executable_suffix}")
 
-    if args.targets == ["local"]:
-        targets = list(local_targets)
-    elif args.targets == ["all"]:
-        targets = list(all_targets)
-    else:
-        targets = args.targets
+    targets = select_targets(args.targets)
 
     with TemporaryDirectory(prefix="uv-publish-keyring-") as temporary:
-        for project_name in targets:
-            plan = plan_test(project_name, uv, Path(temporary))
-            # Each publish gets its own client, since we may need to introduce
-            # target-specific authentication.
-            with httpx.Client(timeout=120) as client:
-                try:
-                    test_publish_project(plan, client)
-                except CalledProcessError as error:
-                    if error.stderr:
-                        print(
-                            f"Subprocess failed for {plan.target} "
-                            f"(exit code {error.returncode}):\n{error.stderr}",
-                            file=sys.stderr,
-                        )
-                    raise
+        for name in targets:
+            session = TargetSession(name, uv, Path(temporary))
+            with session:
+                PublishTest(session).run()
+
+            if session.failed:
+                return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
