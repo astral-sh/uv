@@ -70,7 +70,7 @@ impl SercCompiler {
             .map_or(0, |value| {
                 value
                     .to_string_lossy()
-                    .trim()
+                    .trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r'])
                     .parse::<i32>()
                     .ok()
                     .filter(|value| *value >= 0)
