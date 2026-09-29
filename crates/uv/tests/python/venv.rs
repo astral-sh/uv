@@ -150,6 +150,10 @@ fn create_venv_caches_upgradeable_interpreter() -> Result<()> {
         .init_no_wait()?
         .context("Interpreter cache is locked")?;
     PythonEnvironment::from_root(context.venv.path(), &cache)?;
+    if startup_marker.is_file() {
+        fs_err::remove_file(&startup_marker)?;
+    }
+    PythonEnvironment::from_root(context.venv.path(), &cache)?;
     assert!(!startup_marker.exists());
 
     context
