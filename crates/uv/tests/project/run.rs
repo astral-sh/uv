@@ -1710,9 +1710,6 @@ fn run_with_overlay_interpreter() -> Result<()> {
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
 
-    // Use the same base Python path when recreating the environment below.
-    context.venv().arg("--allow-existing").assert().success();
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
