@@ -7,22 +7,23 @@
 
 Released on 2026-09-29.
 
+### Python
+
+- Update managed CPython distributions to OpenSSL 3.5.9 ([#22076](https://github.com/astral-sh/uv/pull/22076))
+
 ### Enhancements
 
-- Omit compatible prerelease version constraints ([#22068](https://github.com/astral-sh/uv/pull/22068))
-- Omit redundant runtime constraints from lockfiles ([#22004](https://github.com/astral-sh/uv/pull/22004))
+- Omit empty `[manifest]` tables from lockfiles that contain only manifest subtables ([#22070](https://github.com/astral-sh/uv/pull/22070))
+
+### Preview features
+
+- Omit redundant runtime constraints with `resolution-inputs`, including constraints involving prereleases ([#22004](https://github.com/astral-sh/uv/pull/22004), [#22068](https://github.com/astral-sh/uv/pull/22068))
+- Allow `uv add` to insert lower bounds after reusing a lockfile created with `lock-without-metadata` ([#21225](https://github.com/astral-sh/uv/pull/21225))
 
 ### Bug fixes
 
-- Allow an empty metadata cache when adding lower bounds ([#21225](https://github.com/astral-sh/uv/pull/21225))
-- Fix post-release matching for exclusive version bounds ([#22049](https://github.com/astral-sh/uv/pull/22049))
-
-### Other changes
-
-- Omit empty manifest headers from lockfiles ([#22070](https://github.com/astral-sh/uv/pull/22070))
-- Replace serde_yaml with yaml_serde ([#22069](https://github.com/astral-sh/uv/pull/22069))
-- Sync latest Python releases ([#22076](https://github.com/astral-sh/uv/pull/22076))
-- protect global .python-versions from removal without --global flag ([#21992](https://github.com/astral-sh/uv/pull/21992))
+- Preserve global `.python-versions` files unless `uv python pin --rm --global` is used ([#21992](https://github.com/astral-sh/uv/pull/21992))
+- Treat post-releases of a base version as satisfying exclusive lower bounds on its prereleases during installed-package checks ([#22049](https://github.com/astral-sh/uv/pull/22049))
 
 ## 0.12.20
 
