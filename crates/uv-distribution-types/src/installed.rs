@@ -48,10 +48,10 @@ pub enum InstalledDistError {
     #[error(transparent)]
     ExpandedTagParse(#[from] uv_distribution_filename::ExpandedTagError),
 
-    #[error("Invalid .egg-link path: {}", _0.user_display())]
+    #[error("Invalid `.egg-link` path: {}", _0.user_display())]
     InvalidEggLinkPath(PathBuf),
 
-    #[error("Invalid .egg-link target: {}", _0.user_display())]
+    #[error("Invalid `.egg-link` target: {}", _0.user_display())]
     InvalidEggLinkTarget(PathBuf),
 
     #[error("Failed to parse `METADATA` file: {}", path.user_display())]
