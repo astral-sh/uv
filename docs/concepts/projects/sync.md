@@ -80,9 +80,10 @@ versions of dependencies.
 
 When the environment is synced, uv will install the project (and other workspace members) as
 _editable_ packages, such that re-syncing is not necessary for changes to be reflected in the
-environment.
+environment. To opt-out of this behavior, use the `--no-editable` option.
 
-To opt-out of this behavior, use the `--no-editable` option.
+See [Editable mode](./config.md#editable-mode) for more details, including use-cases for
+non-editable installs such as Docker deployments.
 
 !!! note
 
