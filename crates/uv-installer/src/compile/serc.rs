@@ -29,7 +29,6 @@ pub(super) struct SercCompiler {
 }
 
 /// How Python determines whether cached bytecode matches its source.
-#[derive(Clone, Copy)]
 enum InvalidationMode {
     Timestamp,
     Hash { checked: bool },
@@ -82,9 +81,9 @@ impl SercCompiler {
             _ => OptimizationLevel::Two,
         };
         let cache_suffix = if optimization == 0 {
-            format!(".{cache_tag}.pyc")
+            format!("{cache_tag}.pyc")
         } else {
-            format!(".{cache_tag}.opt-{optimization}.pyc")
+            format!("{cache_tag}.opt-{optimization}.pyc")
         };
 
         let invalidation_mode = match env::var_os(EnvVars::PYC_INVALIDATION_MODE) {
@@ -176,13 +175,11 @@ impl SercCompiler {
     fn compile(&self, source_file: &Path) -> anyhow::Result<bool> {
         let metadata = fs_err::metadata(source_file)?;
         let parent = source_file.parent().context("Source file has no parent")?;
-        let mut filename = source_file
-            .file_stem()
-            .context("Source file has no stem")?
-            .to_os_string();
-        filename.push(&self.cache_suffix);
+        let filename = source_file
+            .file_name()
+            .context("Source file has no filename")?;
         let cache_dir = parent.join("__pycache__");
-        let bytecode_file = cache_dir.join(filename);
+        let bytecode_file = cache_dir.join(filename).with_extension(&self.cache_suffix);
 
         // Like py_compile, never replace symlinks or special files with bytecode.
         if let Ok(metadata) = fs_err::symlink_metadata(&bytecode_file)
@@ -210,11 +207,8 @@ impl SercCompiler {
                 let source = fs_err::read(source_file)?;
                 expected[4..8].copy_from_slice(&(1 | (u32::from(checked) << 1)).to_le_bytes());
                 let key = u64::from(u32::from_le_bytes(magic_number));
-                expected[8..].copy_from_slice(
-                    &SipHasher13::new_with_keys(key, 0)
-                        .hash(&source)
-                        .to_le_bytes(),
-                );
+                let hash = SipHasher13::new_with_keys(key, 0).hash(&source);
+                expected[8..].copy_from_slice(&hash.to_le_bytes());
                 Some(source)
             }
         };
@@ -226,11 +220,7 @@ impl SercCompiler {
             return Ok(false);
         }
 
-        let source = if let Some(source) = source {
-            source
-        } else {
-            fs_err::read(source_file)?
-        };
+        let source = source.map_or_else(|| fs_err::read(source_file), Ok)?;
         let module =
             match serc::compile_bytes_with_path_and_options(&source, source_file, &self.options) {
                 Ok(module) => module,
