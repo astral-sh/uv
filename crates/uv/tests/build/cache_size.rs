@@ -114,3 +114,30 @@ fn cache_size_output_format_conflicts_with_human() {
     For more information, try '--help'.
     ");
 }
+
+/// Test that `cache size --inodes` returns 0 for an empty cache directory.
+#[test]
+fn cache_size_empty_inodes() {
+    let context = uv_test::test_context!("3.12");
+
+    context.clean().assert().success();
+
+    uv_snapshot!(context.cache_size().arg("--preview").arg("--inodes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    0
+    ");
+
+    uv_snapshot!(context.cache_size().arg("--preview").arg("--inodes").arg("--human"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    0
+    ");
+
+    uv_snapshot!(context.cache_size().arg("--preview").arg("--inodes").arg("--output-format").arg("machine"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    0
+    ");
+}
+

@@ -1010,6 +1010,12 @@ pub struct SizeArgs {
         conflicts_with = "output_format"
     )]
     pub human: bool,
+
+    /// Display the number of inodes used by the cache instead of the size in bytes.
+    ///
+    /// This is useful on filesystems with inode quotas, such as HPC clusters.
+    #[arg(long)]
+    pub inodes: bool,
 }
 
 #[derive(Args)]

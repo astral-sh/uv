@@ -1290,7 +1290,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             } else {
                 args.output_format
             };
-            commands::cache_size(&cache, output_format, printer, globals.preview)
+            commands::cache_size(&cache, output_format, args.inodes, printer, globals.preview)
         }
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
