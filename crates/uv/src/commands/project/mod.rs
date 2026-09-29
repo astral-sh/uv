@@ -25,6 +25,7 @@ use uv_distribution_types::{
     IndexUrlError, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
+use uv_errors::Hinted;
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
@@ -51,7 +52,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
@@ -168,7 +169,7 @@ pub(crate) enum ProjectError {
     RequestedPythonProjectIncompatibility(Version, RequiresPython, Box<PythonRequirementConflicts>),
 
     #[error(
-        "The Python request from `{python_request}` resolved to Python {version}, which is incompatible with the project's Python requirement: `{requires_python}`{requires_python_sources}\nUse `uv python pin` to update the `.python-version` file to a compatible version"
+        "The Python request from `{python_request}` resolved to Python {version}, which is incompatible with the project's Python requirement: `{requires_python}`{requires_python_sources}"
     )]
     DotPythonVersionProjectIncompatibility {
         python_request: String,
@@ -412,6 +413,9 @@ impl uv_errors::Hinted for ProjectError {
             }
             Self::LockFormat(..) => uv_errors::Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
+            ),
+            Self::DotPythonVersionProjectIncompatibility { .. } => uv_errors::Hints::from(
+                "Use `uv python pin` to update the `.python-version` file to a compatible version",
             ),
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
@@ -1041,7 +1045,7 @@ impl ScriptInterpreter {
             }
             None => Ok(()),
         } {
-            warn_user!("{err}");
+            warn_user_with_chain!(&err, err.hints());
         }
 
         Ok(Self::Interpreter(interpreter))

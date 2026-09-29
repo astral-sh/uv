@@ -383,7 +383,7 @@ fn python_find_project() {
 
     ----- stderr -----
     warning: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
-    Use `uv python pin` to update the `.python-version` file to a compatible version
+      hint: Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     // Unless the pin file is outside the project, in which case we should just ignore it

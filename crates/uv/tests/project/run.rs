@@ -3755,7 +3755,8 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
-           Use `uv python pin` to update the `.python-version` file to a compatible version
+
+    hint: Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     // ...even if `--isolated` is provided.
@@ -3763,7 +3764,8 @@ fn run_isolated_incompatible_python() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
-           Use `uv python pin` to update the `.python-version` file to a compatible version
+
+    hint: Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     Ok(())

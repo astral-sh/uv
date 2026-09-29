@@ -969,6 +969,22 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     "
     );
 
+    // An incompatible pin includes advice for updating the version file.
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.11")?;
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    warning: The Python request from `.python-version` resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
+      hint: Use `uv python pin` to update the `.python-version` file to a compatible version
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
     Ok(())
 }
 
