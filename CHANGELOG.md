@@ -9,7 +9,7 @@ Released on 2026-09-29.
 
 ### Python
 
-- Update managed CPython distributions to OpenSSL 3.5.9 ([#22076](https://github.com/astral-sh/uv/pull/22076))
+- Update CPython to use OpenSSL 3.5.9 ([#22076](https://github.com/astral-sh/uv/pull/22076))
 
 ### Enhancements
 
@@ -17,13 +17,12 @@ Released on 2026-09-29.
 
 ### Preview features
 
-- Omit redundant runtime constraints with `resolution-inputs`, including constraints involving prereleases ([#22004](https://github.com/astral-sh/uv/pull/22004), [#22068](https://github.com/astral-sh/uv/pull/22068))
-- Allow `uv add` to insert lower bounds after reusing a lockfile created with `lock-without-metadata` ([#21225](https://github.com/astral-sh/uv/pull/21225))
+- Omit redundant runtime constraints from `uv.lock`, including those involving pre-releases, with the `resolution-inputs` preview feature ([#22004](https://github.com/astral-sh/uv/pull/22004), [#22068](https://github.com/astral-sh/uv/pull/22068))
 
 ### Bug fixes
 
-- Preserve global `.python-versions` files unless `uv python pin --rm --global` is used ([#21992](https://github.com/astral-sh/uv/pull/21992))
-- Treat post-releases of a base version as satisfying exclusive lower bounds on its prereleases during installed-package checks ([#22049](https://github.com/astral-sh/uv/pull/22049))
+- Prevent `uv python pin --rm` from removing a global `.python-versions` file without `--global` ([#21992](https://github.com/astral-sh/uv/pull/21992))
+- Fix installed-package checks incorrectly reporting post-releases as incompatible with exclusive lower bounds on pre-releases ([#22049](https://github.com/astral-sh/uv/pull/22049))
 
 ## 0.12.20
 
