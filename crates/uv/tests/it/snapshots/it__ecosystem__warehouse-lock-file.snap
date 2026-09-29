@@ -9,8 +9,6 @@ requires-python = "==3.11.*"
 [options]
 exclude-newer = "2026-06-30T00:00:00Z"
 
-[manifest]
-
 [[manifest.dependency-metadata]]
 name = "psycopg-c"
 version = "3.2.1"

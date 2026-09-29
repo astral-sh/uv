@@ -222,14 +222,12 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
         || !manifest.constraints.is_empty()
         || !manifest.overrides.is_empty()
         || !manifest.excludes.is_empty()
-        || !manifest.build_constraints.is_empty()
-        || has_dependency_groups
-        || !manifest.dependency_metadata.is_empty();
-    if !has_manifest {
-        return Ok(());
+        || !manifest.build_constraints.is_empty();
+    // Subtables define their parent implicitly, so only write the header for direct entries.
+    if has_manifest {
+        writer.table(&["manifest"])?;
     }
 
-    writer.table(&["manifest"])?;
     if !manifest.members.is_empty() {
         writer.key_multiline_array("members", &manifest.members, |writer, member| {
             writer.value(member.as_ref())

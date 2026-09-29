@@ -5154,8 +5154,6 @@ fn add_non_project() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
         [manifest.dependency-groups]
         dev = [{ name = "iniconfig", specifier = ">=2.0.0" }]
 

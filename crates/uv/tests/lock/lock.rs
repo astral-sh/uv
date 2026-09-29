@@ -15038,8 +15038,6 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
         [manifest.dependency-groups]
         dev = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
@@ -25860,8 +25858,6 @@ fn lock_non_project_fork() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
         [manifest.dependency-groups]
         dev = [
             { name = "anyio", marker = "python_full_version < '3.11'", specifier = ">3" },
@@ -26035,8 +26031,6 @@ fn lock_non_project_conditional() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
         [manifest.dependency-groups]
         dev = [{ name = "anyio", marker = "sys_platform == 'linux'", specifier = ">3" }]
 
@@ -26135,8 +26129,6 @@ fn lock_non_project_group() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
 
         [manifest.dependency-groups]
         dev = [
@@ -26268,8 +26260,6 @@ fn lock_non_project_group_standard() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
         [manifest.dependency-groups]
         dev = [{ name = "typing-extensions" }]
         lint = [{ name = "iniconfig" }]
@@ -26355,8 +26345,6 @@ fn lock_non_project_sources() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
 
         [manifest.dependency-groups]
         dev = [{ name = "idna", url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }]
@@ -29984,8 +29972,6 @@ fn lock_dependency_metadata() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
         [[manifest.dependency-metadata]]
         name = "anyio"
         version = "3.7.0"
@@ -30201,8 +30187,6 @@ fn lock_dependency_metadata_git() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
 
         [[manifest.dependency-metadata]]
         name = "anyio"
@@ -46985,8 +46969,6 @@ fn lock_resolution_inputs_metadata_declarations() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
         [[manifest.dependency-metadata]]
         name = "anyio"
 
@@ -47754,8 +47736,6 @@ fn lock_resolution_inputs_metadata_unknown_version() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
 
         [[manifest.dependency-metadata]]
         name = "child"

@@ -5818,8 +5818,6 @@ fn extra_inferences() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
         [[manifest.dependency-metadata]]
         name = "python-nvd3"
         version = "0.16.0"
