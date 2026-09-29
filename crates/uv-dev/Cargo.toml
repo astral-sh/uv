@@ -56,7 +56,6 @@ resvg = { version = "0.47.0", default-features = false, features = ["text", "sys
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { version = "0.9.34", default-features = false }
 tagu = { version = "0.1.6", default-features = false, optional = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
@@ -67,6 +66,7 @@ tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uv-performance-memory-allocator = { workspace = true, optional = true }
 walkdir = { workspace = true }
+yaml_serde = { version = "0.10.7", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 insta = { workspace = true }
