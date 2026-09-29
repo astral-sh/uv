@@ -11,7 +11,7 @@ use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::{EggInfoFilename, ExpandedTags};
-use uv_fs::Simplified;
+use uv_fs::{Simplified, format_diagnostic_path};
 use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -620,14 +620,20 @@ fn read_metadata(path: &Path) -> Option<uv_pypi_types::Metadata10> {
     let content = match fs::read(path) {
         Ok(content) => content,
         Err(err) => {
-            warn!("Failed to read metadata for `{path:?}`: {err}");
+            warn!(
+                "Failed to read metadata for {}: {err}",
+                format_diagnostic_path(path)
+            );
             return None;
         }
     };
     let metadata = match uv_pypi_types::Metadata10::parse_pkg_info(&content) {
         Ok(metadata) => metadata,
         Err(err) => {
-            warn!("Failed to parse metadata for `{path:?}`: {err}");
+            warn!(
+                "Failed to parse metadata for {}: {err}",
+                format_diagnostic_path(path)
+            );
             return None;
         }
     };

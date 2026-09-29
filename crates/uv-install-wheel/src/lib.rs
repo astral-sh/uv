@@ -52,7 +52,7 @@ pub enum Error {
     WalkDir(#[from] walkdir::Error),
     // This shouldn't be possible anymore, we keep it for better error reporting.
     #[error(
-        "`RECORD` file doesn't match wheel contents, could not find entry for: {} ({})",
+        "`RECORD` file doesn't match wheel contents, could not find entry for `{}` (`{}`)",
         relative.simplified_display(),
         absolute.simplified_display()
     )]

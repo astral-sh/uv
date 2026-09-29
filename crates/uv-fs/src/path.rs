@@ -1,10 +1,50 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
+use std::fmt::{self, Debug, Display};
 use std::path::{Component, Path, PathBuf, Prefix};
 use std::sync::LazyLock;
 
 use either::Either;
 use path_slash::PathExt;
+
+/// Quote diagnostic values when whitespace or control characters would obscure them.
+pub fn format_diagnostic_value(value: impl Display) -> String {
+    let value = value.to_string();
+    if value.is_empty()
+        || value.trim() != value
+        || (value.starts_with('"') && value.ends_with('"'))
+        || has_non_printable_characters(&value)
+    {
+        format!("{value:?}")
+    } else {
+        value
+    }
+}
+
+/// Format a path for a diagnostic, escaping non-Unicode and non-printable characters.
+pub fn format_diagnostic_path(path: &Path) -> impl Display + '_ {
+    DiagnosticPath(path)
+}
+
+struct DiagnosticPath<'a>(&'a Path);
+
+impl Display for DiagnosticPath<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0.to_str() {
+            Some(path) if !path.contains('`') && !has_non_printable_characters(path) => {
+                write!(formatter, "`{path}`")
+            }
+            Some(_) | None => Debug::fmt(self.0, formatter),
+        }
+    }
+}
+
+fn has_non_printable_characters(value: &str) -> bool {
+    value.chars().any(|character| match character {
+        '\\' | '\'' | '"' => false,
+        _ => !character.escape_debug().eq(std::iter::once(character)),
+    })
+}
 
 /// The current working directory.
 #[expect(clippy::print_stderr)]
@@ -669,8 +709,46 @@ impl AsRef<Path> for PortablePathBuf {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    #[cfg(unix)]
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn diagnostic_path_preserves_non_utf8_and_control_characters() {
+        let path = Path::new(OsStr::from_bytes(b"file\xff\n\""));
+        assert_eq!(
+            format_diagnostic_path(path).to_string(),
+            r#""file\xFF\n\"""#
+        );
+    }
+
+    #[test]
+    fn diagnostic_path_preserves_backslashes() {
+        assert_eq!(
+            format_diagnostic_path(Path::new(r"dir\file")).to_string(),
+            r"`dir\file`"
+        );
+    }
+
+    #[test]
+    fn diagnostic_path_escapes_ambiguous_characters() {
+        assert_eq!(
+            format_diagnostic_path(Path::new("file\u{202e}")).to_string(),
+            r#""file\u{202e}""#
+        );
+        assert_eq!(
+            format_diagnostic_path(Path::new("a`b")).to_string(),
+            r#""a`b""#
+        );
+    }
+
+    #[test]
+    fn diagnostic_value_distinguishes_literal_quotes() {
+        assert_eq!(format_diagnostic_value(" example"), r#"" example""#);
+        assert_eq!(format_diagnostic_value("\" example\""), r#""\" example\"""#);
+    }
 
     #[test]
     fn test_find_git_repository_root() -> std::io::Result<()> {

@@ -8298,7 +8298,7 @@ fn unsupported_scheme() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
-      cause: Unsupported URL prefix `bzr` in URL: bzr+https://example.com/anyio (Bazaar is not supported)
+      cause: Unsupported URL prefix `bzr` in URL `bzr+https://example.com/anyio` (Bazaar is not supported)
              anyio @ bzr+https://example.com/anyio
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "

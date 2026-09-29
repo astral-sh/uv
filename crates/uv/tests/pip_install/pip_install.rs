@@ -261,7 +261,7 @@ fn whitespace_only_requirement() {
 
 #[test]
 fn missing_requirements_txt() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"\\n", "[NEWLINE]"));
     let requirements_txt = context.temp_dir.child("requirements.txt");
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -272,6 +272,36 @@ fn missing_requirements_txt() {
     ----- stderr -----
     error: File not found: requirements.txt
     "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(" requirements.txt")
+        .arg("--strict"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: File not found: " requirements.txt"
+    "#
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt ")
+        .arg("--strict"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: File not found: "requirements.txt "
+    "#
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements\n.txt")
+        .arg("--strict"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: File not found: "requirements[NEWLINE].txt"
+    "#
     );
 
     requirements_txt.assert(predicates::path::missing());
@@ -840,7 +870,7 @@ fn invalid_uv_toml_option_disallowed_automatic_discovery() -> Result<()> {
         .arg("iniconfig"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: uv.toml. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+    error: Failed to parse `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "
     );
 
@@ -861,7 +891,7 @@ fn invalid_uv_toml_option_disallowed_command_line() -> Result<()> {
         .arg("foo.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: foo.toml. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+    error: Failed to parse `foo.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "
     );
 

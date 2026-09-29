@@ -155,7 +155,7 @@ fn remove_entrypoint_paths<'a>(entrypoints: impl IntoIterator<Item = &'a Path>) 
         debug!("Removing executable: {}", executable.simplified_display());
         if let Err(err) = fs_err::remove_file(executable) {
             warn!(
-                "Failed to remove executable: {}: {err}",
+                "Failed to remove executable `{}`: {err}",
                 executable.simplified_display()
             );
         }

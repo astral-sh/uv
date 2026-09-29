@@ -110,8 +110,8 @@ pub enum PublishPrepareError {
     InvalidExtension(SourceDistFilename),
     #[error("No `PKG-INFO` file found")]
     MissingPkgInfo,
-    #[error("Multiple `PKG-INFO` files found: {0}")]
-    MultiplePkgInfo(String),
+    #[error("Multiple `PKG-INFO` files found: {}", .0.iter().map(|path| format!("`{path}`")).join(", "))]
+    MultiplePkgInfo(Vec<String>),
     #[error("Failed to decode source distribution")]
     Decode(#[source] tar_codec::DecodeError),
     #[error("Failed to read: {0}")]
@@ -461,7 +461,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<PreparedDistri
             && let Some(dist_name) = filename_parts.next()
         {
             debug!(
-                "Found attestation for distribution: {} -> {}",
+                "Found attestation for distribution: `{}` -> `{}`",
                 file.user_display(),
                 dist_name
             );
@@ -1033,8 +1033,8 @@ async fn source_dist_pkg_info_tokio_tar(file: &Path) -> Result<Vec<u8>, PublishP
         _ => Err(PublishPrepareError::MultiplePkgInfo(
             pkg_infos
                 .iter()
-                .map(|(path, _buffer)| path.to_string_lossy())
-                .join(", "),
+                .map(|(path, _buffer)| path.to_string_lossy().into_owned())
+                .collect(),
         )),
     }
 }
@@ -1080,7 +1080,7 @@ async fn source_dist_pkg_info_tar_codec(file: &Path) -> Result<Vec<u8>, PublishP
         0 => Err(PublishPrepareError::MissingPkgInfo),
         1 => Ok(pkg_infos.remove(0).1),
         _ => Err(PublishPrepareError::MultiplePkgInfo(
-            pkg_infos.iter().map(|(path, _buffer)| path).join(", "),
+            pkg_infos.into_iter().map(|(path, _buffer)| path).collect(),
         )),
     }
 }
@@ -1526,10 +1526,17 @@ mod tests {
 
         for features in TAR_BACKENDS {
             let _preview = uv_preview::test::with_features(features);
+            let error = source_dist_pkg_info(file.path())
+                .await
+                .expect_err("duplicate PKG-INFO files should be rejected");
+            assert_eq!(
+                error.to_string(),
+                "Multiple `PKG-INFO` files found: `example-1.0/PKG-INFO`, `other-1.0/PKG-INFO`"
+            );
             assert_matches!(
-                source_dist_pkg_info(file.path()).await,
-                Err(PublishPrepareError::MultiplePkgInfo(paths))
-                    if paths == "example-1.0/PKG-INFO, other-1.0/PKG-INFO"
+                error,
+                PublishPrepareError::MultiplePkgInfo(paths)
+                    if paths == ["example-1.0/PKG-INFO", "other-1.0/PKG-INFO"]
             );
         }
     }

@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use console::Term;
 
 use uv_configuration::RequirementsInput;
-use uv_fs::{CWD, Simplified};
+use uv_fs::{CWD, Simplified, format_diagnostic_value};
 use uv_requirements_txt::RequirementsTxtRequirement;
 
 #[derive(Debug, Clone)]
@@ -312,11 +312,7 @@ impl std::fmt::Display for RequirementsSource {
 
 /// Format a requirement without losing trailing whitespace in the rendered error.
 pub(crate) fn format_requirement_parse_error(name: &str) -> String {
-    if name.is_empty() || name.trim_end() != name {
-        format!("Failed to parse: {name:?}")
-    } else {
-        format!("Failed to parse: {name}")
-    }
+    format!("Failed to parse: {}", format_diagnostic_value(name))
 }
 
 /// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.

@@ -1160,7 +1160,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
         - no-index
         - find-links
-        error: Failed to parse: uv.toml. The `minimum-libc-version` field is not allowed in a `uv.toml` file. `minimum-libc-version` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+        error: Failed to parse `uv.toml`. The `minimum-libc-version` field is not allowed in a `uv.toml` file. `minimum-libc-version` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     ");
     Ok(())
 }

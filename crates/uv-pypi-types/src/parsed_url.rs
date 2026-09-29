@@ -16,7 +16,7 @@ use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {
-    #[error("Unsupported URL prefix `{prefix}` in URL: {url} ({message})")]
+    #[error("Unsupported URL prefix `{prefix}` in URL `{url}` ({message})")]
     UnsupportedUrlPrefix {
         prefix: String,
         url: String,

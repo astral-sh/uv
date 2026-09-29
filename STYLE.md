@@ -16,6 +16,7 @@ documentation_.
 1. Use less than and greater than symbols to wrap bare URLs, e.g., `<https://astral.sh>` (unless it
    is an example; then, use backticks).
 1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.
+1. Markdown files should be wrapped at 100 characters.
 1. Use a space, not an equals sign, for command-line arguments with a value, e.g.
    `--resolution lowest`, not `--resolution=lowest`.
 

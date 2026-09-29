@@ -46,7 +46,7 @@ use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, Simplified};
+use uv_fs::{CWD, Simplified, format_diagnostic_value};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
@@ -278,7 +278,10 @@ impl RequirementsSpecification {
                 if let RequirementsInput::Local(path) = input
                     && !path.exists()
                 {
-                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
+                    return Err(anyhow::anyhow!(
+                        "File not found: {}",
+                        format_diagnostic_value(path.user_display())
+                    ));
                 }
 
                 let requirements_txt =
@@ -298,7 +301,10 @@ impl RequirementsSpecification {
                 let content = match fs_err::tokio::read_to_string(&path).await {
                     Ok(content) => content,
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
+                        return Err(anyhow::anyhow!(
+                            "File not found: {}",
+                            format_diagnostic_value(path.user_display())
+                        ));
                     }
                     Err(err) => {
                         return Err(anyhow::anyhow!(
@@ -340,7 +346,10 @@ impl RequirementsSpecification {
             }
             RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
-                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
+                    return Err(anyhow::anyhow!(
+                        "File not found: {}",
+                        format_diagnostic_value(path.user_display())
+                    ));
                 }
 
                 Self {
@@ -350,7 +359,10 @@ impl RequirementsSpecification {
             }
             RequirementsSource::SetupCfg(path) => {
                 if !path.is_file() {
-                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
+                    return Err(anyhow::anyhow!(
+                        "File not found: {}",
+                        format_diagnostic_value(path.user_display())
+                    ));
                 }
 
                 Self {
@@ -362,7 +374,10 @@ impl RequirementsSpecification {
                 if let RequirementsInput::Local(path) = input
                     && !path.exists()
                 {
-                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
+                    return Err(anyhow::anyhow!(
+                        "File not found: {}",
+                        format_diagnostic_value(path.user_display())
+                    ));
                 }
 
                 Self {

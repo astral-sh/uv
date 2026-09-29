@@ -1327,7 +1327,7 @@ impl ManagedPythonDownload {
             // Avoid overlong log lines
             debug!("Downloading `{url}`");
             debug!(
-                "Extracting `{filename}` to temporary location: {}",
+                "Extracting `{filename}` to temporary location `{}`",
                 temp_dir.path().simplified_display()
             );
 
