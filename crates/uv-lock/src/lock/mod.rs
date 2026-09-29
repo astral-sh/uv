@@ -77,7 +77,6 @@ pub use crate::lock::export::{
 use crate::lock::inputs::ManifestFilter;
 pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
-use crate::lock::prereleases::PrereleaseConstraints;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
@@ -87,10 +86,8 @@ pub(crate) mod export;
 mod inputs;
 mod installable;
 mod map;
-mod prereleases;
 mod requirements;
 mod serialize;
-mod sources;
 mod tree;
 
 /// The current version of the lockfile format.
@@ -2441,7 +2438,6 @@ impl Lock {
         supported_environments: Vec<MarkerTree>,
         index_locations: &IndexLocations,
         metadata_free: bool,
-        conflicts: Conflicts,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
@@ -2606,22 +2602,21 @@ impl Lock {
             requires_python,
             options,
             manifest,
-            conflicts,
+            Conflicts::empty(),
             supported_environments,
             vec![],
             fork_markers,
         )?;
-        let lock = if metadata_free {
+        let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
+            lock.prune_constraints()
+        } else {
+            lock
+        };
+        Ok(if metadata_free {
             lock.without_package_metadata()
         } else {
             lock
-        };
-        let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
-            lock.prune_constraints(root)
-        } else {
-            lock
-        };
-        Ok(lock)
+        })
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -2771,6 +2766,13 @@ impl Lock {
             manifest,
         };
         Ok(lock)
+    }
+
+    /// Record the conflicting groups that were used to generate this lock.
+    #[must_use]
+    pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
+        self.conflicts = conflicts;
+        self
     }
 
     /// Record the required platforms that were used to generate this lock.
@@ -4083,22 +4085,14 @@ impl Lock {
 
         let filter = ManifestFilter::from_lock(self);
         let omit_constraints = uv_preview::is_enabled(PreviewFeature::ResolutionInputs);
-        let prereleases = PrereleaseConstraints::new(
-            self,
-            self.manifest.constraints.iter().chain(constraints.iter()),
-        );
 
-        {
+        let normalized_constraints = {
             let expected = normalizer.constraints(
                 constraints
                     .iter()
                     .filter(|entry| {
                         filter.includes_constraint(entry)
-                            // A preview-written lock may omit constraints even when the preview
-                            // is now disabled. Compare retained declarations normally, and check
-                            // compatible inputs against the graph when none were recorded.
-                            && (!omit_constraints && filter.has_retained_constraint(&entry.name)
-                                || !self.can_omit_constraint(entry, root, &prereleases))
+                            && (!omit_constraints || !self.can_omit_constraint(entry))
                     })
                     .cloned(),
             )?;
@@ -4106,9 +4100,7 @@ impl Lock {
                 self.manifest
                     .constraints
                     .iter()
-                    .filter(|entry| {
-                        !omit_constraints || !self.can_omit_constraint(entry, root, &prereleases)
-                    })
+                    .filter(|entry| !omit_constraints || !self.can_omit_constraint(entry))
                     .cloned(),
             )?;
             if expected != actual {
@@ -4117,7 +4109,8 @@ impl Lock {
                     actual.into_iter().collect(),
                 ));
             }
-        }
+            expected.into_iter().collect()
+        };
 
         let normalized_overrides = {
             let expected = normalizer.overrides(
@@ -4262,50 +4255,9 @@ impl Lock {
                 !dependency_excludes.contains_for_package(None, &requirement.name)
             })
             .collect::<Vec<_>>();
-        // Source constraints omitted from the manifest still authorize their current sources.
-        // Retain all current constraints for source discovery, independently of comparison.
-        let external_source = self.simple_external_source();
-        let source_constraints = if allow_missing_package_metadata || external_source.is_some() {
-            normalizer
-                .constraints(
-                    constraints
-                        .iter()
-                        .filter(|entry| filter.includes_constraint(entry))
-                        .cloned(),
-                )?
-                .into_iter()
-                .collect::<BTreeSet<_>>()
-        } else {
-            BTreeSet::new()
-        };
-        if let Some(package) = external_source {
-            let mut selected = false;
-            for constraint in &source_constraints {
-                if Self::source_selected_by(package, constraint, root)? {
-                    selected = true;
-                    break;
-                }
-            }
-            // A workspace root is checked before its dependencies. If its recorded metadata
-            // independently selects this source, a change to that declaration is detected
-            // before the source itself is read.
-            if !selected && let Some(workspace_root) = self.root() {
-                for requirement in &workspace_root.metadata.requires_dist {
-                    let requirement =
-                        normalize_requirement(requirement.clone(), root, &self.requires_python)?;
-                    if Self::source_selected_by(package, &requirement, root)? {
-                        selected = true;
-                        break;
-                    }
-                }
-            }
-            if !selected {
-                return Ok(SatisfiesResult::UnauthorizedSource(&package.id.name));
-            }
-        }
         let dependency_sources = if allow_missing_package_metadata {
             Box::pin(self.collect_dependency_sources(
-                source_constraints,
+                normalized_constraints,
                 &root_requirements,
                 dependency_metadata,
                 &dependency_overrides,
@@ -4798,12 +4750,6 @@ impl Lock {
                     queue.push_back(dependency.index);
                 }
             }
-        }
-
-        if let Some(name) =
-            self.unsatisfied_prerelease(&prereleases, constraints, overrides, excludes)?
-        {
-            return Ok(SatisfiesResult::UnauthorizedPrerelease(name));
         }
 
         Ok(SatisfiesResult::Satisfied)
@@ -5961,10 +5907,6 @@ pub enum SatisfiesResult<'lock> {
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
-    /// A locked source is no longer selected by the current requirements or constraints.
-    UnauthorizedSource(&'lock PackageName),
-    /// A locked prerelease is no longer enabled by the current requirements or constraints.
-    UnauthorizedPrerelease(&'lock PackageName),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,
