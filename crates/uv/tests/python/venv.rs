@@ -120,7 +120,7 @@ fn create_venv_caches_interpreter() -> Result<()> {
     Ok(())
 }
 
-/// An upgradeable venv must discard cached metadata when its base path changes.
+/// Cached metadata matches Python after recreating an upgradeable venv.
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn create_venv_caches_upgradeable_interpreter() -> Result<()> {
@@ -168,8 +168,8 @@ fn create_venv_caches_upgradeable_interpreter() -> Result<()> {
         .init_no_wait()?
         .context("Fresh interpreter cache is locked")?;
     let cached = PythonEnvironment::from_root(context.venv.path(), &cache)?;
-    assert!(startup_marker.is_file());
     let queried = PythonEnvironment::from_root(context.venv.path(), &fresh_cache)?;
+    assert!(startup_marker.is_file());
     assert_eq!(cached, queried);
 
     Ok(())
