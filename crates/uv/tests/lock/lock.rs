@@ -44965,7 +44965,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     Ok(())
 }
 
-/// Retained constraints do not force compatible bounds for the same package into the lock.
+/// Compatible bounds are omitted even when a specifier mentions a prerelease.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_resolution_inputs_individual_constraints() -> Result<()> {
@@ -44973,7 +44973,7 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
     let links = context.workspace_root.join("test/links");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
-    // Keep the prerelease opt-in, but omit the bound satisfied by the stable locked version.
+    // Both bounds admit the stable locked version.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -44983,6 +44983,7 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
+        prerelease = "explicit"
         constraint-dependencies = ["ok>=1a1", "ok<3"]
     "#})?;
 
@@ -45004,10 +45005,8 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
+        prerelease-mode = "explicit"
         exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
-        constraints = [{ name = "ok", specifier = ">=1a1" }]
 
         [[package]]
         name = "ok"
@@ -45043,8 +45042,7 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), lock);
 
-    // Normalization must happen after pruning, so it cannot combine the omitted bound with
-    // the retained prerelease specifier. Force resolution to exercise lockfile serialization.
+    // Normalization still omits both bounds when a fresh resolution writes the lockfile.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -45054,6 +45052,7 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs", "lockfile-normalization"]
+        prerelease = "explicit"
         constraint-dependencies = ["ok>=1a1", "ok<3"]
     "#})?;
 
@@ -45081,7 +45080,7 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), lock);
 
-    // Changing the omitted bound does not change the retained declaration.
+    // Changing an omitted bound does not change the lockfile.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -45091,7 +45090,35 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs", "lockfile-normalization"]
+        prerelease = "explicit"
         constraint-dependencies = ["ok>=1a1", "ok<4"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Removing the prerelease specifier leaves the stable locked version eligible.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lockfile-normalization"]
+        prerelease = "explicit"
+        constraint-dependencies = ["ok<4"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -45422,7 +45449,8 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
     );
     let pyproject = context.temp_dir.child("pyproject.toml");
 
-    // Only the Linux constraint applies to this transitive dependency.
+    // Only the Linux constraint applies to this transitive dependency. The prerelease bound
+    // admits the locked version and is omitted even with markers and metadata-free locking.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -45435,6 +45463,7 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
         constraint-dependencies = [
             "b<2; sys_platform == 'linux'",
             "b>=2; sys_platform != 'linux'",
+            "b>=1.0a1",
         ]
     "#})?;
 
@@ -45518,6 +45547,7 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
         constraint-dependencies = [
             "b<2; sys_platform == 'linux'",
             "b>=2; sys_platform != 'linux'",
+            "b>=1.0a1",
         ]
     "#})?;
 
@@ -45960,8 +45990,8 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     );
     let pyproject = context.temp_dir.child("pyproject.toml");
 
-    // An explicit constraint selects the prerelease over the stable version. Both constraints
-    // remain recorded because the locked version is a prerelease.
+    // The pin opts in to the prerelease and remains recorded. Even with normalization, the
+    // compatible bound and prerelease exclusion are omitted because neither grants that opt-in.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -45970,9 +46000,9 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
         dependencies = ["a"]
 
         [tool.uv]
-        preview-features = ["resolution-inputs"]
+        preview-features = ["resolution-inputs", "lockfile-normalization"]
         prerelease = "explicit"
-        constraint-dependencies = ["b==1.0.0a1", "b>=0.8"]
+        constraint-dependencies = ["b==1.0.0a1", "b>=0.8", "b!=1.0.0a2"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -45994,10 +46024,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        constraints = [
-            { name = "b", specifier = "==1.0.0a1" },
-            { name = "b", specifier = ">=0.8" },
-        ]
+        constraints = [{ name = "b", specifier = "==1a1" }]
 
         [[package]]
         name = "a"
@@ -46044,7 +46071,8 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
 
     let initial_lock = context.read("uv.lock");
 
-    // Removing the prerelease opt-in requires a new resolution, even if the bound admits it.
+    // Removing the opt-in requires a new resolution. Excluding another prerelease does not
+    // opt the package into prereleases.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -46053,9 +46081,9 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
         dependencies = ["a"]
 
         [tool.uv]
-        preview-features = ["resolution-inputs"]
+        preview-features = ["resolution-inputs", "lockfile-normalization"]
         prerelease = "explicit"
-        constraint-dependencies = ["b>=0.8"]
+        constraint-dependencies = ["b>=0.8", "b!=1.0.0a2"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -46080,7 +46108,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
         dependencies = ["a"]
 
         [tool.uv]
-        preview-features = ["resolution-inputs"]
+        preview-features = ["resolution-inputs", "lockfile-normalization"]
         prerelease = "explicit"
         constraint-dependencies = []
     "#})?;
@@ -47796,5 +47824,408 @@ fn lock_resolution_inputs_metadata_unknown_version() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+    Ok(())
+}
+
+/// The if-necessary policy accepts a locked prerelease but prefers stable on upgrade.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_if_necessary_prerelease_constraint() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "prerelease-constraint-policy"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        requires = ["b"]
+        sdist = false
+
+        [packages.b.versions."1.0.0"]
+        sdist = false
+
+        [packages.b.versions."2.0.0a1"]
+        sdist = false
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // The pin selects the prerelease despite an available stable version.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = ["b==2.0.0a1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0
+    └── a v1.0.0
+        └── b v2.0.0a1
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "b" },
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0a1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0a1-py3-none-any.whl", hash = "sha256:[SHA256:b-2.0.0a1-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // The unchanged constraint is valid without registry metadata.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Removing the pin still allows the locked prerelease as a preference.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // An upgrade performs a fresh resolution, which prefers the stable version.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--upgrade")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Updated b v2.0.0a1 -> v1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Package-specific prerelease settings override the global policy when validating constraints.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_package_prerelease_constraint() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-package-prerelease"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        requires = ["b"]
+        sdist = false
+
+        [packages.b.versions."1.0.0"]
+        sdist = false
+
+        [packages.b.versions."2.0.0a1"]
+        sdist = false
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // The package-specific explicit policy requires a prerelease opt-in even though the
+    // global policy permits prereleases.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        prerelease = "allow"
+        prerelease-package = { b = "explicit" }
+        constraint-dependencies = ["b==2.0.0a1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        prerelease-mode = "allow"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [options.prerelease-package]
+        b = "explicit"
+
+        [manifest]
+        constraints = [{ name = "b", specifier = "==2.0.0a1" }]
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "b" },
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0a1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0a1-py3-none-any.whl", hash = "sha256:[SHA256:b-2.0.0a1-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // Unchanged inputs reuse the lock without registry metadata.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Removing the opt-in requires a resolution under the package-specific policy.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        prerelease = "allow"
+        prerelease-package = { b = "explicit" }
+        constraint-dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Updated b v2.0.0a1 -> v1.0.0
+    ");
+
+    // A package-specific allow policy overrides a global explicit policy, so the opt-in
+    // constraint can be omitted even though the locked package is a prerelease.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        prerelease = "explicit"
+        prerelease-package = { b = "allow" }
+        constraint-dependencies = ["b==2.0.0a1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolving despite existing lockfile due to change in pre-release mode: `allow` vs. `explicit`
+    Resolved 3 packages in [TIME]
+    Updated b v1.0.0 -> v2.0.0a1
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        prerelease-mode = "explicit"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [options.prerelease-package]
+        b = "allow"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "b" },
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0a1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0a1-py3-none-any.whl", hash = "sha256:[SHA256:b-2.0.0a1-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // Removing the omitted pin does not invalidate the locked prerelease.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        prerelease = "explicit"
+        prerelease-package = { b = "allow" }
+        constraint-dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
     Ok(())
 }

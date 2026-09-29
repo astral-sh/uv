@@ -6169,7 +6169,7 @@ fn tool_install_lock_resolution_inputs_constraints() -> Result<()> {
     let links = context.workspace_root.join("test/links");
     let constraints = context.temp_dir.child("constraints.txt");
 
-    // Retain the prerelease opt-in, but omit the compatible bound on the stable version.
+    // Both constraints are compatible with the stable version selected for the tool.
     constraints.write_str(indoc! {r"
         ok>=1a1
         ok<3
@@ -6207,7 +6207,6 @@ fn tool_install_lock_resolution_inputs_constraints() -> Result<()> {
             { name = "ok" },
             { name = "simple-launcher" },
         ]
-        constraints = [{ name = "ok", specifier = ">=1a1" }]
 
         [[package]]
         name = "ok"

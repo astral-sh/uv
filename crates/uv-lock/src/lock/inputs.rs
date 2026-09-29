@@ -1,14 +1,16 @@
 use std::collections::BTreeSet;
 use std::mem;
 
-use uv_configuration::{ExcludeDependency, NormalizedConstraints, Override};
+use uv_configuration::{
+    ExcludeDependency, NormalizedConstraints, Override, PrereleaseMode,
+    specifier_opts_into_prereleases,
+};
 use uv_distribution_types::{Requirement, RequirementSource, ResolutionLookups, StaticMetadata};
 use uv_normalize::PackageName;
-use uv_pep440::VersionSpecifier;
 use uv_preview::PreviewFeature;
 
 use super::requirements::normalize_collection;
-use super::{Lock, Package};
+use super::{Lock, Package, Source};
 
 impl Lock {
     /// Retain settings for locked packages and settings consulted during runtime resolution.
@@ -51,11 +53,11 @@ impl Lock {
         self
     }
 
-    /// Return whether a plain version bound is satisfied by every stable locked version.
+    /// Return whether a plain version bound is satisfied by every locked version.
     ///
-    /// Source declarations and prerelease specifiers can affect candidate eligibility, so their
-    /// changes must trigger resolution. Bounds on dynamic or prerelease versions also remain
-    /// recorded. Check every version regardless of markers: an inapplicable bound that does not
+    /// Source declarations remain recorded because they affect candidate eligibility. Under the
+    /// explicit prerelease policy, an opt-in also remains recorded when a registry prerelease is
+    /// locked. Check every version regardless of markers: an inapplicable bound that does not
     /// contain a locked version must be retained to avoid resolving unchanged inputs repeatedly.
     pub(super) fn can_omit_constraint(&self, constraint: &Requirement) -> bool {
         let RequirementSource::Registry {
@@ -69,17 +71,21 @@ impl Lock {
         if specifier.is_empty() {
             return true;
         }
-        if specifier.iter().any(VersionSpecifier::any_prerelease) {
-            return false;
-        }
+        let prerelease_opt_in = self.options.prerelease.mode(&constraint.name)
+            == PrereleaseMode::Explicit
+            && specifier.iter().any(specifier_opts_into_prereleases);
         self.packages_for_name(&constraint.name)
             .iter()
             .all(|package| {
-                package
-                    .id
-                    .version
-                    .as_ref()
-                    .is_some_and(|version| !version.any_prerelease() && specifier.contains(version))
+                package.id.version.as_ref().is_some_and(|version| {
+                    if prerelease_opt_in
+                        && version.any_prerelease()
+                        && let Source::Registry(_) = &package.id.source
+                    {
+                        return false;
+                    }
+                    specifier.contains(version)
+                })
             })
     }
 }
