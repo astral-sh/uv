@@ -163,16 +163,12 @@ fn native_bytecode_hash() -> Result<()> {
             let modified = fs_err::metadata(&source)?.modified()?;
             fs_err::write(&source, fs_err::read_to_string(&source)?.replace("return 42", "return 43"))?;
             fs_err::File::options().write(true).open(&source)?.set_modified(modified)?;
-            uv_snapshot!(context.python_command().arg("-B").arg("-c").arg(indoc! {r"
-                import sys
-                from example.module import answer
-                if answer() != int(sys.argv[1]):
-                    raise RuntimeError('Incorrect hash invalidation behavior')
-                print('ok')
-            "}).arg(if checked { "43" } else { "42" }), @"
+            uv_snapshot!(context.python_command()
+                .arg("-c").arg("import sys; from example.module import answer; print(answer() == int(sys.argv[1]))")
+                .arg(if checked { "43" } else { "42" }), @"
             exit_code: 0 (success)
             ----- stdout -----
-            ok
+            True
             ");
             uv_snapshot!(context.filters(), context.pip_sync()
                 .arg("requirements.txt").arg("--compile-bytecode")
