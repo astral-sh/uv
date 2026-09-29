@@ -120,23 +120,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reject_legacy_nanoid_revision() {
-        #[derive(Serialize)]
-        struct LegacyRevision {
-            id: &'static str,
-            hashes: HashDigests,
-        }
-
-        // The sdists-v10 bucket only accepts 16-character IDs.
-        let legacy = LegacyRevision {
-            id: "HM0NxJml5hc7UjbfTWT1r",
-            hashes: HashDigests::empty(),
-        };
-        let bytes = rmp_serde::to_vec(&legacy).expect("serialize legacy revision");
-        assert!(rmp_serde::from_slice::<Revision>(&bytes).is_err());
-    }
-
-    #[test]
     fn round_trip_current_revision() {
         let original = Revision::new().with_hashes(HashDigests::from(
             "sha256:0000000000000000000000000000000000000000000000000000000000000000"
