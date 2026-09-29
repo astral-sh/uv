@@ -4750,10 +4750,10 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: TOML parse error at line 4, column 1
-      |
-    4 | [tool.uv]
-      | ^^^^^^^^^
-    invalid type: integer `123`, expected a string
+             |
+           4 | [tool.uv]
+             | ^^^^^^^^^
+           invalid type: integer `123`, expected a string
     ");
 
     context
@@ -4801,10 +4801,10 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: TOML parse error at line 4, column 1
-      |
-    4 | [tool.uv]
-      | ^^^^^^^^^
-    cannot specify both `preview` and `preview-features`
+             |
+           4 | [tool.uv]
+             | ^^^^^^^^^
+           cannot specify both `preview` and `preview-features`
     ");
 
     Ok(())

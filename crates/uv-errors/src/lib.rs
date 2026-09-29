@@ -361,7 +361,14 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
 
     let main_msg = err.to_string();
     let main_padding = " ".repeat(level.len() + 2);
-    let wrapped_main = wrap_text(&main_msg, width, &main_padding, &main_padding, "");
+    // Authored lines align with wrapped continuations, retaining any additional indentation.
+    let wrapped_main = wrap_text(
+        &main_msg,
+        width,
+        &main_padding,
+        &main_padding,
+        &main_padding,
+    );
     writeln!(
         &mut stream,
         "{}{} {}",
@@ -766,9 +773,38 @@ mod tests {
         assert_snapshot!(output, @r"
         error: There is no command `foobar` for `uv`. Did
                you mean one of:
-            auth
-            run
-            init
+                   auth
+                   run
+                   init
+        ");
+    }
+
+    #[test]
+    fn format_multiline_warning() {
+        let error = anyhow!(
+            "Requirements conflict:\n- foo==1.0\n  - bar>=2\n\nSelect compatible requirements."
+        );
+        let mut output = String::new();
+        write_error_chain_with_options(
+            error.as_ref(),
+            &Hints::from("Check the dependency versions."),
+            ErrorOptions::default()
+                .with_level("warning")
+                .with_color(AnsiColors::Yellow)
+                .with_width_override(80)
+                .with_stream(&mut output),
+        )
+        .unwrap();
+        let output = anstream::adapter::strip_str(&output);
+
+        assert_snapshot!(output, @"
+        warning: Requirements conflict:
+                 - foo==1.0
+                   - bar>=2
+
+                 Select compatible requirements.
+
+        hint: Check the dependency versions.
         ");
     }
 

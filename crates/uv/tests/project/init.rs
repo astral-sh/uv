@@ -4037,8 +4037,8 @@ fn git_states() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize Git repository at `[TEMP_DIR]/broken-git`
-    stdout:
-    stderr: error: `git` operations are not allowed — are you missing a cfg for the `git` feature?
+           stdout:
+           stderr: error: `git` operations are not allowed — are you missing a cfg for the `git` feature?
     ");
     assert!(!context.temp_dir.child("broken-git/.git").is_dir());
 }

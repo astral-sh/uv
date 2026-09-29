@@ -520,10 +520,10 @@ fn run_pep723_script_empty_dependency() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: TOML parse error at line 2, column 17
-      |
-    2 | dependencies = [""]
-      |                 ^^
-    Empty field is not allowed for PEP508
+             |
+           2 | dependencies = [""]
+             |                 ^^
+           Empty field is not allowed for PEP508
     "#);
 
     Ok(())
@@ -3755,7 +3755,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
-    Use `uv python pin` to update the `.python-version` file to a compatible version
+           Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     // ...even if `--isolated` is provided.
@@ -3763,7 +3763,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
-    Use `uv python pin` to update the `.python-version` file to a compatible version
+           Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     Ok(())
@@ -5655,9 +5655,9 @@ fn run_groups_include_requires_python() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting Python requirements:
-    - project: >=3.11
-    - project:bar: >=3.13
-    - project:dev: >=3.12, <3.13
+           - project: >=3.11
+           - project:bar: >=3.13
+           - project:dev: >=3.12, <3.13
     ");
 
     // Explicitly requesting an out-of-range python fails

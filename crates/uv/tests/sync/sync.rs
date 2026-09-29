@@ -2036,10 +2036,10 @@ fn sync_frozen_member_default_groups_python_sources() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.14`.
-    The following requirements in `uv.lock` do not permit this version:
-    - lockfile: >=3.13
-    - member:docs: >=3.14
-    - member:test: >=3.13
+           The following requirements in `uv.lock` do not permit this version:
+           - lockfile: >=3.13
+           - member:docs: >=3.14
+           - member:test: >=3.13
     ");
 
     // A `.python-version` request reports the requirements for the default group.
@@ -2054,10 +2054,10 @@ fn sync_frozen_member_default_groups_python_sources() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: The Python request from `.python-version` resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.14`.
-    The following requirements in `uv.lock` do not permit this version:
-    - lockfile: >=3.13
-    - member:docs: >=3.14
-    Use `uv python pin` to update the `.python-version` file to a compatible version
+           The following requirements in `uv.lock` do not permit this version:
+           - lockfile: >=3.13
+           - member:docs: >=3.14
+           Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     Ok(())
@@ -10373,7 +10373,7 @@ fn sync_python_version() -> Result<()> {
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     error: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
-    Use `uv python pin` to update the `.python-version` file to a compatible version
+           Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     // Unless the pin file is outside the project, in which case we should just ignore it entirely

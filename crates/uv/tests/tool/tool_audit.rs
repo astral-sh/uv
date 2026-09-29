@@ -246,10 +246,10 @@ fn tool_audit_invalid_lockfile() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse the lockfile for tool `simple-launcher` at `tools/simple-launcher/uv.lock`: TOML parse error at line 1, column 5
-      |
-    1 | not valid toml
-      |     ^
-    key with no value, expected `=`
+             |
+           1 | not valid toml
+             |     ^
+           key with no value, expected `=`
     ");
 
     Ok(())

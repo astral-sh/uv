@@ -962,58 +962,58 @@ fn help_unknown_subcommand() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: There is no command `foobar` for `uv`. Did you mean one of:
-        auth
-        run
-        init
-        add
-        remove
-        version
-        sync
-        lock
-        export
-        tree
-        format
-        check
-        audit
-        tool
-        python
-        pip
-        venv
-        build
-        publish
-        workspace
-        cache
-        self
-        generate-shell-completion
+               auth
+               run
+               init
+               add
+               remove
+               version
+               sync
+               lock
+               export
+               tree
+               format
+               check
+               audit
+               tool
+               python
+               pip
+               venv
+               build
+               publish
+               workspace
+               cache
+               self
+               generate-shell-completion
     ");
 
     uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: There is no command `foo bar` for `uv`. Did you mean one of:
-        auth
-        run
-        init
-        add
-        remove
-        version
-        sync
-        lock
-        export
-        tree
-        format
-        check
-        audit
-        tool
-        python
-        pip
-        venv
-        build
-        publish
-        workspace
-        cache
-        self
-        generate-shell-completion
+               auth
+               run
+               init
+               add
+               remove
+               version
+               sync
+               lock
+               export
+               tree
+               format
+               check
+               audit
+               tool
+               python
+               pip
+               venv
+               build
+               publish
+               workspace
+               cache
+               self
+               generate-shell-completion
     ");
 }
 
@@ -1025,14 +1025,14 @@ fn help_unknown_subsubcommand() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: There is no command `foobar` for `uv python`. Did you mean one of:
-        list
-        install
-        upgrade
-        find
-        pin
-        dir
-        uninstall
-        update-shell
+               list
+               install
+               upgrade
+               find
+               pin
+               dir
+               uninstall
+               update-shell
     ");
 }
 
