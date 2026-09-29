@@ -3,6 +3,27 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.21
+
+Released on 2026-09-29.
+
+### Python
+
+- Update CPython to use OpenSSL 3.5.9 ([#22076](https://github.com/astral-sh/uv/pull/22076))
+
+### Enhancements
+
+- Omit empty `[manifest]` tables from lockfiles that contain only manifest subtables ([#22070](https://github.com/astral-sh/uv/pull/22070))
+
+### Preview features
+
+- Omit redundant runtime constraints from `uv.lock`, including those involving pre-releases, with the `resolution-inputs` preview feature ([#22004](https://github.com/astral-sh/uv/pull/22004), [#22068](https://github.com/astral-sh/uv/pull/22068))
+
+### Bug fixes
+
+- Prevent `uv python pin --rm` from removing a global `.python-versions` file without `--global` ([#21992](https://github.com/astral-sh/uv/pull/21992))
+- Fix installed-package checks incorrectly reporting post-releases as incompatible with exclusive lower bounds on pre-releases ([#22049](https://github.com/astral-sh/uv/pull/22049))
+
 ## 0.12.20
 
 Released on 2026-09-28.
