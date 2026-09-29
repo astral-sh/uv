@@ -1088,7 +1088,7 @@ fn existing_project_environment(
             if unix {
                 let target_path = fs_err::read_link(&path)?;
                 warn_user!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> `{}`",
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: `{}` -> `{}`",
                     path.user_display().cyan(),
                     target_path.user_display().cyan(),
                 );
