@@ -49,8 +49,7 @@ rayon = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 serc = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
+siphasher = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

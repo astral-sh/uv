@@ -405,7 +405,7 @@ pub(super) async fn compile_bytecode(
         }
         files += compile_tree(
             &site_packages,
-            venv.python_executable(),
+            venv.interpreter(),
             concurrency,
             cache.root(),
         )
@@ -430,7 +430,7 @@ pub(super) async fn compile_bytecode_files(
     printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
-    let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
+    let files = compile_files(files, venv.interpreter(), concurrency, cache.root())
         .await
         .context("Failed to bytecode-compile installed packages")?;
     if files == 0 {

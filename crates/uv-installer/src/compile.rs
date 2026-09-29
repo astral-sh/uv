@@ -4,6 +4,7 @@ use std::process::Stdio;
 use std::time::Duration;
 use std::{env, io, panic};
 
+use ::serc::ParsePythonVersionError;
 use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
 use thiserror::Error;
@@ -16,12 +17,13 @@ use walkdir::WalkDir;
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
 use uv_preview::PreviewFeature;
+use uv_python::Interpreter;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
-use self::rust::RustCompiler;
+use self::serc::SercCompiler;
 
-mod rust;
+mod serc;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
@@ -44,8 +46,19 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
-    #[error("Failed to configure native bytecode compilation")]
-    NativeSetup(#[source] anyhow::Error),
+    #[error("serc does not support {0}; expected CPython")]
+    NativeImplementation(String),
+    #[error(transparent)]
+    NativeVersion(#[from] ParsePythonVersionError),
+    #[error("serc does not support this interpreter's bytecode magic number")]
+    NativeMagicNumber,
+    #[error("serc requires an interpreter with a bytecode cache tag")]
+    NativeCacheTag,
+    #[error("serc does not support {setting} ({variable})")]
+    NativeSetting {
+        setting: &'static str,
+        variable: &'static str,
+    },
     #[error("Failed to compile `{}` with serc", source_file.user_display())]
     NativeCompile {
         source_file: PathBuf,
@@ -104,23 +117,14 @@ fn compile_timeout() -> Result<Option<Duration>, CompileError> {
     Ok(timeout)
 }
 
-async fn spawn_workers(
+fn spawn_workers(
     dir: &Path,
     python_executable: &Path,
     pip_compileall_py: &Path,
     receiver: &Receiver<PathBuf>,
     worker_count: usize,
     timeout: Option<Duration>,
-) -> Result<Vec<WorkerHandle>, CompileError> {
-    let rust_compiler = if uv_preview::is_enabled(PreviewFeature::NativeBytecode) {
-        Some(
-            RustCompiler::query(dir, python_executable, timeout)
-                .await
-                .map_err(CompileError::NativeSetup)?,
-        )
-    } else {
-        None
-    };
+) -> Vec<WorkerHandle> {
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::with_capacity(worker_count);
     for _ in 0..worker_count {
@@ -132,7 +136,6 @@ async fn spawn_workers(
             pip_compileall_py.to_path_buf(),
             receiver.clone(),
             timeout,
-            rust_compiler.clone(),
         );
 
         // Spawn each worker on a dedicated thread.
@@ -155,7 +158,7 @@ async fn spawn_workers(
 
         worker_handles.push(rx);
     }
-    Ok(worker_handles)
+    worker_handles
 }
 
 /// Wait for all workers to exit so worker failures are not hidden by channel send errors.
@@ -184,7 +187,7 @@ async fn wait_for_workers(
 /// Bytecode compile all files in `dir` using serc when enabled, or a pool of Python
 /// interpreters running a Python script that calls `compileall.compile_file`.
 ///
-/// Python compilation errors are muted (like pip); native compilation errors are returned.
+/// Invalid Python source is skipped (like pip). Unsupported native compilation requests are errors.
 /// There is a 60s timeout for each file compiled by Python to handle
 /// a broken `python`. The timeout can be configured with `UV_COMPILE_BYTECODE_TIMEOUT`; a value of
 /// `0` disables the timeout.
@@ -193,10 +196,10 @@ async fn wait_for_workers(
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
 ///
 /// We've confirmed that both uv and pip (as of 24.0.0) remove the `__pycache__` directory.
-#[instrument(skip(python_executable))]
+#[instrument(skip(interpreter))]
 pub async fn compile_tree(
     dir: &Path,
-    python_executable: &Path,
+    interpreter: &Interpreter,
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
@@ -205,6 +208,14 @@ pub async fn compile_tree(
         "compileall doesn't work with relative paths: `{}`",
         dir.display()
     );
+    if uv_preview::is_enabled(PreviewFeature::NativeBytecode) {
+        let compiler = SercCompiler::new(interpreter)?;
+        let dir = dir.to_path_buf();
+        return tokio::task::spawn_blocking(move || compiler.compile_tree(&dir))
+            .await
+            .map_err(|_| CompileError::Join)?;
+    }
+    let python_executable = interpreter.sys_executable();
     let worker_count = concurrency.installs;
 
     // A larger buffer is significantly faster than just 1 or the worker count.
@@ -221,8 +232,7 @@ pub async fn compile_tree(
         &receiver,
         worker_count,
         timeout,
-    )
-    .await?;
+    );
     // Make sure the channel gets closed when all workers exit.
     drop(receiver);
 
@@ -273,15 +283,26 @@ pub async fn compile_tree(
 /// Bytecode compile the given Python source files using serc when enabled, or a pool
 /// of Python interpreters.
 ///
-/// All paths must be absolute. Python compilation errors are muted (like pip), while native
-/// compilation errors and failures to launch or communicate with the Python workers are returned.
-#[instrument(skip(files, python_executable))]
+/// All paths must be absolute. Invalid Python source is skipped (like pip); unsupported native
+/// compilation requests and failures to launch or communicate with Python workers are returned.
+#[instrument(skip(files, interpreter))]
 pub async fn compile_files(
     files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
-    python_executable: &Path,
+    interpreter: &Interpreter,
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
+    if uv_preview::is_enabled(PreviewFeature::NativeBytecode) {
+        let compiler = SercCompiler::new(interpreter)?;
+        let files = files
+            .into_iter()
+            .collect::<anyhow::Result<Vec<_>>>()
+            .map_err(CompileError::SourceFiles)?;
+        return tokio::task::spawn_blocking(move || compiler.compile_files(&files))
+            .await
+            .map_err(|_| CompileError::Join)?;
+    }
+    let python_executable = interpreter.sys_executable();
     let mut files = files.into_iter();
     let mut initial_files = Vec::with_capacity(concurrency.installs);
     for file in files.by_ref().take(concurrency.installs) {
@@ -305,8 +326,7 @@ pub async fn compile_files(
         &receiver,
         worker_count,
         timeout,
-    )
-    .await?;
+    );
     drop(receiver);
 
     let mut send_error = None;
@@ -347,17 +367,7 @@ async fn worker(
     pip_compileall_py: PathBuf,
     receiver: Receiver<PathBuf>,
     timeout: Option<Duration>,
-    rust_compiler: Option<RustCompiler>,
 ) -> Result<(), CompileError> {
-    if let Some(compiler) = rust_compiler {
-        while let Ok(source_file) = receiver.recv().await {
-            compiler
-                .compile(&source_file)
-                .map_err(|err| CompileError::NativeCompile { source_file, err })?;
-        }
-        return Ok(());
-    }
-
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
         .await
         .map_err(CompileError::TempFile)?;

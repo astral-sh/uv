@@ -4965,9 +4965,9 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 
 [[package]]
 name = "serc"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cbf03bc7d094dc253ff6714bc3548ddcc4ef058add1430cdf460a9fc2339ed3"
+checksum = "29ef3086709b7f9d33f0e5718a454ac7c934ed41e5fd31329e9be6e7ca52fae1"
 dependencies = [
  "encoding_rs",
  "hashbrown 0.17.1",
@@ -4979,7 +4979,9 @@ dependencies = [
  "ruff_source_file",
  "ruff_text_size",
  "rustc-hash",
+ "siphasher",
  "smallvec",
+ "stacker",
 ]
 
 [[package]]
@@ -5213,9 +5215,9 @@ dependencies = [
 
 [[package]]
 name = "siphasher"
-version = "1.0.2"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
+checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
 name = "slab"
@@ -7260,8 +7262,7 @@ dependencies = [
  "rustc-hash",
  "same-file",
  "serc",
- "serde",
- "serde_json",
+ "siphasher",
  "tempfile",
  "thiserror",
  "tokio",

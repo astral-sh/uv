@@ -145,7 +145,8 @@ mod tests {
           project's resolved dependencies.
         - <a id="native-auth" href="#native-auth"><code>native-auth</code></a>: Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
         - <a id="native-bytecode" href="#native-bytecode"><code>native-bytecode</code></a>: Uses the Rust-based [serc](https://github.com/astral-sh/serc) compiler for bytecode compilation
-          on supported CPython versions. Unsupported files and settings cause an error.
+          on CPython 3.12–3.15, including optimized and hash-based bytecode. Unsupported interpreter
+          settings and source encodings cause an error; invalid Python source is skipped.
         - <a id="no-distutils-patch" href="#no-distutils-patch"><code>no-distutils-patch</code></a>: Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
           in virtual environments for Python 3.10 and later.
         - <a id="package-conflicts" href="#package-conflicts"><code>package-conflicts</code></a>: Allows defining workspace conflicts at the package level.
