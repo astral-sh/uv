@@ -19,7 +19,9 @@ use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::base_client::CertificateSource;
-use crate::httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder};
+use crate::httpcache::{
+    AfterResponse, ArchivedCachePolicy, BeforeRequest, CachePolicy, CachePolicyBuilder,
+};
 use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetryState};
 
 /// A trait the generalizes (de)serialization at a high level.
@@ -347,7 +349,7 @@ impl CachedClient {
                         span.in_scope(|| {
                             cached.refresh_policy(&path, &new_policy)?;
                             // Keep decoding errors separate so a corrupt payload can be refetched.
-                            Ok::<_, Error>(Payload::from_aligned_bytes(cached.data))
+                            Ok::<_, Error>(Payload::from_aligned_bytes(cached.into_data()))
                         })
                     })
                     .await
@@ -521,10 +523,12 @@ impl CachedClient {
                             );
                         }
                         let url = DisplaySafeUrl::from_url(req.url().clone());
-                        match cached.cache_policy.before_request(&mut req) {
+                        match cached.cache_policy().before_request(&mut req) {
                             BeforeRequest::Fresh => {
                                 debug!("Found fresh response for: {url}");
-                                Some(CachedEntry::Fresh(Payload::from_aligned_bytes(cached.data)))
+                                Some(CachedEntry::Fresh(Payload::from_aligned_bytes(
+                                    cached.into_data(),
+                                )))
                             }
                             BeforeRequest::Stale(new_cache_policy_builder) => {
                                 debug!("Found stale response for: {url}");
@@ -579,8 +583,8 @@ impl CachedClient {
             .cache_read_runtime()
             .spawn_blocking(move || {
                 let cached = DataWithCachePolicy::from_path_sync(&path).and_then(|cached| {
-                    if cached.cache_policy.matches_stale_request(&req) {
-                        Payload::from_aligned_bytes(cached.data).map(Some)
+                    if cached.cache_policy().matches_stale_request(&req) {
+                        Payload::from_aligned_bytes(cached.into_data()).map(Some)
                     } else {
                         Ok(None)
                     }
@@ -638,7 +642,7 @@ impl CachedClient {
         }
 
         match cached
-            .cache_policy
+            .cache_policy()
             .after_response(new_cache_policy_builder, &response)
         {
             AfterResponse::NotModified(new_policy) => {
@@ -874,10 +878,11 @@ enum CachedResponse {
 ///
 /// # Format
 ///
-/// Each file contains the payload, a random 16-byte generation ID, the archived
-/// HTTP cache policy, a 4-byte CRC32 checksum, and the payload length as a little-endian
-/// `u64`. The checksum covers the generation, policy, and encoded payload length.
-/// The payload remains first so an [`AlignedVec`] can be truncated without moving it.
+/// Each file contains the payload, zero padding to a 16-byte boundary, a random 16-byte
+/// generation ID, the archived HTTP cache policy, a 4-byte CRC32 checksum, and the payload
+/// length as a little-endian `u64`. The checksum covers the padding, generation, policy,
+/// and encoded payload length. The policy is read directly from the same [`AlignedVec`]
+/// as the payload, which remains first so the buffer can be truncated without moving it.
 ///
 /// New responses atomically replace the entire file with a new generation. HTTP 304
 /// responses overwrite only the policy, checksum, and length. A writer opens the file
@@ -891,8 +896,9 @@ enum CachedResponse {
 /// No additional file or reader lock is needed.
 #[derive(Debug)]
 pub struct DataWithCachePolicy {
-    pub data: AlignedVec,
-    cache_policy: OwnedArchive<CachePolicy>,
+    bytes: AlignedVec,
+    data_len: usize,
+    policy_start: usize,
     generation: [u8; 16],
 }
 
@@ -953,17 +959,21 @@ impl DataWithCachePolicy {
         Self::from_aligned_bytes(aligned_bytes)
     }
 
-    /// Validate the policy and separate it from the aligned payload.
+    /// Validate the policy within its aligned portion of the shared buffer.
     fn from_aligned_bytes(mut bytes: AlignedVec) -> Result<Self, Error> {
         let (contents, footer) = CachePolicyFooter::ref_from_suffix(&bytes).map_err(|_| {
             ErrorKind::ArchiveRead("HTTP cache entry is shorter than its trailer".to_owned())
         })?;
         let data_len = usize::try_from(footer.data_len.get())
             .map_err(|_| ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned()))?;
-        let (_, tail) = contents.split_at_checked(data_len).ok_or_else(|| {
+        let tail = contents.get(data_len..).ok_or_else(|| {
             ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned())
         })?;
-        let (generation, policy_bytes) = <[u8; 16]>::ref_from_prefix(tail)
+        let padding_len = Self::padding_len(data_len);
+        let aligned_tail = tail.get(padding_len..).ok_or_else(|| {
+            ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned())
+        })?;
+        let (generation, policy_bytes) = <[u8; 16]>::ref_from_prefix(aligned_tail)
             .map_err(|_| ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned()))?;
 
         let mut hasher = Hasher::new();
@@ -975,15 +985,18 @@ impl DataWithCachePolicy {
             );
         }
 
+        // Validate only the policy slice: relative pointers must not reach into the payload,
+        // generation, or footer, even when those bytes happen to contain a valid archived value.
+        rkyv::access::<ArchivedCachePolicy, rkyv::rancor::Error>(policy_bytes)
+            .map_err(|err| ErrorKind::ArchiveRead(err.to_string()))?;
         let generation = *generation;
-        let mut policy = AlignedVec::with_capacity(policy_bytes.len());
-        policy.extend_from_slice(policy_bytes);
-        let cache_policy = OwnedArchive::new(policy)?;
-
-        bytes.resize(data_len, 0);
+        let policy_start = contents.len() - policy_bytes.len();
+        let contents_len = contents.len();
+        bytes.resize(contents_len, 0);
         Ok(Self {
-            data: bytes,
-            cache_policy,
+            bytes,
+            data_len,
+            policy_start,
             generation,
         })
     }
@@ -995,8 +1008,10 @@ impl DataWithCachePolicy {
             .as_array::<16>()
             .expect("IDs have 16 bytes");
         let tail = Self::serialize_policy(policy, &generation, data.len())?;
-        let mut bytes = Vec::with_capacity(data.len() + generation.len() + tail.len());
+        let generation_start = data.len() + Self::padding_len(data.len());
+        let mut bytes = Vec::with_capacity(generation_start + generation.len() + tail.len());
         bytes.extend_from_slice(data);
+        bytes.resize(generation_start, 0);
         bytes.extend_from_slice(&generation);
         bytes.extend_from_slice(&tail);
         Ok(bytes)
@@ -1010,11 +1025,13 @@ impl DataWithCachePolicy {
     ) -> Result<Vec<u8>, Error> {
         let policy = OwnedArchive::from_unarchived(policy)?;
         let policy = OwnedArchive::as_bytes(&policy);
+        let padding_len = Self::padding_len(data_len);
         let data_len = U64::new(
             u64::try_from(data_len).map_err(|err| ErrorKind::ArchiveWrite(err.to_string()))?,
         );
 
         let mut hasher = Hasher::new();
+        hasher.update(&[0; AlignedVec::<16>::ALIGNMENT][..padding_len]);
         hasher.update(generation);
         hasher.update(policy);
         hasher.update(data_len.as_bytes());
@@ -1027,6 +1044,29 @@ impl DataWithCachePolicy {
         bytes.extend_from_slice(policy);
         bytes.extend_from_slice(footer.as_bytes());
         Ok(bytes)
+    }
+
+    /// Return the payload in the original allocation, discarding the policy and its padding.
+    pub fn into_data(mut self) -> AlignedVec {
+        self.bytes.resize(self.data_len, 0);
+        self.bytes
+    }
+
+    /// Borrow the policy from the validated, immutable portion of the shared buffer.
+    fn cache_policy(&self) -> &ArchivedCachePolicy {
+        // SAFETY: `from_aligned_bytes` validates this exact aligned slice as an
+        // `ArchivedCachePolicy`. The private buffer and its bounds remain immutable until
+        // `into_data` consumes `self`, so the archive remains valid for the returned lifetime.
+        #[expect(unsafe_code)]
+        unsafe {
+            rkyv::access_unchecked::<ArchivedCachePolicy>(&self.bytes[self.policy_start..])
+        }
+    }
+
+    /// Return the zero padding needed to align the generation and policy to the buffer.
+    fn padding_len(data_len: usize) -> usize {
+        (AlignedVec::<16>::ALIGNMENT - data_len % AlignedVec::<16>::ALIGNMENT)
+            % AlignedVec::<16>::ALIGNMENT
     }
 
     /// Refresh only the policy tail of the file whose payload was revalidated.
@@ -1044,8 +1084,10 @@ impl DataWithCachePolicy {
             }
             Err(err) => return Err(ErrorKind::CacheWrite(err).into()),
         };
-        file.seek(SeekFrom::Start(self.data.len() as u64))
-            .map_err(ErrorKind::CacheWrite)?;
+        file.seek(SeekFrom::Start(
+            (self.policy_start - self.generation.len()) as u64,
+        ))
+        .map_err(ErrorKind::CacheWrite)?;
         let mut generation = [0; 16];
         match file.read_exact(&mut generation) {
             Ok(()) => {}
@@ -1056,9 +1098,9 @@ impl DataWithCachePolicy {
             // A newer response replaced the entry while this request was in flight.
             return Ok(());
         }
-        let tail = Self::serialize_policy(policy, &generation, self.data.len())?;
+        let tail = Self::serialize_policy(policy, &generation, self.data_len)?;
         file.write_all(&tail).map_err(ErrorKind::CacheWrite)?;
-        file.set_len((self.data.len() + generation.len() + tail.len()) as u64)
+        file.set_len((self.policy_start + tail.len()) as u64)
             .map_err(ErrorKind::CacheWrite)?;
         Ok(())
     }
@@ -1067,8 +1109,14 @@ impl DataWithCachePolicy {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    use rkyv::util::AlignedVec;
+    use zerocopy::IntoBytes;
+    use zerocopy::byteorder::little_endian::{U32, U64};
 
-    use super::{CachePolicy, CachePolicyBuilder, DataWithCachePolicy, OwnedArchive};
+    use super::{
+        ArchivedCachePolicy, CachePolicy, CachePolicyBuilder, CachePolicyFooter,
+        DataWithCachePolicy, Hasher, OwnedArchive,
+    };
 
     /// Build policies with different serialized sizes without depending on wall-clock changes.
     fn policy(vary: &str) -> Result<CachePolicy> {
@@ -1083,12 +1131,63 @@ mod tests {
     }
 
     #[test]
+    fn payload_and_policy_share_an_aligned_buffer() -> Result<()> {
+        let policy = policy("x-small")?;
+        for data_len in 0..32 {
+            let payload = vec![42; data_len];
+            let serialized = DataWithCachePolicy::serialize(&policy, &payload)?;
+            let mut bytes = AlignedVec::with_capacity(serialized.len());
+            bytes.extend_from_slice(&serialized);
+            let allocation = bytes.as_ptr();
+            let cached = DataWithCachePolicy::from_aligned_bytes(bytes)?;
+
+            assert_eq!(cached.policy_start % AlignedVec::<16>::ALIGNMENT, 0);
+            assert_eq!(
+                &cached.bytes[cached.policy_start..],
+                OwnedArchive::as_bytes(&policy.to_archived()),
+            );
+            let data = cached.into_data();
+            assert_eq!(data.as_ptr(), allocation);
+            assert_eq!(data.as_slice(), payload);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn policy_pointers_cannot_reference_the_payload() -> Result<()> {
+        let policy = policy(&format!("x-{}", "large".repeat(20)))?;
+        let serialized = DataWithCachePolicy::serialize(&policy, b"")?;
+        let mut bytes = AlignedVec::new();
+        bytes.extend_from_slice(&serialized);
+        let footer_start = bytes.len() - size_of::<CachePolicyFooter>();
+
+        // Move the payload boundary into the policy's strings, leaving the archive's root and
+        // relative pointers intact. Recompute the checksum so rkyv must reject those pointers.
+        let data_len = U64::new(16);
+        let mut hasher = Hasher::new();
+        hasher.update(&bytes[usize::try_from(data_len.get())?..footer_start]);
+        hasher.update(data_len.as_bytes());
+        let footer = CachePolicyFooter {
+            checksum: U32::new(hasher.finalize()),
+            data_len,
+        };
+        bytes[footer_start..].copy_from_slice(footer.as_bytes());
+
+        assert!(
+            rkyv::access::<ArchivedCachePolicy, rkyv::rancor::Error>(&bytes[..footer_start])
+                .is_ok()
+        );
+        assert!(DataWithCachePolicy::from_aligned_bytes(bytes).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn policy_can_grow_and_shrink_in_place() -> Result<()> {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("response");
         let small = policy("x-small")?;
         let large = policy(&format!("x-{}", "large".repeat(1000)))?;
-        let payload = vec![42; 1024 * 1024];
+        let payload = vec![42; 1024 * 1024 + 7];
         let original = DataWithCachePolicy::serialize(&small, &payload)?;
         fs_err::write(&path, &original)?;
         let cached = DataWithCachePolicy::from_path_sync(&path)?;
@@ -1096,10 +1195,10 @@ mod tests {
         cached.refresh_policy(&path, &large)?;
         assert!(fs_err::metadata(&path)?.len() > original.len() as u64);
         let grown = DataWithCachePolicy::from_path_sync(&path)?;
-        assert_eq!(grown.data.as_slice(), payload);
+        assert_eq!(&grown.bytes[..grown.data_len], payload);
         assert_eq!(grown.generation, cached.generation);
         assert_eq!(
-            OwnedArchive::as_bytes(&grown.cache_policy),
+            &grown.bytes[grown.policy_start..],
             OwnedArchive::as_bytes(&large.to_archived()),
         );
 
@@ -1115,12 +1214,9 @@ mod tests {
         for (before, after) in [(&small, &large), (&large, &small)] {
             let original = DataWithCachePolicy::serialize(before, b"payload")?;
             let cached = DataWithCachePolicy::from_reader(original.as_slice())?;
-            let tail = DataWithCachePolicy::serialize_policy(
-                after,
-                &cached.generation,
-                cached.data.len(),
-            )?;
-            let offset = cached.data.len() + cached.generation.len();
+            let tail =
+                DataWithCachePolicy::serialize_policy(after, &cached.generation, cached.data_len)?;
+            let offset = cached.policy_start;
             let before = before.to_archived();
             let after = after.to_archived();
             // Model every interruption point in write_all, before set_len truncates a shorter policy.
@@ -1129,8 +1225,8 @@ mod tests {
                 interrupted.resize(interrupted.len().max(offset + written), 0);
                 interrupted[offset..offset + written].copy_from_slice(&tail[..written]);
                 if let Ok(read) = DataWithCachePolicy::from_reader(interrupted.as_slice()) {
-                    assert_eq!(read.data.as_slice(), b"payload");
-                    let policy = OwnedArchive::as_bytes(&read.cache_policy);
+                    assert_eq!(&read.bytes[..read.data_len], b"payload");
+                    let policy = &read.bytes[read.policy_start..];
                     assert!(
                         policy == OwnedArchive::as_bytes(&before)
                             || policy == OwnedArchive::as_bytes(&after)
@@ -1144,7 +1240,7 @@ mod tests {
     #[test]
     fn cache_trailer_corruption_is_rejected() -> Result<()> {
         let bytes = DataWithCachePolicy::serialize(&policy("x-small")?, b"payload")?;
-        // The checksum covers the generation, policy, and length; corrupt each byte in turn.
+        // The checksum covers the padding, generation, policy, and length; corrupt each byte in turn.
         for index in b"payload".len()..bytes.len() {
             let mut corrupted = bytes.clone();
             corrupted[index] ^= 1;

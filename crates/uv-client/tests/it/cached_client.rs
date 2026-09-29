@@ -68,7 +68,7 @@ async fn revalidation_updates_only_policy() -> Result<()> {
 
     let original = fs_err::read(&entry)?;
     let data_len = DataWithCachePolicy::from_reader(original.as_slice())?
-        .data
+        .into_data()
         .len();
     // A hardlink observes in-place changes, but would retain the old file after a rename.
     let alias = temp_dir.path().join("alias");
@@ -95,7 +95,10 @@ async fn revalidation_updates_only_policy() -> Result<()> {
         body
     );
     let refreshed = fs_err::read(&entry)?;
-    assert_eq!(refreshed[..data_len + 16], original[..data_len + 16]);
+    assert_eq!(
+        refreshed[..data_len.next_multiple_of(16) + 16],
+        original[..data_len.next_multiple_of(16) + 16]
+    );
     assert_ne!(refreshed, original);
     assert_eq!(fs_err::read(alias)?, refreshed);
     assert!(refreshed.len() - data_len < 1024);
@@ -202,7 +205,7 @@ async fn overlapping_policy_updates_are_refetched() -> Result<()> {
     );
     let large = fs_err::read(&entry)?;
     let data_len = DataWithCachePolicy::from_reader(large.as_slice())?
-        .data
+        .into_data()
         .len();
     server.verify().await;
     server.reset().await;
@@ -225,7 +228,7 @@ async fn overlapping_policy_updates_are_refetched() -> Result<()> {
 
     // Model a writer paused between writing a longer policy and setting the file length.
     let mut writer = fs_err::OpenOptions::new().write(true).open(entry.path())?;
-    let policy_start = data_len + 16;
+    let policy_start = data_len.next_multiple_of(16) + 16;
     writer.seek(SeekFrom::Start(policy_start as u64))?;
     writer.write_all(&large[policy_start..])?;
 
@@ -359,10 +362,10 @@ async fn torn_policy_is_refetched() -> Result<()> {
     );
     let original = fs_err::read(&entry)?;
     let data_len = DataWithCachePolicy::from_reader(original.as_slice())?
-        .data
+        .into_data()
         .len();
     let mut torn = original.clone();
-    torn[data_len + 16] ^= 1;
+    torn[data_len.next_multiple_of(16) + 16] ^= 1;
     fs_err::write(&entry, &torn)?;
     assert_eq!(
         cached_text(&client, &server, &entry, CacheControl::None).await?,
