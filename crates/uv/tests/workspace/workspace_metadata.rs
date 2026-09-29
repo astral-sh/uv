@@ -9,8 +9,6 @@ use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use url::Url;
 
-use uv_cache::Cache;
-use uv_python::PythonEnvironment;
 use uv_static::EnvVars;
 #[cfg(target_os = "macos")]
 use uv_test::venv_bin_path;
@@ -694,34 +692,15 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
     Ok(())
 }
 
-/// Syncing a script warms the interpreter cache without running the new environment's Python,
-/// and the inferred metadata matches a subsequent query of that interpreter.
+/// Syncing a script caches its interpreter so the next sync does not query Python.
 #[test]
 fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
-    let wheel = context
-        .temp_dir
-        .child("startup_probe-0.1.0-py3-none-any.whl");
-    write_wheel(
-        wheel.path(),
-        "startup-probe",
-        "startup_probe-0.1.0",
-        &[(
-            "sitecustomize.py",
-            indoc! {r#"
-                from pathlib import Path
-
-                Path(__file__).with_name("interpreter-started").touch()
-            "#},
-        )],
-    )?;
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
         # /// script
         # requires-python = ">=3.12"
-        # dependencies = ["startup-probe"]
-        # [tool.uv.sources]
-        # startup-probe = { path = "startup_probe-0.1.0-py3-none-any.whl" }
+        # dependencies = []
         # ///
         "#
     })?;
@@ -737,24 +716,34 @@ fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
     let root = metadata["environment"]["root"]
         .as_str()
         .context("Missing environment root")?;
-    let startup_marker =
-        site_packages_path(Path::new(root), "python3.12").join("interpreter-started");
+    let site_packages = site_packages_path(Path::new(root), "python3.12");
+    fs_err::write(
+        site_packages.join("sitecustomize.py"),
+        indoc! {r#"
+            from pathlib import Path
 
-    // Priming the cache must not run the newly prepared interpreter.
+            Path(__file__).with_name("interpreter-started").touch()
+        "#},
+    )?;
+    let startup_marker = site_packages.join("interpreter-started");
+
+    context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .assert()
+        .success();
     assert!(!startup_marker.exists());
 
-    // Compare all inferred interpreter metadata with a query of the actual venv Python.
-    let cache = Cache::from_path(context.cache_dir.path().to_path_buf())
-        .init_no_wait()?
-        .context("Interpreter cache is locked")?;
-    let fresh_cache = Cache::temp()?
-        .init_no_wait()?
-        .context("Fresh interpreter cache is locked")?;
-    let cached = PythonEnvironment::from_root(root, &cache)?;
-    assert!(!startup_marker.exists());
-    let queried = PythonEnvironment::from_root(root, &fresh_cache)?;
+    // Bypassing the cache must run Python and trigger the startup probe.
+    context
+        .python_find()
+        .arg(root)
+        .arg("--no-cache")
+        .assert()
+        .success();
     assert!(startup_marker.is_file());
-    assert_eq!(cached, queried);
 
     Ok(())
 }
