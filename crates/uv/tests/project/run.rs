@@ -3091,7 +3091,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Installed 2 packages in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + typing-extensions==4.10.0
-    warning: Ignoring `--index-url` from requirements file: https://test.pypi.org/simple. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
