@@ -83,16 +83,18 @@ fn create_venv_caches_interpreter() -> Result<()> {
     // It should cache for both a system interpreter and when starting from another venv.
     for python in [Path::new("3.12"), context.venv.path()] {
         let root = tempfile::tempdir_in(context.temp_dir.path())?;
+        // On Windows, canonicalization returns a verbatim path.
+        let root_path = root.path().canonicalize()?;
         context
             .venv()
-            .arg(root.path())
+            .arg(&root_path)
             .arg("--clear")
             .arg("--python")
             .arg(python)
             .assert()
             .success();
 
-        let site_packages = site_packages_path(root.path(), "python3.12");
+        let site_packages = site_packages_path(&root_path, "python3.12");
         fs_err::write(
             site_packages.join("sitecustomize.py"),
             indoc! {r#"
@@ -106,7 +108,7 @@ fn create_venv_caches_interpreter() -> Result<()> {
         // Recreating the venv without clearing its packages must not run its Python to cache it.
         context
             .venv()
-            .arg(root.path())
+            .arg(&root_path)
             .arg("--allow-existing")
             .arg("--python")
             .arg(python)
@@ -114,13 +116,13 @@ fn create_venv_caches_interpreter() -> Result<()> {
             .success();
         assert!(!startup_marker.exists());
 
-        let cached = PythonEnvironment::from_root(root.path(), &cache)?;
+        let cached = PythonEnvironment::from_root(&root_path, &cache)?;
         assert!(!startup_marker.exists());
 
         let fresh_cache = Cache::temp()?
             .init_no_wait()?
             .context("Fresh interpreter cache is locked")?;
-        let queried = PythonEnvironment::from_root(root.path(), &fresh_cache)?;
+        let queried = PythonEnvironment::from_root(&root_path, &fresh_cache)?;
         assert!(startup_marker.is_file());
         assert_eq!(cached, queried);
     }
