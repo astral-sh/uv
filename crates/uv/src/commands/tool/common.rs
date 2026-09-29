@@ -345,6 +345,7 @@ impl ToolLock {
             Vec::new(),
             index_locations,
             false,
+            Conflicts::empty(),
         )?;
         Ok(Self {
             root: root.to_path_buf(),

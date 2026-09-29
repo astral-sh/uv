@@ -16,7 +16,10 @@ use uv_pep440::{
 use uv_pep508::MarkerTree;
 use version_ranges::Ranges;
 
-use crate::{ExcludeDependency, Excludes, Override, PackageOverride, PackageOverrideTarget};
+use crate::{
+    ExcludeDependency, Excludes, Override, PackageOverride, PackageOverrideTarget,
+    specifier_opts_into_prereleases,
+};
 
 mod coverage;
 
@@ -241,7 +244,7 @@ impl RequirementsKey {
         let range = if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
             yanked = allows_yanked(specifier.iter());
             let ranges = mem::take(specifier).into_iter().map(|specifier| {
-                prerelease |= allows_prereleases(&specifier);
+                prerelease |= specifier_opts_into_prereleases(&specifier);
                 Ranges::from(specifier)
             });
             intersect_ranges(ranges)
@@ -449,7 +452,7 @@ fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
     let mut retained_count = specifiers.len();
     let mut prerelease_count = specifiers
         .iter()
-        .filter(|specifier| allows_prereleases(specifier))
+        .filter(|specifier| specifier_opts_into_prereleases(specifier))
         .count();
     for (index, specifier) in specifiers.iter().enumerate() {
         let remaining = specifiers
@@ -458,14 +461,14 @@ fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
             .filter(|(other_index, _)| *other_index != index && retained[*other_index])
             .map(|(_, specifier)| specifier);
         if (retained_count == 2 && allows_yanked(remaining))
-            || (allows_prereleases(specifier) && prerelease_count == 1)
+            || (specifier_opts_into_prereleases(specifier) && prerelease_count == 1)
         {
             continue;
         }
         if coverage.is_redundant(&exclusions[index]) {
             retained[index] = false;
             retained_count -= 1;
-            prerelease_count -= usize::from(allows_prereleases(specifier));
+            prerelease_count -= usize::from(specifier_opts_into_prereleases(specifier));
             coverage.remove(&exclusions[index]);
         }
     }
@@ -525,22 +528,6 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     }
 }
 
-/// Whether this clause opts into prereleases under the explicit prerelease policy.
-/// Excluding a prerelease, as in `!=1rc1`, does not opt in.
-fn allows_prereleases(specifier: &VersionSpecifier) -> bool {
-    match specifier.operator() {
-        Operator::NotEqual | Operator::NotEqualStar => false,
-        Operator::Equal
-        | Operator::EqualStar
-        | Operator::ExactEqual
-        | Operator::TildeEqual
-        | Operator::LessThan
-        | Operator::LessThanEqual
-        | Operator::GreaterThan
-        | Operator::GreaterThanEqual => specifier.any_prerelease(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -555,8 +542,8 @@ mod tests {
     use crate::{ExcludeDependency, Excludes, Overrides};
 
     use super::{
-        NormalizedExcludes, NormalizedRequirements, allows_prereleases, allows_yanked,
-        simplify_specifiers,
+        NormalizedExcludes, NormalizedRequirements, allows_yanked, simplify_specifiers,
+        specifier_opts_into_prereleases,
     };
 
     fn requirements(inputs: &[&str]) -> Result<Vec<Requirement>> {
@@ -827,8 +814,8 @@ mod tests {
                 let original = VersionSpecifiers::from_str(&format!("{left},{right}"))?;
                 let normalized = simplify_specifiers(original.clone());
                 assert_eq!(
-                    original.iter().any(allows_prereleases),
-                    normalized.iter().any(allows_prereleases),
+                    original.iter().any(specifier_opts_into_prereleases),
+                    normalized.iter().any(specifier_opts_into_prereleases),
                     "{original} -> {normalized}"
                 );
                 assert_eq!(

@@ -1158,8 +1158,8 @@ async fn do_lock(
                 lock_supported_environments.clone().into_markers(),
                 index_locations,
                 preview.is_enabled(PreviewFeature::LockWithoutMetadata),
+                conflicts,
             )?
-            .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
 
             let lock = if let Some(recorder) = recorder {
@@ -1528,9 +1528,15 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedSourceMetadata(name) => {
+            SatisfiesResult::UnauthorizedSource(name) => {
                 debug!(
-                    "Resolving despite existing lockfile because source metadata for `{name}` could not be refreshed"
+                    "Resolving despite existing lockfile because the source for `{name}` is no longer authorized"
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::UnauthorizedPrerelease(name) => {
+                debug!(
+                    "Resolving despite existing lockfile because the prerelease for `{name}` is no longer enabled"
                 );
                 Ok(Self::Preferable(lock))
             }

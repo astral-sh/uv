@@ -2,13 +2,18 @@ use std::collections::BTreeSet;
 use std::mem;
 use std::path::Path;
 
-use uv_configuration::{ExcludeDependency, NormalizedConstraints, Override};
+use uv_configuration::{
+    ExcludeDependency, NormalizedConstraints, Override, PrereleaseMode,
+    specifier_opts_into_prereleases,
+};
 use uv_distribution_types::{Requirement, RequirementSource, ResolutionLookups, StaticMetadata};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_preview::PreviewFeature;
 
+use super::prereleases::PrereleaseConstraints;
 use super::requirements::normalize_collection;
-use super::{Lock, Package};
+use super::{Lock, Package, Source};
 
 impl Lock {
     /// Retain settings for locked packages and settings consulted during runtime resolution.
@@ -41,11 +46,12 @@ impl Lock {
 
     /// Omit redundant constraints before normalizing the remaining declarations.
     pub(super) fn prune_constraints(mut self, root: &Path) -> Self {
+        let prereleases = PrereleaseConstraints::new(&self, self.manifest.constraints.iter());
         let constraints = mem::take(&mut self.manifest.constraints);
         self.manifest.constraints = normalize_collection::<_, NormalizedConstraints>(
             constraints
                 .into_iter()
-                .filter(|constraint| !self.can_omit_constraint(constraint, root)),
+                .filter(|constraint| !self.can_omit_constraint(constraint, root, &prereleases)),
             uv_preview::is_enabled(PreviewFeature::LockfileNormalization),
         );
         self
@@ -54,9 +60,36 @@ impl Lock {
     /// Return whether a version bound is satisfied by every locked version.
     ///
     /// Check every version regardless of markers: an inapplicable bound that does not contain a
-    /// locked version must be retained to avoid resolving unchanged inputs repeatedly. A locked
-    /// prerelease remains valid when a constraint that originally opted it in is removed.
-    pub(super) fn can_omit_constraint(&self, constraint: &Requirement, root: &Path) -> bool {
+    /// locked version must be retained to avoid resolving unchanged inputs repeatedly.
+    pub(super) fn can_omit_constraint(
+        &self,
+        constraint: &Requirement,
+        root: &Path,
+        prereleases: &PrereleaseConstraints,
+    ) -> bool {
+        // Under the explicit policy, removing a constraint can revoke the opt-in that made a
+        // registry prerelease eligible. Direct sources do not use registry candidate selection.
+        if let RequirementSource::Registry { specifier, .. } = &constraint.source
+            && self.options.prerelease.mode(&constraint.name) == PrereleaseMode::Explicit
+            && specifier.iter().any(specifier_opts_into_prereleases)
+            && !prereleases.can_omit(&constraint.name)
+            && self
+                .packages_for_name(&constraint.name)
+                .iter()
+                .any(|package| {
+                    let Source::Registry(_) = &package.id.source else {
+                        return false;
+                    };
+                    package
+                        .id
+                        .version
+                        .as_ref()
+                        .is_some_and(Version::any_prerelease)
+                })
+        {
+            return false;
+        }
+
         let RequirementSource::Registry {
             specifier,
             index: None,
@@ -180,6 +213,11 @@ impl ManifestFilter {
         self.packages.contains(&requirement.name)
             || self.lookups.constraints.contains(&requirement.name)
             || self.lookups.candidate_policy.contains(&requirement.name)
+    }
+
+    /// Return whether the lock records a constraint for this package.
+    pub(super) fn has_retained_constraint(&self, name: &PackageName) -> bool {
+        self.lookups.constraints.contains(name)
     }
 
     pub(super) fn includes_override(&self, entry: &Override<Requirement>) -> bool {

@@ -77,6 +77,7 @@ pub use crate::lock::export::{
 use crate::lock::inputs::ManifestFilter;
 pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
+use crate::lock::prereleases::PrereleaseConstraints;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
@@ -86,6 +87,7 @@ pub(crate) mod export;
 mod inputs;
 mod installable;
 mod map;
+mod prereleases;
 mod requirements;
 mod serialize;
 mod sources;
@@ -2439,6 +2441,7 @@ impl Lock {
         supported_environments: Vec<MarkerTree>,
         index_locations: &IndexLocations,
         metadata_free: bool,
+        conflicts: Conflicts,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
@@ -2603,7 +2606,7 @@ impl Lock {
             requires_python,
             options,
             manifest,
-            Conflicts::empty(),
+            conflicts,
             supported_environments,
             vec![],
             fork_markers,
@@ -2768,13 +2771,6 @@ impl Lock {
             manifest,
         };
         Ok(lock)
-    }
-
-    /// Record the conflicting groups that were used to generate this lock.
-    #[must_use]
-    pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
-        self.conflicts = conflicts;
-        self
     }
 
     /// Record the required platforms that were used to generate this lock.
@@ -4087,14 +4083,22 @@ impl Lock {
 
         let filter = ManifestFilter::from_lock(self);
         let omit_constraints = uv_preview::is_enabled(PreviewFeature::ResolutionInputs);
+        let prereleases = PrereleaseConstraints::new(
+            self,
+            self.manifest.constraints.iter().chain(constraints.iter()),
+        );
 
-        let normalized_constraints = {
+        {
             let expected = normalizer.constraints(
                 constraints
                     .iter()
                     .filter(|entry| {
                         filter.includes_constraint(entry)
-                            && (!omit_constraints || !self.can_omit_constraint(entry, root))
+                            // A preview-written lock may omit constraints even when the preview
+                            // is now disabled. Compare retained declarations normally, and check
+                            // compatible inputs against the graph when none were recorded.
+                            && (!omit_constraints && filter.has_retained_constraint(&entry.name)
+                                || !self.can_omit_constraint(entry, root, &prereleases))
                     })
                     .cloned(),
             )?;
@@ -4102,7 +4106,9 @@ impl Lock {
                 self.manifest
                     .constraints
                     .iter()
-                    .filter(|entry| !omit_constraints || !self.can_omit_constraint(entry, root))
+                    .filter(|entry| {
+                        !omit_constraints || !self.can_omit_constraint(entry, root, &prereleases)
+                    })
                     .cloned(),
             )?;
             if expected != actual {
@@ -4111,8 +4117,7 @@ impl Lock {
                     actual.into_iter().collect(),
                 ));
             }
-            expected.into_iter().collect()
-        };
+        }
 
         let normalized_overrides = {
             let expected = normalizer.overrides(
@@ -4257,9 +4262,50 @@ impl Lock {
                 !dependency_excludes.contains_for_package(None, &requirement.name)
             })
             .collect::<Vec<_>>();
+        // Source constraints omitted from the manifest still authorize their current sources.
+        // Retain all current constraints for source discovery, independently of comparison.
+        let external_source = self.simple_external_source();
+        let source_constraints = if allow_missing_package_metadata || external_source.is_some() {
+            normalizer
+                .constraints(
+                    constraints
+                        .iter()
+                        .filter(|entry| filter.includes_constraint(entry))
+                        .cloned(),
+                )?
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+        } else {
+            BTreeSet::new()
+        };
+        if let Some(package) = external_source {
+            let mut selected = false;
+            for constraint in &source_constraints {
+                if Self::source_selected_by(package, constraint, root)? {
+                    selected = true;
+                    break;
+                }
+            }
+            // A workspace root is checked before its dependencies. If its recorded metadata
+            // independently selects this source, a change to that declaration is detected
+            // before the source itself is read.
+            if !selected && let Some(workspace_root) = self.root() {
+                for requirement in &workspace_root.metadata.requires_dist {
+                    let requirement =
+                        normalize_requirement(requirement.clone(), root, &self.requires_python)?;
+                    if Self::source_selected_by(package, &requirement, root)? {
+                        selected = true;
+                        break;
+                    }
+                }
+            }
+            if !selected {
+                return Ok(SatisfiesResult::UnauthorizedSource(&package.id.name));
+            }
+        }
         let dependency_sources = if allow_missing_package_metadata {
             Box::pin(self.collect_dependency_sources(
-                normalized_constraints,
+                source_constraints,
                 &root_requirements,
                 dependency_metadata,
                 &dependency_overrides,
@@ -4464,30 +4510,20 @@ impl Lock {
                 // If the distribution is a source tree, attempt to validate it from statically
                 // available `pyproject.toml` metadata before converting it to an installable
                 // distribution. This avoids requiring build permission for static local packages.
-                let source_tree_metadata =
-                    if let Some(source_tree) = package.id.source.as_source_tree() {
-                        match Self::source_tree_requires_dist_cached(
-                            source_tree,
-                            root,
-                            package,
-                            database,
-                            &mut source_tree_metadata,
-                        )
-                        .await
-                        {
-                            Ok(metadata) => metadata,
-                            Err(error) => {
-                                return self.source_metadata_error(package, root, error);
-                            }
-                        }
-                    } else {
-                        None
-                    };
-                let statically_satisfied = if let Some(SourceTreeRequiresDist {
-                    version: static_version,
-                    requires_python,
-                    metadata,
-                }) = source_tree_metadata
+                let statically_satisfied = if let Some(source_tree) =
+                    package.id.source.as_source_tree()
+                    && let Some(SourceTreeRequiresDist {
+                        version: static_version,
+                        requires_python,
+                        metadata,
+                    }) = Self::source_tree_requires_dist_cached(
+                        source_tree,
+                        root,
+                        package,
+                        database,
+                        &mut source_tree_metadata,
+                    )
+                    .await?
                 {
                     // If this local package has become dynamic, the locked package should
                     // no longer contain a version.
@@ -4545,7 +4581,7 @@ impl Lock {
                 if !statically_satisfied {
                     // For a non-dynamic package without usable static metadata, fetch the metadata
                     // from the distribution database.
-                    let metadata = match Self::package_metadata(
+                    let metadata = Self::package_metadata(
                         package,
                         root,
                         tags,
@@ -4555,13 +4591,7 @@ impl Lock {
                         index,
                         database,
                     )
-                    .await
-                    {
-                        Ok(metadata) => metadata,
-                        Err(error) => {
-                            return self.source_metadata_error(package, root, error);
-                        }
-                    };
+                    .await?;
 
                     // If this is a local package, validate that it hasn't become dynamic (in which
                     // case, we'd expect the version to be omitted).
@@ -4626,20 +4656,14 @@ impl Lock {
                     // available from the built distribution metadata.
                     None
                 } else {
-                    match Self::source_tree_requires_dist_cached(
+                    Self::source_tree_requires_dist_cached(
                         source_tree,
                         root,
                         package,
                         database,
                         &mut source_tree_metadata,
                     )
-                    .await
-                    {
-                        Ok(metadata) => metadata,
-                        Err(error) => {
-                            return self.source_metadata_error(package, root, error);
-                        }
-                    }
+                    .await?
                 };
 
                 let satisfied = metadata.is_some_and(|SourceTreeRequiresDist {
@@ -4704,7 +4728,7 @@ impl Lock {
                 // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
                 // extras, while `setuptools` will not.
                 if !satisfied {
-                    let metadata = match Self::package_metadata(
+                    let metadata = Self::package_metadata(
                         package,
                         root,
                         tags,
@@ -4714,13 +4738,7 @@ impl Lock {
                         index,
                         database,
                     )
-                    .await
-                    {
-                        Ok(metadata) => metadata,
-                        Err(error) => {
-                            return self.source_metadata_error(package, root, error);
-                        }
-                    };
+                    .await?;
 
                     // Validate that the package is still dynamic.
                     if !metadata.dynamic {
@@ -4780,6 +4798,12 @@ impl Lock {
                     queue.push_back(dependency.index);
                 }
             }
+        }
+
+        if let Some(name) =
+            self.unsatisfied_prerelease(&prereleases, constraints, overrides, excludes)?
+        {
+            return Ok(SatisfiesResult::UnauthorizedPrerelease(name));
         }
 
         Ok(SatisfiesResult::Satisfied)
@@ -5937,8 +5961,10 @@ pub enum SatisfiesResult<'lock> {
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
-    /// Metadata for a previously selected source could not be refreshed.
-    MismatchedSourceMetadata(&'lock PackageName),
+    /// A locked source is no longer selected by the current requirements or constraints.
+    UnauthorizedSource(&'lock PackageName),
+    /// A locked prerelease is no longer enabled by the current requirements or constraints.
+    UnauthorizedPrerelease(&'lock PackageName),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,

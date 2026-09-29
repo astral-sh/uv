@@ -3,94 +3,97 @@ use std::path::Path;
 use uv_distribution_types::{Requirement, RequirementSource};
 
 use super::requirements::normalize_requirement;
-use super::{Lock, LockError, LockErrorKind, Package, SatisfiesResult, Source, normalize_url};
+use super::{Lock, LockError, Package, Source};
 
 impl Lock {
-    /// Retry resolution if a local source is gone or a direct artifact returns a 404.
+    /// Return the workspace root when its declarations can be checked without marker forks.
     ///
-    /// Only a confirmed missing artifact can be retried: authentication, hash validation,
-    /// build, and other metadata errors must remain visible.
-    pub(super) fn source_metadata_error<'lock>(
-        &'lock self,
-        package: &'lock Package,
-        root: &Path,
-        error: LockError,
-    ) -> Result<SatisfiesResult<'lock>, LockError> {
-        let can_retry = !self.supports_missing_package_metadata()
-            && !self.is_workspace_package(package)
-            && match &package.id.source {
-                Source::Path(path)
-                | Source::Directory(path)
-                | Source::Editable(path)
-                | Source::Virtual(path) => matches!(root.join(path).try_exists(), Ok(false)),
-                Source::Direct(url, _) => {
-                    if let LockErrorKind::Resolution {
-                        err: uv_distribution::Error::Client(client_error),
-                        ..
-                    } = &*error.kind
-                        && let uv_client::ErrorKind::WrappedReqwestError(request_url, request_error) =
-                            client_error.kind()
-                    {
-                        let mut request_url = request_url.clone();
-                        request_url.remove_credentials();
-                        request_error.is_user_failure() && normalize_url(request_url) == *url
-                    } else {
-                        false
-                    }
-                }
-                Source::Registry(_) | Source::Git(..) => false,
-            };
-        if can_retry {
-            tracing::debug!("Could not refresh metadata for `{}`: {error}", package.id);
-            Ok(SatisfiesResult::MismatchedSourceMetadata(&package.id.name))
-        } else {
-            Err(error)
+    /// Restrict the check to unconditional edges from one workspace root. A more general graph
+    /// can have declarations that apply only in particular extras, groups, or conflict contexts
+    /// and needs full marker coverage.
+    pub(super) fn simple_root(&self) -> Option<&Package> {
+        let root = self.root()?;
+        if self.supports_missing_package_metadata()
+            || root.is_dynamic()
+            || !root.has_metadata()
+            || !self.fork_markers.is_empty()
+            || !self.conflicts.is_empty()
+            || !self.manifest.requirements.is_empty()
+            || !self.manifest.dependency_groups.is_empty()
+            || !self.manifest.overrides.is_empty()
+            || !self.manifest.excludes.is_empty()
+            || !self.manifest.dependency_metadata.is_empty()
+        {
+            return None;
         }
+        if self.packages.iter().any(|package| {
+            !package.fork_markers.is_empty()
+                || !package.optional_dependencies.is_empty()
+                || !package.dependency_groups.is_empty()
+                || self.is_workspace_package(package) && package.id != root.id
+                || package.dependencies.iter().any(|dependency| {
+                    !dependency.extra.is_empty()
+                        || !dependency
+                            .simplified_marker
+                            .as_simplified_marker_tree()
+                            .is_true()
+                })
+        }) {
+            return None;
+        }
+        if !root.metadata.provides_extra.is_empty()
+            || !root.metadata.dependency_groups.is_empty()
+            || root
+                .metadata
+                .requires_dist
+                .iter()
+                .any(|requirement| !requirement.marker.is_true())
+        {
+            return None;
+        }
+        Some(root)
     }
 
-    /// Return whether a source constraint is satisfied by every locked package with its name.
-    ///
-    /// Locks without package metadata cannot distinguish a removed source constraint from a
-    /// removed first-party source declaration. Keep those constraints so validation can make
-    /// that distinction without inspecting an obsolete local source.
+    /// Return the only external source when its authorization can be checked from the root.
+    pub(super) fn simple_external_source(&self) -> Option<&Package> {
+        let mut external = self.packages.iter().filter(|package| {
+            !matches!(package.id.source, Source::Registry(_)) && !self.is_workspace_package(package)
+        });
+        let package = external.next()?;
+        if external.next().is_some() {
+            return None;
+        }
+        self.simple_root()?;
+        Some(package)
+    }
+
+    /// Return whether a current declaration selects this exact source without a marker.
+    pub(super) fn source_selected_by(
+        package: &Package,
+        requirement: &Requirement,
+        root: &Path,
+    ) -> Result<bool, LockError> {
+        if requirement.name != package.id.name || !requirement.marker.is_true() {
+            return Ok(false);
+        }
+        package
+            .id
+            .source
+            .satisfies_requirement_source(&requirement.source, root)
+    }
+
+    /// Omit an unconditional source constraint when its selected source can be revalidated.
     pub(super) fn can_omit_source_constraint(&self, constraint: &Requirement, root: &Path) -> bool {
-        if self.supports_missing_package_metadata() {
+        if matches!(constraint.source, RequirementSource::Registry { .. }) {
             return false;
         }
-        if matches!(
-            constraint.source,
-            RequirementSource::Registry { index: None, .. }
-        ) {
+        let Some(package) = self.simple_external_source() else {
             return false;
-        }
+        };
         let Ok(constraint) = normalize_requirement(constraint.clone(), root, &self.requires_python)
         else {
             return false;
         };
-        let packages = self.packages_for_name(&constraint.name);
-        !packages.is_empty()
-            && packages.iter().all(|package| {
-                let source_matches = package
-                    .id
-                    .source
-                    .satisfies_requirement_source(&constraint.source, root)
-                    .is_ok_and(|matches| matches);
-                let version_matches = match &constraint.source {
-                    RequirementSource::Registry { specifier, .. } if !specifier.is_empty() => {
-                        package
-                            .id
-                            .version
-                            .as_ref()
-                            .is_some_and(|version| specifier.contains(version))
-                    }
-                    RequirementSource::Registry { .. }
-                    | RequirementSource::Url { .. }
-                    | RequirementSource::GitDirectory { .. }
-                    | RequirementSource::GitPath { .. }
-                    | RequirementSource::Path { .. }
-                    | RequirementSource::Directory { .. } => true,
-                };
-                source_matches && version_matches
-            })
+        Self::source_selected_by(package, &constraint, root).is_ok_and(|selected| selected)
     }
 }
