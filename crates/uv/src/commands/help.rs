@@ -36,14 +36,14 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
             format!("`{}` for `uv {}`", unmatched.join(" "), nearest.get_name())
         };
         anyhow!(
-            "There is no command {}. Did you mean one of:\n    {}",
+            "There is no command {}. Did you mean one of:\n{}",
             missing,
             nearest
                 .get_subcommands()
                 .filter(|cmd| !cmd.is_hide_set())
                 .map(clap::Command::get_name)
                 .filter(|name| *name != "help")
-                .join("\n    "),
+                .join("\n"),
         )
     })?;
 

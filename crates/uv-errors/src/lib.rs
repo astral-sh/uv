@@ -753,9 +753,7 @@ mod tests {
     #[test]
     fn test_multiline_main_message_wraps_each_line() {
         #[derive(Debug, thiserror::Error)]
-        #[error(
-            "There is no command `foobar` for `uv`. Did you mean one of:\n    auth\n    run\n    init"
-        )]
+        #[error("There is no command `foobar` for `uv`. Did you mean one of:\nauth\nrun\ninit")]
         struct Suggestions;
 
         let error = Suggestions;
@@ -773,9 +771,9 @@ mod tests {
         assert_snapshot!(output, @r"
         error: There is no command `foobar` for `uv`. Did
                you mean one of:
-                   auth
-                   run
-                   init
+               auth
+               run
+               init
         ");
     }
 
