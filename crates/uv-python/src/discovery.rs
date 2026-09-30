@@ -1183,7 +1183,7 @@ fn find_python_installations_with_strategy<'a>(
             .and_then(|request| request.arch().map(ArchRequest::inner))
             .unwrap_or_else(|| arch.into_inner())
     });
-    let platform = PlatformRequest::default().with_default_arch(arch);
+    let platform = PlatformRequest::default().with_arch_if_unspecified(arch);
     let sources = DiscoveryPreferences {
         python_preference: preference,
         environment_preference: environments,
@@ -1355,7 +1355,7 @@ fn find_python_installations_with_strategy<'a>(
                 python_installations(
                     request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
-                    request.platform().with_default_arch(arch),
+                    request.platform().with_arch_if_unspecified(arch),
                     environments,
                     preference,
                     cache,
@@ -1646,7 +1646,7 @@ pub(crate) async fn find_best_python_installation(
 
             let download = download_request
                 .clone()
-                .with_default_arch(preferences.arch.map(PythonArchitecture::into_inner))
+                .with_arch_if_unspecified(preferences.arch.map(PythonArchitecture::into_inner))
                 .fill()
                 .map(|request| download_list.find(&request));
 
@@ -2292,7 +2292,7 @@ impl PythonRequest {
     }
 
     /// Apply an architecture to requests that do not already select one or name an executable.
-    pub(crate) fn with_default_arch(&self, arch: Option<Arch>) -> Cow<'_, Self> {
+    pub(crate) fn with_arch_if_unspecified(&self, arch: Option<Arch>) -> Cow<'_, Self> {
         let Some(arch) = arch else {
             return Cow::Borrowed(self);
         };

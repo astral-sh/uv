@@ -231,7 +231,9 @@ pub struct PythonDownloadRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArchRequest {
+    /// Require an exact architecture.
     Explicit(Arch),
+    /// Allow architectures supported by the detected host architecture.
     Environment(Arch),
 }
 
@@ -243,8 +245,9 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
+    /// Require the user-selected architecture if this request does not specify one.
     #[must_use]
-    pub(crate) fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
+    pub(crate) fn with_arch_if_unspecified(mut self, arch: Option<Arch>) -> Self {
         if self.arch.is_none() {
             self.arch = arch.map(ArchRequest::Explicit);
         }
@@ -366,9 +369,9 @@ impl PythonDownloadRequest {
         self
     }
 
-    /// Fill an unspecified architecture with the configured default.
+    /// Require the user-selected architecture if this request does not specify one.
     #[must_use]
-    pub fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
+    pub fn with_arch_if_unspecified(mut self, arch: Option<Arch>) -> Self {
         if self.arch.is_none() {
             self.arch = arch.map(ArchRequest::Explicit);
         }

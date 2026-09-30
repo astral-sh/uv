@@ -55,7 +55,7 @@ impl PythonPreferences {
 
     /// Apply the default architecture without overriding an explicit interpreter request.
     pub fn apply_to_request(self, request: &PythonRequest) -> Cow<'_, PythonRequest> {
-        request.with_default_arch(self.arch.map(PythonArchitecture::into_inner))
+        request.with_arch_if_unspecified(self.arch.map(PythonArchitecture::into_inner))
     }
 
     /// Check whether an interpreter satisfies a request and its default architecture.
