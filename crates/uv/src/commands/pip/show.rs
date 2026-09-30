@@ -14,8 +14,8 @@ use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonPreferences,
-    PythonRequest, Target,
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest,
+    PythonSelection, Target,
 };
 
 use crate::commands::ExitStatus;
@@ -24,7 +24,7 @@ use crate::printer::Printer;
 
 /// Show information about one or more installed packages.
 pub(crate) fn pip_show(
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     mut packages: Vec<PackageName>,
     strict: bool,
     dependency_metadata: &DependencyMetadata,
@@ -52,7 +52,7 @@ pub(crate) fn pip_show(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
-        python_preferences.with_source(PythonPreference::default().with_system_flag(system)),
+        python_selection.with_preference(PythonPreference::default().with_system_flag(system)),
         cache,
     )?;
 

@@ -34,7 +34,7 @@ use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreferences, PythonRequest,
+    PythonRequest, PythonSelection,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -162,7 +162,7 @@ pub(crate) async fn run(
     client_builder: BaseClientBuilder<'_>,
     invocation_source: ToolRunCommand,
     isolated: bool,
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -321,7 +321,7 @@ pub(crate) async fn run(
         &client_builder,
         isolated,
         lfs,
-        python_preferences,
+        python_selection,
         python_downloads,
         installer_metadata,
         &concurrency,
@@ -753,7 +753,7 @@ async fn get_or_create_environment(
     client_builder: &BaseClientBuilder<'_>,
     isolated: bool,
     lfs: GitLfsSetting,
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
@@ -819,7 +819,7 @@ async fn get_or_create_environment(
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
-        python_preferences,
+        python_selection,
         python_downloads,
         client_builder,
         cache,
@@ -1088,7 +1088,7 @@ async fn get_or_create_environment(
             let existing_environment = installed_tools
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
-                    python_preferences.satisfies_request(
+                    python_selection.satisfies_request(
                         python_request.as_ref(),
                         environment.environment().interpreter(),
                         cache,
@@ -1224,7 +1224,7 @@ async fn get_or_create_environment(
                     client_builder,
                     &reporter,
                     &install_mirrors,
-                    python_preferences,
+                    python_selection,
                     python_downloads,
                     cache,
                 )

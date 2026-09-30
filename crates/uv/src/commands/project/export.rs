@@ -21,7 +21,7 @@ use uv_fs::CWD;
 use uv_lock::{Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreferences, PythonRequest};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonRequest, PythonSelection};
 use uv_requirements::is_pylock_toml;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -153,7 +153,7 @@ pub(crate) async fn export(
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -242,7 +242,7 @@ pub(crate) async fn export(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
-                python_preferences,
+                python_selection,
                 python_downloads,
                 &install_mirrors,
                 false,
@@ -276,7 +276,7 @@ pub(crate) async fn export(
                     &interpreter_groups,
                     workspace_python,
                     &client_builder,
-                    python_preferences,
+                    python_selection,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,

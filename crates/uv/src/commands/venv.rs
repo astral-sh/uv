@@ -24,8 +24,8 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreferences,
-    PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonRequest,
+    PythonSelection,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
@@ -66,7 +66,7 @@ pub(crate) async fn venv(
     path: Option<PathBuf>,
     python_request: Option<PythonRequest>,
     install_mirrors: PythonInstallMirrors,
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     python_downloads: PythonDownloads,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
@@ -165,7 +165,7 @@ pub(crate) async fn venv(
         let python = PythonInstallation::find_or_download(
             python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
-            python_preferences,
+            python_selection,
             python_downloads,
             client_builder,
             cache,

@@ -36,7 +36,7 @@ use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_lock::Lock;
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreferences, PythonVersion};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonSelection, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -58,7 +58,7 @@ pub(crate) async fn audit(
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -128,7 +128,7 @@ pub(crate) async fn audit(
                 script.into(),
                 None,
                 &client_builder,
-                python_preferences,
+                python_selection,
                 python_downloads,
                 &install_mirrors,
                 false,
@@ -153,7 +153,7 @@ pub(crate) async fn audit(
                     &groups,
                     workspace_python,
                     &client_builder,
-                    python_preferences,
+                    python_selection,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,

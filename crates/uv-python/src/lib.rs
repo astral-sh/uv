@@ -20,9 +20,9 @@ pub use crate::interpreter::{
     BrokenLink, Error as InterpreterError, Interpreter, canonicalize_executable,
 };
 pub use crate::pointer_size::PointerSize;
-pub use crate::preferences::{PythonArchitecture, PythonPreferences};
 pub use crate::prefix::Prefix;
 pub use crate::python_version::{BuildVersionError, PythonVersion};
+pub use crate::selection::{PythonArchitecture, PythonSelection};
 pub use crate::target::Target;
 pub use crate::version_files::{
     ConfigDiscovery, DiscoveryOptions as VersionFileDiscoveryOptions,
@@ -42,9 +42,9 @@ pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
 mod pointer_size;
-mod preferences;
 mod prefix;
 mod python_version;
+mod selection;
 mod sysconfig;
 mod target;
 mod version_files;
@@ -228,7 +228,7 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        PythonDownloads, PythonNotFound, PythonPreferences, PythonRequest, PythonSource,
+        PythonDownloads, PythonNotFound, PythonRequest, PythonSelection, PythonSource,
         PythonVersion, find_all_python_installations, find_python_installations,
         implementation::ImplementationName, installation::PythonInstallation,
         managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
@@ -686,8 +686,8 @@ mod tests {
         }
         let script = fs_err::read_to_string(&aarch64)?;
         fs_err::write(&aarch64, script.replace("x86_64", "aarch64"))?;
-        let preferences = PythonPreferences {
-            source: PythonPreference::OnlySystem,
+        let selection = PythonSelection {
+            preference: PythonPreference::OnlySystem,
             arch: Some("aarch64".parse()?),
         };
 
@@ -695,7 +695,7 @@ mod tests {
             find_python_installation(
                 &PythonRequest::parse("3.14"),
                 EnvironmentPreference::OnlySystem,
-                preferences,
+                selection,
                 &context.cache,
             )
         })??;
@@ -705,7 +705,7 @@ mod tests {
             find_all_python_installations(
                 &PythonRequest::parse("3.14"),
                 EnvironmentPreference::OnlySystem,
-                preferences,
+                selection,
                 &context.cache,
             )
         })?;
@@ -721,7 +721,7 @@ mod tests {
             find_python_installation(
                 &PythonRequest::parse("cpython-3.14-linux-x86_64-gnu"),
                 EnvironmentPreference::OnlySystem,
-                preferences,
+                selection,
                 &context.cache,
             )
         })??;
@@ -731,7 +731,7 @@ mod tests {
             find_python_installation(
                 &PythonRequest::File(x86_64.clone()),
                 EnvironmentPreference::OnlySystem,
-                preferences,
+                selection,
                 &context.cache,
             )
         })??;

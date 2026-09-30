@@ -29,7 +29,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonPreferences, PythonRequest, PythonVersion, Target,
+    PythonPreference, PythonRequest, PythonSelection, PythonVersion, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -93,7 +93,7 @@ pub(crate) async fn pip_sync(
     target: Option<Target>,
     prefix: Option<Prefix>,
     sources: NoSources,
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     concurrency: Concurrency,
     cache: Cache,
     workspace_cache: WorkspaceCache,
@@ -181,7 +181,7 @@ pub(crate) async fn pip_sync(
         let installation = PythonInstallation::find_or_download(
             python_request.as_ref(),
             EnvironmentPreference::from_system_flag(system, false),
-            python_preferences.with_system_flag(system),
+            python_selection.with_system_flag(system),
             python_downloads,
             &client_builder,
             &cache,
@@ -200,7 +200,7 @@ pub(crate) async fn pip_sync(
                 .map(PythonRequest::parse)
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
-            python_preferences.with_source(PythonPreference::default().with_system_flag(system)),
+            python_selection.with_preference(PythonPreference::default().with_system_flag(system)),
             &cache,
         )?;
         report_target_environment(&environment, &cache, printer)?;

@@ -43,7 +43,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenLink, Interpreter, PythonArchitecture, PythonPreferences, PythonVersion};
+use crate::{BrokenLink, Interpreter, PythonArchitecture, PythonSelection, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -1156,13 +1156,13 @@ fn python_installations_with_name<'a>(
 pub(crate) fn find_python_installations<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
-    preferences: impl Into<PythonPreferences>,
+    selection: impl Into<PythonSelection>,
     cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     find_python_installations_with_strategy(
         request,
         environments,
-        preferences.into(),
+        selection.into(),
         cache,
         QueryStrategy::Sequential,
     )
@@ -1173,12 +1173,12 @@ pub(crate) fn find_python_installations<'a>(
 fn find_python_installations_with_strategy<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
-    preferences: PythonPreferences,
+    selection: PythonSelection,
     cache: &'a Cache,
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
-    let preference = preferences.source;
-    let arch = preferences.arch.map(|arch| {
+    let preference = selection.preference;
+    let arch = selection.arch.map(|arch| {
         PythonDownloadRequest::from_request(request)
             .and_then(|request| request.arch().map(ArchRequest::inner))
             .unwrap_or_else(|| arch.into_inner())
@@ -1379,13 +1379,13 @@ fn find_python_installations_with_strategy<'a>(
 pub fn find_all_python_installations(
     request: &PythonRequest,
     environments: EnvironmentPreference,
-    preferences: impl Into<PythonPreferences>,
+    selection: impl Into<PythonSelection>,
     cache: &Cache,
 ) -> Result<Vec<PythonInstallation>, Error> {
     let results = find_python_installations_with_strategy(
         request,
         environments,
-        preferences.into(),
+        selection.into(),
         cache,
         QueryStrategy::Parallel,
     );
@@ -1411,12 +1411,12 @@ pub fn find_all_python_installations(
 pub(crate) fn find_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
-    preferences: impl Into<PythonPreferences>,
+    selection: impl Into<PythonSelection>,
     cache: &Cache,
 ) -> Result<FindPythonResult, Error> {
-    let preferences = preferences.into();
-    let preference = preferences.source;
-    let installations = find_python_installations(request, environments, preferences, cache);
+    let selection = selection.into();
+    let preference = selection.preference;
+    let installations = find_python_installations(request, environments, selection, cache);
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;
@@ -1543,7 +1543,7 @@ pub(crate) fn find_python_installation(
     }
 
     Ok(Err(PythonNotFound {
-        request: preferences.apply_to_request(request).into_owned(),
+        request: selection.apply_to_request(request).into_owned(),
         environment_preference: environments,
         python_preference: preference,
     }))
@@ -1566,7 +1566,7 @@ pub(crate) fn find_python_installation(
 pub(crate) async fn find_best_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
-    preferences: impl Into<PythonPreferences>,
+    selection: impl Into<PythonSelection>,
     downloads_enabled: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
@@ -1575,7 +1575,7 @@ pub(crate) async fn find_best_python_installation(
     pypy_install_mirror: Option<&str>,
     python_downloads_json_url: Option<&str>,
 ) -> Result<PythonInstallation, crate::Error> {
-    let preferences = preferences.into();
+    let selection = selection.into();
     debug!("Starting Python discovery for {request}");
     let original_request = request;
 
@@ -1609,7 +1609,7 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        let result = find_python_installation(request, environments, preferences, cache);
+        let result = find_python_installation(request, environments, selection, cache);
         let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1646,7 +1646,7 @@ pub(crate) async fn find_best_python_installation(
 
             let download = download_request
                 .clone()
-                .with_arch_if_unspecified(preferences.arch.map(PythonArchitecture::into_inner))
+                .with_arch_if_unspecified(selection.arch.map(PythonArchitecture::into_inner))
                 .fill()
                 .map(|request| download_list.find(&request));
 
@@ -1704,7 +1704,7 @@ pub(crate) async fn find_best_python_installation(
             return Err(match error {
                 crate::Error::MissingPython(err, _) => PythonNotFound {
                     // Use a more general error in this case since we looked for multiple versions
-                    request: preferences.apply_to_request(original_request).into_owned(),
+                    request: selection.apply_to_request(original_request).into_owned(),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
                 }
@@ -2588,7 +2588,7 @@ impl PythonPreference {
     /// cases, like in projects, but we can't distinguish between explicit requests for a
     /// different Python preference or a persistent preference in a configuration file which
     /// would result in overly aggressive invalidation.
-    pub(crate) fn allows_installation(self, installation: &PythonInstallation) -> bool {
+    pub fn allows_installation(self, installation: &PythonInstallation) -> bool {
         let source = installation.source;
         let interpreter = &installation.interpreter;
 

@@ -18,8 +18,8 @@ use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreferences,
-    PythonRequest,
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonRequest,
+    PythonSelection,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -50,7 +50,7 @@ pub(crate) async fn upgrade(
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
     client_builder: BaseClientBuilder<'_>,
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -102,7 +102,7 @@ pub(crate) async fn upgrade(
             PythonInstallation::find_or_download(
                 python_request.as_ref(),
                 EnvironmentPreference::OnlySystem,
-                python_preferences,
+                python_selection,
                 python_downloads,
                 &client_builder,
                 cache,

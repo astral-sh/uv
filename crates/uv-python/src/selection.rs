@@ -5,7 +5,7 @@ use std::str::FromStr;
 use uv_cache::Cache;
 use uv_platform::Arch;
 
-use crate::{Interpreter, PythonInstallation, PythonPreference, PythonRequest};
+use crate::{Interpreter, PythonPreference, PythonRequest};
 
 /// The architecture to use when a Python request does not specify one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,26 +31,24 @@ impl Display for PythonArchitecture {
     }
 }
 
-/// Preferences used when selecting a Python interpreter.
+/// Options used when selecting a Python interpreter.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct PythonPreferences {
-    pub source: PythonPreference,
+pub struct PythonSelection {
+    /// Whether to prefer managed or system Python installations.
+    pub preference: PythonPreference,
+    /// Require this architecture when the Python request does not specify one.
     pub arch: Option<PythonArchitecture>,
 }
 
-impl PythonPreferences {
+impl PythonSelection {
     #[must_use]
-    pub fn with_source(self, source: PythonPreference) -> Self {
-        Self { source, ..self }
+    pub fn with_preference(self, preference: PythonPreference) -> Self {
+        Self { preference, ..self }
     }
 
     #[must_use]
     pub fn with_system_flag(self, system: bool) -> Self {
-        self.with_source(self.source.with_system_flag(system))
-    }
-
-    pub fn allows_installation(self, installation: &PythonInstallation) -> bool {
-        self.source.allows_installation(installation)
+        self.with_preference(self.preference.with_system_flag(system))
     }
 
     /// Apply the default architecture without overriding an explicit interpreter request.
@@ -70,14 +68,11 @@ impl PythonPreferences {
     }
 }
 
-impl From<PythonPreference> for PythonPreferences {
-    fn from(source: PythonPreference) -> Self {
-        Self { source, arch: None }
-    }
-}
-
-impl Display for PythonPreferences {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        self.source.fmt(formatter)
+impl From<PythonPreference> for PythonSelection {
+    fn from(preference: PythonPreference) -> Self {
+        Self {
+            preference,
+            arch: None,
+        }
     }
 }

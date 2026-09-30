@@ -14,7 +14,7 @@ use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonPreference, PythonPreferences};
+use uv_python::{EnvironmentPreference, PythonPreference, PythonSelection};
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -24,7 +24,7 @@ use crate::printer::Printer;
 
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(
-    python_preferences: PythonPreferences,
+    python_selection: PythonSelection,
     sources: &[RequirementsSource],
     python: Option<String>,
     system: bool,
@@ -51,7 +51,7 @@ pub(crate) async fn pip_uninstall(
             .map(PythonRequest::parse)
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
-        python_preferences.with_source(PythonPreference::default().with_system_flag(system)),
+        python_selection.with_preference(PythonPreference::default().with_system_flag(system)),
         &cache,
     )?;
 

@@ -54,7 +54,7 @@ use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{
-    Prefix, PythonDownloads, PythonPreference, PythonPreferences, PythonVersion, Target,
+    Prefix, PythonDownloads, PythonPreference, PythonSelection, PythonVersion, Target,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
@@ -91,7 +91,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) concurrency: Concurrency,
     pub(crate) show_settings: bool,
     pub(crate) preview: Preview,
-    pub(crate) python_preferences: PythonPreferences,
+    pub(crate) python_selection: PythonSelection,
     pub(crate) python_downloads: PythonDownloads,
     pub(crate) no_progress: bool,
     pub(crate) installer_metadata: bool,
@@ -143,8 +143,8 @@ impl GlobalSettings {
             ),
             show_settings: args.show_settings,
             preview: resolve_preview(args, workspace, environment)?,
-            python_preferences: PythonPreferences {
-                source: python_preference,
+            python_selection: PythonSelection {
+                preference: python_preference,
                 arch: environment.python_arch,
             },
             python_downloads: flag(
