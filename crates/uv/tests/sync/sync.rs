@@ -2057,7 +2057,8 @@ fn sync_frozen_member_default_groups_python_sources() -> Result<()> {
            The following requirements in `uv.lock` do not permit this version:
            - lockfile: >=3.13
            - member:docs: >=3.14
-           Use `uv python pin` to update the `.python-version` file to a compatible version
+
+    hint: Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     Ok(())
@@ -10373,7 +10374,8 @@ fn sync_python_version() -> Result<()> {
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     error: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
-           Use `uv python pin` to update the `.python-version` file to a compatible version
+
+    hint: Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     // Unless the pin file is outside the project, in which case we should just ignore it entirely

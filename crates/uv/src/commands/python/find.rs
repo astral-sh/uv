@@ -5,7 +5,7 @@ use std::path::Path;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
-use uv_errors::ErrorWithHints;
+use uv_errors::{ErrorWithHints, Hinted};
 use uv_fs::Simplified;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
@@ -13,7 +13,7 @@ use uv_python::{
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
-use uv_warnings::{warn_user, warn_user_once_with_chain};
+use uv_warnings::{warn_user_once_with_chain, warn_user_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
@@ -118,7 +118,7 @@ pub(crate) async fn find(
         ) {
             Ok(()) => {}
             Err(err) => {
-                warn_user!("{err}");
+                warn_user_with_chain!(&err, err.hints());
             }
         }
     }

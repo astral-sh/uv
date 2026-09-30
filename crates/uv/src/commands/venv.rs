@@ -19,6 +19,7 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildRequires, IndexLocations, PackageConfigSettings,
     Requirement,
 };
+use uv_errors::Hinted;
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
@@ -34,7 +35,7 @@ use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
 };
 use uv_virtualenv::{OnExisting, RemovalReason, Seed};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::ExitStatus;
@@ -210,7 +211,7 @@ pub(crate) async fn venv(
         ) {
             Ok(()) => {}
             Err(err) => {
-                warn_user!("{err}");
+                warn_user_with_chain!(&err, err.hints());
             }
         }
     }
