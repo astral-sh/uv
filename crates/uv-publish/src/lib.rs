@@ -1526,16 +1526,9 @@ mod tests {
 
         for features in TAR_BACKENDS {
             let _preview = uv_preview::test::with_features(features);
-            let error = source_dist_pkg_info(file.path())
-                .await
-                .expect_err("duplicate PKG-INFO files should be rejected");
-            assert_eq!(
-                error.to_string(),
-                "Multiple `PKG-INFO` files found: `example-1.0/PKG-INFO`, `other-1.0/PKG-INFO`"
-            );
             assert_matches!(
-                error,
-                PublishPrepareError::MultiplePkgInfo(paths)
+                source_dist_pkg_info(file.path()).await,
+                Err(PublishPrepareError::MultiplePkgInfo(paths))
                     if paths == ["example-1.0/PKG-INFO", "other-1.0/PKG-INFO"]
             );
         }

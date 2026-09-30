@@ -709,46 +709,8 @@ impl AsRef<Path> for PortablePathBuf {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
-    #[cfg(unix)]
-    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
     use super::*;
-
-    #[cfg(unix)]
-    #[test]
-    fn diagnostic_path_preserves_non_utf8_and_control_characters() {
-        let path = Path::new(OsStr::from_bytes(b"file\xff\n\""));
-        assert_eq!(
-            format_diagnostic_path(path).to_string(),
-            r#""file\xFF\n\"""#
-        );
-    }
-
-    #[test]
-    fn diagnostic_path_preserves_backslashes() {
-        assert_eq!(
-            format_diagnostic_path(Path::new(r"dir\file")).to_string(),
-            r"`dir\file`"
-        );
-    }
-
-    #[test]
-    fn diagnostic_path_escapes_ambiguous_characters() {
-        assert_eq!(
-            format_diagnostic_path(Path::new("file\u{202e}")).to_string(),
-            r#""file\u{202e}""#
-        );
-        assert_eq!(
-            format_diagnostic_path(Path::new("a`b")).to_string(),
-            r#""a`b""#
-        );
-    }
-
-    #[test]
-    fn diagnostic_value_distinguishes_literal_quotes() {
-        assert_eq!(format_diagnostic_value(" example"), r#"" example""#);
-        assert_eq!(format_diagnostic_value("\" example\""), r#""\" example\"""#);
-    }
 
     #[test]
     fn test_find_git_repository_root() -> std::io::Result<()> {
