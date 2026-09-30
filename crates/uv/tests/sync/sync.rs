@@ -1477,6 +1477,141 @@ fn frozen() -> Result<()> {
     Ok(())
 }
 
+/// A locked wheel does not need build-dependency indexes during installation.
+#[tokio::test]
+async fn sync_frozen_find_links_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel(
+        &"network-wheel".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let size = wheel.len();
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/flat"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["network-wheel==1.0.0"]
+    "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "network-wheel"
+        version = "1.0.0"
+        source = {{ registry = "{server}/simple" }}
+        wheels = [{{ url = "{server}/files/{filename}", hash = "sha256:{hash}", size = {size} }}]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "network-wheel" }}]
+
+        [package.metadata]
+        requires-dist = [{{ name = "network-wheel", specifier = "==1.0.0" }}]
+    "#, server = server.uri()})?;
+    context
+        .sync()
+        .args([
+            "--frozen",
+            "--no-index",
+            "--find-links",
+            &format!("{}/flat", server.uri()),
+        ])
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .assert()
+        .success();
+    context.assert_installed("network_wheel", "1.0.0");
+    server.verify().await;
+    Ok(())
+}
+
+/// Source builds can resolve their build requirements from find-links indexes.
+#[tokio::test]
+async fn sync_frozen_find_links_build() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let server = MockServer::start().await;
+    let filename = "build_dependency-1.0.0-py3-none-any.whl";
+    let wheel = fs_err::read(context.temp_dir.child("wheels").child(filename))?;
+    Mock::given(method("GET"))
+        .and(path("/flat"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!("<a href='/files/{filename}#sha256={hash}' data-upload-time='2024-01-01T00:00:00Z'>{filename}</a>"),
+            "text/html",
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("HEAD"))
+        .and(path(format!("/files/{filename}")))
+        .respond_with(
+            ResponseTemplate::new(200).insert_header("Content-Length", wheel.len().to_string()),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&context.read("pyproject.toml").replace(
+            "find-links = [\"wheels\"]",
+            &format!("find-links = [\"{}/flat\"]", server.uri()),
+        ))?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+    "#})?;
+    context
+        .sync()
+        .args(["--frozen", "--no-editable"])
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .assert()
+        .success();
+    assert!(context.temp_dir.child("backend-executed").exists());
+    context.assert_installed("project", "0.1.0");
+    server.verify().await;
+    Ok(())
+}
+
 /// Frozen sync reads the project lockfile before selecting an environment.
 #[test]
 fn sync_frozen_lockfile_before_environment() -> Result<()> {
