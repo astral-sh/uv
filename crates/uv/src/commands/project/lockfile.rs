@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use uv_configuration::{DependencyGroups, DependencyGroupsWithDefaults};
 use uv_lock::{Lock, Package};
-use uv_normalize::{DefaultGroups, PackageName};
+use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::PyProjectToml;
@@ -116,21 +116,18 @@ impl FrozenWorkspace {
             .or_else(|| self.lock.root().map(Package::name))
     }
 
-    /// Resolve groups using a project's recorded defaults, requiring a selection if they are unknown.
+    /// Resolve groups using the selected member's or non-project root's recorded defaults.
     pub(crate) fn resolve_groups(
         &self,
         groups: &DependencyGroups,
         project: Option<&PackageName>,
     ) -> Result<DependencyGroupsWithDefaults> {
-        if let Some(defaults) = project.and_then(|name| self.lock.member_default_groups(name)) {
-            return Ok(groups.with_defaults(defaults));
+        let defaults = match project {
+            Some(name) => self.lock.member_default_groups(name),
+            None => self.lock.workspace_default_groups(),
         }
-        if groups.requires_defaults() {
-            bail!(
-                "The lockfile does not record default dependency groups for a non-project workspace root; pass `--no-default-groups`, `--only-group`, `--only-dev`, or `--all-groups`"
-            );
-        }
-        Ok(groups.with_defaults(DefaultGroups::default()))
+        .context("The lockfile does not record default dependency groups")?;
+        Ok(groups.with_defaults(defaults))
     }
 
     /// Validate the selected packages against the workspace recorded in the lockfile.

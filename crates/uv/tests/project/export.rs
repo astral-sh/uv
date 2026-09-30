@@ -12199,11 +12199,12 @@ fn frozen_lockfile_non_project_workspace() -> Result<()> {
     fs_err::remove_file(root.join("member/pyproject.toml"))?;
     fs_err::remove_file(root.join("other/pyproject.toml"))?;
 
-    // Defaults for a non-project workspace root are not recorded.
+    // The root's recorded defaults are available without its manifest.
     uv_snapshot!(context.filters(), frozen_export(&context), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: The lockfile does not record default dependency groups for a non-project workspace root; pass `--no-default-groups`, `--only-group`, `--only-dev`, or `--all-groups`
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    -e ./other
     ");
 
     // A selected member has its own recorded defaults.
@@ -12265,6 +12266,77 @@ fn frozen_lockfile_non_project_workspace() -> Result<()> {
     ----- stdout -----
     -e ./member
     -e ./other
+    ");
+
+    Ok(())
+}
+
+/// Root defaults select groups without a manifest, including the implicit dev default.
+#[test]
+fn frozen_lockfile_root_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let lockfile = context.temp_dir.child("uv.lock");
+    lockfile.write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [manifest]
+        default-groups = ["docs"]
+
+        [manifest.dependency-groups]
+        docs = [{ name = "documentation" }]
+        lint = []
+
+        [manifest.group-requires-python]
+        docs = ">=3.13"
+
+        [[package]]
+        name = "documentation"
+        version = "1.0.0"
+        source = { directory = "documentation" }
+    "#})?;
+
+    // The recorded default activates a group other than dev.
+    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./documentation
+    ");
+
+    // Disabling defaults leaves the dependency unselected.
+    uv_snapshot!(context.filters(), frozen_export(&context).arg("--no-default-groups"), @"
+    exit_code: 0 (success)
+    ");
+
+    // Revision 5 infers the dev default when it is omitted from the manifest.
+    lockfile.write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [manifest.dependency-groups]
+        dev = [{ name = "development" }]
+        docs = [{ name = "documentation" }]
+
+        [manifest.group-requires-python]
+        dev = ">=3.13"
+
+        [[package]]
+        name = "development"
+        version = "1.0.0"
+        source = { directory = "development" }
+
+        [[package]]
+        name = "documentation"
+        version = "1.0.0"
+        source = { directory = "documentation" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./development
     ");
 
     Ok(())
