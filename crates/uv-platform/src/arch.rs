@@ -32,6 +32,10 @@ impl Ord for Arch {
 
 impl Arch {
     /// Prefer the native architecture, then the given fallback architecture.
+    ///
+    /// Windows ARM64 can emulate both x86-64 and 32-bit x86. An explicit x86-64 fallback keeps
+    /// 64-bit Python ahead of 32-bit Python when a native distribution is unavailable; the
+    /// lexicographic ordering alone would put `i686` first.
     pub(crate) fn cmp_with_fallback(
         self,
         other: Self,
