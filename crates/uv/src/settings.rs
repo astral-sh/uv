@@ -145,9 +145,7 @@ impl GlobalSettings {
             preview: resolve_preview(args, workspace, environment)?,
             python_preferences: PythonPreferences {
                 source: python_preference,
-                arch: args
-                    .python_arch
-                    .combine(workspace.and_then(|workspace| workspace.globals.python_arch)),
+                arch: environment.python_arch,
             },
             python_downloads: flag(
                 args.allow_python_downloads,

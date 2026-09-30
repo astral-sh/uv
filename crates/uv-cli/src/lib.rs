@@ -29,7 +29,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement, VerbatimUrl};
 use uv_preview::{MaybePreviewFeature, PreviewFeature};
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::{PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
@@ -205,13 +205,6 @@ pub struct GlobalArgs {
         hide = true
     )]
     pub python_preference: Option<PythonPreference>,
-
-    /// The architecture to use for Python interpreters.
-    ///
-    /// Version-only Python requests use this architecture. A request that includes an
-    /// architecture or names an interpreter executable takes precedence.
-    #[arg(global = true, long, help_heading = "Python options", env = EnvVars::UV_PYTHON_ARCH)]
-    pub python_arch: Option<PythonArchitecture>,
 
     /// Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
     ///

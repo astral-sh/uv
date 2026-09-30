@@ -31,27 +31,6 @@ impl Display for PythonArchitecture {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for PythonArchitecture {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = <Cow<'_, str>>::deserialize(deserializer)?;
-        value.parse().map_err(serde::de::Error::custom)
-    }
-}
-
-#[cfg(feature = "schemars")]
-impl schemars::JsonSchema for PythonArchitecture {
-    fn schema_name() -> Cow<'static, str> {
-        Cow::Borrowed("PythonArchitecture")
-    }
-
-    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({
-            "type": "string",
-            "description": "A Python architecture, e.g. `x86_64` or `aarch64`."
-        })
-    }
-}
-
 /// Preferences used when selecting a Python interpreter.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct PythonPreferences {

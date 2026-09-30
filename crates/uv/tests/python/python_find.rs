@@ -18,34 +18,34 @@ fn python_find_default_arch() -> Result<()> {
         .temp_dir
         .child(".python-version")
         .write_str("3.12\n")?;
-    context
-        .temp_dir
-        .child("uv.toml")
-        .write_str("python-arch = \"wasm32\"\n")?;
 
-    // A version pin inherits the architecture configured in uv.toml.
-    uv_snapshot!(context.filters(), context.python_find(), @"
+    // A version pin uses the architecture specified by the environment variable.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, "wasm32"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for any-3.12-any-wasm32-any in [PYTHON SOURCES]
     ");
 
-    // The environment and CLI override the configured default architecture.
     uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, &arch), @"
     exit_code: 0 (success)
     ----- stdout -----
     [PYTHON-3.12]
     ");
-    uv_snapshot!(context.filters(), context.python_find()
-        .env(EnvVars::UV_PYTHON_ARCH, "wasm32")
-        .args(["--python-arch", &arch]), @"
+    // An empty value leaves the architecture unrestricted.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, ""), @"
     exit_code: 0 (success)
     ----- stdout -----
     [PYTHON-3.12]
     ");
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, "invalid"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_PYTHON_ARCH` with invalid value `invalid`: Unknown architecture: invalid
+    ");
 
     // An architecture-qualified request and an explicit interpreter path take precedence.
     uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_ARCH, "wasm32")
         .arg(format!("cpython-3.12-{os}-{arch}")), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -56,7 +56,9 @@ fn python_find_default_arch() -> Result<()> {
         .env(EnvVars::UV_PYTHON_ARCH, &arch)
         .output()?;
     let python = String::from_utf8(python.stdout)?;
-    uv_snapshot!(context.filters(), context.python_find().arg(python.trim()), @"
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_ARCH, "wasm32")
+        .arg(python.trim()), @"
     exit_code: 0 (success)
     ----- stdout -----
     [PYTHON-3.12]

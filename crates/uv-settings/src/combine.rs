@@ -14,7 +14,7 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
-use uv_python::{PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -110,7 +110,6 @@ impl_combine_or!(PipIndex);
 impl_combine_or!(PrereleaseMode);
 impl_combine_or!(PreviewOption);
 impl_combine_or!(ProxyUrl);
-impl_combine_or!(PythonArchitecture);
 impl_combine_or!(PythonDownloads);
 impl_combine_or!(PythonPreference);
 impl_combine_or!(PythonVersion);

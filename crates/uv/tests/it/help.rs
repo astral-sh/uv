@@ -66,14 +66,10 @@ fn help() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>  The architecture to use for Python interpreters [env:
-                                       UV_PYTHON_ARCH=]
-          --managed-python             Require use of uv-managed Python versions [env:
-                                       UV_MANAGED_PYTHON=]
-          --no-managed-python          Disable use of uv-managed Python versions [env:
-                                       UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads        Disable automatic downloads of Python. [env:
-                                       "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -150,14 +146,10 @@ fn help_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>  The architecture to use for Python interpreters [env:
-                                       UV_PYTHON_ARCH=]
-          --managed-python             Require use of uv-managed Python versions [env:
-                                       UV_MANAGED_PYTHON=]
-          --no-managed-python          Disable use of uv-managed Python versions [env:
-                                       UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads        Disable automatic downloads of Python. [env:
-                                       "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -234,14 +226,10 @@ fn help_short_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>  The architecture to use for Python interpreters [env:
-                                       UV_PYTHON_ARCH=]
-          --managed-python             Require use of uv-managed Python versions [env:
-                                       UV_MANAGED_PYTHON=]
-          --no-managed-python          Disable use of uv-managed Python versions [env:
-                                       UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads        Disable automatic downloads of Python. [env:
-                                       "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -298,14 +286,10 @@ fn help_flag_workspace() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>  The architecture to use for Python interpreters [env:
-                                       UV_PYTHON_ARCH=]
-          --managed-python             Require use of uv-managed Python versions [env:
-                                       UV_MANAGED_PYTHON=]
-          --no-managed-python          Disable use of uv-managed Python versions [env:
-                                       UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads        Disable automatic downloads of Python. [env:
-                                       "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -417,14 +401,6 @@ fn help_subcommand() {
               [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>
-              The architecture to use for Python interpreters.
-
-              Version-only Python requests use this architecture. A request that includes an
-              architecture or names an interpreter executable takes precedence.
-
-              [env: UV_PYTHON_ARCH=]
-
           --managed-python
               Require use of uv-managed Python versions.
 
@@ -708,14 +684,6 @@ fn help_subsubcommand() {
               [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>
-              The architecture to use for Python interpreters.
-
-              Version-only Python requests use this architecture. A request that includes an
-              architecture or names an interpreter executable takes precedence.
-
-              [env: UV_PYTHON_ARCH=]
-
           --managed-python
               Require use of uv-managed Python versions.
 
@@ -871,14 +839,10 @@ fn help_flag_subcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>  The architecture to use for Python interpreters [env:
-                                       UV_PYTHON_ARCH=]
-          --managed-python             Require use of uv-managed Python versions [env:
-                                       UV_MANAGED_PYTHON=]
-          --no-managed-python          Disable use of uv-managed Python versions [env:
-                                       UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads        Disable automatic downloads of Python. [env:
-                                       "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -956,14 +920,10 @@ fn help_flag_subsubcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>  The architecture to use for Python interpreters [env:
-                                       UV_PYTHON_ARCH=]
-          --managed-python             Require use of uv-managed Python versions [env:
-                                       UV_MANAGED_PYTHON=]
-          --no-managed-python          Disable use of uv-managed Python versions [env:
-                                       UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads        Disable automatic downloads of Python. [env:
-                                       "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -1119,14 +1079,10 @@ fn help_with_global_option() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>  The architecture to use for Python interpreters [env:
-                                       UV_PYTHON_ARCH=]
-          --managed-python             Require use of uv-managed Python versions [env:
-                                       UV_MANAGED_PYTHON=]
-          --no-managed-python          Disable use of uv-managed Python versions [env:
-                                       UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads        Disable automatic downloads of Python. [env:
-                                       "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -1239,14 +1195,10 @@ fn help_with_no_pager() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-arch <PYTHON_ARCH>  The architecture to use for Python interpreters [env:
-                                       UV_PYTHON_ARCH=]
-          --managed-python             Require use of uv-managed Python versions [env:
-                                       UV_MANAGED_PYTHON=]
-          --no-managed-python          Disable use of uv-managed Python versions [env:
-                                       UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads        Disable automatic downloads of Python. [env:
-                                       "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
