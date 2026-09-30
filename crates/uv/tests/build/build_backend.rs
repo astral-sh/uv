@@ -52,6 +52,40 @@ fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn tar_backend_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let source = Path::new("../../test/packages/built-by-uv");
+    let dist = TempDir::new()?;
+    let archive = dist.path().join("built_by_uv-0.1.0.tar.gz");
+
+    let build = |no_tar_codec: Option<&str>, preview: bool| -> Result<Vec<u8>> {
+        let mut command = context.build_backend();
+        command.env_remove(EnvVars::UV_NO_TAR_CODEC);
+        if let Some(value) = no_tar_codec {
+            command.env(EnvVars::UV_NO_TAR_CODEC, value);
+        }
+        if preview {
+            command.arg("--preview-features").arg("tar-codec");
+        }
+        command
+            .arg("build-sdist")
+            .arg(dist.path())
+            .current_dir(source)
+            .assert()
+            .success();
+        Ok(fs_err::read(&archive)?)
+    };
+
+    let default = build(None, false)?;
+    let fallback = build(Some("1"), false)?;
+    assert_ne!(default, fallback);
+    assert_eq!(build(Some("0"), false)?, default);
+    assert_eq!(build(None, true)?, default);
+    assert_eq!(build(Some("1"), true)?, fallback);
+    Ok(())
+}
+
 /// Test that build backend works if we invoke it directly.
 ///
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel.
@@ -262,8 +296,6 @@ fn preserve_executable_bit() -> Result<()> {
 
     context
         .build_backend()
-        .arg("--preview-features")
-        .arg("tar-codec")
         .arg("build-sdist")
         .arg(context.temp_dir.path())
         .current_dir(&project_dir)

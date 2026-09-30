@@ -326,7 +326,8 @@ pub enum PreviewFeature {
     LockfileNormalization,
     /// Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
     LockWithoutMetadata,
-    /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
+    /// Deprecated compatibility feature. `tar-codec` is enabled by default; set
+    /// `UV_NO_TAR_CODEC=1` to use `astral-tokio-tar`.
     TarCodec,
     /// Allows selecting configured package indexes by name with `--index` and `--default-index`.
     IndexByName,

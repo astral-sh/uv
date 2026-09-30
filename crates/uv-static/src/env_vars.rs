@@ -416,6 +416,11 @@ impl EnvVars {
     #[attr_added_in("0.8.6")]
     pub const UV_INSECURE_NO_ZIP_VALIDATION: &'static str = "UV_INSECURE_NO_ZIP_VALIDATION";
 
+    /// Use `astral-tokio-tar` instead of `tar-codec` to read and write tar archives.
+    /// Set to a true value (e.g., `1`) to enable this compatibility fallback.
+    #[attr_added_in("0.13.0")]
+    pub const UV_NO_TAR_CODEC: &'static str = "UV_NO_TAR_CODEC";
+
     /// Sets the maximum number of in-flight concurrent downloads that uv will
     /// perform at any given time.
     #[attr_added_in("0.1.43")]

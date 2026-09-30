@@ -22,6 +22,14 @@ Unreleased.
 
   This stabilizes the `no-distutils-patch` preview feature.
 
+- **Use `tar-codec` for tar archives by default**
+
+  uv now uses `tar-codec` when extracting tar archives, building source distributions with `uv_build`, and reading source distribution metadata for publishing. The stricter archive validation can reject malformed archives and archives with unsupported entries that `astral-tokio-tar` previously accepted. Source distributions built by `uv_build` may also have different archive bytes.
+
+  Set `UV_NO_TAR_CODEC=1` to use `astral-tokio-tar` if a workflow depends on the previous behavior.
+
+  This stabilizes the `tar-codec` preview feature.
+
 ## 0.12.x
 
 See [changelogs/0.12.x](./changelogs/0.12.x.md)
@@ -71,4 +79,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-

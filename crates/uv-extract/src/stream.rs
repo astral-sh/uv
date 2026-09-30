@@ -21,7 +21,7 @@ use tokio_util::compat::{
 use tracing::{debug, warn};
 
 use uv_distribution_filename::{LegacySourceDistExtension, SourceDistExtension};
-use uv_preview::PreviewFeature;
+use uv_static::TarBackend;
 
 use crate::archive_path::SanitizedArchivePath;
 use crate::dirhash::{
@@ -877,7 +877,7 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
     mut reader: R,
     dst: &Path,
 ) -> Result<Vec<UnhashedFile>, Error> {
-    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
+    if TarBackend::from_env() == TarBackend::TarCodec {
         untar_in_tar_codec(reader, dst).await.map_err(Error::from)
     } else {
         let archive =

@@ -8,6 +8,28 @@ use std::borrow::Cow;
 
 use thiserror::Error;
 
+/// The implementation used to read and write tar archives.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TarBackend {
+    #[default]
+    TarCodec,
+    TokioTar,
+}
+
+impl TarBackend {
+    /// Select the tar implementation, allowing users to opt out of `tar-codec`.
+    pub fn from_env() -> Self {
+        if matches!(
+            parse_boolish_environment_variable(EnvVars::UV_NO_TAR_CODEC),
+            Ok(Some(true))
+        ) {
+            Self::TokioTar
+        } else {
+            Self::TarCodec
+        }
+    }
+}
+
 /// The base URL for the default Astral mirror.
 const ASTRAL_MIRROR_BASE_URL: &str = "https://releases.astral.sh";
 

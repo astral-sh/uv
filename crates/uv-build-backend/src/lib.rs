@@ -497,8 +497,9 @@ mod tests {
     use uv_errors::{ErrorWithHints, Hinted};
     use uv_fs::{copy_dir_all, relative_to};
     use uv_preview::PreviewFeature;
+    use uv_static::TarBackend;
 
-    use crate::source_dist::SyncReader;
+    use crate::source_dist::{SyncReader, build_source_dist_with_backend};
 
     const MOCK_UV_VERSION: &str = "1.0.0+test";
 
@@ -545,6 +546,14 @@ mod tests {
     /// Run both a direct wheel build and an indirect wheel build through a source distribution,
     /// while checking that directly built wheel and indirectly built wheel are the same.
     fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
+        build_with_backend(source_root, dist, TarBackend::default())
+    }
+
+    fn build_with_backend(
+        source_root: &Path,
+        dist: &Path,
+        tar_backend: TarBackend,
+    ) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
         let (_name, direct_wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
@@ -560,7 +569,8 @@ mod tests {
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
         let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
-        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?;
+        let source_dist_filename =
+            build_source_dist_with_backend(source_root, dist, MOCK_UV_VERSION, false, tar_backend)?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
@@ -715,8 +725,8 @@ mod tests {
     #[test]
     fn built_by_uv_building() {
         built_by_uv_building_with_backend(
-            &[],
-            "1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508",
+            TarBackend::default(),
+            "88540014e8884fff1d6479c0c7315fcf497ba2a46f6db5c9f6e04f64a8620dcc",
         );
     }
 
@@ -749,18 +759,15 @@ mod tests {
     }
 
     #[test]
-    fn built_by_uv_building_tar_codec() {
+    fn built_by_uv_building_tokio_tar() {
         built_by_uv_building_with_backend(
-            &[PreviewFeature::TarCodec],
-            "88540014e8884fff1d6479c0c7315fcf497ba2a46f6db5c9f6e04f64a8620dcc",
+            TarBackend::TokioTar,
+            "1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508",
         );
     }
 
-    fn built_by_uv_building_with_backend(
-        preview_features: &[PreviewFeature],
-        expected_source_dist_hash: &str,
-    ) {
-        let _preview = uv_preview::test::with_features(preview_features);
+    fn built_by_uv_building_with_backend(tar_backend: TarBackend, expected_source_dist_hash: &str) {
+        let _preview = uv_preview::test::with_features(&[]);
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
         let src = TempDir::new().unwrap();
         for dir in [
@@ -822,7 +829,7 @@ mod tests {
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path()).unwrap();
+        let build = build_with_backend(src.path(), dist.path(), tar_backend).unwrap();
 
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
         assert_eq!(

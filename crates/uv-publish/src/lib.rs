@@ -41,9 +41,9 @@ use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_archive_metadata;
-use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_static::TarBackend;
 use uv_warnings::warn_user;
 
 pub use crate::trusted_publishing::TrustedPublishingToken;
@@ -988,7 +988,14 @@ async fn hash_file<const COUNT: usize>(
 
 // Not in `uv-metadata` because we only support tar files here.
 async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
-    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
+    source_dist_pkg_info_with_backend(file, TarBackend::from_env()).await
+}
+
+async fn source_dist_pkg_info_with_backend(
+    file: &Path,
+    tar_backend: TarBackend,
+) -> Result<Vec<u8>, PublishPrepareError> {
+    if tar_backend == TarBackend::TarCodec {
         source_dist_pkg_info_tar_codec(file).await
     } else {
         source_dist_pkg_info_tokio_tar(file).await
@@ -1430,13 +1437,14 @@ mod tests {
     use uv_auth::Credentials;
     use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
-    use uv_preview::PreviewFeature;
     use uv_pypi_types::{HashDigest, Metadata23};
     use uv_redacted::DisplaySafeUrl;
+    use uv_static::TarBackend;
 
     use crate::{
         FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSession,
-        PublishingCredentials, Reporter, UploadOutcome, group_files, source_dist_pkg_info,
+        PublishingCredentials, Reporter, UploadOutcome, group_files,
+        source_dist_pkg_info_with_backend,
     };
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
     use wiremock::matchers::{method, path};
@@ -1444,7 +1452,7 @@ mod tests {
 
     struct DummyReporter;
 
-    const TAR_BACKENDS: &[&[PreviewFeature]] = &[&[], &[PreviewFeature::TarCodec]];
+    const TAR_BACKENDS: [TarBackend; 2] = [TarBackend::TarCodec, TarBackend::TokioTar];
 
     impl Reporter for DummyReporter {
         fn on_progress(&self, _name: &str, _id: usize) {}
@@ -1492,10 +1500,9 @@ mod tests {
         ])
         .await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_eq!(
-                source_dist_pkg_info(file.path())
+                source_dist_pkg_info_with_backend(file.path(), backend)
                     .await
                     .expect("top-level PKG-INFO should be read"),
                 expected
@@ -1507,10 +1514,9 @@ mod tests {
     async fn source_dist_pkg_info_requires_a_file() {
         let file = source_dist(&[("example-1.0/nested/PKG-INFO", b"ignored")]).await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_matches!(
-                source_dist_pkg_info(file.path()).await,
+                source_dist_pkg_info_with_backend(file.path(), backend).await,
                 Err(PublishPrepareError::MissingPkgInfo)
             );
         }
@@ -1524,10 +1530,9 @@ mod tests {
         ])
         .await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_matches!(
-                source_dist_pkg_info(file.path()).await,
+                source_dist_pkg_info_with_backend(file.path(), backend).await,
                 Err(PublishPrepareError::MultiplePkgInfo(paths))
                     if paths == "example-1.0/PKG-INFO, other-1.0/PKG-INFO"
             );
