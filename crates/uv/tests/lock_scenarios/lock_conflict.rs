@@ -2056,13 +2056,11 @@ fn group_default() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest.default-groups]
-        project = ["group1"]
-
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
+        default-groups = ["group1"]
 
         [package.dev-dependencies]
         group1 = [
