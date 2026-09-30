@@ -224,6 +224,7 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
             Installed 1 package in [TIME]
              + uv==[VERSION]
             Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
              + large-wheel==1.0.0 (from file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl)
             ");
