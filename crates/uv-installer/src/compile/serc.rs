@@ -126,6 +126,12 @@ impl SercCompiler {
         WalkDir::new(dir)
             .into_iter()
             .filter_entry(|entry| entry.file_name() != "__pycache__")
+            .filter(|entry| {
+                entry.as_ref().map_or(true, |entry| {
+                    entry.file_type().is_file()
+                        && entry.path().extension().is_some_and(|ext| ext == "py")
+                })
+            })
             .par_bridge()
             .map(|entry| {
                 let entry = match entry {
@@ -139,18 +145,12 @@ impl SercCompiler {
                     }
                     Err(err) => return Err(CompileError::Walkdir(err)),
                 };
-                if entry.file_type().is_file()
-                    && entry.path().extension().is_some_and(|ext| ext == "py")
-                {
-                    self.compile(entry.path()).map(usize::from).map_err(|err| {
-                        CompileError::NativeCompile {
-                            source_file: entry.into_path(),
-                            err,
-                        }
-                    })
-                } else {
-                    Ok(0)
-                }
+                self.compile(entry.path()).map(usize::from).map_err(|err| {
+                    CompileError::NativeCompile {
+                        source_file: entry.into_path(),
+                        err,
+                    }
+                })
             })
             .try_reduce(|| 0, |left, right| Ok(left + right))
     }
