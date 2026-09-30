@@ -17,8 +17,8 @@ pub enum ArchVariant {
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Arch {
-    pub(crate) family: target_lexicon::Architecture,
-    pub(crate) variant: Option<ArchVariant>,
+    family: target_lexicon::Architecture,
+    variant: Option<ArchVariant>,
 }
 
 impl Ord for Arch {
