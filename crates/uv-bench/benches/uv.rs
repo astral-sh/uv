@@ -89,6 +89,11 @@ fn hash_reader(criterion: &mut Criterion<WallTime>) {
             ][..],
         ),
     ] {
+        // The no-hash cases produce noisy wall-time measurements.
+        if algorithms.is_empty() && !is_codspeed_simulation() {
+            continue;
+        }
+
         // Exercise chunks both smaller and larger than the reader's drain buffer.
         for chunk_size in [4 * 1024, 64 * 1024] {
             group.bench_with_input(
