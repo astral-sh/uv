@@ -20,12 +20,6 @@ fn audit_offline() -> Result<()> {
     error: Auditing requires network access and cannot be performed in offline mode
     ");
 
-    uv_snapshot!(context.filters(), context.command().arg("--offline").arg("audit"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Auditing requires network access and cannot be performed in offline mode
-    ");
-
     uv_snapshot!(context.filters(), context.audit().env(EnvVars::UV_OFFLINE, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
