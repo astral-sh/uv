@@ -255,6 +255,7 @@ impl fmt::Display for HintPrefix {
 pub struct ErrorOptions<'a, C = AnsiColors, W = Stderr> {
     level: Cow<'a, str>,
     color: C,
+    nested_hints: bool,
     width_override: Option<usize>,
     stream: W,
 }
@@ -275,6 +276,7 @@ impl Default for ErrorOptions<'_, AnsiColors, Stderr> {
         Self {
             level: Cow::Borrowed("error"),
             color: AnsiColors::Red,
+            nested_hints: false,
             width_override: None,
             stream: Stderr,
         }
@@ -293,9 +295,16 @@ impl<'a, C, W> ErrorOptions<'a, C, W> {
         ErrorOptions {
             level: self.level,
             color,
+            nested_hints: self.nested_hints,
             width_override: self.width_override,
             stream: self.stream,
         }
+    }
+
+    /// Indent hints beneath the diagnostic without separating them with blank lines.
+    pub fn with_nested_hints(mut self) -> Self {
+        self.nested_hints = true;
+        self
     }
 
     /// Override the terminal width used for wrapping.
@@ -312,6 +321,7 @@ impl<'a, C, W> ErrorOptions<'a, C, W> {
         ErrorOptions {
             level: self.level,
             color: self.color,
+            nested_hints: self.nested_hints,
             width_override: self.width_override,
             stream,
         }
@@ -354,6 +364,7 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
     let ErrorOptions {
         level,
         color,
+        nested_hints,
         width_override,
         mut stream,
     } = options;
@@ -403,7 +414,13 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
     }
 
     for hint in hints {
-        writeln!(&mut stream, "\n{HintPrefix} {hint}")?;
+        if nested_hints {
+            let hint_padding = "        ";
+            let wrapped = wrap_text(hint, width, hint_padding, hint_padding, hint_padding);
+            writeln!(&mut stream, "  {HintPrefix} {}", wrapped.trim())?;
+        } else {
+            writeln!(&mut stream, "\n{HintPrefix} {hint}")?;
+        }
     }
 
     Ok(())
@@ -785,11 +802,17 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             error.as_ref(),
-            &Hints::from("Check the dependency versions."),
+            &[
+                "Check the dependency versions before retrying.\nTry one of:\n  - foo==2.0\n  - bar<2".to_string(),
+                "Recreate the environment.".to_string(),
+            ]
+            .into_iter()
+            .collect(),
             ErrorOptions::default()
                 .with_level("warning")
                 .with_color(AnsiColors::Yellow)
-                .with_width_override(80)
+                .with_nested_hints()
+                .with_width_override(50)
                 .with_stream(&mut output),
         )
         .unwrap();
@@ -801,8 +824,12 @@ mod tests {
                    - bar>=2
 
                  Select compatible requirements.
-
-        hint: Check the dependency versions.
+          hint: Check the dependency versions before
+                retrying.
+                Try one of:
+                  - foo==2.0
+                  - bar<2
+          hint: Recreate the environment.
         ");
     }
 

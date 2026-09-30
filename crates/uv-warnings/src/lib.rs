@@ -66,6 +66,7 @@ fn write_warning_chain_with_options<C, W: fmt::Write>(
         hints,
         options
             .with_level("warning")
+            .with_nested_hints()
             .with_color(owo_colors::AnsiColors::Yellow),
     )
 }
@@ -191,15 +192,14 @@ mod tests {
             ErrorOptions::default().with_stream(&mut output),
         )
         .unwrap();
-        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[33mwarning\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to install Python\n  \u{1b}[1m\u{1b}[33mcause\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write registry entry\n  \u{1b}[1m\u{1b}[33mcause\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Permission denied\n\n\u{1b}[36m\u{1b}[1mhint\u{1b}[0m\u{1b}[39m\u{1b}[1m:\u{1b}[0m Check the registry permissions.\n""#);
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[33mwarning\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to install Python\n  \u{1b}[1m\u{1b}[33mcause\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write registry entry\n  \u{1b}[1m\u{1b}[33mcause\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Permission denied\n  \u{1b}[36m\u{1b}[1mhint\u{1b}[0m\u{1b}[39m\u{1b}[1m:\u{1b}[0m Check the registry permissions.\n""#);
         let output = anstream::adapter::strip_str(&output);
 
         assert_snapshot!(output, @"
         warning: Failed to install Python
           cause: Failed to write registry entry
           cause: Permission denied
-
-        hint: Check the registry permissions.
+          hint: Check the registry permissions.
         ");
     }
 
@@ -222,19 +222,16 @@ mod tests {
             )?;
         }
         let output = anstream::adapter::strip_str(&output);
-        assert_snapshot!(output, @r"
+        assert_snapshot!(output, @"
         warning: Failed to read credentials
           cause: Permission denied
-
-        hint: Unlock the keyring.
+          hint: Unlock the keyring.
         warning: Failed to read credentials
           cause: Storage unavailable
-
-        hint: Unlock the keyring.
+          hint: Unlock the keyring.
         warning: Failed to read credentials
           cause: Permission denied
-
-        hint: Try another backend.
+          hint: Try another backend.
         ");
         Ok(())
     }
