@@ -2588,7 +2588,7 @@ impl PythonPreference {
     /// cases, like in projects, but we can't distinguish between explicit requests for a
     /// different Python preference or a persistent preference in a configuration file which
     /// would result in overly aggressive invalidation.
-    pub fn allows_installation(self, installation: &PythonInstallation) -> bool {
+    pub(crate) fn allows_installation(self, installation: &PythonInstallation) -> bool {
         let source = installation.source;
         let interpreter = &installation.interpreter;
 

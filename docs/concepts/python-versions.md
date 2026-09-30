@@ -48,9 +48,9 @@ Additionally, a specific system Python interpreter can be requested with:
 - `<install-dir>` (e.g., `/some/environment/`)
 
 Use [`UV_PYTHON_ARCH`](../reference/environment.md#uv_python_arch) to select an architecture
-independently of the Python version. For example, setting `UV_PYTHON_ARCH=x86_64` makes `uv sync` use
-an `x86_64` interpreter while honoring the project's Python version request. A request that includes
-an architecture or names an interpreter executable takes precedence.
+independently of the Python version. For example, setting `UV_PYTHON_ARCH=x86_64` makes `uv sync`
+use an `x86_64` interpreter while honoring the project's Python version request. A request that
+includes an architecture or names an interpreter executable takes precedence.
 
 By default, uv will automatically download Python versions if they cannot be found on the system.
 This behavior can be

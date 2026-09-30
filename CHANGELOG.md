@@ -3,6 +3,12 @@
 <!-- prettier-ignore-start -->
 
 
+## Unreleased
+
+### Configuration
+
+- Add `UV_PYTHON_ARCH` to select a Python architecture independently of the version request. Explicit architecture requests and interpreter paths take precedence.
+
 ## 0.12.21
 
 Released on 2026-09-29.
@@ -893,5 +899,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
 
