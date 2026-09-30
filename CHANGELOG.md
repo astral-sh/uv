@@ -9,7 +9,7 @@ Unreleased.
 
 ### Breaking changes
 
-- **Prefer native Python on Windows ARM64**
+- **Prefer native Python on Windows ARM64** ([#22100](https://github.com/astral-sh/uv/pull/22100))
 
   Previously, native ARM64 builds of uv preferred emulated `x86_64` Python installations because native wheel support was limited. Now, uv prefers `aarch64` Python across Python versions. uv still falls back to `x86_64`, then 32-bit `x86`, when a native distribution is unavailable.
 
