@@ -9851,6 +9851,124 @@ fn sync_scripts_workspace_member_not_packaged_not_synced() -> Result<()> {
 }
 
 #[test]
+fn sync_scripts_required_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        member-entry = "member:main"
+    "#})?;
+    member.child("member.py").write_str(indoc! {r#"
+        def main():
+            print("Hello from member")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&member), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + member==0.1.0 (from file://[TEMP_DIR]/member)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("member"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("member-entry"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from member
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_scripts_required_workspace_member_not_packaged() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        member-entry = "member:main"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: Skipping installation of entry points (`project.scripts`) for package `member` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_dynamic_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

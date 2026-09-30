@@ -439,9 +439,10 @@ pub(crate) async fn sync(
     if let SyncTarget::Project(project) = &target {
         let roots = sync_target.roots().collect::<FxHashSet<_>>();
         for (name, member) in project.workspace().packages() {
+            let is_required_member = project.workspace().required_members().contains_key(name);
             if roots.contains(name)
                 && member.pyproject_toml().has_scripts()
-                && !member.pyproject_toml().is_package(true)
+                && !member.pyproject_toml().is_package(!is_required_member)
             {
                 warn_user!(
                     "Skipping installation of entry points (`project.scripts`) for package `{}` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`",
