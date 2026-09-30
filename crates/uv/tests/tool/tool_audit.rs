@@ -73,6 +73,54 @@ async fn mount_vulnerable_service(server: &MockServer) {
 }
 
 #[test]
+fn tool_audit_offline() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+
+    uv_snapshot!(context.filters(), context.tool_audit().arg("--all").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    uv_snapshot!(context.filters(), context.command().arg("--offline").arg("tool").arg("audit").arg("--all"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_audit().arg("--all").env(EnvVars::UV_OFFLINE, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc! {"
+        offline = true
+    "})?;
+
+    uv_snapshot!(context.filters(), context.tool_audit().arg("--all").arg("--config-file").arg(config.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_audit()
+        .arg("--all")
+        .arg("--config-file")
+        .arg(config.path())
+        .arg("--no-offline")
+        .env(EnvVars::UV_OFFLINE, "1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "audit,tool-install-locks"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    No tools installed
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tool_audit_requires_selection() {
     let context = uv_test::test_context!("3.12");
 

@@ -17,7 +17,7 @@ use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use rustc_hash::FxHashSet;
 use tracing::trace;
 use uv_audit::{
@@ -72,6 +72,10 @@ pub(crate) async fn audit(
     ignore: Vec<VulnerabilityID>,
     ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {
+    if client_builder.is_offline() {
+        bail!("Auditing requires network access and cannot be performed in offline mode");
+    }
+
     // Check if the audit feature is in preview
     if !preview.is_enabled(PreviewFeature::AuditCommand) {
         warn_user!(
