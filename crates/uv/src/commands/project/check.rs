@@ -31,8 +31,8 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectInterpreter,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    validate_project_requires_python,
+    PythonRequirementSource, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    validate_python_requirement,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project};
@@ -313,7 +313,7 @@ pub(crate) async fn check(
             let WorkspacePython {
                 source,
                 python_request,
-                requires_python,
+                requirement,
             } = WorkspacePython::from_request(
                 python.as_deref().map(PythonRequest::parse),
                 workspace,
@@ -339,13 +339,12 @@ pub(crate) async fn check(
             .await?
             .into_interpreter();
 
-            if let Some(requires_python) = requires_python.as_ref() {
-                validate_project_requires_python(
+            if let Some(requirement) = requirement.as_ref() {
+                validate_python_requirement(
                     &interpreter,
-                    workspace,
-                    &groups,
-                    requires_python,
+                    &requirement.requires_python,
                     &source,
+                    PythonRequirementSource::Workspace(workspace, &groups),
                 )?;
             }
             interpreter
@@ -510,6 +509,7 @@ pub(crate) async fn check(
         } else {
             ProjectEnvironment::get_or_init(
                 project.workspace(),
+                None,
                 &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,

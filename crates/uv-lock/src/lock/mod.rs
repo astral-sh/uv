@@ -6262,7 +6262,7 @@ fn canonicalize_member_default_groups(
 pub struct GroupMetadata {
     /// The effective Python requirement, including requirements from included groups.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<VersionSpecifiers>,
 }
 
 /// Collect metadata for each member's dependency groups.
