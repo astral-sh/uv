@@ -26,7 +26,7 @@ Unreleased.
 
   Previously, uv used `astral-tokio-tar` to extract tar archives, build source distributions with `uv_build`, and read their metadata for `uv publish`. Now, uv uses `tar-codec`, which applies stricter validation when reading archives. This can cause uv to reject archives containing hard links or unsupported tar extensions that previous versions accepted. Source distributions created by `uv_build` can also have different archive bytes and hashes.
 
-  You can opt out of this behavior by setting `UV_NO_TAR_CODEC=1`.
+  You can opt out of this behavior by setting `UV_LEGACY_TAR_BACKEND=1`.
 
   This stabilizes the `tar-codec` preview feature.
 

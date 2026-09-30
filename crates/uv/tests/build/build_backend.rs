@@ -59,11 +59,11 @@ fn tar_backend_selection() -> Result<()> {
     let dist = TempDir::new()?;
     let archive = dist.path().join("built_by_uv-0.1.0.tar.gz");
 
-    let build = |no_tar_codec: Option<&str>, preview: bool| -> Result<Vec<u8>> {
+    let build = |legacy_tar_backend: Option<&str>, preview: bool| -> Result<Vec<u8>> {
         let mut command = context.build_backend();
-        command.env_remove(EnvVars::UV_NO_TAR_CODEC);
-        if let Some(value) = no_tar_codec {
-            command.env(EnvVars::UV_NO_TAR_CODEC, value);
+        command.env_remove(EnvVars::UV_LEGACY_TAR_BACKEND);
+        if let Some(value) = legacy_tar_backend {
+            command.env(EnvVars::UV_LEGACY_TAR_BACKEND, value);
         }
         if preview {
             command.arg("--preview-features").arg("tar-codec");
@@ -80,7 +80,10 @@ fn tar_backend_selection() -> Result<()> {
     let default = build(None, false)?;
     let fallback = build(Some("1"), false)?;
     assert_ne!(default, fallback);
+    assert_eq!(build(Some("true"), false)?, fallback);
     assert_eq!(build(Some("0"), false)?, default);
+    assert_eq!(build(Some("false"), false)?, default);
+    assert_eq!(build(Some("invalid"), false)?, default);
     assert_eq!(build(None, true)?, default);
     assert_eq!(build(Some("1"), true)?, fallback);
     Ok(())
@@ -608,7 +611,7 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     uv_snapshot!(context
         .build_backend()
-        .env(EnvVars::UV_NO_TAR_CODEC, "1")
+        .env(EnvVars::UV_LEGACY_TAR_BACKEND, "1")
         .arg("build-sdist")
         .arg(legacy_dir.path()), @"
     exit_code: 0 (success)
@@ -640,7 +643,7 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     uv_snapshot!(context
         .build_backend()
-        .env_remove(EnvVars::UV_NO_TAR_CODEC)
+        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
         .arg("build-sdist")
         .arg(default_dir.path()), @"
     exit_code: 0 (success)

@@ -160,7 +160,7 @@ mod tests {
         - <a id="sbom-export" href="#sbom-export"><code>sbom-export</code></a>: Allows using `uv export --format=cyclonedx1.5`.
         - <a id="special-conda-env-names" href="#special-conda-env-names"><code>special-conda-env-names</code></a>: Stops treating Conda environments named `base` or `root` as special.
         - <a id="tar-codec" href="#tar-codec"><code>tar-codec</code></a>: Deprecated compatibility feature. `tar-codec` is enabled by default; set
-          `UV_NO_TAR_CODEC=1` to use `astral-tokio-tar`.
+          `UV_LEGACY_TAR_BACKEND=1` to use the legacy backend.
         - <a id="target-workspace-discovery" href="#target-workspace-discovery"><code>target-workspace-discovery</code></a>: Uses the directory containing a local `uv run` target, rather than the current working
           directory, as the starting point for project and workspace discovery. This feature takes
           effect before configuration is loaded.

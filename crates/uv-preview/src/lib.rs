@@ -327,7 +327,7 @@ pub enum PreviewFeature {
     /// Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
     LockWithoutMetadata,
     /// Deprecated compatibility feature. `tar-codec` is enabled by default; set
-    /// `UV_NO_TAR_CODEC=1` to use `astral-tokio-tar`.
+    /// `UV_LEGACY_TAR_BACKEND=1` to use the legacy backend.
     TarCodec,
     /// Allows selecting configured package indexes by name with `--index` and `--default-index`.
     IndexByName,

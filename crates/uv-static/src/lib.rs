@@ -17,10 +17,10 @@ pub enum TarBackend {
 }
 
 impl TarBackend {
-    /// Select the tar implementation, allowing users to opt out of `tar-codec`.
+    /// Select the tar implementation, allowing users to enable the legacy backend.
     pub fn from_env() -> Self {
         if matches!(
-            parse_boolish_environment_variable(EnvVars::UV_NO_TAR_CODEC),
+            parse_boolish_environment_variable(EnvVars::UV_LEGACY_TAR_BACKEND),
             Ok(Some(true))
         ) {
             Self::TokioTar
