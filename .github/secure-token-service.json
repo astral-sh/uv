@@ -145,6 +145,16 @@
     {
       "caller": "uv",
       "environment": "automations",
+      "caller_ref": "refs/pull/21778/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@refs/heads/tk/pr-security-review",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
       "caller_ref": "refs/pull/*/merge",
       "caller_workflow": "ci.yml",
       "reusable_workflow": "check-crates-policies.yml",
