@@ -1,32 +1,10 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
-use std::fmt::Display;
 use std::path::{Component, Path, PathBuf, Prefix};
 use std::sync::LazyLock;
 
 use either::Either;
 use path_slash::PathExt;
-
-/// Quote diagnostic values when whitespace or control characters would obscure them.
-pub fn format_diagnostic_value(value: impl Display) -> String {
-    let value = value.to_string();
-    if value.is_empty()
-        || value.trim() != value
-        || (value.starts_with('"') && value.ends_with('"'))
-        || has_non_printable_characters(&value)
-    {
-        format!("{value:?}")
-    } else {
-        value
-    }
-}
-
-fn has_non_printable_characters(value: &str) -> bool {
-    value.chars().any(|character| match character {
-        '\\' | '\'' | '"' => false,
-        _ => !character.escape_debug().eq(std::iter::once(character)),
-    })
-}
 
 /// The current working directory.
 #[expect(clippy::print_stderr)]

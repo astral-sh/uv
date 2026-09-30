@@ -27,7 +27,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
 use uv_fs::which::is_executable;
-use uv_fs::{PythonExt, Simplified, create_symlink, format_diagnostic_value};
+use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_lock::{Installable, Lock};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -1323,12 +1323,9 @@ pub(crate) async fn run(
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    let handle = process.spawn().with_context(|| {
-        format!(
-            "Failed to spawn: {}",
-            format_diagnostic_value(command.display_executable())
-        )
-    })?;
+    let handle = process
+        .spawn()
+        .with_context(|| format!("Failed to spawn: {}", command.display_executable()))?;
 
     run_to_completion(handle).await
 }

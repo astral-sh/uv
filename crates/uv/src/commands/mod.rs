@@ -68,7 +68,7 @@ pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
 use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
-use uv_fs::{CWD, Simplified, format_diagnostic_value};
+use uv_fs::{CWD, Simplified};
 use uv_installer::{compile_files, compile_tree};
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
@@ -265,7 +265,7 @@ fn read_env_files<'a>(
             Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 bail!(
                     "No environment file found at: {}",
-                    format_diagnostic_value(env_file_path.simplified_display())
+                    env_file_path.simplified_display()
                 );
             }
             Err(dotenvy::Error::Io(err)) => {

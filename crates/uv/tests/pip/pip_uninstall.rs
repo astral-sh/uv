@@ -33,7 +33,7 @@ fn invalid_requirement() {
         .arg("flask==1.0.x"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: flask==1.0.x
+    error: Failed to parse: `flask==1.0.x`
       cause: after parsing `1.0`, found `.x`, which is not part of a valid version
              flask==1.0.x
                   ^^^^^^^

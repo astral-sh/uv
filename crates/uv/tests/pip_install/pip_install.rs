@@ -238,23 +238,21 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
 fn whitespace_only_requirement() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filter(("\u{a0}", "[WHITESPACE]"))
-        .with_filter(("\u{2003}", "[WHITESPACE]"))
-        .with_filter((r"\\u\{a0\}", "[WHITESPACE]"))
-        .with_filter((r"\\u\{2003\}", "[WHITESPACE]"));
+        .with_filter(("\u{2003}", "[WHITESPACE]"));
 
     allow_duplicates! {
         for whitespace in ["\u{a0}", "\u{2003}"] {
             uv_snapshot!(context.filters(), context.pip_install()
                 .arg(whitespace)
                 .arg("--system")
-                .arg("--dry-run"), @r#"
+                .arg("--dry-run"), @"
             exit_code: 2 (failure)
             ----- stderr -----
-            error: Failed to parse: "[WHITESPACE]"
+            error: Failed to parse: `[WHITESPACE]`
               cause: Empty field is not allowed for PEP508
 
                      ^
-            "#);
+            ");
         }
     }
 }
@@ -3207,7 +3205,7 @@ fn install_git_unescaped_ref() {
         .arg("example @ git+https://example.com/repository@pkg@1.2.3"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: example @ git+https://example.com/repository@pkg@1.2.3
+    error: Failed to parse: `example @ git+https://example.com/repository@pkg@1.2.3`
       cause: Ambiguous Git URL `https://example.com/repository@pkg@1.2.3`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`
              example @ git+https://example.com/repository@pkg@1.2.3
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -11404,7 +11402,7 @@ fn invalid_extension() {
         , @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
+    error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`
       cause: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
              ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -11421,7 +11419,7 @@ fn no_extension() {
         , @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
+    error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
       cause: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
              ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -11825,7 +11823,7 @@ fn missing_git_prefix() -> Result<()> {
         .arg("workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
+    error: Failed to parse: `workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test`
       cause: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
              workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -13417,7 +13415,7 @@ fn unsupported_git_scheme() {
         .arg("git+fantasy://foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: git+fantasy://foo
+    error: Failed to parse: `git+fantasy://foo`
       cause: Unsupported Git URL scheme `fantasy:` in `fantasy://foo` (expected one of `https:`, `ssh:`, or `file:`)
              git+fantasy://foo
              ^^^^^^^^^^^^^^^^^

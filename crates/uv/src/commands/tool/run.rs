@@ -27,7 +27,6 @@ use uv_distribution_types::{
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_errors::HintOrdering;
-use uv_fs::format_diagnostic_value;
 use uv_installer::{BuildSettings, InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -461,7 +460,7 @@ pub(crate) async fn run(
         }
         Err(err) => Err(err),
     }
-    .with_context(|| format!("Failed to spawn: {}", format_diagnostic_value(executable)))?;
+    .with_context(|| format!("Failed to spawn: {executable}"))?;
 
     run_to_completion(handle).await
 }

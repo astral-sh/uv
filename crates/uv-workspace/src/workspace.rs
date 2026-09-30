@@ -19,7 +19,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
 use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
-use uv_fs::{CWD, Simplified, format_diagnostic_value, normalize_path};
+use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
 use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
@@ -1280,7 +1280,7 @@ impl Workspace {
                         if !metadata.is_dir() {
                             warn!(
                                 "Ignoring non-directory workspace member: {}",
-                                format_diagnostic_value(member_root.simplified_display())
+                                member_root.simplified_display()
                             );
                             continue;
                         }

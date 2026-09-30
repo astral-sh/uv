@@ -96,7 +96,7 @@ fn tool_run_at_version() {
         .arg("--version"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: pytest@
+    error: Failed to parse: `pytest@`
       cause: Expected URL
              pytest@
                     ^

@@ -11,7 +11,7 @@ use tracing::{debug, warn};
 use webpki::{Error as WebPkiError, anchor_from_trusted_cert};
 use x509_parser::prelude::{FromDer, X509Certificate};
 
-use uv_fs::{Simplified, format_diagnostic_value};
+use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -481,9 +481,9 @@ pub(crate) enum CertificateError {
 pub enum CertificateFileError {
     #[error("Failed to read certificate file `{}`", .0.simplified_display())]
     Io(PathBuf, #[source] io::Error),
-    #[error("Certificate path is not a file: {}", format_diagnostic_value(.0.simplified_display()))]
+    #[error("Certificate path is not a file: {}", .0.simplified_display())]
     NotFile(PathBuf),
-    #[error("No valid certificates found in: {}", format_diagnostic_value(.0.simplified_display()))]
+    #[error("No valid certificates found in: {}", .0.simplified_display())]
     NoValidCertificates(PathBuf),
 }
 

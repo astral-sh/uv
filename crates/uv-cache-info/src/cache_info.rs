@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use tracing::{debug, info_span, warn};
 
-use uv_fs::{Simplified, created_time, format_diagnostic_value};
+use uv_fs::{Simplified, created_time};
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -127,7 +127,7 @@ impl CacheInfo {
                     if !metadata.is_file() {
                         warn!(
                             "Expected file for cache key, but found directory: {}",
-                            format_diagnostic_value(path.display())
+                            path.display()
                         );
                         continue;
                     }
@@ -155,7 +155,7 @@ impl CacheInfo {
                     if !metadata.is_dir() {
                         warn!(
                             "Expected directory for cache key, but found file: {}",
-                            format_diagnostic_value(path.display())
+                            path.display()
                         );
                         continue;
                     }
@@ -263,7 +263,7 @@ impl CacheInfo {
                             // don't warn if it was a symlink - it may legitimately resolve to a directory
                             warn!(
                                 "Expected file for cache key, but found directory: {}",
-                                format_diagnostic_value(entry.path().display())
+                                entry.path().display()
                             );
                         }
                         continue;

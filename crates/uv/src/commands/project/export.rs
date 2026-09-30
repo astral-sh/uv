@@ -17,7 +17,7 @@ use uv_configuration::{
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
-use uv_fs::{CWD, format_diagnostic_value};
+use uv_fs::CWD;
 use uv_lock::{Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
@@ -108,10 +108,7 @@ impl ExportBatch {
                 parent.join(&entry.output_file),
             )?)?;
             if !outputs.insert(entry.output_file.clone()) {
-                bail!(
-                    "Duplicate export output: {}",
-                    format_diagnostic_value(entry.output_file.display())
-                );
+                bail!("Duplicate export output: {}", entry.output_file.display());
             }
             if entry.all_packages && !entry.package.is_empty() {
                 bail!("`all-packages` cannot be combined with `package`");

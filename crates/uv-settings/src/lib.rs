@@ -9,7 +9,7 @@ use uv_configuration::RequiredVersion;
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::{IndexUrlError, Origin};
 use uv_flags::EnvironmentFlags;
-use uv_fs::{Simplified, format_diagnostic_value};
+use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
@@ -679,10 +679,10 @@ pub enum Error {
     #[error(transparent)]
     Index(#[from] uv_distribution_types::IndexUrlError),
 
-    #[error("Failed to parse: {}", format_diagnostic_value(_0.user_display()))]
+    #[error("Failed to parse: {}", _0.user_display())]
     PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: {}", format_diagnostic_value(_0.user_display()))]
+    #[error("Failed to parse: {}", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
 
     #[error("Failed to parse `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
