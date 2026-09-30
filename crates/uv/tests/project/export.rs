@@ -11251,14 +11251,14 @@ fn frozen_lockfile_rejects_index_emission() -> Result<()> {
         .args(["--no-default-groups", "--emit-index-url"]), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: `--emit-index-url` and `--emit-find-links` are not supported without a workspace manifest
+    error: `--emit-index-url` and `--emit-find-links` are not supported without a `pyproject.toml`
     ");
 
     uv_snapshot!(context.filters(), frozen_export(&context)
         .args(["--no-default-groups", "--emit-find-links"]), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: `--emit-index-url` and `--emit-find-links` are not supported without a workspace manifest
+    error: `--emit-index-url` and `--emit-find-links` are not supported without a `pyproject.toml`
     ");
 
     Ok(())
@@ -11970,7 +11970,7 @@ fn frozen_lockfile_single_project() -> Result<()> {
     -e .
 
     ----- stderr -----
-    warning: Using `uv.lock` without a workspace manifest is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    warning: Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
     ");
 
     // Select the only project.

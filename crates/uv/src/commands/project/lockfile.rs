@@ -66,7 +66,7 @@ impl FrozenWorkspace {
                 }
                 if !preview.is_enabled(PreviewFeature::FrozenLockfile) {
                     warn_user!(
-                        "Using `uv.lock` without a workspace manifest is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                        "Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
                         PreviewFeature::FrozenLockfile
                     );
                 }

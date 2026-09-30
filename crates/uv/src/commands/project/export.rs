@@ -256,7 +256,7 @@ pub(crate) async fn export(
             DiscoveredProject::Lockfile(workspace) => {
                 if include_index_url || include_find_links {
                     bail!(
-                        "`--emit-index-url` and `--emit-find-links` are not supported without a workspace manifest"
+                        "`--emit-index-url` and `--emit-find-links` are not supported without a `pyproject.toml`"
                     );
                 }
                 frozen_workspace = workspace;
