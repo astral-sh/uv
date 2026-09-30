@@ -105,6 +105,8 @@ Ok(
         workspace_members: {},
         manifest: ResolverManifest {
             members: {},
+            default_groups: None,
+            group_requires_python: {},
             requirements: {},
             dependency_groups: {},
             constraints: {},

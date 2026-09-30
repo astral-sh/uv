@@ -644,6 +644,17 @@ fn find_lockfile_requires_python(
         }
     }
 
+    for (group, metadata) in lock.workspace_group_metadata() {
+        if target.includes_group(None, group, groups)
+            && let Some(requires_python) = &metadata.requires_python
+        {
+            group_requirements.insert(
+                RequiresPythonDeclaration::Workspace(group.clone()),
+                requires_python.clone(),
+            );
+        }
+    }
+
     let Some(requires_python) = RequiresPython::intersection(
         std::iter::once(lock.requires_python().specifiers()).chain(group_requirements.values()),
     ) else {

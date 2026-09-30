@@ -23,8 +23,8 @@ use uv_distribution_types::{
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
-use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
-use uv_normalize::{GroupName, PackageName};
+use uv_lock::{GroupMetadata, Lock, Package, ResolverManifest, SatisfiesResult};
+use uv_normalize::{DefaultGroups, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
@@ -542,6 +542,16 @@ async fn do_lock(
     let members = target.members();
     let packages = target.packages();
     let required_members = target.required_members();
+    let workspace_default_groups = match target {
+        LockTarget::Workspace(workspace) => {
+            if workspace.is_non_project() {
+                Some(workspace.default_groups()?)
+            } else {
+                None
+            }
+        }
+        LockTarget::Script(_) => None,
+    };
 
     // Validate explicit defaults before omitting `["dev"]` from the lockfile. Unlike the
     // implicit default, an explicit `["dev"]` requires the `dev` group to exist.
@@ -560,6 +570,19 @@ async fn do_lock(
     let excludes = target.exclude_dependencies();
     let constraints = target.constraints();
     let dependency_groups = target.dependency_groups()?;
+    let workspace_group_metadata = dependency_groups
+        .iter()
+        .filter_map(|(name, group)| {
+            group.requires_python.clone().map(|requires_python| {
+                (
+                    name.clone(),
+                    GroupMetadata {
+                        requires_python: Some(requires_python),
+                    },
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
     let source_trees = vec![];
 
     // If necessary, lower the overrides and constraints.
@@ -970,6 +993,8 @@ async fn do_lock(
             required_members,
             &requirements,
             &dependency_groups,
+            &workspace_group_metadata,
+            workspace_default_groups.as_ref(),
             &constraints,
             &overrides,
             &excludes,
@@ -1190,7 +1215,9 @@ async fn do_lock(
                     })
                     .collect(),
             )
-            .with_member_group_metadata(packages)?;
+            .with_workspace_default_groups(workspace_default_groups)
+            .with_member_group_metadata(packages)?
+            .with_workspace_group_metadata(workspace_group_metadata);
 
             let lock = if let Some(recorder) = recorder {
                 lock.prune_unused(recorder.take())
@@ -1239,6 +1266,8 @@ impl ValidatedLock {
         required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
+        workspace_group_metadata: &BTreeMap<GroupName, GroupMetadata>,
+        workspace_default_groups: Option<&DefaultGroups>,
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
@@ -1473,6 +1502,8 @@ impl ValidatedLock {
                 excludes,
                 build_constraints,
                 dependency_groups,
+                workspace_group_metadata,
+                workspace_default_groups,
                 dependency_metadata,
                 indexes,
                 interpreter.tags()?,
@@ -1499,6 +1530,20 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedMemberDefaultGroups(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched member default groups:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedWorkspaceGroupMetadata(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched workspace group metadata:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedWorkspaceDefaultGroups(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched workspace default groups:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

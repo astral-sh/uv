@@ -120,7 +120,7 @@ impl PyProjectToml {
             }
             Ok(defaults.clone())
         } else {
-            Ok(DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()]))
+            Ok(DefaultGroups::from_groups(vec![DEV_DEPENDENCIES.clone()]))
         }
     }
 
