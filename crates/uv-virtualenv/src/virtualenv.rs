@@ -17,7 +17,6 @@ use tracing::{debug, trace};
 use crate::{Error, Prompt};
 use uv_fs::{CWD, PythonExt, Simplified, cachedir};
 use uv_platform_tags::Os;
-use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_python_interpreter::{Interpreter, VirtualEnvironment};
 use uv_python_managed::{
@@ -50,7 +49,6 @@ const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 /// See <https://github.com/pypa/virtualenv/issues/3181>
 fn install_distutils_patch(interpreter: &Interpreter) -> bool {
     interpreter.python_tuple() < (3, 10)
-        || !uv_preview::is_enabled(PreviewFeature::NoDistutilsPatch)
 }
 
 /// Very basic `.cfg` file format writer.

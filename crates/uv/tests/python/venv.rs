@@ -177,40 +177,36 @@ fn create_venv_caches_upgradeable_interpreter() -> Result<()> {
 }
 
 #[test]
-fn create_venv_preview_skips_distutils_patch_on_py310_plus() {
-    let context = uv_test::test_context_with_versions!(&["3.12"]);
+fn create_venv_skips_distutils_patch_on_py310() {
+    let context = uv_test::test_context_with_versions!(&["3.10"]);
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
-        .arg("--preview-features")
-        .arg("no-distutils-patch"), @"
+        .arg("3.10"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "
     );
 
     context.venv.assert(predicates::path::is_dir());
-    let site_packages = site_packages_path(context.venv.path(), "python3.12");
+    let site_packages = site_packages_path(context.venv.path(), "python3.10");
     assert!(!site_packages.join("_virtualenv.py").exists());
     assert!(!site_packages.join("_virtualenv.pth").exists());
 }
 
 #[test]
 #[cfg(feature = "test-python-eol")]
-fn create_venv_preview_keeps_distutils_patch_on_py39() {
+fn create_venv_keeps_distutils_patch_on_py39() {
     let context = uv_test::test_context_with_versions!(&["3.9"]);
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.9")
-        .arg("--preview-features")
-        .arg("no-distutils-patch"), @"
+        .arg("3.9"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
@@ -223,6 +219,61 @@ fn create_venv_preview_keeps_distutils_patch_on_py39() {
     let site_packages = site_packages_path(context.venv.path(), "python3.9");
     assert!(site_packages.join("_virtualenv.py").is_file());
     assert!(site_packages.join("_virtualenv.pth").is_file());
+}
+
+#[test]
+fn create_venv_with_removed_distutils_patch_preview() {
+    let context = uv_test::test_context_with_versions!(&["3.10"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.10")
+        .arg("--preview-features")
+        .arg("no-distutils-patch"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Unknown preview feature: `no-distutils-patch`
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    let site_packages = site_packages_path(context.venv.path(), "python3.10");
+    assert!(!site_packages.join("_virtualenv.py").exists());
+    assert!(!site_packages.join("_virtualenv.pth").exists());
+}
+
+#[test]
+fn create_venv_preserves_existing_distutils_patch() -> Result<()> {
+    let context = uv_test::test_context!("3.10");
+    let site_packages = site_packages_path(context.venv.path(), "python3.10");
+    fs_err::write(site_packages.join("_virtualenv.py"), "")?;
+    fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.10"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    assert!(site_packages.join("_virtualenv.py").is_file());
+    assert!(site_packages.join("_virtualenv.pth").is_file());
+
+    context
+        .venv()
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.10")
+        .assert()
+        .success();
+    assert!(!site_packages.join("_virtualenv.py").exists());
+    assert!(!site_packages.join("_virtualenv.pth").exists());
+    Ok(())
 }
 
 #[test]
@@ -1334,6 +1385,9 @@ fn seed() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+    let site_packages = site_packages_path(context.venv.path(), "python3.12");
+    assert!(!site_packages.join("_virtualenv.py").exists());
+    assert!(!site_packages.join("_virtualenv.pth").exists());
 }
 
 #[test]
@@ -1357,6 +1411,54 @@ fn seed_older_python_version() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn seed_skips_distutils_patch_on_py310() {
+    let context = uv_test::test_context_with_versions!(&["3.10"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--seed")
+        .arg("--python")
+        .arg("3.10"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    Creating virtual environment with seed packages at: .venv
+     + pip==24.0
+     + setuptools==69.2.0
+     + wheel==0.43.0
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    let site_packages = site_packages_path(context.venv.path(), "python3.10");
+    assert!(!site_packages.join("_virtualenv.py").exists());
+    assert!(!site_packages.join("_virtualenv.pth").exists());
+}
+
+#[test]
+#[cfg(all(feature = "test-pypi", feature = "test-python-eol"))]
+fn seed_keeps_distutils_patch_on_py39() {
+    let context = uv_test::test_context_with_versions!(&["3.9"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--seed")
+        .arg("--python")
+        .arg("3.9"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Creating virtual environment with seed packages at: .venv
+     + pip==24.0
+     + setuptools==69.2.0
+     + wheel==0.43.0
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    let site_packages = site_packages_path(context.venv.path(), "python3.9");
+    assert!(site_packages.join("_virtualenv.py").is_file());
+    assert!(site_packages.join("_virtualenv.pth").is_file());
 }
 
 #[test]
