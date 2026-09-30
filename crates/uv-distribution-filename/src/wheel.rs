@@ -395,6 +395,10 @@ pub enum WheelFilenameError {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
+    use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
+
     use super::*;
 
     #[test]
@@ -488,6 +492,40 @@ mod tests {
     #[test]
     fn ok_single_tags() {
         insta::assert_debug_snapshot!(WheelFilename::from_str("foo-1.2.3-py3-none-any.whl"));
+    }
+
+    #[test]
+    fn netbsd_release_casing() -> Result<(), Box<dyn Error>> {
+        let tags = Tags::from_env(
+            Platform::new(
+                Os::NetBsd {
+                    release: "11.0_STABLE".to_string(),
+                },
+                Arch::X86_64,
+            ),
+            (3, 14),
+            "cpython",
+            (3, 14),
+            TagsOptions::default(),
+        )?;
+        for (suffix, compatible) in [
+            ("11_0_STABLE_amd64", true),
+            ("11_0_stable_amd64", true),
+            ("11_0_StAbLe_amd64", true),
+            ("10_0_stable_amd64", false),
+            ("11_0_stable_aarch64", false),
+        ] {
+            let wheel = WheelFilename::from_str(&format!(
+                "pyreqwest-0.13.0-cp314-cp314-netbsd_{suffix}.whl"
+            ))?;
+            assert_eq!(wheel.is_compatible(&tags), compatible, "{wheel}");
+            assert_eq!(
+                wheel.compatibility(&tags).is_compatible(),
+                compatible,
+                "{wheel}"
+            );
+        }
+        Ok(())
     }
 
     #[test]
