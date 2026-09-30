@@ -7,7 +7,7 @@
 
 ### Configuration
 
-- Add `UV_PYTHON_ARCH` to select a Python architecture independently of the version request. Explicit architecture requests and interpreter paths take precedence ([#22098](https://github.com/astral-sh/uv/pull/22098)).
+- Add `UV_PYTHON_ARCH` to select a Python architecture independently of the version request, while honoring explicit architecture requests and interpreter paths ([#22098](https://github.com/astral-sh/uv/pull/22098))
 
 ## 0.12.21
 
