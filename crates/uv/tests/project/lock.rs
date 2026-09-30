@@ -412,6 +412,446 @@ fn member_group_python_requirements_in_lockfile() -> Result<()> {
     Ok(())
 }
 
+/// Record root group bounds independently of the resolved dependency markers.
+#[test]
+fn non_project_group_python_requirements_in_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = ["combined"]
+
+        [dependency-groups]
+        base = []
+        combined = [{ include-group = "base" }]
+        unrestricted = []
+
+        [tool.uv.dependency-groups]
+        base = { requires-python = ">=3.13" }
+        combined = { requires-python = "<3.15" }
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    // Empty groups retain their own bounds and requirements inherited through include-group.
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let contents = context.read("uv.lock");
+    assert_snapshot!(contents, @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "member",
+    ]
+    default-groups = ["combined"]
+
+    [manifest.dependency-groups]
+    base = []
+    combined = []
+    unrestricted = []
+
+    [manifest.group-requires-python]
+    base = ">=3.13"
+    combined = ">=3.13,<3.15"
+
+    [[package]]
+    name = "member"
+    version = "1.0.0"
+    source = { virtual = "member" }
+    "#);
+
+    // Canonical and general TOML parsing retain the same root metadata.
+    let lock = Lock::from_canonical_toml(&contents)?;
+    assert_eq!(Lock::from_toml(&contents)?, lock);
+    assert_eq!(toml::from_str::<Lock>(&contents)?, lock);
+    assert_eq!(lock.to_toml()?, contents);
+
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // An older lock must be updated when it omits the root's Python requirements.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["member"]
+
+        [[package]]
+        name = "member"
+        version = "1.0.0"
+        source = { virtual = "member" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Changing an included group's bound makes the lock stale even without dependencies.
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = ["combined"]
+
+        [dependency-groups]
+        base = []
+        combined = [{ include-group = "base" }]
+        unrestricted = []
+
+        [tool.uv.dependency-groups]
+        base = { requires-python = ">=3.14" }
+        combined = { requires-python = "<3.15" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Omitting package declaration metadata retains the root's defaults and group requirements.
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--preview-features", "lock-without-metadata"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "member",
+    ]
+    default-groups = ["combined"]
+
+    [manifest.dependency-groups]
+    base = []
+    combined = []
+    unrestricted = []
+
+    [manifest.group-requires-python]
+    base = ">=3.14"
+    combined = ">=3.14,<3.15"
+
+    [[package]]
+    name = "member"
+    version = "1.0.0"
+    source = { virtual = "member" }
+    "#);
+
+    // Removing a requirement also makes the recorded root metadata stale.
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = ["combined"]
+
+        [dependency-groups]
+        base = []
+        combined = [{ include-group = "base" }]
+        unrestricted = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+/// Record canonical root defaults and retain support for older locks without them.
+#[test]
+fn non_project_default_groups_in_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = ["lint", "docs", "docs"]
+
+        [dependency-groups]
+        docs = []
+        lint = []
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    // Root defaults are sorted and deduplicated, and empty root groups remain selectable.
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "member",
+    ]
+    default-groups = ["docs", "lint"]
+
+    [manifest.dependency-groups]
+    docs = []
+    lint = []
+
+    [[package]]
+    name = "member"
+    version = "1.0.0"
+    source = { virtual = "member" }
+    "#);
+
+    // An older lock without recorded defaults remains usable with its workspace manifest.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["member"]
+
+        [[package]]
+        name = "member"
+        version = "1.0.0"
+        source = { virtual = "member" }
+    "#})?;
+
+    let legacy = Lock::from_canonical_toml(&context.read("uv.lock"))?;
+    assert_eq!(legacy.workspace_default_groups(), None);
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Restore the recorded defaults before checking changes to the selection.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["member"]
+        default-groups = ["docs", "lint"]
+
+        [manifest.dependency-groups]
+        docs = []
+        lint = []
+
+        [[package]]
+        name = "member"
+        version = "1.0.0"
+        source = { virtual = "member" }
+    "#})?;
+
+    // An explicit empty default selection is recorded independently of the defined groups.
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = []
+
+        [dependency-groups]
+        docs = []
+        lint = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock = Lock::from_canonical_toml(&context.read("uv.lock"))?;
+    assert_eq!(
+        lock.workspace_default_groups(),
+        Some(DefaultGroups::List(vec![]))
+    );
+
+    // Switching to all groups invalidates the recorded default selection.
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = "all"
+
+        [dependency-groups]
+        docs = []
+        lint = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock = Lock::from_canonical_toml(&context.read("uv.lock"))?;
+    assert_eq!(lock.workspace_default_groups(), Some(DefaultGroups::All));
+
+    // The implicit dev default is omitted, even when the root has no dev group.
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [dependency-groups]
+        docs = []
+        lint = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "member",
+    ]
+
+    [manifest.dependency-groups]
+    docs = []
+    lint = []
+
+    [[package]]
+    name = "member"
+    version = "1.0.0"
+    source = { virtual = "member" }
+    "#);
+    let lock = Lock::from_canonical_toml(&context.read("uv.lock"))?;
+    assert_eq!(
+        lock.workspace_default_groups(),
+        Some(DefaultGroups::List(vec!["dev".parse()?]))
+    );
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Changing the implicit default still invalidates the lockfile.
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = ["docs"]
+
+        [dependency-groups]
+        docs = []
+        lint = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
 /// A metadata-free lock records group requirements without an explicit manifest parent table.
 #[test]
 fn metadata_free_group_python_requirements_in_lockfile() -> Result<()> {

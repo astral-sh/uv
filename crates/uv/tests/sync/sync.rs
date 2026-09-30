@@ -1304,6 +1304,11 @@ fn non_project_group_requires_python() -> Result<()> {
 
         [tool.uv]
         package = false
+        default-groups = ["lint"]
+
+        [dependency-groups]
+        lint = []
+        test = []
     "#})?;
     context
         .lock()
@@ -1339,12 +1344,36 @@ fn non_project_group_requires_python() -> Result<()> {
     Would make no changes
     ");
 
-    // Explicit root groups also constrain `run`.
+    // Explicit root groups also constrain `run` and frozen member sync.
     uv_snapshot!(context.filters(), context.run().args(["--no-default-groups", "--group", "docs", "--python", "3.11", "--offline", "--", "python", "-V"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from the workspace root's `tool.uv.dependency-groups.docs.requires-python`).
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--package", "member", "--group", "docs", "--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `workspace:docs` in `uv.lock`).
+    ");
+
+    // A member's defaults and same-named groups do not activate the root's requirements.
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--package", "member", "--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Would create project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--package", "member", "--group", "test", "--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Would create project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
     ");
 
     // Conflicting root requirements identify both group declarations.
