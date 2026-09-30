@@ -61,6 +61,10 @@ fn hash_sha256(c: &mut Criterion<WallTime>) {
 }
 
 fn hash_reader(criterion: &mut Criterion<WallTime>) {
+    if !is_codspeed_simulation() {
+        return;
+    }
+
     // Rounded PyPI wheel size deciles (10th through 90th), with a second median-sized wheel,
     // followed by a representative 33 MiB Python standalone archive.
     let inputs = [7, 12, 20, 32, 55, 55, 98, 220, 589, 3154, 33 * 1024]
