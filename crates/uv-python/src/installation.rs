@@ -234,7 +234,7 @@ impl PythonInstallation {
 
         let download = download_request
             .clone()
-            .with_arch_if_unspecified(arch.map(PythonArchitecture::into_inner))
+            .with_default_arch(arch.map(PythonArchitecture::into_inner))
             .fill()
             .map(|request| download_list.find(&request));
 

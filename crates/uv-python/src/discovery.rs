@@ -1185,7 +1185,7 @@ fn find_python_installations_with_strategy<'a>(
             .and_then(|request| request.arch().map(ArchRequest::inner))
             .unwrap_or_else(|| arch.into_inner())
     });
-    let platform = PlatformRequest::default().with_arch_if_unspecified(arch);
+    let platform = PlatformRequest::default().with_default_arch(arch);
     let sources = DiscoveryPreferences {
         python_preference: preference,
         environment_preference: environments,
@@ -1357,7 +1357,7 @@ fn find_python_installations_with_strategy<'a>(
                 python_installations(
                     request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
-                    request.platform().with_arch_if_unspecified(arch),
+                    request.platform().with_default_arch(arch),
                     environments,
                     preference,
                     cache,
@@ -1547,7 +1547,7 @@ pub(crate) fn find_python_installation(
 
     Ok(Err(PythonNotFound {
         request: request
-            .with_arch_if_unspecified(arch.map(PythonArchitecture::into_inner))
+            .with_default_arch(arch.map(PythonArchitecture::into_inner))
             .into_owned(),
         environment_preference: environments,
         python_preference: preference,
@@ -1651,7 +1651,7 @@ pub(crate) async fn find_best_python_installation(
 
             let download = download_request
                 .clone()
-                .with_arch_if_unspecified(arch.map(PythonArchitecture::into_inner))
+                .with_default_arch(arch.map(PythonArchitecture::into_inner))
                 .fill()
                 .map(|request| download_list.find(&request));
 
@@ -1710,7 +1710,7 @@ pub(crate) async fn find_best_python_installation(
                 crate::Error::MissingPython(err, _) => PythonNotFound {
                     // Use a more general error in this case since we looked for multiple versions
                     request: original_request
-                        .with_arch_if_unspecified(arch.map(PythonArchitecture::into_inner))
+                        .with_default_arch(arch.map(PythonArchitecture::into_inner))
                         .into_owned(),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
@@ -2298,8 +2298,8 @@ impl PythonRequest {
         }
     }
 
-    /// Apply an architecture to requests that do not already select one or name an executable.
-    pub fn with_arch_if_unspecified(&self, arch: Option<Arch>) -> Cow<'_, Self> {
+    /// Require an exact architecture for requests that do not select one or name an executable.
+    pub fn with_default_arch(&self, arch: Option<Arch>) -> Cow<'_, Self> {
         let Some(arch) = arch else {
             return Cow::Borrowed(self);
         };

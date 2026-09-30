@@ -245,9 +245,9 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
-    /// Require the user-selected architecture if this request does not specify one.
+    /// Require an exact match for the given architecture if this request does not specify one.
     #[must_use]
-    pub(crate) fn with_arch_if_unspecified(mut self, arch: Option<Arch>) -> Self {
+    pub(crate) fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
         if self.arch.is_none() {
             self.arch = arch.map(ArchRequest::Explicit);
         }
@@ -369,9 +369,9 @@ impl PythonDownloadRequest {
         self
     }
 
-    /// Require the user-selected architecture if this request does not specify one.
+    /// Require an exact match for the given architecture if this request does not specify one.
     #[must_use]
-    pub fn with_arch_if_unspecified(mut self, arch: Option<Arch>) -> Self {
+    pub fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
         if self.arch.is_none() {
             self.arch = arch.map(ArchRequest::Explicit);
         }

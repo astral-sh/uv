@@ -1095,7 +1095,7 @@ async fn get_or_create_environment(
                     python_request
                         .as_ref()
                         .unwrap_or(&PythonRequest::Any)
-                        .with_arch_if_unspecified(python_arch.map(PythonArchitecture::into_inner))
+                        .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
                         .satisfied(environment.environment().interpreter(), cache)
                 });
 

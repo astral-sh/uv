@@ -83,9 +83,7 @@ pub(crate) async fn list(
     } else {
         // If the user request cannot be mapped to a download request, we won't show any downloads
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any)).map(
-            |request| {
-                request.with_arch_if_unspecified(python_arch.map(PythonArchitecture::into_inner))
-            },
+            |request| request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)),
         )
     };
 

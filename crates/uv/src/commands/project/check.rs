@@ -731,7 +731,7 @@ pub(crate) async fn check(
         let request = PythonRequest::parse(&python);
         if let Some(venv) = venv.as_ref()
             && request
-                .with_arch_if_unspecified(python_arch.map(PythonArchitecture::into_inner))
+                .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
                 .satisfied(venv.interpreter(), cache)
         {
             Some(venv.interpreter().python_minor_version())

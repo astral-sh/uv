@@ -68,7 +68,7 @@ impl<'a> InstallRequest<'a> {
                     request.to_canonical_string()
                 )
             })?
-            .with_arch_if_unspecified(arch.map(PythonArchitecture::into_inner))
+            .with_default_arch(arch.map(PythonArchitecture::into_inner))
             .fill()?;
 
         // Find a matching download

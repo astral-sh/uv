@@ -720,7 +720,7 @@ pub(crate) async fn refine_interpreter(
     // can't use it.
     if let Some(python_request) = python_request {
         if !python_request
-            .with_arch_if_unspecified(python_arch.map(PythonArchitecture::into_inner))
+            .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
             .satisfied(&interpreter, cache)
         {
             return Ok(None);

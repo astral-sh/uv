@@ -1141,9 +1141,7 @@ fn check_environment_compatibility(
 
     let python_request = python_request
         .or_else(|| python_arch.map(|_| &PythonRequest::Any))
-        .map(|request| {
-            request.with_arch_if_unspecified(python_arch.map(PythonArchitecture::into_inner))
-        });
+        .map(|request| request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)));
     if let Some(request) = python_request {
         if request.satisfied(environment.interpreter(), cache) {
             debug!("The {kind} environment's Python version satisfies the request: `{request}`");
