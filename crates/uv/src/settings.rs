@@ -3381,6 +3381,10 @@ impl AuditSettings {
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
+        // Audit includes all groups by default, regardless of `tool.uv.default-groups`.
+        // `--no-default-groups` disables that implicit selection.
+        let all_groups = only_group.is_empty() && !only_dev && !no_default_groups;
+
         Ok(Self {
             extras: ExtrasSpecification::from_args(
                 vec![],
@@ -3392,11 +3396,7 @@ impl AuditSettings {
                 true,
             ),
             groups: DependencyGroups::from_args(
-                DevMode::from_args(
-                    only_group.is_empty() && !only_dev && !no_default_groups,
-                    no_dev,
-                    only_dev,
-                ),
+                DevMode::from_args(all_groups, no_dev, only_dev),
                 vec![],
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -3404,8 +3404,8 @@ impl AuditSettings {
                     no_group
                 },
                 no_default_groups,
-                only_group.clone(),
-                only_group.is_empty() && !only_dev && !no_default_groups,
+                only_group,
+                all_groups,
             ),
             lock_check: locked,
             frozen,

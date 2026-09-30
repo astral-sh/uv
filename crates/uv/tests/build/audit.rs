@@ -797,7 +797,7 @@ async fn audit_extras() {
     ");
 }
 
-/// Non-default dependency groups are included when explicitly requested.
+/// Dependency group filters limit the groups included in an audit.
 #[tokio::test]
 async fn audit_dependency_groups() {
     let context = uv_test::test_context!("3.12");
@@ -888,7 +888,7 @@ async fn audit_dependency_groups() {
     ");
 }
 
-/// `--no-default-groups` excludes the default dependency groups from an audit.
+/// `--no-default-groups` disables all implicit dependency groups in an audit.
 #[tokio::test]
 async fn audit_no_default_groups() {
     let context = uv_test::test_context!("3.12");
@@ -904,6 +904,7 @@ async fn audit_no_default_groups() {
 
         [dependency-groups]
         dev = ["typing-extensions==4.10.0"]
+        lint = ["sniffio==1.3.1"]
 
         [tool.uv]
         default-groups = ["dev"]
@@ -922,7 +923,7 @@ async fn audit_no_default_groups() {
         .mount(&server)
         .await;
 
-    // The default audit includes both the project and its default dev group.
+    // All groups are audited by default, including lint, which is not in default-groups.
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--preview-features")
@@ -931,11 +932,11 @@ async fn audit_no_default_groups() {
         .arg(server.uri()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Found no known vulnerabilities and no adverse project statuses in 2 packages
+    Resolved 4 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 3 packages
     ");
 
-    // `--no-default-groups` should leave only the project's direct dependencies.
+    // Disabling implicit groups leaves only the project's dependencies.
     uv_snapshot!(context.filters(), context
         .audit()
         .arg("--preview-features")
@@ -945,7 +946,7 @@ async fn audit_no_default_groups() {
         .arg(server.uri()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
