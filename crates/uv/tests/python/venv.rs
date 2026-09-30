@@ -1124,8 +1124,8 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting Python requirements:
-    - foo: <3.12
-    - foo:dev: >=3.12
+           - foo: <3.12
+           - foo:dev: >=3.12
     "
     );
 

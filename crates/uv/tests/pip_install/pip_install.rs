@@ -2314,8 +2314,8 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `black`:
-    - file://[WORKSPACE]/test/packages/black_editable (editable)
-    - https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
+           - file://[WORKSPACE]/test/packages/black_editable (editable)
+           - https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
     "
     );
 

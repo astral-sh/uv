@@ -10122,8 +10122,8 @@ fn lock_requires_python_disjoint() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting Python requirements:
-    - child: ==3.10
-    - project: >=3.12
+           - child: ==3.10
+           - project: >=3.12
     ");
 
     Ok(())
@@ -30805,7 +30805,7 @@ fn lock_request_requires_python() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: The Python request from `.python-version` resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.8, <=3.10` (from `project.requires-python`)
-    Use `uv python pin` to update the `.python-version` file to a compatible version
+           Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     Ok(())

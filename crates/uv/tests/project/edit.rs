@@ -14416,16 +14416,16 @@ fn add_ambiguous() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot perform ambiguous update; found multiple entries for `anyio`:
-    - `anyio>=4.0.0`
-    - `anyio>=4.1.0`
+           - `anyio>=4.0.0`
+           - `anyio>=4.1.0`
     ");
 
     uv_snapshot!(context.filters(), context.add().arg("--group").arg("bar").arg("anyio"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot perform ambiguous update; found multiple entries for `anyio`:
-    - `anyio>=4.1.0`
-    - `anyio>=4.2.0`
+           - `anyio>=4.1.0`
+           - `anyio>=4.2.0`
     ");
 
     Ok(())

@@ -2725,8 +2725,8 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `werkzeug`:
-    - https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl
-    - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
+           - https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl
+           - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
     "
     );
 
@@ -2776,8 +2776,8 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `werkzeug`:
-    - git+https://github.com/pallets/werkzeug.git@2.0.0
-    - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
+           - git+https://github.com/pallets/werkzeug.git@2.0.0
+           - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
     "
     );
 
@@ -2849,8 +2849,8 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
-    - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1
-    - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.2
+           - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1
+           - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.2
     "
     );
 
@@ -2968,8 +2968,8 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
-    - git+https://github.com/astral-test/uv-public-pypackage@test-branch
-    - git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+           - git+https://github.com/astral-test/uv-public-pypackage@test-branch
+           - git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
     "
     );
 
