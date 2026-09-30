@@ -1280,9 +1280,9 @@ pub enum ProjectCommand {
     /// Dependencies are audited for known vulnerabilities, as well as 'adverse' statuses such as
     /// deprecation and quarantine.
     ///
-    /// By default, all extras and groups within the project are audited. To exclude extras
-    /// and/or groups from the audit, use the `--no-extra`, `--no-group`, and related
-    /// options.
+    /// By default, all extras and dependency groups within the project are audited, regardless of
+    /// `tool.uv.default-groups`. To omit all dependency groups, use `--no-default-groups`. To exclude
+    /// individual extras or groups, use `--no-extra` or `--no-group`.
     #[command(
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
@@ -5331,7 +5331,7 @@ pub struct AuditArgs {
     /// Don't audit the development dependency group [env: UV_NO_DEV=]
     ///
     /// This option is an alias of `--no-group dev`.
-    /// See `--no-default-groups` to exclude all default groups instead.
+    /// See `--no-default-groups` to exclude all dependency groups instead.
     ///
     /// This option is only available when running in a project.
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
@@ -5343,7 +5343,10 @@ pub struct AuditArgs {
     #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_group: Vec<GroupName>,
 
-    /// Don't audit the default dependency groups.
+    /// Don't audit dependency groups unless explicitly requested.
+    ///
+    /// By default, `uv audit` includes all dependency groups, regardless of `tool.uv.default-groups`.
+    /// Groups can still be selected with `--only-group` or `--only-dev`.
     #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
