@@ -502,6 +502,29 @@ def run_workloads(
             )
         )
 
+        if project.name == "pytest-cov":
+            # The normal sync above creates and populates this Python 3.14 environment.
+            # Train the native compiler separately on its installed packages.
+            commands.append(
+                (
+                    f"native-bytecode-{project.name}",
+                    [
+                        str(binary),
+                        "sync",
+                        "--project",
+                        str(project_directory),
+                        "--frozen",
+                        *project.python_arguments,
+                        *project.group_arguments,
+                        "--no-install-workspace",
+                        "--no-build",
+                        "--compile-bytecode",
+                        "--preview-features",
+                        "native-bytecode",
+                    ],
+                )
+            )
+
     # The Windows trampoline calls process::exit, bypassing LLVM's profile flush.
     if launcher.is_file() and launcher.suffix != ".exe":
         commands.append(("launcher", [str(launcher), "--version"]))
@@ -515,12 +538,40 @@ def run_workloads(
             if group.startswith("universal-"):
                 cache_directory /= "universal"
             workload_environment["UV_CACHE_DIR"] = str(cache_directory / project)
+            if project == "pytest-cov" and group in ("sync", "native-bytecode"):
+                # Both syncs must use the corpus environment even if the caller
+                # configured a different project environment.
+                workload_environment["UV_PROJECT_ENVIRONMENT"] = str(
+                    corpus_directory / project / ".venv"
+                )
         if profile_dir is not None:
             workload_environment["LLVM_PROFILE_FILE"] = str(
                 profile_dir / f"uv-{group}-%m.profraw"
             )
         print(f"Training uv workload: {label}", flush=True)
+        if group == "native-bytecode":
+            for variable in (
+                "PYTHONPYCACHEPREFIX",
+                "PYTHONNODEBUGRANGES",
+                "PYTHONOPTIMIZE",
+            ):
+                workload_environment.pop(variable, None)
+            workload_environment["PYC_INVALIDATION_MODE"] = "TIMESTAMP"
+            # Python interpreter discovery must not produce the bytecode checked below.
+            workload_environment["PYTHONDONTWRITEBYTECODE"] = "1"
+            # Force compilation even if an earlier workload produced bytecode.
+            native_venv = corpus_directory / label.removeprefix(f"{group}-") / ".venv"
+            for bytecode in native_venv.rglob("*.pyc"):
+                bytecode.unlink()
         run(command, environment=workload_environment)
+        if group == "native-bytecode" and not any(
+            native_venv.glob(
+                "**/site-packages/pytest/__pycache__/__init__.cpython-314*.pyc"
+            )
+        ):
+            raise RuntimeError(
+                f"Native bytecode workload did not compile pytest: {label}"
+            )
 
     return (*labels, *(label for label, _ in commands))
 
@@ -562,6 +613,7 @@ def profile_group(label: str) -> str:
         "export",
         "install",
         "sync",
+        "native-bytecode",
     ):
         if label.startswith(f"{group}-"):
             return group
