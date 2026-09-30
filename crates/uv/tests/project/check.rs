@@ -1316,7 +1316,7 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -1495,7 +1495,7 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
         +++ new
         @@ -1,26 +1,26 @@
          version = 1
-         revision = 3
+         revision = 5
          requires-python = ">=3.12"
 
          [options]

@@ -817,7 +817,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
             insta::assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.12"
             resolution-markers = [
                 "sys_platform == 'darwin'",
@@ -2089,7 +2089,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
             insta::assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.12"
             resolution-markers = [
                 "sys_platform == 'win32'",
@@ -3263,7 +3263,7 @@ fn requirements_txt_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -3381,7 +3381,7 @@ fn requirements_txt_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
         resolution-markers = [
             "sys_platform == 'win32'",

@@ -41,7 +41,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -105,7 +105,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -151,7 +151,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -337,7 +337,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -400,7 +400,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -447,7 +447,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -516,7 +516,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -584,7 +584,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -664,7 +664,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     // typing-extensions 4.11.0 (per-package cutoff 2024-04-17 is after 4.11.0 release on 2024-04-05)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -777,7 +777,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     // typing-extensions 4.11.0 (relative cutoff 2024-04-17)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -842,7 +842,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     // typing-extensions 4.10.0 (absolute cutoff 2024-04-01 is before 4.11.0 release on 2024-04-05)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -1119,7 +1119,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -1167,7 +1167,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -1227,7 +1227,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]

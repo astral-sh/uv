@@ -1435,7 +1435,9 @@ impl WorkspaceMember {
     }
 
     /// Return the default dependency groups for this workspace member.
-    fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
+    ///
+    /// Returns an error if an explicitly configured group is not declared by the member.
+    pub fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
         self.pyproject_toml.default_groups()
     }
 }
