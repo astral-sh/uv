@@ -3392,7 +3392,11 @@ impl AuditSettings {
                 true,
             ),
             groups: DependencyGroups::from_args(
-                DevMode::from_args(only_group.is_empty() && !only_dev, no_dev, only_dev),
+                DevMode::from_args(
+                    only_group.is_empty() && !only_dev && !no_default_groups,
+                    no_dev,
+                    only_dev,
+                ),
                 vec![],
                 if no_group.is_empty() {
                     environment.no_group.clone().unwrap_or_default()
@@ -3401,7 +3405,7 @@ impl AuditSettings {
                 },
                 no_default_groups,
                 only_group.clone(),
-                only_group.is_empty() && !only_dev,
+                only_group.is_empty() && !only_dev && !no_default_groups,
             ),
             lock_check: locked,
             frozen,
