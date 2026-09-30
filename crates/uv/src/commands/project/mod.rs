@@ -54,7 +54,10 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeE
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::ExtraBuildDependency;
-use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
+use uv_workspace::{
+    ProjectEnvironmentSelection, RequiresPythonDeclaration, RequiresPythonSources, Workspace,
+    WorkspaceCache,
+};
 
 use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -227,7 +230,7 @@ pub(crate) enum ProjectError {
         "Found conflicting Python requirements:\n{}",
         format_requires_python_sources(_0)
     )]
-    DisjointRequiresPython(BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>),
+    DisjointRequiresPython(RequiresPythonSources),
 
     #[error(
         "Found conflicting Python requirements:\n- lockfile: {locked}\n{groups}",
@@ -585,7 +588,7 @@ pub(crate) fn find_requires_python(
     if requires_python.is_empty() {
         return Ok(None);
     }
-    for ((package, group), specifiers) in &requires_python {
+    for (source, specifiers) in &requires_python {
         if let [spec] = &specifiers[..] {
             if let Some(spec) = TildeVersionSpecifier::from_specifier_ref(spec) {
                 if spec.has_patch() {
@@ -595,16 +598,11 @@ pub(crate) fn find_requires_python(
                 let spec_0 = spec.with_patch_version(0);
                 let (lower_0, upper_0) = spec_0.bounding_specifiers();
                 warn_user_once!(
-                    "The `requires-python` specifier (`{spec}`) in `{package}{group}` \
+                    "The `requires-python` specifier (`{spec}`) in `{source}` \
                     uses the tilde specifier (`~=`) without a patch version. This will be \
                     interpreted as `{lower}, {upper}`. Did you mean `{spec_0}` to constrain the \
                     version as `{lower_0}, {upper_0}`? We recommend only using \
                     the tilde specifier with a patch version to avoid ambiguity.",
-                    group = if let Some(group) = group {
-                        format!(":{group}")
-                    } else {
-                        String::new()
-                    },
                 );
             }
         }
@@ -638,7 +636,7 @@ fn find_lockfile_requires_python(
                     && let Some(requires_python) = &metadata.requires_python
                 {
                     group_requirements.insert(
-                        (member.clone(), Some(group.clone())),
+                        RequiresPythonDeclaration::Member(member.clone(), Some(group.clone())),
                         requires_python.clone(),
                     );
                 }
@@ -693,7 +691,17 @@ impl std::fmt::Display for PythonRequirementConflicts {
                         format_requires_python_sources(sources)
                     );
                 }
-                if let Some(((package, group), _)) = sources.iter().next() {
+                if let Some((RequiresPythonDeclaration::Workspace(group), _)) =
+                    sources.iter().next()
+                {
+                    return write!(
+                        f,
+                        " (from the workspace root's `tool.uv.dependency-groups.{group}.requires-python`)."
+                    );
+                }
+                if let Some((RequiresPythonDeclaration::Member(package, group), _)) =
+                    sources.iter().next()
+                {
                     if let Some(group) = group {
                         if *multiple_members {
                             return write!(
@@ -731,8 +739,8 @@ impl std::fmt::Display for PythonRequirementConflicts {
                 if locked.is_some() {
                     return f.write_str(" (from `requires-python` in `uv.lock`).");
                 }
-                if let Some(((package, Some(group)), _)) = groups.iter().next() {
-                    return write!(f, " (from `{package}:{group}` in `uv.lock`).");
+                if let Some((source, _)) = groups.iter().next() {
+                    return write!(f, " (from `{source}` in `uv.lock`).");
                 }
                 f.write_str(" (from `uv.lock`).")
             }
@@ -3757,12 +3765,6 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
 fn format_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
     conflicts
         .iter()
-        .map(|((package, group), specifiers)| {
-            if let Some(group) = group {
-                format!("- {package}:{group}: {specifiers}")
-            } else {
-                format!("- {package}: {specifiers}")
-            }
-        })
+        .map(|(source, specifiers)| format!("- {source}: {specifiers}"))
         .join("\n")
 }

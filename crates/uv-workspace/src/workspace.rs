@@ -354,7 +354,26 @@ pub struct DiscoveryOptions {
     pub members: MemberDiscovery,
 }
 
-pub type RequiresPythonSources = BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>;
+/// The declaration contributing a workspace Python requirement.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RequiresPythonDeclaration {
+    /// A member's project requirement or dependency group requirement.
+    Member(PackageName, Option<GroupName>),
+    /// A dependency group on a workspace root without a `[project]` table.
+    Workspace(GroupName),
+}
+
+impl std::fmt::Display for RequiresPythonDeclaration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Member(package, Some(group)) => write!(f, "{package}:{group}"),
+            Self::Member(package, None) => package.fmt(f),
+            Self::Workspace(group) => write!(f, "workspace:{group}"),
+        }
+    }
+}
+
+pub type RequiresPythonSources = BTreeMap<RequiresPythonDeclaration, VersionSpecifiers>;
 
 pub type Editability = Option<bool>;
 
@@ -848,7 +867,7 @@ impl Workspace {
         Ok(conflicting)
     }
 
-    /// Returns an iterator over the `requires-python` values for each member of the workspace.
+    /// Returns Python requirements from workspace members and selected workspace-root groups.
     pub fn requires_python(
         &self,
         groups: &DependencyGroupsWithDefaults,
@@ -865,7 +884,12 @@ impl Workspace {
                 .project
                 .as_ref()
                 .and_then(|project| project.requires_python.as_ref())
-                .map(|requires_python| ((name.to_owned(), None), requires_python.clone()));
+                .map(|requires_python| {
+                    (
+                        RequiresPythonDeclaration::Member(name.to_owned(), None),
+                        requires_python.clone(),
+                    )
+                });
             requires.extend(top_requires);
 
             // Get the requires-python for each enabled group on this package
@@ -878,13 +902,26 @@ impl Workspace {
                     .filter_map(move |(group_name, flat_group)| {
                         if groups.contains(&group_name) {
                             flat_group.requires_python.map(|requires_python| {
-                                ((name.to_owned(), Some(group_name)), requires_python)
+                                (
+                                    RequiresPythonDeclaration::Member(
+                                        name.to_owned(),
+                                        Some(group_name),
+                                    ),
+                                    requires_python,
+                                )
                             })
                         } else {
                             None
                         }
                     });
             requires.extend(group_requires);
+        }
+        for (group, flat_group) in self.workspace_dependency_groups()? {
+            if groups.contains(&group)
+                && let Some(requires_python) = flat_group.requires_python
+            {
+                requires.insert(RequiresPythonDeclaration::Workspace(group), requires_python);
+            }
         }
         Ok(requires)
     }
