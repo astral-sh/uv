@@ -15,7 +15,7 @@ use std::str::FromStr;
 use std::{env, fmt};
 use target_lexicon::Endianness;
 use tracing::trace;
-use uv_fs::{Simplified, format_diagnostic_path};
+use uv_fs::Simplified;
 use uv_static::EnvVars;
 
 #[derive(Debug, thiserror::Error)]
@@ -158,18 +158,14 @@ fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     match detect_musl_version(&ld_path) {
         Ok(os) => return Ok(os),
         Err(err) => {
-            trace!(
-                "Tried to find musl version by running {}, but failed: {err}",
-                format_diagnostic_path(&ld_path)
-            );
+            trace!("Tried to find musl version by running `{ld_path:?}`, but failed: {err}");
         }
     }
     match detect_linux_libc_from_ld_symlink(&ld_path) {
         Ok(os) => return Ok(os),
         Err(err) => {
             trace!(
-                "Tried to find libc version from possible symlink at {}, but failed: {err}",
-                format_diagnostic_path(&ld_path)
+                "Tried to find libc version from possible symlink at {ld_path:?}, but failed: {err}"
             );
         }
     }

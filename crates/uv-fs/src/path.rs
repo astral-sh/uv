@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
-use std::fmt::{self, Debug, Display};
+use std::fmt::Display;
 use std::path::{Component, Path, PathBuf, Prefix};
 use std::sync::LazyLock;
 
@@ -18,24 +18,6 @@ pub fn format_diagnostic_value(value: impl Display) -> String {
         format!("{value:?}")
     } else {
         value
-    }
-}
-
-/// Format a path for a diagnostic, escaping non-Unicode and non-printable characters.
-pub fn format_diagnostic_path(path: &Path) -> impl Display + '_ {
-    DiagnosticPath(path)
-}
-
-struct DiagnosticPath<'a>(&'a Path);
-
-impl Display for DiagnosticPath<'_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0.to_str() {
-            Some(path) if !path.contains('`') && !has_non_printable_characters(path) => {
-                write!(formatter, "`{path}`")
-            }
-            Some(_) | None => Debug::fmt(self.0, formatter),
-        }
     }
 }
 
