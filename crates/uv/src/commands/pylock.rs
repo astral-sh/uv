@@ -1,5 +1,5 @@
 //! Shared helpers for reading `pylock.toml` (PEP 751) files and deriving a [`Resolution`] and
-//! [`HashStrategy`] from them, used by `uv pip install` and `uv pip sync`.
+//! [`HashStrategy`] from them, used by `uv audit`, `uv pip install`, and `uv pip sync`.
 
 use std::path::{Path, PathBuf};
 

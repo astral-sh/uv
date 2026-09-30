@@ -504,7 +504,7 @@ async fn tool_audit_ignore() {
         , @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability in the selected tools
+    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability
     Auditing `simple-launcher`
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
