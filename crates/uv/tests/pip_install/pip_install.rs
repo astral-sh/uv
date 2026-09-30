@@ -966,9 +966,6 @@ dependencies = ["flask==1.0.x"]
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/_distutils/core.py", line 159, in setup
                  dist.parse_config_files()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/_virtualenv.py", line 21, in parse_config_files
-                 result = old_parse_config_files(self, *args, **kwargs)
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/dist.py", line 631, in parse_config_files
                  pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
                File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 68, in apply_configuration
