@@ -499,7 +499,7 @@ mod tests {
     use uv_preview::PreviewFeature;
     use uv_static::TarBackend;
 
-    use crate::source_dist::{SyncReader, build_source_dist_with_backend};
+    use crate::source_dist::SyncReader;
 
     const MOCK_UV_VERSION: &str = "1.0.0+test";
 
@@ -570,7 +570,7 @@ mod tests {
         // normalize the path.
         let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
         let source_dist_filename =
-            build_source_dist_with_backend(source_root, dist, MOCK_UV_VERSION, false, tar_backend)?;
+            build_source_dist(source_root, dist, MOCK_UV_VERSION, false, tar_backend)?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
@@ -1001,7 +1001,14 @@ mod tests {
 
         // Build a wheel from a source distribution
         let output_dir = TempDir::new().unwrap();
-        build_source_dist(src.path(), output_dir.path(), "0.5.15", false).unwrap();
+        build_source_dist(
+            src.path(),
+            output_dir.path(),
+            "0.5.15",
+            false,
+            TarBackend::default(),
+        )
+        .unwrap();
         let sdist_tree = TempDir::new().unwrap();
         let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
         unpack_sdist(&source_dist_path, sdist_tree.path()).unwrap();
@@ -1232,7 +1239,13 @@ mod tests {
         let dist = TempDir::new().unwrap();
 
         // Source dist build should fail
-        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        let sdist_result = build_source_dist(
+            src.path(),
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        );
         assert!(sdist_result.is_err());
 
         // Wheel build should fail
@@ -1278,7 +1291,13 @@ mod tests {
         fs_err::write(&wheel_path, old_content).unwrap();
 
         // Build should fail and delete existing files
-        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        let sdist_result = build_source_dist(
+            src.path(),
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        );
         assert!(sdist_result.is_err());
 
         let wheel_result = build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false);
@@ -1334,7 +1353,14 @@ mod tests {
         fs_err::write(&wheel_path, old_content).unwrap();
 
         // Build should succeed and overwrite existing files
-        build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        build_source_dist(
+            src.path(),
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        )
+        .unwrap();
         build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).unwrap();
 
         // Verify files were overwritten (content should be different)
@@ -2005,8 +2031,14 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let source_dist_filename =
-            build_source_dist(tmp_dir.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        let source_dist_filename = build_source_dist(
+            tmp_dir.path(),
+            dist.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+        )
+        .unwrap();
         let source_dist_path = dist.path().join(source_dist_filename.to_string());
         let contents = sdist_contents(&source_dist_path);
 

@@ -865,7 +865,9 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
+            let (temp_dir, _) =
+                uv_extract::stream::archive(reader, ext, temp_dir, build_dispatch.tar_backend())
+                    .await?;
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -977,7 +979,9 @@ async fn build_package(
                 Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
-            let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
+            let (temp_dir, _) =
+                uv_extract::stream::archive(reader, ext, temp_dir, build_dispatch.tar_backend())
+                    .await?;
 
             // If the source distribution has a normalized filename, check its identity.
             let source_dist = source
@@ -1160,12 +1164,14 @@ async fn build_sdist(
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
             let sources_enabled = sources.is_none();
+            let tar_backend = build_dispatch.tar_backend();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_source_dist(
                     &source_tree,
                     &output_dir_,
                     uv_version::version(),
                     sources_enabled,
+                    tar_backend,
                 )
             })
             .await??

@@ -6006,6 +6006,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-resolver",
+ "uv-static",
  "uv-types",
  "uv-workspace",
  "wiremock",
@@ -6458,6 +6459,7 @@ dependencies = [
  "uv-python",
  "uv-requirements",
  "uv-resolver",
+ "uv-static",
  "uv-types",
  "uv-version",
  "uv-workspace",
@@ -6512,6 +6514,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-static",
  "uv-threads",
  "uv-types",
  "uv-workspace",
@@ -7610,6 +7613,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-static",
  "uv-workspace",
 ]
 

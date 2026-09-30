@@ -36,21 +36,6 @@ pub fn build_source_dist(
     source_dist_directory: &Path,
     uv_version: &str,
     show_warnings: bool,
-) -> Result<SourceDistFilename, Error> {
-    build_source_dist_with_backend(
-        source_tree,
-        source_dist_directory,
-        uv_version,
-        show_warnings,
-        TarBackend::from_env(),
-    )
-}
-
-pub(crate) fn build_source_dist_with_backend(
-    source_tree: &Path,
-    source_dist_directory: &Path,
-    uv_version: &str,
-    show_warnings: bool,
     tar_backend: TarBackend,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
@@ -66,12 +51,15 @@ pub(crate) fn build_source_dist_with_backend(
     }
 
     let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
-    if tar_backend == TarBackend::TarCodec {
-        let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
-        write_source_dist(source_tree, writer, uv_version, show_warnings)?;
-    } else {
-        let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
-        write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    match tar_backend {
+        TarBackend::TarCodec => {
+            let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
+            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+        }
+        TarBackend::TokioTar => {
+            let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
+            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+        }
     }
     temp_file
         .persist(&source_dist_path)
