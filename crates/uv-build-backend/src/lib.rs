@@ -546,10 +546,10 @@ mod tests {
     /// Run both a direct wheel build and an indirect wheel build through a source distribution,
     /// while checking that directly built wheel and indirectly built wheel are the same.
     fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
-        build_with_backend(source_root, dist, TarBackend::default())
+        build_with_options(source_root, dist, TarBackend::default())
     }
 
-    fn build_with_backend(
+    fn build_with_options(
         source_root: &Path,
         dist: &Path,
         tar_backend: TarBackend,
@@ -833,7 +833,7 @@ mod tests {
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
-        let build = build_with_backend(src.path(), dist.path(), tar_backend).unwrap();
+        let build = build_with_options(src.path(), dist.path(), tar_backend).unwrap();
 
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
         assert_eq!(
