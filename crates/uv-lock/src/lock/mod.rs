@@ -68,6 +68,7 @@ use uv_resolver_types::{
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
+use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use uv_workspace::{Editability, WorkspaceMember};
 
 pub use crate::lock::deserialize::Error as CanonicalLockError;
@@ -125,11 +126,14 @@ pub enum LockParseError {
 /// - 2: Record distribution upload times.
 /// - 3: Record package-specific `exclude-newer` values.
 /// - 4: Support omitting package declaration metadata and record empty extras and groups.
-/// - 5: Record workspace member default dependency groups.
+/// - 5: Record workspace member default groups and dependency group metadata.
 const REVISION: u32 = 5;
 
 /// The first lockfile revision that records workspace member default groups.
 const MEMBER_DEFAULT_GROUPS_REVISION: u32 = 5;
+
+/// The first lockfile revision that records workspace member dependency group metadata.
+const MEMBER_GROUP_METADATA_REVISION: u32 = 5;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -2830,6 +2834,15 @@ impl Lock {
         self
     }
 
+    /// Record member group metadata, including Python requirements inherited from included groups.
+    pub fn with_member_group_metadata(
+        mut self,
+        packages: &BTreeMap<PackageName, WorkspaceMember>,
+    ) -> Result<Self, LockError> {
+        self.manifest.group_metadata = collect_member_group_metadata(packages)?;
+        Ok(self)
+    }
+
     /// Omit package metadata except for remote URL and Git dependencies.
     ///
     /// Local declarations can be reread from disk. Remote URL and Git declarations remain in the
@@ -3114,6 +3127,17 @@ impl Lock {
     ) -> Option<&BTreeMap<PackageName, DefaultGroups>> {
         ((self.version(), self.revision()) >= (VERSION, MEMBER_DEFAULT_GROUPS_REVISION))
             .then_some(&self.manifest.default_groups)
+    }
+
+    /// Return the dependency group metadata recorded for workspace members.
+    ///
+    /// `None` means the lockfile predates this metadata; an absent group in a returned map has no
+    /// group-specific metadata.
+    pub fn member_group_metadata(
+        &self,
+    ) -> Option<&BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>> {
+        ((self.version(), self.revision()) >= (VERSION, MEMBER_GROUP_METADATA_REVISION))
+            .then_some(&self.manifest.group_metadata)
     }
 
     /// Return a workspace member's default groups, assuming `dev` when not recorded.
@@ -4164,6 +4188,24 @@ impl Lock {
                 return Ok(SatisfiesResult::MismatchedMemberDefaultGroups(
                     expected, actual,
                 ));
+            }
+        }
+
+        if let Some(actual) = self.member_group_metadata() {
+            let expected = collect_member_group_metadata(packages)?;
+            if expected != *actual {
+                // Unknown fields can leave a group with no known metadata. Such entries are
+                // equivalent to an absent group for the settings this version understands.
+                let mut canonical = actual.clone();
+                canonical.retain(|_, groups| {
+                    groups.retain(|_, metadata| *metadata != GroupMetadata::default());
+                    !groups.is_empty()
+                });
+                if expected != canonical {
+                    return Ok(SatisfiesResult::MismatchedMemberGroupMetadata(
+                        expected, actual,
+                    ));
+                }
             }
         }
 
@@ -5985,6 +6027,11 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<PackageName, DefaultGroups>,
         BTreeMap<PackageName, DefaultGroups>,
     ),
+    /// The lockfile records different dependency group metadata.
+    MismatchedMemberGroupMetadata(
+        BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
+        &'lock BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
+    ),
     /// A workspace member switched from virtual to non-virtual or vice versa.
     MismatchedVirtual(PackageName, bool),
     /// A workspace member switched from editable to non-editable or vice versa.
@@ -6160,6 +6207,9 @@ pub struct ResolverManifest {
     /// Nonstandard default dependency groups configured by workspace members.
     #[serde(default)]
     default_groups: BTreeMap<PackageName, DefaultGroups>,
+    /// Metadata for dependency groups of workspace members.
+    #[serde(default)]
+    group_metadata: BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>,
     /// The requirements provided to the resolver, exclusive of the workspace members.
     ///
     /// These are requirements that are attached to the project, but not to any of its
@@ -6206,6 +6256,42 @@ fn canonicalize_member_default_groups(
     groups
 }
 
+/// Metadata for a workspace member's dependency group.
+#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct GroupMetadata {
+    /// The effective Python requirement, including requirements from included groups.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    requires_python: Option<VersionSpecifiers>,
+}
+
+/// Collect metadata for each member's dependency groups.
+fn collect_member_group_metadata(
+    packages: &BTreeMap<PackageName, WorkspaceMember>,
+) -> Result<BTreeMap<PackageName, BTreeMap<GroupName, GroupMetadata>>, DependencyGroupError> {
+    let mut members = BTreeMap::new();
+    for (name, member) in packages {
+        let groups =
+            FlatDependencyGroups::from_pyproject_toml(member.root(), member.pyproject_toml())?
+                .into_iter()
+                .filter_map(|(group, flat)| {
+                    flat.requires_python.map(|requires_python| {
+                        (
+                            group,
+                            GroupMetadata {
+                                requires_python: Some(requires_python),
+                            },
+                        )
+                    })
+                })
+                .collect::<BTreeMap<_, _>>();
+        if !groups.is_empty() {
+            members.insert(name.clone(), groups);
+        }
+    }
+    Ok(members)
+}
+
 impl ResolverManifest {
     /// Initialize a [`ResolverManifest`] with the given members, requirements, constraints, and
     /// overrides.
@@ -6223,6 +6309,7 @@ impl ResolverManifest {
         Self {
             members: members.into_iter().collect(),
             default_groups: BTreeMap::new(),
+            group_metadata: BTreeMap::new(),
             requirements: normalize_collection::<_, NormalizedRequirements>(
                 requirements,
                 normalize,
@@ -6253,6 +6340,7 @@ impl ResolverManifest {
         Ok(Self {
             members: self.members,
             default_groups: self.default_groups,
+            group_metadata: self.group_metadata,
             requirements: self
                 .requirements
                 .into_iter()
@@ -9609,6 +9697,9 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    /// An error that occurs when collecting dependency-group settings.
+    #[error(transparent)]
+    DependencyGroups(#[from] DependencyGroupError),
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]

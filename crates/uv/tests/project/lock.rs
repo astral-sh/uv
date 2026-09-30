@@ -258,6 +258,248 @@ fn member_default_groups_in_lockfile() -> Result<()> {
     Ok(())
 }
 
+/// Record effective group Python requirements, including those inherited from other groups.
+#[test]
+fn member_group_python_requirements_in_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Give the root an included group and the member its own Python requirement.
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        base = []
+        combined = [{ include-group = "base" }]
+        unrestricted = []
+
+        [tool.uv]
+        package = false
+        default-groups = ["combined"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.dependency-groups]
+        base = { requires-python = ">=3.13" }
+        combined = { requires-python = "<3.15" }
+    "#})?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        docs = []
+
+        [tool.uv]
+        package = false
+        default-groups = []
+
+        [tool.uv.dependency-groups]
+        docs = { requires-python = ">=3.14" }
+    "#})?;
+
+    // Record the declared bounds, including the combined group's inherited requirement.
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let contents = context.read("uv.lock");
+    assert_snapshot!(contents, @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "member",
+        "root",
+    ]
+
+    [manifest.default-groups]
+    member = []
+    root = ["combined"]
+
+    [manifest.group-metadata]
+    member = { docs = { requires-python = ">=3.14" } }
+    root = { base = { requires-python = ">=3.13" }, combined = { requires-python = ">=3.13,<3.15" } }
+
+    [[package]]
+    name = "member"
+    version = "1.0.0"
+    source = { virtual = "member" }
+
+    [package.metadata]
+
+    [package.metadata.requires-dev]
+    docs = []
+
+    [[package]]
+    name = "root"
+    version = "1.0.0"
+    source = { virtual = "." }
+
+    [package.metadata]
+
+    [package.metadata.requires-dev]
+    base = []
+    combined = []
+    unrestricted = []
+    "#);
+    let lock = Lock::from_canonical_toml(&contents)?;
+    assert_eq!(Lock::from_toml(&contents)?, lock);
+    assert_eq!(toml::from_str::<Lock>(&contents)?, lock);
+    assert_eq!(lock.to_toml()?, contents);
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // A group with only an unknown future setting has no known Python requirement.
+    let extended = context.read("uv.lock").replace(
+        "combined = { requires-python = \">=3.13,<3.15\" } }",
+        "combined = { requires-python = \">=3.13,<3.15\" }, unrestricted = { future-setting = true } }",
+    );
+    assert_ne!(context.read("uv.lock"), extended);
+    context.temp_dir.child("uv.lock").write_str(&extended)?;
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), extended);
+
+    // Changing the included group's bound makes the lock stale.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        base = []
+        combined = [{ include-group = "base" }]
+        unrestricted = []
+
+        [tool.uv]
+        package = false
+        default-groups = ["combined"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.dependency-groups]
+        base = { requires-python = ">=3.14" }
+        combined = { requires-python = "<3.15" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // Relocking records the new bound and makes the lock current again.
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A metadata-free lock records group requirements without an explicit manifest parent table.
+#[test]
+fn metadata_free_group_python_requirements_in_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        bar = []
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.dependency-groups]
+        bar = { requires-python = ">=3.13" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--offline",
+        "--preview-features",
+        "lock-without-metadata",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let contents = context.read("uv.lock");
+    assert_snapshot!(contents, @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest.group-metadata]
+    project = { bar = { requires-python = ">=3.13" } }
+
+    [[package]]
+    name = "project"
+    version = "1.0.0"
+    source = { virtual = "." }
+
+    [package.dev-dependencies]
+    bar = []
+    "#);
+
+    // Both parsers accept the implicit parent, and serialization preserves the layout.
+    let lock = Lock::from_canonical_toml(&contents)?;
+    assert_eq!(toml::from_str::<Lock>(&contents)?, lock);
+    assert_eq!(lock.to_toml()?, contents);
+    assert_eq!(
+        lock.member_default_groups(&"project".parse()?),
+        Some(DefaultGroups::List(vec!["dev".parse()?]))
+    );
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--offline",
+        "--locked",
+        "--preview-features",
+        "lock-without-metadata",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
 /// Existing revision 3 lockfiles remain valid until a new resolution is needed.
 #[test]
 fn legacy_default_groups_in_lockfile() -> Result<()> {
@@ -405,7 +647,7 @@ fn legacy_metadata_free_lockfile() -> Result<()> {
     Ok(())
 }
 
-/// Revision 4 preview locks do not record member defaults.
+/// Revision 4 preview locks do not record member defaults or group Python requirements.
 #[test]
 fn metadata_free_default_groups_in_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -443,6 +685,7 @@ fn metadata_free_default_groups_in_lockfile() -> Result<()> {
     "#};
     let old_lock = Lock::from_canonical_toml(legacy)?;
     assert_eq!(old_lock.member_default_groups(&"root".parse()?), None);
+    assert_eq!(old_lock.member_group_metadata(), None);
     context.temp_dir.child("uv.lock").write_str(legacy)?;
     context
         .lock()

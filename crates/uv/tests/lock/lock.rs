@@ -33233,6 +33233,9 @@ fn lock_group_requires_python() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
+        [manifest.group-metadata]
+        project = { bar = { requires-python = ">=3.13" } }
+
         [[package]]
         name = "idna"
         version = "3.6"
@@ -33370,6 +33373,9 @@ fn lock_group_includes_requires_python() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest.group-metadata]
+        project = { bar = { requires-python = ">=3.13" }, baz = { requires-python = ">=3.13,>=3.13.1" }, blargh = { requires-python = ">=3.12.[X],>=3.13" }, foo = { requires-python = ">=3.13" } }
 
         [[package]]
         name = "idna"
@@ -33594,6 +33600,9 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest.group-metadata]
+        project = { bar = { requires-python = ">=3.13" }, foo = { requires-python = "<3.13,>=3.13" } }
 
         [[package]]
         name = "idna"

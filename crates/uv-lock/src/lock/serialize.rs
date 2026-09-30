@@ -245,6 +245,13 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
         }
     }
 
+    if !manifest.group_metadata.is_empty() {
+        writer.table(&["manifest", "group-metadata"])?;
+        for (name, groups) in &manifest.group_metadata {
+            writer.key_value(name.as_ref(), serialize_value(groups)?)?;
+        }
+    }
+
     if has_dependency_groups {
         writer.table(&["manifest", "dependency-groups"])?;
         for (group, requirements) in &manifest.dependency_groups {

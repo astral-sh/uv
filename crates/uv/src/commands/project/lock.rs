@@ -1189,7 +1189,8 @@ async fn do_lock(
                             .map(|groups| (name.clone(), groups))
                     })
                     .collect(),
-            );
+            )
+            .with_member_group_metadata(packages)?;
 
             let lock = if let Some(recorder) = recorder {
                 lock.prune_unused(recorder.take())
@@ -1498,6 +1499,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedMemberDefaultGroups(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched member default groups:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedMemberGroupMetadata(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched group metadata:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
