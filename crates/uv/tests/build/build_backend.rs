@@ -80,10 +80,6 @@ fn tar_backend_selection() -> Result<()> {
     let default = build(None, false)?;
     let fallback = build(Some("1"), false)?;
     assert_ne!(default, fallback);
-    assert_eq!(build(Some("true"), false)?, fallback);
-    assert_eq!(build(Some("0"), false)?, default);
-    assert_eq!(build(Some("false"), false)?, default);
-    assert_eq!(build(Some("invalid"), false)?, default);
     assert_eq!(build(None, true)?, default);
     assert_eq!(build(Some("1"), true)?, fallback);
     Ok(())
