@@ -418,7 +418,7 @@ impl EnvVars {
 
     /// Use `astral-tokio-tar` instead of `tar-codec` to read and write tar archives.
     /// Set to a true value (e.g., `1`) to enable this compatibility fallback.
-    #[attr_added_in("0.13.0")]
+    #[attr_added_in("next release")]
     pub const UV_NO_TAR_CODEC: &'static str = "UV_NO_TAR_CODEC";
 
     /// Sets the maximum number of in-flight concurrent downloads that uv will
