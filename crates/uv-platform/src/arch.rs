@@ -23,43 +23,38 @@ pub struct Arch {
 
 impl Ord for Arch {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.cmp_with_fallback(
+            *other,
+            cfg!(windows).then_some(target_lexicon::Architecture::X86_64),
+        )
+    }
+}
+
+impl Arch {
+    /// Prefer the native architecture, then the given fallback architecture.
+    pub(crate) fn cmp_with_fallback(
+        self,
+        other: Self,
+        fallback: Option<target_lexicon::Architecture>,
+    ) -> std::cmp::Ordering {
         if self.family == other.family {
             return self.variant.cmp(&other.variant);
         }
 
-        // For the time being, manually make aarch64 windows disfavored
-        // on its own host platform, because most packages don't have wheels for
-        // aarch64 windows, making emulation more useful than native execution!
-        //
-        // The reason we do this in "sorting" and not "supports" is so that we don't
-        // *refuse* to use an aarch64 windows pythons if they happen to be installed
-        // and nothing else is available.
-        //
-        // Similarly if someone manually requests an aarch64 windows install, we
-        // should respect that request (this is the way users should "override"
-        // this behaviour).
-        let preferred = if cfg!(all(windows, target_arch = "aarch64")) {
-            Self {
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
+        let preferred = Self::from_env().family;
+        let priority = |family| -> u8 {
+            if family == preferred {
+                0
+            } else if Some(family) == fallback {
+                1
+            } else {
+                2
             }
-        } else {
-            // Prefer native architectures
-            Self::from_env()
         };
 
-        match (
-            self.family == preferred.family,
-            other.family == preferred.family,
-        ) {
-            (true, true) => unreachable!(),
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            (false, false) => {
-                // Both non-preferred, fallback to lexicographic order
-                self.family.to_string().cmp(&other.family.to_string())
-            }
-        }
+        priority(self.family)
+            .cmp(&priority(other.family))
+            .then_with(|| self.family.to_string().cmp(&other.family.to_string()))
     }
 }
 
@@ -224,6 +219,37 @@ impl From<&uv_platform_tags::Arch> for Arch {
             ),
             uv_platform_tags::Arch::Wasm32 => Self::new(target_lexicon::Architecture::Wasm32, None),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    use std::str::FromStr;
+
+    #[cfg(windows)]
+    use super::Arch;
+    use super::test_support::{aarch64, run_with_arch, x86_64};
+
+    #[test]
+    fn test_arch_sorting_prefers_native() {
+        run_with_arch(aarch64(), || {
+            assert!(aarch64() < x86_64());
+        });
+        run_with_arch(x86_64(), || {
+            assert!(x86_64() < aarch64());
+        });
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_windows_arch_sorting_fallback() {
+        let x86 = Arch::from_str("x86").expect("valid architecture");
+        let mut architectures = [x86, x86_64(), aarch64()];
+
+        run_with_arch(aarch64(), || architectures.sort());
+
+        assert_eq!(architectures, [aarch64(), x86_64(), x86]);
     }
 }
 
