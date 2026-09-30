@@ -1269,6 +1269,96 @@ fn mixed_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// Non-project root groups constrain Python selection, including inherited group requirements.
+#[test]
+fn non_project_group_requires_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = ["docs"]
+
+        [dependency-groups]
+        test = []
+        docs = [{ include-group = "test" }]
+        lint = []
+
+        [tool.uv.dependency-groups]
+        test = { requires-python = ">=3.12" }
+        docs = { requires-python = "<3.13" }
+        lint = { requires-python = ">=3.13" }
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .lock()
+        .args(["--python", "3.11", "--offline"])
+        .assert()
+        .success();
+
+    // Default groups select Python 3.12 even though the workspace permits Python 3.11.
+    uv_snapshot!(context.filters(), context.sync().args(["--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Would create project environment at: .venv
+    Resolved 1 package in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Checked in [TIME]
+    Would make no changes
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from the workspace root's `tool.uv.dependency-groups.docs.requires-python`).
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--no-default-groups", "--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Would create project environment at: .venv
+    Resolved 1 package in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    // Explicit root groups also constrain `run`.
+    uv_snapshot!(context.filters(), context.run().args(["--no-default-groups", "--group", "docs", "--python", "3.11", "--offline", "--", "python", "-V"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from the workspace root's `tool.uv.dependency-groups.docs.requires-python`).
+    ");
+
+    // Conflicting root requirements identify both group declarations.
+    uv_snapshot!(context.filters(), context.sync().args(["--group", "lint", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Found conflicting Python requirements:
+    - member: >=3.11
+    - workspace:docs: >=3.12, <3.13
+    - workspace:lint: >=3.13
+    ");
+    Ok(())
+}
+
 /// Ensure that group requires-python solves an actual problem
 #[test]
 #[cfg(not(windows))]
