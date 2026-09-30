@@ -315,7 +315,7 @@ async fn delayed_revalidation_cannot_modify_replaced_payload() -> Result<()> {
     Mock::given(method("GET"))
         .and(header("if-none-match", "\"first\""))
         .respond_with(move |_: &Request| {
-            // Publish a newer 200 while the original generation is awaiting revalidation.
+            // Publish a newer 200 while the original entry is awaiting revalidation.
             uv_fs::write_atomic_sync(&path, &replacement).expect("replace cached response");
             ResponseTemplate::new(304)
                 .insert_header("etag", "\"first\"")

@@ -876,14 +876,14 @@ enum CachedResponse {
 ///
 /// # Format
 ///
-/// Each file contains the payload, a random 16-byte generation ID, the archived
+/// Each file contains the payload, a random 16-byte entry ID, the archived
 /// HTTP cache policy, a 4-byte CRC32 checksum, and the payload length as a little-endian
-/// `u64`. The checksum covers the generation, policy, and encoded payload length.
+/// `u64`. The checksum covers the entry ID, policy, and encoded payload length.
 /// The payload remains first so an [`AlignedVec`] can be truncated without moving it.
 ///
-/// New responses atomically replace the entire file with a new generation. HTTP 304
+/// New responses atomically replace the entire file with a new entry ID. HTTP 304
 /// responses overwrite only the policy, checksum, and length. A writer opens the file
-/// and verifies its generation before updating it, so a delayed 304 cannot mutate a
+/// and verifies its entry ID before updating it, so a delayed 304 cannot mutate a
 /// newer response. If a replacement occurs after opening, the writer updates only the
 /// old file through its open handle.
 ///
@@ -895,7 +895,7 @@ enum CachedResponse {
 pub struct DataWithCachePolicy {
     pub data: AlignedVec,
     cache_policy: OwnedArchive<CachePolicy>,
-    generation: [u8; 16],
+    entry_id: [u8; 16],
 }
 
 /// The fixed-size footer following the archived HTTP cache policy.
@@ -965,7 +965,7 @@ impl DataWithCachePolicy {
         let (_, tail) = contents.split_at_checked(data_len).ok_or_else(|| {
             ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned())
         })?;
-        let (generation, policy_bytes) = <[u8; 16]>::ref_from_prefix(tail)
+        let (entry_id, policy_bytes) = <[u8; 16]>::ref_from_prefix(tail)
             .map_err(|_| ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned()))?;
 
         let mut hasher = Hasher::new();
@@ -977,7 +977,7 @@ impl DataWithCachePolicy {
             );
         }
 
-        let generation = *generation;
+        let entry_id = *entry_id;
         let mut policy = AlignedVec::with_capacity(policy_bytes.len());
         policy.extend_from_slice(policy_bytes);
         let cache_policy = OwnedArchive::new(policy)?;
@@ -986,28 +986,28 @@ impl DataWithCachePolicy {
         Ok(Self {
             data: bytes,
             cache_policy,
-            generation,
+            entry_id,
         })
     }
 
-    /// Serialize a new response with a unique generation for atomic publication.
+    /// Serialize a new response with a unique entry ID for atomic publication.
     fn serialize(policy: &CachePolicy, data: &[u8]) -> Result<Vec<u8>, Error> {
-        let generation = *Id::secure()
+        let entry_id = *Id::secure()
             .as_bytes()
             .as_array::<16>()
             .expect("IDs have 16 bytes");
-        let tail = Self::serialize_policy(policy, &generation, data.len())?;
-        let mut bytes = Vec::with_capacity(data.len() + generation.len() + tail.len());
+        let tail = Self::serialize_policy(policy, &entry_id, data.len())?;
+        let mut bytes = Vec::with_capacity(data.len() + entry_id.len() + tail.len());
         bytes.extend_from_slice(data);
-        bytes.extend_from_slice(&generation);
+        bytes.extend_from_slice(&entry_id);
         bytes.extend_from_slice(&tail);
         Ok(bytes)
     }
 
-    /// Serialize the mutable tail, binding the policy to its generation and payload boundary.
+    /// Serialize the mutable tail, binding the policy to its entry ID and payload boundary.
     fn serialize_policy(
         policy: &CachePolicy,
-        generation: &[u8; 16],
+        entry_id: &[u8; 16],
         data_len: usize,
     ) -> Result<Vec<u8>, Error> {
         let policy = OwnedArchive::from_unarchived(policy)?;
@@ -1017,7 +1017,7 @@ impl DataWithCachePolicy {
         );
 
         let mut hasher = Hasher::new();
-        hasher.update(generation);
+        hasher.update(entry_id);
         hasher.update(policy);
         hasher.update(data_len.as_bytes());
         let footer = CachePolicyFooter {
@@ -1048,19 +1048,19 @@ impl DataWithCachePolicy {
         };
         file.seek(SeekFrom::Start(self.data.len() as u64))
             .map_err(ErrorKind::CacheWrite)?;
-        let mut generation = [0; 16];
-        match file.read_exact(&mut generation) {
+        let mut entry_id = [0; 16];
+        match file.read_exact(&mut entry_id) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
             Err(err) => return Err(ErrorKind::CacheWrite(err).into()),
         }
-        if generation != self.generation {
+        if entry_id != self.entry_id {
             // A newer response replaced the entry while this request was in flight.
             return Ok(());
         }
-        let tail = Self::serialize_policy(policy, &generation, self.data.len())?;
+        let tail = Self::serialize_policy(policy, &entry_id, self.data.len())?;
         file.write_all(&tail).map_err(ErrorKind::CacheWrite)?;
-        file.set_len((self.data.len() + generation.len() + tail.len()) as u64)
+        file.set_len((self.data.len() + entry_id.len() + tail.len()) as u64)
             .map_err(ErrorKind::CacheWrite)?;
         Ok(())
     }
@@ -1099,7 +1099,7 @@ mod tests {
         assert!(fs_err::metadata(&path)?.len() > original.len() as u64);
         let grown = DataWithCachePolicy::from_path_sync(&path)?;
         assert_eq!(grown.data.as_slice(), payload);
-        assert_eq!(grown.generation, cached.generation);
+        assert_eq!(grown.entry_id, cached.entry_id);
         assert_eq!(
             OwnedArchive::as_bytes(&grown.cache_policy),
             OwnedArchive::as_bytes(&large.to_archived()),
@@ -1117,12 +1117,9 @@ mod tests {
         for (before, after) in [(&small, &large), (&large, &small)] {
             let original = DataWithCachePolicy::serialize(before, b"payload")?;
             let cached = DataWithCachePolicy::from_reader(original.as_slice())?;
-            let tail = DataWithCachePolicy::serialize_policy(
-                after,
-                &cached.generation,
-                cached.data.len(),
-            )?;
-            let offset = cached.data.len() + cached.generation.len();
+            let tail =
+                DataWithCachePolicy::serialize_policy(after, &cached.entry_id, cached.data.len())?;
+            let offset = cached.data.len() + cached.entry_id.len();
             let before = before.to_archived();
             let after = after.to_archived();
             // Model every interruption point in write_all, before set_len truncates a shorter policy.
@@ -1146,7 +1143,7 @@ mod tests {
     #[test]
     fn cache_trailer_corruption_is_rejected() -> Result<()> {
         let bytes = DataWithCachePolicy::serialize(&policy("x-small")?, b"payload")?;
-        // The checksum covers the generation, policy, and length; corrupt each byte in turn.
+        // The checksum covers the entry ID, policy, and length; corrupt each byte in turn.
         for index in b"payload".len()..bytes.len() {
             let mut corrupted = bytes.clone();
             corrupted[index] ^= 1;
