@@ -137,6 +137,7 @@ actually need to make an HTTP request).
 
 use std::time::{Duration, SystemTime};
 
+use bitflags::bitflags;
 use http::header::HeaderValue;
 use rkyv::primitive::ArchivedU64;
 
@@ -1184,29 +1185,48 @@ struct ResponseTiming {
     presence: u8,
 }
 
-impl ResponseTiming {
-    const AGE_SECONDS: u8 = 1 << 0;
-    const DATE_UNIX_TIMESTAMP: u8 = 1 << 1;
-    const EXPIRES_UNIX_TIMESTAMP: u8 = 1 << 2;
-    const LAST_MODIFIED_UNIX_TIMESTAMP: u8 = 1 << 3;
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    struct ResponseTimingFlags: u8 {
+        const AGE_SECONDS = 1 << 0;
+        const DATE_UNIX_TIMESTAMP = 1 << 1;
+        const EXPIRES_UNIX_TIMESTAMP = 1 << 2;
+        const LAST_MODIFIED_UNIX_TIMESTAMP = 1 << 3;
+    }
+}
 
+impl ResponseTiming {
     fn new(
         age_seconds: Option<u64>,
         date_unix_timestamp: Option<u64>,
         expires_unix_timestamp: Option<u64>,
         last_modified_unix_timestamp: Option<u64>,
     ) -> Self {
+        let mut presence = ResponseTimingFlags::empty();
+        presence.set(ResponseTimingFlags::AGE_SECONDS, age_seconds.is_some());
+        presence.set(
+            ResponseTimingFlags::DATE_UNIX_TIMESTAMP,
+            date_unix_timestamp.is_some(),
+        );
+        presence.set(
+            ResponseTimingFlags::EXPIRES_UNIX_TIMESTAMP,
+            expires_unix_timestamp.is_some(),
+        );
+        presence.set(
+            ResponseTimingFlags::LAST_MODIFIED_UNIX_TIMESTAMP,
+            last_modified_unix_timestamp.is_some(),
+        );
         Self {
             age_seconds: age_seconds.unwrap_or_default().into(),
             date_unix_timestamp: date_unix_timestamp.unwrap_or_default().into(),
             expires_unix_timestamp: expires_unix_timestamp.unwrap_or_default().into(),
             last_modified_unix_timestamp: last_modified_unix_timestamp.unwrap_or_default().into(),
-            presence: (u8::from(age_seconds.is_some()) * Self::AGE_SECONDS)
-                | (u8::from(date_unix_timestamp.is_some()) * Self::DATE_UNIX_TIMESTAMP)
-                | (u8::from(expires_unix_timestamp.is_some()) * Self::EXPIRES_UNIX_TIMESTAMP)
-                | (u8::from(last_modified_unix_timestamp.is_some())
-                    * Self::LAST_MODIFIED_UNIX_TIMESTAMP),
+            presence: presence.bits(),
         }
+    }
+
+    fn presence(&self) -> ResponseTimingFlags {
+        ResponseTimingFlags::from_bits_retain(self.presence)
     }
 
     /// The value of the `Age` header corresponding to `age_value` as defined
@@ -1215,7 +1235,9 @@ impl ResponseTiming {
     ///
     /// [RFC 9111 S4.2.3]: https://www.rfc-editor.org/rfc/rfc9111.html#name-calculating-age
     fn age_seconds(&self) -> Option<u64> {
-        (self.presence & Self::AGE_SECONDS != 0).then_some(self.age_seconds.to_native())
+        self.presence()
+            .contains(ResponseTimingFlags::AGE_SECONDS)
+            .then_some(self.age_seconds.to_native())
     }
 
     /// This is `date_value` from [RFC 9111 S4.2.3], which says it corresponds
@@ -1227,7 +1249,8 @@ impl ResponseTiming {
     /// [RFC 9111 S4.2.3]: https://www.rfc-editor.org/rfc/rfc9111.html#name-calculating-age
     /// [RFC 7231 S7.1.1.2]: https://httpwg.org/specs/rfc7231.html#header.date
     fn date_unix_timestamp(&self) -> Option<u64> {
-        (self.presence & Self::DATE_UNIX_TIMESTAMP != 0)
+        self.presence()
+            .contains(ResponseTimingFlags::DATE_UNIX_TIMESTAMP)
             .then_some(self.date_unix_timestamp.to_native())
     }
 
@@ -1241,7 +1264,8 @@ impl ResponseTiming {
     ///
     /// [RFC 9111 S5.3]: https://www.rfc-editor.org/rfc/rfc9111.html#section-5.3
     fn expires_unix_timestamp(&self) -> Option<u64> {
-        (self.presence & Self::EXPIRES_UNIX_TIMESTAMP != 0)
+        self.presence()
+            .contains(ResponseTimingFlags::EXPIRES_UNIX_TIMESTAMP)
             .then_some(self.expires_unix_timestamp.to_native())
     }
 
@@ -1252,7 +1276,8 @@ impl ResponseTiming {
     /// [RFC 9110 S8.8.2]: https://www.rfc-editor.org/rfc/rfc9110#section-8.8.2
     /// [RFC 9111 S4.2.2]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2.2
     fn last_modified_unix_timestamp(&self) -> Option<u64> {
-        (self.presence & Self::LAST_MODIFIED_UNIX_TIMESTAMP != 0)
+        self.presence()
+            .contains(ResponseTimingFlags::LAST_MODIFIED_UNIX_TIMESTAMP)
             .then_some(self.last_modified_unix_timestamp.to_native())
     }
 }
