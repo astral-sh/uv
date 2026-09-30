@@ -577,8 +577,8 @@ fn build_module_name_normalization() -> Result<()> {
 #[test]
 fn build_sdist_with_long_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let legacy_dir = TempDir::new()?;
     let default_dir = TempDir::new()?;
-    let temp_dir = TempDir::new()?;
 
     context
         .temp_dir
@@ -608,8 +608,9 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     uv_snapshot!(context
         .build_backend()
+        .env(EnvVars::UV_NO_TAR_CODEC, "1")
         .arg("build-sdist")
-        .arg(default_dir.path()), @"
+        .arg(legacy_dir.path()), @"
     exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0.tar.gz
@@ -631,7 +632,7 @@ fn build_sdist_with_long_path() -> Result<()> {
                 assert all(not member.pax_headers for member in members)
                 print(f"GNU members: {len(members)}")
         "#})
-        .arg(default_dir.path().join("foo-1.0.0.tar.gz")), @"
+        .arg(legacy_dir.path().join("foo-1.0.0.tar.gz")), @"
     exit_code: 0 (success)
     ----- stdout -----
     GNU members: 10
@@ -639,9 +640,9 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     uv_snapshot!(context
         .build_backend()
-        .env(EnvVars::UV_PREVIEW_FEATURES, "tar-codec")
+        .env_remove(EnvVars::UV_NO_TAR_CODEC)
         .arg("build-sdist")
-        .arg(temp_dir.path()), @"
+        .arg(default_dir.path()), @"
     exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0.tar.gz
@@ -676,7 +677,7 @@ fn build_sdist_with_long_path() -> Result<()> {
                 print(f"Long path bytes: {len(long_member.name.encode())}")
                 print(f"Streamed bytes: {streamed}")
         "#})
-        .arg(temp_dir.path().join("foo-1.0.0.tar.gz"))
+        .arg(default_dir.path().join("foo-1.0.0.tar.gz"))
         .arg(format!("foo-1.0.0/{long_path}"))
         .arg(format!("foo-1.0.0/{large_path}")), @"
     exit_code: 0 (success)
