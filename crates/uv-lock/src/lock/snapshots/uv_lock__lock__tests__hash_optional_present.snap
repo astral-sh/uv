@@ -103,6 +103,8 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dependency_groups: {},
+                default_groups: None,
+                group_requires_python: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],
@@ -129,10 +131,9 @@ Ok(
                 0,
             ),
         },
+        workspace_members: {},
         manifest: ResolverManifest {
             members: {},
-            default_groups: {},
-            group_metadata: {},
             requirements: {},
             dependency_groups: {},
             constraints: {},

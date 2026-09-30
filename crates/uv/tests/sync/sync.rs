@@ -2088,21 +2088,20 @@ fn sync_frozen_member_default_groups_python_sources() -> Result<()> {
         [manifest]
         members = ["member", "root"]
 
-        [manifest.default-groups]
-        member = ["docs"]
-
-        [manifest.group-metadata]
-        member = { docs = { requires-python = ">=3.14" }, test = { requires-python = ">=3.13" }, unbounded = {} }
-
         [[package]]
         name = "member"
         version = "1.0.0"
         source = { virtual = "member" }
+        default-groups = ["docs"]
 
         [package.dev-dependencies]
         docs = []
         test = []
         unbounded = []
+
+        [package.group-requires-python]
+        docs = ">=3.14"
+        test = ">=3.13"
 
         [[package]]
         name = "root"

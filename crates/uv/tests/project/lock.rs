@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -113,15 +115,11 @@ fn member_default_groups_in_lockfile() -> Result<()> {
         "root",
     ]
 
-    [manifest.default-groups]
-    all = "all"
-    custom = ["dev", "docs"]
-    empty = []
-
     [[package]]
     name = "all"
     version = "1.0.0"
     source = { virtual = "all" }
+    default-groups = "all"
 
     [package.metadata]
 
@@ -133,6 +131,7 @@ fn member_default_groups_in_lockfile() -> Result<()> {
     name = "custom"
     version = "1.0.0"
     source = { virtual = "custom" }
+    default-groups = ["dev", "docs"]
 
     [package.metadata]
 
@@ -144,6 +143,7 @@ fn member_default_groups_in_lockfile() -> Result<()> {
     name = "empty"
     version = "1.0.0"
     source = { virtual = "empty" }
+    default-groups = []
 
     [package.metadata]
 
@@ -208,15 +208,14 @@ fn member_default_groups_in_lockfile() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), contents);
 
-    // Relocking updates the defaults without changing the resolved packages.
+    // Relocking updates the recorded defaults.
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     ");
     let updated = Lock::from_canonical_toml(&context.read("uv.lock"))?;
-    assert_eq!(updated.packages(), lock.packages());
-    insta::assert_json_snapshot!(updated.configured_member_default_groups(), @r#"
+    insta::assert_json_snapshot!(updated.configured_member_default_groups().map(Iterator::collect::<BTreeMap<_, _>>), @r#"
     {
       "all": "all",
       "custom": [],
@@ -249,7 +248,7 @@ fn member_default_groups_in_lockfile() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
     let updated = Lock::from_canonical_toml(&context.read("uv.lock"))?;
-    insta::assert_json_snapshot!(updated.configured_member_default_groups(), @r#"
+    insta::assert_json_snapshot!(updated.configured_member_default_groups().map(Iterator::collect::<BTreeMap<_, _>>), @r#"
     {
       "all": "all",
       "empty": []
@@ -326,18 +325,14 @@ fn member_group_python_requirements_in_lockfile() -> Result<()> {
         "root",
     ]
 
-    [manifest.default-groups]
-    member = []
-    root = ["combined"]
-
-    [manifest.group-metadata]
-    member = { docs = { requires-python = ">=3.14" } }
-    root = { base = { requires-python = ">=3.13" }, combined = { requires-python = ">=3.13,<3.15" } }
-
     [[package]]
     name = "member"
     version = "1.0.0"
     source = { virtual = "member" }
+    default-groups = []
+
+    [package.group-requires-python]
+    docs = ">=3.14"
 
     [package.metadata]
 
@@ -348,6 +343,11 @@ fn member_group_python_requirements_in_lockfile() -> Result<()> {
     name = "root"
     version = "1.0.0"
     source = { virtual = "." }
+    default-groups = ["combined"]
+
+    [package.group-requires-python]
+    base = ">=3.13"
+    combined = ">=3.13,<3.15"
 
     [package.metadata]
 
@@ -365,20 +365,6 @@ fn member_group_python_requirements_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
-
-    // A group with only an unknown future setting has no known Python requirement.
-    let extended = context.read("uv.lock").replace(
-        "combined = { requires-python = \">=3.13,<3.15\" } }",
-        "combined = { requires-python = \">=3.13,<3.15\" }, unrestricted = { future-setting = true } }",
-    );
-    assert_ne!(context.read("uv.lock"), extended);
-    context.temp_dir.child("uv.lock").write_str(&extended)?;
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    ");
-    assert_eq!(context.read("uv.lock"), extended);
 
     // Changing the included group's bound makes the lock stale.
     pyproject.write_str(indoc! {r#"
@@ -467,9 +453,6 @@ fn metadata_free_group_python_requirements_in_lockfile() -> Result<()> {
     [options]
     exclude-newer = "2024-03-25T00:00:00Z"
 
-    [manifest.group-metadata]
-    project = { bar = { requires-python = ">=3.13" } }
-
     [[package]]
     name = "project"
     version = "1.0.0"
@@ -477,9 +460,12 @@ fn metadata_free_group_python_requirements_in_lockfile() -> Result<()> {
 
     [package.dev-dependencies]
     bar = []
+
+    [package.group-requires-python]
+    bar = ">=3.13"
     "#);
 
-    // Both parsers accept the implicit parent, and serialization preserves the layout.
+    // Both parsers retain group requirements when package declaration metadata is omitted.
     let lock = Lock::from_canonical_toml(&contents)?;
     assert_eq!(toml::from_str::<Lock>(&contents)?, lock);
     assert_eq!(lock.to_toml()?, contents);
@@ -543,7 +529,7 @@ fn legacy_default_groups_in_lockfile() -> Result<()> {
     "#};
     let old_lock = Lock::from_canonical_toml(legacy)?;
     assert_eq!(old_lock.member_default_groups(&"root".parse()?), None);
-    assert_eq!(old_lock.configured_member_default_groups(), None);
+    assert!(old_lock.configured_member_default_groups().is_none());
     context.temp_dir.child("uv.lock").write_str(legacy)?;
     context
         .lock()
@@ -685,7 +671,7 @@ fn metadata_free_default_groups_in_lockfile() -> Result<()> {
     "#};
     let old_lock = Lock::from_canonical_toml(legacy)?;
     assert_eq!(old_lock.member_default_groups(&"root".parse()?), None);
-    assert_eq!(old_lock.member_group_metadata(), None);
+    assert!(old_lock.member_group_metadata().is_none());
     context.temp_dir.child("uv.lock").write_str(legacy)?;
     context
         .lock()
@@ -709,7 +695,6 @@ fn metadata_free_default_groups_in_lockfile() -> Result<()> {
         .assert()
         .success();
     let updated = Lock::from_canonical_toml(&context.read("uv.lock"))?;
-    assert_eq!(updated.packages(), old_lock.packages());
     assert_eq!(
         updated.member_default_groups(&"root".parse()?),
         Some(DefaultGroups::List(vec!["docs".parse()?]))
@@ -765,7 +750,7 @@ fn metadata_free_default_groups_in_lockfile() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
     let updated = Lock::from_canonical_toml(&context.read("uv.lock"))?;
-    insta::assert_json_snapshot!(updated.configured_member_default_groups(), @r#"
+    insta::assert_json_snapshot!(updated.configured_member_default_groups().map(Iterator::collect::<BTreeMap<_, _>>), @r#"
     {
       "root": []
     }
@@ -801,15 +786,11 @@ fn unordered_default_groups_in_lockfile() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
-        [manifest.default-groups]
-        root = ["docs", "dev", "docs"]
-
         [[package]]
         name = "root"
         version = "1.0.0"
         source = { virtual = "." }
+        default-groups = ["docs", "dev", "docs"]
 
         [package.metadata]
 
@@ -854,15 +835,11 @@ fn unordered_default_groups_in_lockfile() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest]
-
-        [manifest.default-groups]
-        root = ["dev", "dev"]
-
         [[package]]
         name = "root"
         version = "1.0.0"
         source = { virtual = "." }
+        default-groups = ["dev", "dev"]
 
         [package.metadata]
 
@@ -910,13 +887,11 @@ fn single_project_default_groups_in_lockfile() -> Result<()> {
     [options]
     exclude-newer = "2024-03-25T00:00:00Z"
 
-    [manifest.default-groups]
-    root = ["docs"]
-
     [[package]]
     name = "root"
     version = "1.0.0"
     source = { virtual = "." }
+    default-groups = ["docs"]
 
     [package.metadata]
 
@@ -932,7 +907,7 @@ fn single_project_default_groups_in_lockfile() -> Result<()> {
     Ok(())
 }
 
-/// Member defaults and non-project workspace groups share the lock manifest.
+/// Member defaults coexist with non-project workspace groups.
 #[test]
 fn non_project_workspace_default_groups_in_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1043,7 +1018,8 @@ fn invalid_default_groups_in_lockfile() -> Result<()> {
     assert!(
         lock.configured_member_default_groups()
             .context("Missing default groups")?
-            .is_empty()
+            .next()
+            .is_none()
     );
     Ok(())
 }

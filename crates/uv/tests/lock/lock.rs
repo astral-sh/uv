@@ -22265,43 +22265,91 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
     -e ./provider
     ");
 
-    let original_lock = context.read("uv.lock");
-    insta::allow_duplicates! {
-        for section in ["optional-dependencies", "dev-dependencies"] {
-            let mut lock = original_lock.parse::<toml_edit::DocumentMut>()?;
-            let Some(packages) = lock["package"].as_array_of_tables_mut() else {
-                anyhow::bail!("lockfile did not contain a package array");
-            };
-            let Some(provider) = packages
-                .iter_mut()
-                .find(|package| package["name"].as_str() == Some("provider"))
-            else {
-                anyhow::bail!("lockfile did not contain the provider");
-            };
-            let Some(selections) = provider[section].as_table_mut() else {
-                anyhow::bail!("provider did not contain {section}");
-            };
-            selections.remove("empty");
-            context
-                .temp_dir
-                .child("uv.lock")
-                .write_str(&lock.to_string())?;
+    // Omitting the provider's empty extra makes the metadata-free lock stale.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
 
-            uv_snapshot!(context.filters(), context.lock()
-                .arg("--preview-features")
-                .arg("lock-without-metadata")
-                .arg("--locked")
-                .arg("--offline"), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            Resolved 2 packages in [TIME]
-            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
 
-            hint: To update the lockfile, run `uv lock`.
-            ");
-        }
-        Ok::<(), anyhow::Error>(())
-    }?;
+        [manifest]
+        members = ["project", "provider"]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        empty = []
+
+        [package.dev-dependencies]
+        empty = []
+
+        [[package]]
+        name = "provider"
+        version = "1.0.0"
+        source = { editable = "provider" }
+
+        [package.dev-dependencies]
+        empty = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--preview-features", "lock-without-metadata", "--locked", "--offline",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // Omitting the provider's empty group also makes the metadata-free lock stale.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["project", "provider"]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        empty = []
+
+        [package.dev-dependencies]
+        empty = []
+
+        [[package]]
+        name = "provider"
+        version = "1.0.0"
+        source = { editable = "provider" }
+
+        [package.optional-dependencies]
+        empty = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--preview-features", "lock-without-metadata", "--locked", "--offline",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
 
     Ok(())
 }
@@ -22825,13 +22873,34 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
         .child("uv.lock")
         .write_str(&original_lock)?;
 
-    let pyproject = context
-        .read("pyproject.toml")
-        .replace("ok==1.0.0", "ok==2.0.0");
+    // Changing the Windows constraint requires a new resolution.
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(&pyproject)?;
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["ok[first]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'"]
+        other = ["ok[second]>=1,<3 ; sys_platform == 'win32'"]
+        nested = [
+            { include-group = "dev" },
+            "ok[third]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'",
+        ]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "ok", extra = "first" },
+            { package = "ok", extra = "second" },
+        ]]
+        constraint-dependencies = ["ok==2.0.0 ; sys_platform == 'win32'"]
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -33233,9 +33302,6 @@ fn lock_group_requires_python() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest.group-metadata]
-        project = { bar = { requires-python = ">=3.13" } }
-
         [[package]]
         name = "idna"
         version = "3.6"
@@ -33261,6 +33327,9 @@ fn lock_group_requires_python() -> Result<()> {
         foo = [
             { name = "idna" },
         ]
+
+        [package.group-requires-python]
+        bar = ">=3.13"
 
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]
@@ -33374,9 +33443,6 @@ fn lock_group_includes_requires_python() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest.group-metadata]
-        project = { bar = { requires-python = ">=3.13" }, baz = { requires-python = ">=3.13,>=3.13.1" }, blargh = { requires-python = ">=3.12.[X],>=3.13" }, foo = { requires-python = ">=3.13" } }
-
         [[package]]
         name = "idna"
         version = "3.6"
@@ -33414,6 +33480,12 @@ fn lock_group_includes_requires_python() -> Result<()> {
             { name = "sniffio", marker = "python_full_version >= '3.13'" },
             { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
         ]
+
+        [package.group-requires-python]
+        bar = ">=3.13"
+        baz = ">=3.13,>=3.13.1"
+        blargh = ">=3.12.[X],>=3.13"
+        foo = ">=3.13"
 
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]
@@ -33601,9 +33673,6 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest.group-metadata]
-        project = { bar = { requires-python = ">=3.13" }, foo = { requires-python = "<3.13,>=3.13" } }
-
         [[package]]
         name = "idna"
         version = "3.6"
@@ -33629,6 +33698,10 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
         foo = [
             { name = "idna", marker = "python_full_version < '3.13'" },
         ]
+
+        [package.group-requires-python]
+        bar = ">=3.13"
+        foo = "<3.13,>=3.13"
 
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]

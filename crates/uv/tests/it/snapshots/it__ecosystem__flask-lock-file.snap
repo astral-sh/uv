@@ -15,9 +15,6 @@ resolution-markers = [
 [options]
 exclude-newer = "2026-06-30T00:00:00Z"
 
-[manifest.default-groups]
-flask = ["dev", "pre-commit", "tests", "typing"]
-
 [[package]]
 name = "alabaster"
 version = "1.0.0"
@@ -446,6 +443,7 @@ wheels = [
 name = "flask"
 version = "3.2.0.dev0"
 source = { editable = "." }
+default-groups = ["dev", "pre-commit", "tests", "typing"]
 dependencies = [
     { name = "blinker" },
     { name = "click" },
