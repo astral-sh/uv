@@ -14,7 +14,9 @@ use uv_lock::{PackageMap, TreeDisplay, TreeJsonTarget};
 use uv_normalize::DefaultGroups;
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
+use uv_python::{
+    ConfigDiscovery, PythonDownloads, PythonPreferences, PythonRequest, PythonVersion,
+};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -59,7 +61,7 @@ pub(crate) async fn tree(
     settings: ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
     script: Option<Pep723Script>,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -106,7 +108,7 @@ pub(crate) async fn tree(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 client_builder,
-                python_preference,
+                python_preferences,
                 python_downloads,
                 &install_mirrors,
                 false,
@@ -131,7 +133,7 @@ pub(crate) async fn tree(
                     &groups,
                     workspace_python,
                     client_builder,
-                    python_preference,
+                    python_preferences,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,

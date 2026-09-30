@@ -69,7 +69,10 @@ fn show_settings_returns_before_running_commands() {
         preview: Preview {
             flags: [],
         },
-        python_preference: Managed,
+        python_preferences: PythonPreferences {
+            source: Managed,
+            arch: None,
+        },
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -203,7 +206,10 @@ fn pip_compile_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_preference: Managed,
+        python_preferences: PythonPreferences {
+            source: Managed,
+            arch: None,
+        },
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -411,7 +417,10 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         preview: Preview {
             flags: [],
         },
-        python_preference: Managed,
+        python_preferences: PythonPreferences {
+            source: Managed,
+            arch: None,
+        },
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -580,7 +589,10 @@ fn pip_install_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_preference: Managed,
+        python_preferences: PythonPreferences {
+            source: Managed,
+            arch: None,
+        },
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -771,7 +783,10 @@ fn lock_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_preference: Managed,
+        python_preferences: PythonPreferences {
+            source: Managed,
+            arch: None,
+        },
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -898,7 +913,10 @@ fn version_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_preference: Managed,
+        python_preferences: PythonPreferences {
+            source: Managed,
+            arch: None,
+        },
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -1040,7 +1058,10 @@ fn tool_install_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_preference: Managed,
+        python_preferences: PythonPreferences {
+            source: Managed,
+            arch: None,
+        },
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -2534,8 +2555,8 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     +            Pylock,
     +        ],
          },
-         python_preference: Managed,
-         python_downloads: Automatic,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
              malware_check_url: None,
          },
@@ -2571,8 +2592,8 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     -        ],
     +        flags: [],
          },
-         python_preference: Managed,
-         python_downloads: Automatic,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
 
      ----- stderr -----
@@ -2855,7 +2876,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                |
              1 | [project]
                |  ^^^^^^^
-             unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+             unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-arch`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -3955,8 +3976,8 @@ fn preview_features() {
     +            BuildLazyImports,
     +        ],
          },
-         python_preference: Managed,
-         python_downloads: Automatic,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
     "
     );
@@ -3983,8 +4004,8 @@ fn preview_features() {
     +            JsonOutput,
     +        ],
          },
-         python_preference: Managed,
-         python_downloads: Automatic,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
     "
     );
@@ -4155,8 +4176,8 @@ fn preview_precedence() -> anyhow::Result<()> {
     +            Pylock,
     +        ],
          },
-         python_preference: Managed,
-         python_downloads: Automatic,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
     "
     );
@@ -4231,8 +4252,8 @@ fn preview_precedence() -> anyhow::Result<()> {
     +            FormatCommand,
     +        ],
          },
-         python_preference: Managed,
-         python_downloads: Automatic,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
     "
     );
@@ -4283,7 +4304,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     +            Pylock,
              ],
          },
-         python_preference: Managed,
+         python_preferences: PythonPreferences {
     ...
     "
     );
@@ -4401,8 +4422,8 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     +            FormatCommand,
     +        ],
          },
-         python_preference: Managed,
-         python_downloads: Automatic,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
     "
     );
@@ -4541,8 +4562,8 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
     +            FormatCommand,
     +        ],
          },
-         python_preference: Managed,
-         python_downloads: Automatic,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
     "
     );
@@ -4673,8 +4694,8 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
     +            FormatCommand,
     +        ],
          },
-         python_preference: Managed,
-         python_downloads: Never,
+         python_preferences: PythonPreferences {
+             source: Managed,
     ...
     "
     );

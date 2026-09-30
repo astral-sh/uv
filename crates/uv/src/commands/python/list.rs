@@ -15,8 +15,8 @@ use uv_python::downloads::{
     Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
 };
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonPreference, PythonRequest, PythonSource,
-    find_all_python_installations,
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference,
+    PythonPreferences, PythonRequest, PythonSource, find_all_python_installations,
 };
 
 use crate::commands::ExitStatus;
@@ -65,18 +65,31 @@ pub(crate) async fn list(
     python_downloads_json_url: Option<String>,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let python_preferences = if all_platforms || all_arches {
+        PythonPreferences {
+            arch: None,
+            ..python_preferences
+        }
+    } else {
+        python_preferences
+    };
     let request = request.as_deref().map(PythonRequest::parse);
-    let base_download_request = if python_preference == PythonPreference::OnlySystem {
+    let base_download_request = if python_preferences.source == PythonPreference::OnlySystem {
         None
     } else {
         // If the user request cannot be mapped to a download request, we won't show any downloads
-        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
+        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any)).map(
+            |request| {
+                request
+                    .with_default_arch(python_preferences.arch.map(PythonArchitecture::into_inner))
+            },
+        )
     };
 
     let download_request = if let Some(base_download_request) = base_download_request {
@@ -148,10 +161,11 @@ pub(crate) async fn list(
             // `PATH`, in `uv python list` we want to enumerate links to managed Python
             // interpreters for inspection. Consequently, we widen the preference here and
             // perform post-filtering.
-            let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
-                PythonPreference::Managed
+            let discovery_preference = if python_preferences.source == PythonPreference::OnlyManaged
+            {
+                python_preferences.with_source(PythonPreference::Managed)
             } else {
-                python_preference
+                python_preferences
             };
             let mut installations = find_all_python_installations(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
@@ -159,10 +173,10 @@ pub(crate) async fn list(
                 discovery_preference,
                 cache,
             )?;
-            // Apply the original `PythonPreference` to discovered interpreters, since we may
+            // Apply the original `PythonPreferences` to discovered interpreters, since we may
             // have expanded it above.
             installations
-                .retain(|installation| python_preference.allows_installation(installation));
+                .retain(|installation| python_preferences.allows_installation(installation));
             Some(installations)
         }
         PythonListKinds::Downloads => None,

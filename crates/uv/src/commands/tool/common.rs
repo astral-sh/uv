@@ -38,7 +38,7 @@ use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    PythonInstallation, PythonPreferences, PythonRequest, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
@@ -644,7 +644,7 @@ pub(crate) async fn refine_interpreter(
     client_builder: &BaseClientBuilder<'_>,
     reporter: &PythonDownloadReporter,
     install_mirrors: &PythonInstallMirrors,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     cache: &Cache,
 ) -> anyhow::Result<Option<Interpreter>, ProjectError> {
@@ -702,7 +702,7 @@ pub(crate) async fn refine_interpreter(
     let interpreter = PythonInstallation::find_or_download(
         Some(&requires_python_request),
         EnvironmentPreference::OnlySystem,
-        python_preference,
+        python_preferences,
         python_downloads,
         client_builder,
         cache,
@@ -717,7 +717,7 @@ pub(crate) async fn refine_interpreter(
     // If the user passed a `--python` request, and the refined interpreter is incompatible, we
     // can't use it.
     if let Some(python_request) = python_request {
-        if !python_request.satisfied(&interpreter, cache) {
+        if !python_preferences.satisfies_request(Some(python_request), &interpreter, cache) {
             return Ok(None);
         }
     }

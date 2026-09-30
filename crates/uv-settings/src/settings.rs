@@ -22,7 +22,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::{
@@ -350,6 +350,16 @@ pub struct GlobalOptions {
         possible_values = true
     )]
     pub python_preference: Option<PythonPreference>,
+    /// The architecture to use for Python interpreters when a Python request does not specify
+    /// one. Requests that name an interpreter executable take precedence.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            python-arch = "x86_64"
+        "#
+    )]
+    pub python_arch: Option<PythonArchitecture>,
     /// Whether to allow Python downloads.
     #[option(
         default = "\"automatic\"",
@@ -457,6 +467,7 @@ struct GlobalOptionsWire {
     preview_features: Option<PreviewFeaturesOption>,
 
     python_preference: Option<PythonPreference>,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: Option<PythonDownloads>,
     concurrent_downloads: Option<NonZeroUsize>,
     concurrent_builds: Option<NonZeroUsize>,
@@ -482,6 +493,7 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
             preview,
             preview_features,
             python_preference,
+            python_arch,
             python_downloads,
             concurrent_downloads,
             concurrent_builds,
@@ -501,6 +513,7 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
             cache_dir,
             preview: PreviewOption::try_from(preview, preview_features)?,
             python_preference,
+            python_arch,
             python_downloads,
             concurrent_downloads,
             concurrent_builds,
@@ -2567,6 +2580,7 @@ struct OptionsWire {
     preview: Option<bool>,
     preview_features: Option<PreviewFeaturesOption>,
     python_preference: Option<PythonPreference>,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: Option<PythonDownloads>,
     concurrent_downloads: Option<NonZeroUsize>,
     concurrent_builds: Option<NonZeroUsize>,
@@ -2674,6 +2688,7 @@ impl TryFrom<OptionsWire> for Options {
             preview,
             preview_features,
             python_preference,
+            python_arch,
             python_downloads,
             python_install_mirror,
             pypy_install_mirror,
@@ -2754,6 +2769,7 @@ impl TryFrom<OptionsWire> for Options {
                 cache_dir,
                 preview: PreviewOption::try_from(preview, preview_features)?,
                 python_preference,
+                python_arch,
                 python_downloads,
                 concurrent_downloads,
                 concurrent_builds,

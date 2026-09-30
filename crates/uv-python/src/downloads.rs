@@ -243,6 +243,14 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
+    #[must_use]
+    pub(crate) fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
+        if self.arch.is_none() {
+            self.arch = arch.map(ArchRequest::Explicit);
+        }
+        self
+    }
+
     /// Check if this platform request is satisfied by a platform.
     pub(crate) fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os
@@ -355,6 +363,15 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_arch(mut self, arch: Arch) -> Self {
         self.arch = Some(ArchRequest::Explicit(arch));
+        self
+    }
+
+    /// Fill an unspecified architecture with the configured default.
+    #[must_use]
+    pub fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
+        if self.arch.is_none() {
+            self.arch = arch.map(ArchRequest::Explicit);
+        }
         self
     }
 

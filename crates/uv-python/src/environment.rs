@@ -14,7 +14,7 @@ use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
 use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
 use crate::{
-    EnvironmentPreference, Error, Interpreter, Prefix, PythonNotFound, PythonPreference,
+    EnvironmentPreference, Error, Interpreter, Prefix, PythonNotFound, PythonPreferences,
     PythonRequest, Target,
 };
 
@@ -151,7 +151,7 @@ impl PythonEnvironment {
     pub fn find(
         request: &PythonRequest,
         preference: EnvironmentPreference,
-        python_preference: PythonPreference,
+        python_preference: impl Into<PythonPreferences>,
         cache: &Cache,
     ) -> Result<Self, Error> {
         let installation =

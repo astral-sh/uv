@@ -20,6 +20,7 @@ pub use crate::interpreter::{
     BrokenLink, Error as InterpreterError, Interpreter, canonicalize_executable,
 };
 pub use crate::pointer_size::PointerSize;
+pub use crate::preferences::{PythonArchitecture, PythonPreferences};
 pub use crate::prefix::Prefix;
 pub use crate::python_version::{BuildVersionError, PythonVersion};
 pub use crate::target::Target;
@@ -41,6 +42,7 @@ pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
 mod pointer_size;
+mod preferences;
 mod prefix;
 mod python_version;
 mod sysconfig;
@@ -226,8 +228,8 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        PythonDownloads, PythonNotFound, PythonRequest, PythonSource, PythonVersion,
-        find_all_python_installations, find_python_installations,
+        PythonDownloads, PythonNotFound, PythonPreferences, PythonRequest, PythonSource,
+        PythonVersion, find_all_python_installations, find_python_installations,
         implementation::ImplementationName, installation::PythonInstallation,
         managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
     };
@@ -661,6 +663,80 @@ mod tests {
             ChildPath::new(path.as_ref().join("pyvenv.cfg")).touch()?;
             Ok(())
         }
+    }
+
+    #[test]
+    fn find_python_default_arch() -> Result<()> {
+        let mut context = TestContext::new()?;
+        let version = PythonVersion::from_str("3.14.1").expect("valid Python version");
+        let x86_64 = context
+            .new_search_path_directory("x86_64")?
+            .join("python3.14");
+        let aarch64 = context
+            .new_search_path_directory("aarch64")?
+            .join("python3.14");
+        for executable in [&x86_64, &aarch64] {
+            TestContext::create_mock_interpreter(
+                executable,
+                &version,
+                ImplementationName::CPython,
+                true,
+                false,
+            )?;
+        }
+        let script = fs_err::read_to_string(&aarch64)?;
+        fs_err::write(&aarch64, script.replace("x86_64", "aarch64"))?;
+        let preferences = PythonPreferences {
+            source: PythonPreference::OnlySystem,
+            arch: Some("aarch64".parse()?),
+        };
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("3.14"),
+                EnvironmentPreference::OnlySystem,
+                preferences,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), aarch64);
+
+        let installations = context.run(|| {
+            find_all_python_installations(
+                &PythonRequest::parse("3.14"),
+                EnvironmentPreference::OnlySystem,
+                preferences,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            installations
+                .iter()
+                .map(|installation| installation.interpreter().sys_executable())
+                .collect::<Vec<_>>(),
+            vec![aarch64.as_path()]
+        );
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("cpython-3.14-linux-x86_64-gnu"),
+                EnvironmentPreference::OnlySystem,
+                preferences,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), x86_64);
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::File(x86_64.clone()),
+                EnvironmentPreference::OnlySystem,
+                preferences,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), x86_64);
+        Ok(())
     }
 
     #[test]

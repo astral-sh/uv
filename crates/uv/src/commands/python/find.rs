@@ -8,7 +8,7 @@ use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreferences,
     PythonRequest,
 };
 use uv_scripts::Pep723ItemRef;
@@ -34,7 +34,7 @@ pub(crate) async fn find(
     no_project: bool,
     system: bool,
     config_discovery: ConfigDiscovery,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads_json_url: Option<&str>,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
@@ -93,7 +93,7 @@ pub(crate) async fn find(
     let python = PythonInstallation::find_existing(
         &python_request,
         environment_preference,
-        python_preference,
+        python_preferences,
         cache,
     )?;
     python
@@ -146,7 +146,7 @@ pub(crate) async fn find_script(
     show_version: bool,
     resolve_links: bool,
     client_builder: &BaseClientBuilder<'_>,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     config_discovery: ConfigDiscovery,
     cache: &Cache,
@@ -156,7 +156,7 @@ pub(crate) async fn find_script(
         script,
         None,
         client_builder,
-        python_preference,
+        python_preferences,
         python_downloads,
         &PythonInstallMirrors::default(),
         false,

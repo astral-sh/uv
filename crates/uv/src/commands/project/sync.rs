@@ -32,7 +32,7 @@ use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::{
-    ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
+    ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreferences, PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Prerelease, ResolutionMode};
@@ -81,7 +81,7 @@ pub(crate) async fn sync(
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
@@ -209,7 +209,7 @@ pub(crate) async fn sync(
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &client_builder,
-                python_preference,
+                python_preferences,
                 python_downloads,
                 false,
                 config_discovery,
@@ -226,7 +226,7 @@ pub(crate) async fn sync(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
-                python_preference,
+                python_preferences,
                 python_downloads,
                 &install_mirrors,
                 false,

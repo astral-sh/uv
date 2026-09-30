@@ -24,7 +24,9 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonPreferences, Target,
+};
 use uv_resolver::{ExcludeNewer, Prerelease};
 
 use crate::commands::ExitStatus;
@@ -35,6 +37,7 @@ use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) async fn pip_list(
+    python_preferences: PythonPreferences,
     editable: Option<bool>,
     exclude: &FxHashSet<PackageName>,
     format: &ListFormat,
@@ -64,7 +67,7 @@ pub(crate) async fn pip_list(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
-        PythonPreference::default().with_system_flag(system),
+        python_preferences.with_source(PythonPreference::default().with_system_flag(system)),
         cache,
     )?;
 

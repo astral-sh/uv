@@ -27,8 +27,8 @@ use crate::downloads::{
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
-    Error, ImplementationName, Interpreter, MissingPythonHint, PythonDownloads, PythonPreference,
-    PythonSource, PythonVariant, PythonVersion, downloads,
+    Error, ImplementationName, Interpreter, MissingPythonHint, PythonArchitecture, PythonDownloads,
+    PythonPreference, PythonPreferences, PythonSource, PythonVariant, PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -107,11 +107,11 @@ impl PythonInstallation {
     pub fn find(
         request: &PythonRequest,
         environments: EnvironmentPreference,
-        preference: PythonPreference,
+        preferences: impl Into<PythonPreferences>,
         download_list: &ManagedPythonDownloadList,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let installation = Self::find_existing(request, environments, preference, cache)?;
+        let installation = Self::find_existing(request, environments, preferences, cache)?;
         installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
@@ -120,13 +120,13 @@ impl PythonInstallation {
     pub fn find_existing(
         request: &PythonRequest,
         environments: EnvironmentPreference,
-        preference: PythonPreference,
+        preferences: impl Into<PythonPreferences>,
         cache: &Cache,
     ) -> Result<Self, Error> {
         Ok(find_python_installation(
             request,
             environments,
-            preference,
+            preferences,
             cache,
         )??)
     }
@@ -136,7 +136,7 @@ impl PythonInstallation {
     pub async fn find_best(
         request: &PythonRequest,
         environments: EnvironmentPreference,
-        preference: PythonPreference,
+        preferences: impl Into<PythonPreferences>,
         python_downloads: PythonDownloads,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
@@ -145,13 +145,14 @@ impl PythonInstallation {
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
-        let downloads_enabled = preference.allows_managed()
+        let preferences = preferences.into();
+        let downloads_enabled = preferences.source.allows_managed()
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
         let installation = find_best_python_installation(
             request,
             environments,
-            preference,
+            preferences,
             downloads_enabled,
             client_builder,
             cache,
@@ -178,7 +179,7 @@ impl PythonInstallation {
     pub async fn find_or_download(
         request: Option<&PythonRequest>,
         environments: EnvironmentPreference,
-        preference: PythonPreference,
+        preferences: impl Into<PythonPreferences>,
         python_downloads: PythonDownloads,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
@@ -187,9 +188,11 @@ impl PythonInstallation {
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
+        let preferences = preferences.into();
+        let preference = preferences.source;
         let request = request.unwrap_or(&PythonRequest::Default);
 
-        let err = match Self::find_existing(request, environments, preference, cache) {
+        let err = match Self::find_existing(request, environments, preferences, cache) {
             Ok(installation) => {
                 installation
                     .download_and_warn_if_outdated_prerelease(
@@ -228,6 +231,7 @@ impl PythonInstallation {
 
         let download = download_request
             .clone()
+            .with_default_arch(preferences.arch.map(PythonArchitecture::into_inner))
             .fill()
             .map(|request| download_list.find(&request));
 

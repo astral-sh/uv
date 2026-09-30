@@ -484,6 +484,17 @@
       "description": "Mirror URL to use for downloading managed PyPy installations.\n\nBy default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).\nThis variable can be set to a mirror URL to use a different source for PyPy installations.\nThe provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.\n\nDistributions can be read from a\nlocal directory by using the `file://` URL scheme.",
       "type": ["string", "null"]
     },
+    "python-arch": {
+      "description": "The architecture to use for Python interpreters when a Python request does not specify\none. Requests that name an interpreter executable take precedence.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PythonArchitecture"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "python-downloads": {
       "description": "Whether to allow Python downloads.",
       "anyOf": [
@@ -1914,6 +1925,10 @@
       "description": "A proxy URL (e.g., `http://proxy.example.com:8080`).",
       "type": "string",
       "format": "uri"
+    },
+    "PythonArchitecture": {
+      "description": "A Python architecture, e.g. `x86_64` or `aarch64`.",
+      "type": "string"
     },
     "PythonDownloads": {
       "oneOf": [

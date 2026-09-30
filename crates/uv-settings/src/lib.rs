@@ -396,6 +396,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 cache_dir,
                 preview,
                 python_preference,
+                python_arch,
                 python_downloads,
                 concurrent_downloads,
                 concurrent_builds,
@@ -502,6 +503,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if python_preference.is_some() {
         masked_fields.push("python-preference");
+    }
+    if python_arch.is_some() {
+        masked_fields.push("python-arch");
     }
     if python_downloads.is_some() {
         masked_fields.push("python-downloads");

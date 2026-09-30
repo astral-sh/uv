@@ -13,6 +13,52 @@ use wiremock::{
 };
 
 #[test]
+fn python_list_default_arch() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.14.0-windows-any-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-windows-x86_64-none    <download available>
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.14.0-windows-aarch64-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-windows-aarch64-none    <download available>
+    ");
+
+    let output = context
+        .python_list()
+        .arg("cpython-3.14.0-windows-any-none")
+        .arg("--only-downloads")
+        .arg("--all-arches")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64")
+        .output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    let mut downloads = stdout
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect::<Vec<_>>();
+    downloads.sort_unstable();
+    insta::assert_debug_snapshot!(downloads, @r#"
+    [
+        "cpython-3.14.0-windows-aarch64-none <download available>",
+        "cpython-3.14.0-windows-x86-none <download available>",
+        "cpython-3.14.0-windows-x86_64-none <download available>",
+    ]
+    "#);
+    Ok(())
+}
+
+#[test]
 fn python_list() {
     let mut context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()

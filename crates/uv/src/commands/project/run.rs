@@ -34,7 +34,7 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    PythonEnvironment, PythonInstallation, PythonPreferences, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
@@ -111,7 +111,7 @@ pub(crate) async fn run(
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -213,7 +213,7 @@ pub(crate) async fn run(
                 (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
-                python_preference,
+                python_preferences,
                 python_downloads,
                 &install_mirrors,
                 no_sync,
@@ -400,7 +400,7 @@ pub(crate) async fn run(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
                     &client_builder,
-                    python_preference,
+                    python_preferences,
                     python_downloads,
                     &install_mirrors,
                     no_sync,
@@ -464,7 +464,7 @@ pub(crate) async fn run(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
                     &client_builder,
-                    python_preference,
+                    python_preferences,
                     python_downloads,
                     &install_mirrors,
                     no_sync,
@@ -662,7 +662,7 @@ pub(crate) async fn run(
                 let interpreter = PythonInstallation::find_or_download(
                     python_request.as_ref(),
                     EnvironmentPreference::Any,
-                    python_preference,
+                    python_preferences,
                     python_downloads,
                     &client_builder,
                     &cache,
@@ -707,7 +707,7 @@ pub(crate) async fn run(
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
                     &client_builder,
-                    python_preference,
+                    python_preferences,
                     python_downloads,
                     no_sync,
                     config_discovery,
@@ -904,7 +904,7 @@ pub(crate) async fn run(
                     python_request.as_ref(),
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
-                    python_preference,
+                    python_preferences,
                     python_downloads,
                     &client_builder,
                     &cache,

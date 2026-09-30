@@ -25,7 +25,7 @@ use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest,
+    PythonInstallation, PythonPreferences, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -73,7 +73,7 @@ pub(crate) async fn install(
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -139,7 +139,7 @@ pub(crate) async fn install(
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
-        python_preference,
+        python_preferences,
         python_downloads,
         &client_builder,
         &cache,
@@ -952,7 +952,7 @@ pub(crate) async fn install(
                             &client_builder,
                             &reporter,
                             &install_mirrors,
-                            python_preference,
+                            python_preferences,
                             python_downloads,
                             &cache,
                         )

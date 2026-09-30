@@ -19,7 +19,7 @@ use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreferences, PythonRequest};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
@@ -87,7 +87,7 @@ pub(crate) async fn project_version(
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -357,7 +357,7 @@ pub(crate) async fn project_version(
             install_mirrors,
             &settings,
             client_builder,
-            python_preference,
+            python_preferences,
             python_downloads,
             installer_metadata,
             &concurrency,
@@ -550,7 +550,7 @@ async fn lock_and_sync(
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
-    python_preference: PythonPreference,
+    python_preferences: PythonPreferences,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
@@ -588,7 +588,7 @@ async fn lock_and_sync(
             &groups,
             workspace_python,
             &client_builder,
-            python_preference,
+            python_preferences,
             python_downloads,
             &install_mirrors,
             ProjectEnvironmentPolicy::Optional,
@@ -609,7 +609,7 @@ async fn lock_and_sync(
             python.as_deref().map(PythonRequest::parse),
             &install_mirrors,
             &client_builder,
-            python_preference,
+            python_preferences,
             python_downloads,
             no_sync,
             config_discovery,
