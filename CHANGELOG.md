@@ -11,9 +11,7 @@ Unreleased.
 
 - **Prefer native Python on Windows ARM64** ([#22100](https://github.com/astral-sh/uv/pull/22100))
 
-  Previously, native ARM64 builds of uv preferred emulated `x86_64` Python installations because native wheel support was limited. Now, uv prefers `aarch64` Python across Python versions. uv still falls back to `x86_64`, then 32-bit `x86`, when a native distribution is unavailable.
-
-  CPython is [making native ARM64 Python the default across versions with the Python 3.15 release](https://discuss.python.org/t/python-on-windows-arm64/104524); [Python install manager 26.4 beta](https://discuss.python.org/t/python-install-manager-26-4/108846) already uses that default. GitHub Actions also offers [Windows ARM64 runners for public and private repositories](https://github.blog/changelog/2026-01-29-arm64-standard-runners-are-now-available-in-private-repositories/).
+  Previously, native ARM64 builds of uv preferred emulated `x86_64` Python installations because native wheel support was limited. With GitHub Actions now providing [Windows ARM64 runners for public and private repositories](https://github.blog/changelog/2026-01-29-arm64-standard-runners-are-now-available-in-private-repositories/) and [native Python distributions](https://github.com/actions/python-versions/pull/291), uv prefers `aarch64` Python across Python versions. This follows [CPython's move toward native Windows ARM64 by default](https://discuss.python.org/t/python-on-windows-arm64/104524), already implemented in [Python install manager 26.4 beta](https://discuss.python.org/t/python-install-manager-26-4/108846), and matches [actions/setup-python's default of selecting the host architecture](https://github.com/actions/setup-python#supported-architectures). uv still falls back to `x86_64`, then 32-bit `x86`, when a native distribution is unavailable.
 
   Set `UV_PYTHON_ARCH=x86_64` to keep using emulated Python, or request an explicit architecture such as `cpython-3.14-windows-x86_64`.
 
