@@ -117,7 +117,7 @@ fn create_venv_keeps_distutils_patch_on_py39() {
 }
 
 #[test]
-fn create_venv_distutils_patch_preview_compatibility() {
+fn create_venv_with_removed_distutils_patch_preview() {
     let context = uv_test::test_context_with_versions!(&["3.10"]);
 
     uv_snapshot!(context.filters(), context.venv()
@@ -127,6 +127,7 @@ fn create_venv_distutils_patch_preview_compatibility() {
         .arg("no-distutils-patch"), @"
     exit_code: 0 (success)
     ----- stderr -----
+    warning: Unknown preview feature: `no-distutils-patch`
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
