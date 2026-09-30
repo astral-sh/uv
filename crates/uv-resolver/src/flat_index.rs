@@ -11,13 +11,12 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
-    MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
-    SourceDistCompatibility, WheelCompatibility,
+    MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistryHashTarget,
+    RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{TagCompatibility, Tags};
-use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
 /// Unfiltered entries from `--find-links`, indexed by [`PackageName`].
@@ -127,7 +126,8 @@ impl FlatDistributions {
 
                 let compatibility = Self::wheel_compatibility(
                     &filename,
-                    file.hashes.as_slice(),
+                    &file,
+                    &index,
                     tags,
                     hasher,
                     build_options,
@@ -148,7 +148,8 @@ impl FlatDistributions {
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
                     &filename,
-                    file.hashes.as_slice(),
+                    &file,
+                    &index,
                     hasher,
                     build_options,
                 );
@@ -172,7 +173,8 @@ impl FlatDistributions {
 
     fn source_dist_compatibility(
         filename: &SourceDistFilename,
-        hashes: &[HashDigest],
+        file: &File,
+        index: &IndexUrl,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> SourceDistCompatibility {
@@ -189,26 +191,20 @@ impl FlatDistributions {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::NotPep625Filename);
         }
 
-        // Check if hashes line up
-        let hash_policy = hasher.archive_policy_for_package(&filename.name, &filename.version);
-        let hash = if hash_policy.requires_validation() {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        } else {
-            HashComparison::Matched
-        };
+        // Check if hashes line up.
+        let hash = Self::hash_comparison(
+            RegistryHashTarget::source(index, &filename.name, &filename.version),
+            file,
+            hasher,
+        );
 
         SourceDistCompatibility::Compatible(hash)
     }
 
     fn wheel_compatibility(
         filename: &WheelFilename,
-        hashes: &[HashDigest],
+        file: &File,
+        index: &IndexUrl,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
@@ -230,23 +226,29 @@ impl FlatDistributions {
         };
 
         // Check if hashes line up.
-        let hash_policy = hasher.archive_policy_for_package(&filename.name, &filename.version);
-        let hash = if hash_policy.requires_validation() {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        } else {
-            HashComparison::Matched
-        };
+        let hash = Self::hash_comparison(RegistryHashTarget::wheel(index, filename), file, hasher);
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
         WheelCompatibility::Compatible(hash, priority, build_tag)
+    }
+
+    /// Compare the hashes for a candidate from a flat index.
+    fn hash_comparison(
+        target: RegistryHashTarget<'_>,
+        file: &File,
+        hasher: &HashStrategy,
+    ) -> HashComparison {
+        let hashes = file.hashes.as_slice();
+        hasher
+            .locked_registry_hash_comparison(target, hashes)
+            .unwrap_or_else(|| {
+                let (name, version) = target.name_and_version();
+                hasher
+                    .archive_policy_for_package(name, version)
+                    .compare(hashes)
+            })
     }
 }
 

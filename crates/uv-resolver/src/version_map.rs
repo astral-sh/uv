@@ -12,7 +12,7 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, MinimumLibcVersion,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    PrioritizedDist, RegistryBuiltWheel, RegistryHashTarget, RegistrySourceDist, RequiresPython,
     SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
@@ -676,8 +676,6 @@ impl VersionMapLazy {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
-                            &filename.name,
-                            &filename.version,
                             hashes.as_slice(),
                             yanked,
                             excluded,
@@ -768,21 +766,10 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self
-            .hasher
-            .archive_policy_for_package(&filename.name, &filename.version);
-        let required_hashes = hash_policy.digests();
-        let hash = if required_hashes.is_empty() {
-            HashComparison::Matched
-        } else {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        };
+        let hash = self.hash_comparison(
+            RegistryHashTarget::source(&self.index, &filename.name, &filename.version),
+            hashes,
+        );
 
         SourceDistCompatibility::Compatible(hash)
     }
@@ -790,8 +777,6 @@ impl VersionMapLazy {
     fn wheel_compatibility(
         &self,
         filename: &WheelFilename,
-        name: &PackageName,
-        version: &Version,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
         excluded: bool,
@@ -809,7 +794,11 @@ impl VersionMapLazy {
 
         // Check if yanked
         if let Some(yanked) = yanked {
-            if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
+            if yanked.is_yanked()
+                && !self
+                    .allowed_yanks
+                    .contains(&filename.name, &filename.version)
+            {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
         }
@@ -834,24 +823,33 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.archive_policy_for_package(name, version);
-        let required_hashes = hash_policy.digests();
-        let hash = if required_hashes.is_empty() {
-            HashComparison::Matched
-        } else {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        };
+        let hash = self.hash_comparison(RegistryHashTarget::wheel(&self.index, filename), hashes);
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
         WheelCompatibility::Compatible(hash, priority, build_tag)
+    }
+
+    /// Compare the hashes for a candidate from a registry index.
+    fn hash_comparison(
+        &self,
+        target: RegistryHashTarget<'_>,
+        hashes: &[HashDigest],
+    ) -> HashComparison {
+        self.hasher
+            .locked_registry_hash_comparison(target, hashes)
+            .unwrap_or_else(|| {
+                let (name, version) = target.name_and_version();
+                let hash_policy = self.hasher.archive_policy_for_package(name, version);
+                // An empty hash list does not affect candidate ranking; archive verification still
+                // enforces a required empty policy.
+                if hash_policy.digests().is_empty() {
+                    HashComparison::Matched
+                } else {
+                    hash_policy.compare(hashes)
+                }
+            })
     }
 }
 

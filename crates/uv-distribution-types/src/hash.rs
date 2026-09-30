@@ -1,5 +1,53 @@
+use uv_distribution_filename::WheelFilename;
+use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Hashes};
 use uv_redacted::DisplaySafeUrl;
+
+use crate::{HashComparison, IndexUrl};
+
+/// A registry artifact whose archive hashes are being checked.
+#[derive(Debug, Clone, Copy)]
+pub enum RegistryHashTarget<'a> {
+    /// A wheel downloaded from a registry.
+    Wheel {
+        index: &'a IndexUrl,
+        filename: &'a WheelFilename,
+    },
+    /// A source archive.
+    ///
+    /// Cached source revisions do not retain the archive filename, so their hashes are identified
+    /// by index, package name, and source version.
+    Source {
+        index: &'a IndexUrl,
+        name: &'a PackageName,
+        version: &'a Version,
+    },
+}
+
+impl<'a> RegistryHashTarget<'a> {
+    /// Identify a registry wheel by its index and filename.
+    pub fn wheel(index: &'a IndexUrl, filename: &'a WheelFilename) -> Self {
+        Self::Wheel { index, filename }
+    }
+
+    /// Identify a registry source archive by its index, name, and source version.
+    pub fn source(index: &'a IndexUrl, name: &'a PackageName, version: &'a Version) -> Self {
+        Self::Source {
+            index,
+            name,
+            version,
+        }
+    }
+
+    /// Return the name and version of the archive being checked.
+    pub fn name_and_version(&self) -> (&'a PackageName, &'a Version) {
+        match self {
+            Self::Wheel { filename, .. } => (&filename.name, &filename.version),
+            Self::Source { name, version, .. } => (name, version),
+        }
+    }
+}
 
 /// Hash generation and validation policy for an archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +130,19 @@ impl<'a> ArchiveHashPolicy<'a> {
             Self::All(required) => {
                 !required.is_empty() && required.iter().all(|hash| hashes.contains(hash))
             }
+        }
+    }
+
+    /// Compare a candidate's advertised hashes with this policy for distribution selection.
+    pub fn compare(&self, hashes: &[HashDigest]) -> HashComparison {
+        if !self.requires_validation() {
+            HashComparison::Matched
+        } else if hashes.is_empty() {
+            HashComparison::Missing
+        } else if self.matches(hashes) {
+            HashComparison::Matched
+        } else {
+            HashComparison::Mismatched
         }
     }
 

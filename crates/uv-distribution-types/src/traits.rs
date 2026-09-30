@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
+use uv_pypi_types::HashDigest;
 
 use crate::error::Error;
 use crate::{
@@ -10,7 +11,8 @@ use crate::{
     GitPathBuiltDist, GitPathSourceDist, InstalledDirectUrlDist, InstalledDist,
     InstalledEggInfoDirectory, InstalledEggInfoFile, InstalledLegacyEditable,
     InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist, PathSourceDist,
-    RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
+    RegistryBuiltWheel, RegistryHashTarget, RegistrySourceDist, ResourceId, SourceDist, VersionId,
+    VersionOrUrlRef,
 };
 
 pub trait Name {
@@ -24,6 +26,11 @@ pub trait DistributionMetadata: Name {
     /// Return a [`uv_pep440::Version`], for registry-based distributions, or a [`url::Url`],
     /// for URL-based distributions.
     fn version_or_url(&self) -> VersionOrUrlRef<'_>;
+
+    /// Return the registry hash target and advertised hashes, when available.
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
+        None
+    }
 
     /// Returns a unique identifier for the package at the given version (e.g., `black==23.10.0`).
     ///

@@ -6,16 +6,17 @@ use tracing::debug;
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{WheelFilename, WheelFilenameKey};
 use uv_distribution_types::{
-    BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
-    ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
+    ArchiveHashPolicy, BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings,
+    ExtraBuildRequirement, ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations,
+    IndexUrl, PackageConfigSettings, RegistryBuiltDist, RegistryHashTarget, RegistrySourceDist,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
+use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
@@ -58,7 +59,7 @@ impl IndexEntry<'_> {
         no_binary: bool,
     ) -> bool {
         self.matches_index_and_build_policy(index, no_build, no_binary)
-            && self.dist.filename == *filename
+            && WheelFilenameKey::new(&self.dist.filename) == WheelFilenameKey::new(filename)
     }
 
     fn matches_source(
@@ -249,10 +250,13 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(hasher.archive_policy_for_package(
-                                        &wheel.filename.name,
-                                        &wheel.filename.version,
-                                    )) {
+                                    let policy = Self::cache_hash_policy(
+                                        hasher,
+                                        RegistryHashTarget::wheel(index.url(), &wheel.filename),
+                                        wheel.hashes(),
+                                        &wheel.filename,
+                                    );
+                                    if wheel.satisfies(policy) {
                                         entries.push(IndexEntry {
                                             size: wheel.size,
                                             dist: wheel.into_registry_dist(),
@@ -275,10 +279,13 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(hasher.archive_policy_for_package(
-                                        &wheel.filename.name,
-                                        &wheel.filename.version,
-                                    )) {
+                                    let policy = Self::cache_hash_policy(
+                                        hasher,
+                                        RegistryHashTarget::wheel(index.url(), &wheel.filename),
+                                        wheel.hashes(),
+                                        &wheel.filename,
+                                    );
+                                    if wheel.satisfies(policy) {
                                         entries.push(IndexEntry {
                                             size: wheel.size,
                                             dist: wheel.into_registry_dist(),
@@ -302,6 +309,13 @@ impl<'a> RegistryWheelIndex<'a> {
 
             // For registry source distributions, the cache structure is: `<index>/<package-name>/<version>/`.
             for shard in directories(&cache_shard).ok().into_iter().flatten() {
+                let Some(source_version) = shard
+                    .file_name()
+                    .and_then(|version| version.to_str())
+                    .and_then(|version| version.parse::<Version>().ok())
+                else {
+                    continue;
+                };
                 let cache_shard = cache_shard.shard(shard);
 
                 // Read the revision from the cache.
@@ -361,10 +375,17 @@ impl<'a> RegistryWheelIndex<'a> {
                         if let Some(wheel) = ResolvedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
-                                if revision.satisfies(hasher.archive_policy_for_package(
-                                    &wheel.filename.name,
-                                    &wheel.filename.version,
-                                )) {
+                                let policy = Self::cache_hash_policy(
+                                    hasher,
+                                    RegistryHashTarget::source(
+                                        index.url(),
+                                        package,
+                                        &source_version,
+                                    ),
+                                    revision.hashes(),
+                                    &wheel.filename,
+                                );
+                                if revision.satisfies(policy) {
                                     let wheel = CachedWheel::from_entry(
                                         wheel,
                                         revision.hashes().into(),
@@ -403,6 +424,19 @@ impl<'a> RegistryWheelIndex<'a> {
         });
 
         entries
+    }
+
+    /// Select a cache policy using the archive identity for locked builds and the wheel identity
+    /// for ordinary requirement hashes.
+    fn cache_hash_policy<'hasher>(
+        hasher: &'hasher HashStrategy,
+        target: RegistryHashTarget<'_>,
+        hashes: &[HashDigest],
+        wheel: &WheelFilename,
+    ) -> ArchiveHashPolicy<'hasher> {
+        hasher
+            .locked_registry_archive_policy(target, hashes)
+            .unwrap_or_else(|| hasher.archive_policy_for_package(&wheel.name, &wheel.version))
     }
 
     /// Determine the [`ConfigSettings`] for the given package name.

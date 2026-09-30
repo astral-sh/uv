@@ -2,12 +2,12 @@ use std::fmt::Display;
 
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, ResolvedDist, SourceDist,
-    VersionOrUrlRef,
+    BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, RegistryHashTarget, ResolvedDist,
+    SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pypi_types::HashDigests;
+use uv_pypi_types::{HashDigest, HashDigests};
 
 use crate::UniversalMarker;
 
@@ -102,6 +102,10 @@ impl Name for AnnotatedDist {
 impl DistributionMetadata for AnnotatedDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         self.dist.version_or_url()
+    }
+
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
+        self.dist.registry_hash_target()
     }
 }
 
