@@ -24,8 +24,8 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectError, ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState,
-    WorkspacePython,
+    ProjectError, ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter,
+    UniversalState,
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::{Printer, Stdout};
@@ -123,7 +123,7 @@ pub(crate) async fn metadata(
                     .await?
                     .into_interpreter(),
                     LockTarget::Workspace(workspace) => {
-                        let workspace_python = WorkspacePython::from_request(
+                        let project_python = ProjectPythonRequest::from_request(
                             python.as_deref().map(PythonRequest::parse),
                             Some(workspace),
                             &groups,
@@ -133,8 +133,7 @@ pub(crate) async fn metadata(
                         .await?;
                         ProjectInterpreter::discover(
                             ProjectEnvironmentTarget::from(workspace),
-                            &groups,
-                            workspace_python,
+                            project_python,
                             &client_builder,
                             python_preference,
                             python_arch,

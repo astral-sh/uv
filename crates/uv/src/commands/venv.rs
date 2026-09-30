@@ -24,8 +24,8 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads,
-    PythonInstallation, PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference,
+    PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
@@ -39,12 +39,12 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::pip::operations::{Changelog, report_interpreter};
+use crate::commands::pip::operations::Changelog;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironmentTarget, PythonRequirementSource, WorkspacePython,
+    LinkErrorReporting, ProjectEnvironmentTarget, ProjectPythonRequest, PythonDiscovery,
     centralized_environment_root, centralized_environments_enabled,
     is_centralized_environment_reference, lock_project_environment,
-    update_project_environment_link, validate_python_requirement,
+    update_project_environment_link,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -149,11 +149,7 @@ pub(crate) async fn venv(
         None => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
-    let WorkspacePython {
-        source,
-        python_request,
-        requirement,
-    } = WorkspacePython::from_request(
+    let project_python = ProjectPythonRequest::from_request(
         python_request,
         project.as_ref().map(VirtualProject::workspace),
         &groups,
@@ -162,29 +158,17 @@ pub(crate) async fn venv(
     )
     .await?;
 
-    // Locate the Python interpreter to use in the environment
-    let interpreter = {
-        let python = PythonInstallation::find_or_download(
-            python_request.as_ref(),
-            EnvironmentPreference::OnlySystem,
-            python_preference,
-            python_arch,
-            python_downloads,
-            client_builder,
-            cache,
-            Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
-            install_mirrors.python_downloads_json_url.as_deref(),
-        )
-        .await?;
-        report_interpreter(&python, false, printer)?;
-        python.into_interpreter()
-    };
-
-    let upgradeable = python_request
-        .as_ref()
-        .is_none_or(|request| !request.includes_patch());
+    let discovery = PythonDiscovery::new(
+        EnvironmentPreference::OnlySystem,
+        python_preference,
+        python_arch,
+        client_builder,
+        cache,
+    )
+    .with_downloads(python_downloads, &install_mirrors, &reporter)
+    .with_report(printer);
+    let interpreter = project_python.find(&discovery).await?.into_interpreter();
+    let upgradeable = project_python.upgradeable();
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {
@@ -204,24 +188,6 @@ pub(crate) async fn venv(
         })
         .unwrap_or_else(|| PathBuf::from(".venv"))
     };
-
-    // Check if the discovered Python version is incompatible with the current workspace
-    if let Some(requirement) = requirement {
-        match validate_python_requirement(
-            &interpreter,
-            &requirement.requires_python,
-            &source,
-            PythonRequirementSource::Workspace(
-                project.as_ref().map(VirtualProject::workspace),
-                &groups,
-            ),
-        ) {
-            Ok(()) => {}
-            Err(err) => {
-                warn_user!("{err}");
-            }
-        }
-    }
 
     let with_seed = match seed {
         Seed::Enabled => " with seed packages",

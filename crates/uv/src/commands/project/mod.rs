@@ -63,6 +63,8 @@ use crate::commands::locked_requirements::{LockedRequirements, read_lock_require
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
+use crate::commands::project::python::CompatibleProjectPython;
+pub(crate) use crate::commands::project::python::{ProjectPythonRequest, PythonDiscovery};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
@@ -83,6 +85,7 @@ pub(crate) mod install_target;
 pub(crate) mod lock;
 pub(crate) mod lock_target;
 pub(super) mod lockfile;
+mod python;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
@@ -585,6 +588,15 @@ pub(crate) fn find_requires_python(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<RequiresPython>, ProjectError> {
+    Ok(find_project_python_requirement(workspace, groups)?
+        .map(|requirement| requirement.requires_python))
+}
+
+/// Compute the workspace's Python requirement together with its contributing declarations.
+fn find_project_python_requirement(
+    workspace: &Workspace,
+    groups: &DependencyGroupsWithDefaults,
+) -> Result<Option<ProjectPythonRequirement>, ProjectError> {
     let requires_python = workspace.requires_python(groups)?;
     // If there are no `Requires-Python` specifiers in the workspace, return `None`.
     if requires_python.is_empty() {
@@ -610,7 +622,13 @@ pub(crate) fn find_requires_python(
         }
     }
     match RequiresPython::intersection(requires_python.iter().map(|(.., specifiers)| specifiers)) {
-        Some(requires_python) => Ok(Some(requires_python)),
+        Some(intersection) => Ok(Some(ProjectPythonRequirement {
+            requires_python: intersection,
+            source: PythonRequirementSource::Workspace {
+                sources: requires_python,
+                multiple_members: workspace.packages().len() > 1,
+            },
+        })),
         None => Err(ProjectError::DisjointRequiresPython(requires_python)),
     }
 }
@@ -619,7 +637,7 @@ pub(crate) fn find_requires_python(
 fn find_lockfile_requires_python(
     target: InstallTarget<'_>,
     groups: &DependencyGroupsWithDefaults,
-) -> Result<WorkspacePythonRequirement, ProjectError> {
+) -> Result<ProjectPythonRequirement, ProjectError> {
     let lock = target.lock();
     let mut group_requirements = RequiresPythonSources::new();
 
@@ -665,9 +683,9 @@ fn find_lockfile_requires_python(
             groups: group_requirements,
         });
     };
-    Ok(WorkspacePythonRequirement {
+    Ok(ProjectPythonRequirement {
         requires_python,
-        source: WorkspacePythonRequirementSource::Lockfile {
+        source: PythonRequirementSource::Lockfile {
             locked: lock.requires_python().clone(),
             groups: group_requirements,
         },
@@ -761,40 +779,47 @@ impl std::fmt::Display for PythonRequirementConflicts {
     }
 }
 
-/// Where to read individual Python requirements for incompatibility diagnostics.
-#[derive(Clone, Copy)]
-pub(crate) enum PythonRequirementSource<'a> {
-    Workspace(Option<&'a Workspace>, &'a DependencyGroupsWithDefaults),
+/// The declarations used to compute a project's Python requirement.
+#[derive(Debug, Clone)]
+enum PythonRequirementSource {
+    /// The requirement was derived from the workspace manifests.
+    Workspace {
+        sources: RequiresPythonSources,
+        multiple_members: bool,
+    },
+    /// The lockfile's overall requirement and the selected groups' requirements.
     Lockfile {
-        locked: &'a RequiresPython,
-        groups: &'a RequiresPythonSources,
+        locked: RequiresPython,
+        groups: RequiresPythonSources,
     },
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy `requires_python`.
 ///
 /// The requirement source determines which conflicting declarations are included in the diagnostic.
-pub(crate) fn validate_python_requirement(
+fn validate_python_requirement(
     interpreter: &Interpreter,
     requires_python: &RequiresPython,
     source: &PythonRequestSource,
-    requirement_source: PythonRequirementSource<'_>,
+    requirement_source: &PythonRequirementSource,
 ) -> Result<(), ProjectError> {
     if requires_python.contains(interpreter.python_version()) {
         return Ok(());
     }
 
     let conflicting_requires = match requirement_source {
-        PythonRequirementSource::Workspace(workspace, groups) => {
-            let sources = workspace
-                .and_then(|workspace| workspace.requires_python(groups).ok())
-                .into_iter()
-                .flatten()
+        PythonRequirementSource::Workspace {
+            sources,
+            multiple_members,
+        } => {
+            let sources = sources
+                .iter()
                 .filter(|(.., requires)| !requires.contains(interpreter.python_version()))
+                .map(|(key, requires)| (key.clone(), requires.clone()))
                 .collect();
             PythonRequirementConflicts::Workspace {
                 sources,
-                multiple_members: workspace.is_some_and(|workspace| workspace.packages().len() > 1),
+                multiple_members: *multiple_members,
             }
         }
         PythonRequirementSource::Lockfile { locked, groups } => {
@@ -1051,15 +1076,25 @@ impl ScriptInterpreter {
         .into_interpreter();
 
         if let Err(err) = match requires_python {
-            Some((requires_python, RequiresPythonSource::Project)) => validate_python_requirement(
-                &interpreter,
-                &requires_python,
-                &source,
-                PythonRequirementSource::Workspace(
-                    workspace,
-                    &DependencyGroupsWithDefaults::none(),
-                ),
-            ),
+            Some((requires_python, RequiresPythonSource::Project)) => {
+                let sources = workspace
+                    .and_then(|workspace| {
+                        workspace
+                            .requires_python(&DependencyGroupsWithDefaults::none())
+                            .ok()
+                    })
+                    .unwrap_or_default();
+                validate_python_requirement(
+                    &interpreter,
+                    &requires_python,
+                    &source,
+                    &PythonRequirementSource::Workspace {
+                        sources,
+                        multiple_members: workspace
+                            .is_some_and(|workspace| workspace.packages().len() > 1),
+                    },
+                )
+            }
             Some((requires_python, RequiresPythonSource::Script)) => {
                 validate_script_requires_python(&interpreter, &requires_python, &source)
             }
@@ -1598,9 +1633,9 @@ impl<'a> ProjectEnvironmentTarget<'a> {
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum ProjectInterpreter {
-    /// An interpreter from outside the project, to create a new project virtual environment.
-    Interpreter(Interpreter),
-    /// An interpreter from an existing project virtual environment.
+    /// A compatible interpreter from outside the project, to create a new virtual environment.
+    Interpreter(CompatibleProjectPython),
+    /// An existing project environment, which may be incompatible under `--no-sync`.
     Environment(PythonEnvironment),
 }
 
@@ -1632,173 +1667,10 @@ impl ProjectInterpreter {
         )
     }
 
-    /// Discover an interpreter for a workspace or frozen lockfile.
-    pub(crate) async fn discover(
-        target: ProjectEnvironmentTarget<'_>,
-        groups: &DependencyGroupsWithDefaults,
-        workspace_python: WorkspacePython,
-        client_builder: &BaseClientBuilder<'_>,
-        python_preference: PythonPreference,
-        python_arch: Option<PythonArchitecture>,
-        python_downloads: PythonDownloads,
-        install_mirrors: &PythonInstallMirrors,
-        policy: ProjectEnvironmentPolicy,
-        active: ActiveEnvironment,
-        cache: &Cache,
-        printer: Printer,
-    ) -> Result<Self, ProjectError> {
-        let WorkspacePython {
-            source,
-            python_request,
-            requirement,
-        } = workspace_python;
-        let requires_python = requirement
-            .as_ref()
-            .map(|requirement| &requirement.requires_python);
-
-        let environment_selection =
-            ProjectEnvironmentSelection::from_install_path(target.install_path(), active);
-        let centralized = centralized_environments_enabled(&environment_selection, cache);
-        let upgradeable = python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
-
-        // Prefer `.venv`'s interpreter to keep its compatible cached environment selected; derive
-        // the cache root instead of trusting the link target.
-        if centralized {
-            let project_environment_path = target.install_path().join(".venv");
-            if let Ok(candidate) = PythonEnvironment::from_root(
-                read_environment_path_file(&project_environment_path)
-                    .ok()
-                    .as_deref()
-                    .unwrap_or(&project_environment_path),
-                cache,
-            ) {
-                let root = centralized_environment_root(
-                    target,
-                    candidate.interpreter(),
-                    upgradeable,
-                    cache,
-                );
-                if let Some(environment) = discover_project_environment(
-                    &root,
-                    python_request.as_ref(),
-                    python_preference,
-                    python_arch,
-                    requires_python,
-                    policy,
-                    centralized,
-                    cache,
-                )? {
-                    return Ok(Self::Environment(environment));
-                }
-            }
-        } else {
-            let project_environment_path = environment_selection
-                .explicit_path()
-                .map_or_else(|| target.install_path().join(".venv"), Path::to_path_buf);
-            // TODO(tk): Revisit after PEP 832.
-            // A centralized path file is not a local environment; let initialization replace it.
-            if !(environment_selection.is_default()
-                && read_environment_path_file(&project_environment_path)
-                    .is_ok_and(|target| is_centralized_environment_path(&target, cache)))
-                && let Some(environment) = discover_project_environment(
-                    &project_environment_path,
-                    python_request.as_ref(),
-                    python_preference,
-                    python_arch,
-                    requires_python,
-                    policy,
-                    centralized,
-                    cache,
-                )?
-            {
-                return Ok(Self::Environment(environment));
-            }
-        }
-
-        let reporter = PythonDownloadReporter::single(printer);
-
-        // Locate the Python interpreter to use in the environment.
-        let python = PythonInstallation::find_or_download(
-            python_request.as_ref(),
-            EnvironmentPreference::OnlySystem,
-            python_preference,
-            python_arch,
-            python_downloads,
-            client_builder,
-            cache,
-            Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
-            install_mirrors.python_downloads_json_url.as_deref(),
-        )
-        .await?;
-
-        if centralized {
-            let root =
-                centralized_environment_root(target, python.interpreter(), upgradeable, cache);
-            if let Some(environment) = discover_project_environment(
-                &root,
-                python_request.as_ref(),
-                python_preference,
-                python_arch,
-                requires_python,
-                policy,
-                centralized,
-                cache,
-            )? {
-                return Ok(Self::Environment(environment));
-            }
-        }
-
-        let managed = python.source().is_managed();
-        let implementation = python.implementation();
-        let interpreter = python.into_interpreter();
-
-        if managed {
-            writeln!(
-                printer.stderr(),
-                "Using {} {}{}",
-                implementation.pretty(),
-                interpreter.python_version().cyan(),
-                interpreter.variant().display_suffix().cyan(),
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "Using {} {}{} interpreter at: {}",
-                implementation.pretty(),
-                interpreter.python_version(),
-                interpreter.variant().display_suffix(),
-                interpreter.sys_executable().user_display().cyan()
-            )?;
-        }
-
-        if let Some(requirement) = requirement.as_ref() {
-            let requirement_source = match &requirement.source {
-                WorkspacePythonRequirementSource::Workspace => {
-                    PythonRequirementSource::Workspace(target.workspace(), groups)
-                }
-                WorkspacePythonRequirementSource::Lockfile { locked, groups } => {
-                    PythonRequirementSource::Lockfile { locked, groups }
-                }
-            };
-            validate_python_requirement(
-                &interpreter,
-                &requirement.requires_python,
-                &source,
-                requirement_source,
-            )?;
-        }
-
-        Ok(Self::Interpreter(interpreter))
-    }
-
     /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            Self::Interpreter(interpreter) => interpreter,
+            Self::Interpreter(interpreter) => interpreter.into_interpreter(),
             Self::Environment(environment) => environment.into_interpreter(),
         }
     }
@@ -1850,139 +1722,9 @@ impl std::fmt::Display for PythonRequestSource {
 
 /// A Python requirement and the source used to derive it.
 #[derive(Debug, Clone)]
-pub(crate) struct WorkspacePythonRequirement {
-    pub(crate) requires_python: RequiresPython,
-    source: WorkspacePythonRequirementSource,
-}
-
-#[derive(Debug, Clone)]
-enum WorkspacePythonRequirementSource {
-    /// The requirement was derived from the workspace manifests.
-    Workspace,
-    /// The lockfile's overall requirement and the selected groups' requirements.
-    Lockfile {
-        locked: RequiresPython,
-        groups: RequiresPythonSources,
-    },
-}
-
-/// The resolved Python request and requirement for a [`Workspace`].
-#[derive(Debug, Clone)]
-pub(crate) struct WorkspacePython {
-    /// The source of the Python request.
-    pub(crate) source: PythonRequestSource,
-    /// The resolved Python request, computed by considering (1) any explicit request from the user
-    /// via `--python`, (2) any implicit request from the user via `.python-version`, and (3) the
-    /// workspace or lockfile's `Requires-Python` specifier.
-    pub(crate) python_request: Option<PythonRequest>,
-    /// The resolved Python requirement for the project and its source.
-    pub(crate) requirement: Option<WorkspacePythonRequirement>,
-}
-
-impl WorkspacePython {
-    /// Determine the Python request and requirement from a frozen lockfile.
-    async fn from_lockfile(
-        python_request: Option<PythonRequest>,
-        target: InstallTarget<'_>,
-        groups: &DependencyGroupsWithDefaults,
-        project_dir: &Path,
-        config_discovery: ConfigDiscovery,
-    ) -> Result<Self, ProjectError> {
-        Self::from_requirements(
-            python_request,
-            Some(target.install_path()),
-            Some(find_lockfile_requires_python(target, groups)?),
-            project_dir,
-            config_discovery,
-        )
-        .await
-    }
-
-    /// Determine the [`WorkspacePython`] for the current [`Workspace`].
-    pub(crate) async fn from_request(
-        python_request: Option<PythonRequest>,
-        workspace: Option<&Workspace>,
-        groups: &DependencyGroupsWithDefaults,
-        project_dir: &Path,
-        config_discovery: ConfigDiscovery,
-    ) -> Result<Self, ProjectError> {
-        let requirement = workspace
-            .map(|workspace| find_requires_python(workspace, groups))
-            .transpose()?
-            .flatten()
-            .map(|requires_python| WorkspacePythonRequirement {
-                requires_python,
-                source: WorkspacePythonRequirementSource::Workspace,
-            });
-
-        Self::from_requirements(
-            python_request,
-            workspace.map(|workspace| workspace.install_path().as_path()),
-            requirement,
-            project_dir,
-            config_discovery,
-        )
-        .await
-    }
-
-    /// Select a Python request using a project's root and Python requirement.
-    async fn from_requirements(
-        python_request: Option<PythonRequest>,
-        workspace_root: Option<&Path>,
-        requirement: Option<WorkspacePythonRequirement>,
-        project_dir: &Path,
-        config_discovery: ConfigDiscovery,
-    ) -> Result<Self, ProjectError> {
-        let (source, python_request) = if let Some(request) = python_request {
-            // (1) Explicit request from user
-            let source = PythonRequestSource::UserRequest;
-            let request = Some(request);
-            (source, request)
-        } else if let Some(file) = PythonVersionFile::discover(
-            project_dir,
-            &VersionFileDiscoveryOptions::default()
-                .with_stop_discovery_at(workspace_root)
-                .with_config_discovery(config_discovery),
-        )
-        .await?
-        .filter(|file| {
-            // Ignore global version files that are incompatible with requires-python
-            if !file.is_global() {
-                return true;
-            }
-            match (file.version(), requirement.as_ref()) {
-                (Some(request), Some(requirement)) => request
-                    .as_pep440_version()
-                    .is_none_or(|version| requirement.requires_python.contains(&version)),
-                _ => true,
-            }
-        }) {
-            // (2) Request from `.python-version`
-            let source = PythonRequestSource::DotPythonVersion(file.clone());
-            let request = file.version().cloned();
-            (source, request)
-        } else {
-            // (3) `requires-python` in `pyproject.toml`
-            let request = requirement.as_ref().and_then(|requirement| {
-                PythonRequest::from_requires_python(&requirement.requires_python)
-            });
-            let source = PythonRequestSource::RequiresPython;
-            (source, request)
-        };
-
-        if let Some(python_request) = python_request.as_ref() {
-            debug!(
-                "Using Python request `{}` from {source}",
-                python_request.to_canonical_string()
-            );
-        }
-
-        Ok(Self {
-            source,
-            python_request,
-            requirement,
-        })
-    }
+struct ProjectPythonRequirement {
+    requires_python: RequiresPython,
+    source: PythonRequirementSource,
 }
 
 /// The resolved Python request and requirement for a [`Pep723Script`]
@@ -2097,7 +1839,7 @@ impl ScriptPython {
 /// The Python environment for a project.
 #[derive(Debug)]
 pub(crate) enum ProjectEnvironment {
-    /// An existing [`PythonEnvironment`] was discovered, which satisfies the project's requirements.
+    /// An existing [`PythonEnvironment`] was accepted by the compatibility policy.
     Existing(PythonEnvironment),
     /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the project's
     /// requirements, and so was replaced.
@@ -2164,8 +1906,8 @@ impl ProjectEnvironment {
                 lock,
             }),
         });
-        let workspace_python = if let Some(frozen_target) = frozen_target {
-            WorkspacePython::from_lockfile(
+        let project_python = if let Some(frozen_target) = frozen_target {
+            ProjectPythonRequest::from_lockfile(
                 python,
                 frozen_target,
                 groups,
@@ -2174,7 +1916,7 @@ impl ProjectEnvironment {
             )
             .await?
         } else {
-            WorkspacePython::from_request(
+            ProjectPythonRequest::from_request(
                 python,
                 target.workspace(),
                 groups,
@@ -2183,15 +1925,11 @@ impl ProjectEnvironment {
             )
             .await?
         };
-        let upgradeable = workspace_python
-            .python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
+        let upgradeable = project_python.upgradeable();
 
         match ProjectInterpreter::discover(
             target,
-            groups,
-            workspace_python,
+            project_python,
             client_builder,
             python_preference,
             python_arch,
@@ -2208,7 +1946,7 @@ impl ProjectEnvironment {
         )
         .await?
         {
-            // If we found an existing, compatible environment, use it.
+            // Use the environment accepted by the compatibility policy.
             ProjectInterpreter::Environment(environment) => {
                 if centralized && !dry_run.enabled() {
                     update_project_environment_link(&environment, target, link_error_reporting);
@@ -2219,7 +1957,12 @@ impl ProjectEnvironment {
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
                 let root = if centralized {
-                    centralized_environment_root(target, &interpreter, upgradeable, cache)
+                    centralized_environment_root(
+                        target,
+                        interpreter.interpreter(),
+                        upgradeable,
+                        cache,
+                    )
                 } else {
                     environment_selection
                         .explicit_path()
@@ -2287,7 +2030,7 @@ impl ProjectEnvironment {
                     let temp_dir = cache.venv_dir()?;
                     let environment = uv_virtualenv::create_venv(
                         temp_dir.path(),
-                        interpreter,
+                        interpreter.into_interpreter(),
                         prompt,
                         false,
                         uv_virtualenv::OnExisting::Remove(
@@ -2348,7 +2091,7 @@ impl ProjectEnvironment {
 
                 let environment = uv_virtualenv::create_venv(
                     &root,
-                    interpreter,
+                    interpreter.into_interpreter(),
                     prompt,
                     false,
                     uv_virtualenv::OnExisting::Remove(

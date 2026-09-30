@@ -8,19 +8,17 @@ use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads,
-    PythonInstallation, PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference,
+    PythonRequest,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
-use uv_warnings::{warn_user, warn_user_once_with_chain};
+use uv_warnings::warn_user_once_with_chain;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
     ExitStatus,
-    project::{
-        PythonRequirementSource, ScriptInterpreter, WorkspacePython, validate_python_requirement,
-    },
+    project::{ProjectPythonRequest, PythonDiscovery, ScriptInterpreter},
 };
 use crate::printer::Printer;
 
@@ -77,11 +75,7 @@ pub(crate) async fn find(
 
     // Don't enable the requires-python settings on groups
     let groups = DependencyGroupsWithDefaults::none();
-    let WorkspacePython {
-        source,
-        python_request,
-        requirement,
-    } = WorkspacePython::from_request(
+    let project_python = ProjectPythonRequest::from_request(
         request.map(|request| PythonRequest::parse(&request)),
         project.as_ref().map(VirtualProject::workspace),
         &groups,
@@ -90,40 +84,15 @@ pub(crate) async fn find(
     )
     .await?;
 
-    let python_request = python_request.unwrap_or_default();
-    let python = PythonInstallation::find_existing(
-        &python_request,
+    let discovery = PythonDiscovery::new(
         environment_preference,
         python_preference,
         python_arch,
+        client_builder,
         cache,
-    )?;
-    python
-        .download_and_warn_if_outdated_prerelease(
-            &python_request,
-            client_builder,
-            cache,
-            python_downloads_json_url,
-        )
-        .await?;
-
-    // Warn if the discovered Python version is incompatible with the current workspace
-    if let Some(requirement) = requirement {
-        match validate_python_requirement(
-            python.interpreter(),
-            &requirement.requires_python,
-            &source,
-            PythonRequirementSource::Workspace(
-                project.as_ref().map(VirtualProject::workspace),
-                &groups,
-            ),
-        ) {
-            Ok(()) => {}
-            Err(err) => {
-                warn_user!("{err}");
-            }
-        }
-    }
+    )
+    .with_downloads_json_url(python_downloads_json_url);
+    let python = project_python.find(&discovery).await?;
 
     if show_version {
         writeln!(

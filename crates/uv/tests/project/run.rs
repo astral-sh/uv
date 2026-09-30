@@ -5574,6 +5574,16 @@ fn run_groups_requires_python_errors() -> Result<()> {
     error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
     ");
 
+    // An isolated environment must satisfy the selected groups too.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("-p").arg("3.12")
+        .arg("python").arg("--version"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    ");
+
     // Enabling foo we can't find an interpreter
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("foo")
@@ -7794,6 +7804,32 @@ fn run_centralized_environment_no_sync_uses_incompatible_python() -> Result<()> 
     ----- stderr -----
     warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
     "#);
+
+    // Without the project link, discovery must reuse the cached environment before
+    // rejecting the selected interpreter against the updated requirement.
+    uv_fs::remove_virtualenv(&context.temp_dir.join(".venv"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&context.read("pyproject.toml").replace(">=3.11", ">=3.13"))?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--no-sync")
+        .arg("--python")
+        .arg("3.12")
+        .arg("python")
+        .arg("-c")
+        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not meet the Python requirement: `>=3.13`)
+    "#);
+
     Ok(())
 }
 

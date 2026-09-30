@@ -73,9 +73,9 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
-    ProjectEnvironmentTarget, ProjectError, PythonRequirementSource, ScriptEnvironment,
-    ScriptInterpreter, UniversalState, WorkspacePython, script_extra_build_requires,
-    script_specification, update_environment, validate_python_requirement,
+    ProjectEnvironmentTarget, ProjectError, ProjectPythonRequest, PythonDiscovery,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, script_extra_build_requires,
+    script_specification, update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
@@ -650,11 +650,7 @@ pub(crate) async fn run(
                 // base environment for the project.
 
                 // Resolve the Python request and requirement for the workspace.
-                let WorkspacePython {
-                    source,
-                    python_request,
-                    requirement,
-                } = WorkspacePython::from_request(
+                let project_python = ProjectPythonRequest::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
                     &groups,
@@ -663,36 +659,25 @@ pub(crate) async fn run(
                 )
                 .await?;
 
-                let interpreter = PythonInstallation::find_or_download(
-                    python_request.as_ref(),
+                let discovery = PythonDiscovery::new(
                     EnvironmentPreference::Any,
                     python_preference,
                     python_arch,
-                    python_downloads,
                     &client_builder,
                     &cache,
-                    Some(&download_reporter),
-                    install_mirrors.python_install_mirror.as_deref(),
-                    install_mirrors.pypy_install_mirror.as_deref(),
-                    install_mirrors.python_downloads_json_url.as_deref(),
                 )
-                .await?
-                .into_interpreter();
-
-                if let Some(requirement) = requirement.as_ref() {
-                    validate_python_requirement(
-                        &interpreter,
-                        &requirement.requires_python,
-                        &source,
-                        PythonRequirementSource::Workspace(Some(project.workspace()), &groups),
-                    )?;
-                }
+                .with_downloads(
+                    python_downloads,
+                    &install_mirrors,
+                    &download_reporter,
+                );
+                let interpreter = project_python.find_compatible(&discovery).await?;
 
                 // Create a virtual environment
                 temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    interpreter.into_interpreter(),
                     uv_virtualenv::Prompt::None,
                     false,
                     uv_virtualenv::OnExisting::Remove(
