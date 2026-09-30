@@ -24,9 +24,9 @@ Unreleased.
 
 - **Use `tar-codec` for tar archives by default** ([#22094](https://github.com/astral-sh/uv/pull/22094))
 
-  uv now uses `tar-codec` when extracting tar archives, building source distributions with `uv_build`, and reading source distribution metadata for publishing. The stricter archive validation can reject malformed archives and archives with unsupported entries that `astral-tokio-tar` previously accepted. Source distributions built by `uv_build` may also have different archive bytes.
+  Previously, uv used `astral-tokio-tar` to extract tar archives, build source distributions with `uv_build`, and read their metadata for `uv publish`. Now, uv uses `tar-codec`, which applies stricter validation when reading archives. This can cause uv to reject archives containing hard links or unsupported tar extensions that previous versions accepted. Source distributions created by `uv_build` can also have different archive bytes and hashes.
 
-  Set `UV_NO_TAR_CODEC=1` to use `astral-tokio-tar` if a workflow depends on the previous behavior.
+  You can opt out of this behavior by setting `UV_NO_TAR_CODEC=1`.
 
   This stabilizes the `tar-codec` preview feature.
 
