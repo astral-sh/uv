@@ -33,8 +33,8 @@ use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, Pa
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonRequest,
-    PythonSelection,
+    ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonPreference, PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -129,7 +129,8 @@ pub(crate) async fn add(
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
-    python_selection: PythonSelection,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -227,7 +228,8 @@ pub(crate) async fn add(
                     &install_mirrors,
                     project_dir,
                     false,
-                    python_selection,
+                    python_preference,
+                    python_arch,
                     python_downloads,
                     config_discovery,
                     &client_builder,
@@ -247,7 +249,8 @@ pub(crate) async fn add(
             (&script).into(),
             python.as_deref().map(PythonRequest::parse),
             &client_builder,
-            python_selection,
+            python_preference,
+            python_arch,
             python_downloads,
             &install_mirrors,
             false,
@@ -321,7 +324,8 @@ pub(crate) async fn add(
                 &defaulted_groups,
                 workspace_python,
                 &client_builder,
-                python_selection,
+                python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 ProjectEnvironmentPolicy::Optional,
@@ -343,7 +347,8 @@ pub(crate) async fn add(
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &client_builder,
-                python_selection,
+                python_preference,
+                python_arch,
                 python_downloads,
                 no_sync,
                 config_discovery,

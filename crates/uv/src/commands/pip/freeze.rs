@@ -13,7 +13,7 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
-use uv_python::{PythonPreference, PythonSelection};
+use uv_python::{PythonArchitecture, PythonPreference};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -21,7 +21,7 @@ use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
-    python_selection: PythonSelection,
+    python_arch: Option<PythonArchitecture>,
     exclude_editable: bool,
     exclude: &FxHashSet<PackageName>,
     strict: bool,
@@ -38,7 +38,8 @@ pub(crate) fn pip_freeze(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
-        python_selection.with_preference(PythonPreference::default().with_system_flag(system)),
+        PythonPreference::default().with_system_flag(system),
+        python_arch,
         cache,
     )?;
 

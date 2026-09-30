@@ -37,8 +37,8 @@ use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{
     BrokenLink, ConfigDiscovery, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
-    LenientImplementationName, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonSelection, PythonSource, PythonVariant,
+    LenientImplementationName, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
     PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -966,7 +966,8 @@ impl ScriptInterpreter {
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
         client_builder: &BaseClientBuilder<'_>,
-        python_selection: PythonSelection,
+        python_preference: PythonPreference,
+        python_arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         keep_incompatible: bool,
@@ -989,7 +990,8 @@ impl ScriptInterpreter {
                 &environment,
                 EnvironmentKind::Script,
                 python_request.as_ref(),
-                python_selection,
+                python_preference,
+                python_arch,
                 requires_python
                     .as_ref()
                     .map(|(requires_python, _)| requires_python),
@@ -1014,7 +1016,8 @@ impl ScriptInterpreter {
         let interpreter = PythonInstallation::find_or_download(
             python_request.as_ref(),
             EnvironmentPreference::Any,
-            python_selection,
+            python_preference,
+            python_arch,
             python_downloads,
             client_builder,
             cache,
@@ -1123,7 +1126,8 @@ fn check_environment_compatibility(
     environment: &PythonEnvironment,
     kind: EnvironmentKind,
     python_request: Option<&PythonRequest>,
-    python_selection: PythonSelection,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     requires_python: Option<&RequiresPython>,
     cache: &Cache,
 ) -> Result<(), EnvironmentIncompatibilityError> {
@@ -1136,8 +1140,10 @@ fn check_environment_compatibility(
     }
 
     let python_request = python_request
-        .or_else(|| python_selection.arch.map(|_| &PythonRequest::Any))
-        .map(|request| python_selection.apply_to_request(request));
+        .or_else(|| python_arch.map(|_| &PythonRequest::Any))
+        .map(|request| {
+            request.with_arch_if_unspecified(python_arch.map(PythonArchitecture::into_inner))
+        });
     if let Some(request) = python_request {
         if request.satisfied(environment.interpreter(), cache) {
             debug!("The {kind} environment's Python version satisfies the request: `{request}`");
@@ -1162,21 +1168,18 @@ fn check_environment_compatibility(
         }
     }
 
-    if python_selection
-        .preference
-        .allows_installation(&PythonInstallation::new(
-            PythonSource::DiscoveredEnvironment,
-            environment.interpreter().clone(),
-        ))
-    {
+    if python_preference.allows_installation(&PythonInstallation::new(
+        PythonSource::DiscoveredEnvironment,
+        environment.interpreter().clone(),
+    )) {
         trace!(
             "The virtual environment's Python interpreter meets the Python preference: `{}`",
-            python_selection.preference
+            python_preference
         );
     } else {
         return Err(EnvironmentIncompatibilityError::PythonPreference(
             kind,
-            python_selection.preference,
+            python_preference,
         ));
     }
 
@@ -1269,7 +1272,8 @@ fn existing_project_environment(
 fn discover_project_environment(
     root: &Path,
     python_request: Option<&PythonRequest>,
-    python_selection: PythonSelection,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     requires_python: Option<&RequiresPython>,
     policy: ProjectEnvironmentPolicy,
     centralized: bool,
@@ -1283,7 +1287,8 @@ fn discover_project_environment(
         &environment,
         EnvironmentKind::Project,
         python_request,
-        python_selection,
+        python_preference,
+        python_arch,
         requires_python,
         cache,
     );
@@ -1575,7 +1580,8 @@ impl ProjectInterpreter {
         groups: &DependencyGroupsWithDefaults,
         workspace_python: WorkspacePython,
         client_builder: &BaseClientBuilder<'_>,
-        python_selection: PythonSelection,
+        python_preference: PythonPreference,
+        python_arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         policy: ProjectEnvironmentPolicy,
@@ -1618,7 +1624,8 @@ impl ProjectInterpreter {
                 if let Some(environment) = discover_project_environment(
                     &root,
                     python_request.as_ref(),
-                    python_selection,
+                    python_preference,
+                    python_arch,
                     requires_python,
                     policy,
                     centralized,
@@ -1639,7 +1646,8 @@ impl ProjectInterpreter {
                 && let Some(environment) = discover_project_environment(
                     &project_environment_path,
                     python_request.as_ref(),
-                    python_selection,
+                    python_preference,
+                    python_arch,
                     requires_python,
                     policy,
                     centralized,
@@ -1656,7 +1664,8 @@ impl ProjectInterpreter {
         let python = PythonInstallation::find_or_download(
             python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
-            python_selection,
+            python_preference,
+            python_arch,
             python_downloads,
             client_builder,
             cache,
@@ -1673,7 +1682,8 @@ impl ProjectInterpreter {
             if let Some(environment) = discover_project_environment(
                 &root,
                 python_request.as_ref(),
-                python_selection,
+                python_preference,
+                python_arch,
                 requires_python,
                 policy,
                 centralized,
@@ -2063,7 +2073,8 @@ impl ProjectEnvironment {
         python: Option<PythonRequest>,
         install_mirrors: &PythonInstallMirrors,
         client_builder: &BaseClientBuilder<'_>,
-        python_selection: PythonSelection,
+        python_preference: PythonPreference,
+        python_arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         no_sync: bool,
         config_discovery: ConfigDiscovery,
@@ -2107,7 +2118,8 @@ impl ProjectEnvironment {
             groups,
             workspace_python,
             client_builder,
-            python_selection,
+            python_preference,
+            python_arch,
             python_downloads,
             install_mirrors,
             if no_sync {
@@ -2357,7 +2369,8 @@ impl ScriptEnvironment {
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
         client_builder: &BaseClientBuilder<'_>,
-        python_selection: PythonSelection,
+        python_preference: PythonPreference,
+        python_arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         no_sync: bool,
@@ -2383,7 +2396,8 @@ impl ScriptEnvironment {
             script,
             python_request,
             client_builder,
-            python_selection,
+            python_preference,
+            python_arch,
             python_downloads,
             install_mirrors,
             no_sync,
@@ -3402,7 +3416,8 @@ pub(crate) async fn init_script_python_requirement(
     install_mirrors: &PythonInstallMirrors,
     directory: &Path,
     no_pin_python: bool,
-    python_selection: PythonSelection,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     config_discovery: ConfigDiscovery,
     client_builder: &BaseClientBuilder<'_>,
@@ -3431,7 +3446,8 @@ pub(crate) async fn init_script_python_requirement(
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
         EnvironmentPreference::Any,
-        python_selection,
+        python_preference,
+        python_arch,
         python_downloads,
         client_builder,
         cache,

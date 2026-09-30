@@ -2265,6 +2265,7 @@ fn python_installations_for_versions(
                 &PythonRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
+                None,
                 download_list,
                 &cache,
             ) {

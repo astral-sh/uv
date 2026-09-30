@@ -9,7 +9,7 @@ use uv_configuration::TargetTriple;
 use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDist};
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, PythonSelection,
+    EnvironmentPreference, PythonArchitecture, PythonEnvironment, PythonPreference, PythonRequest,
     PythonVersion,
 };
 
@@ -20,7 +20,7 @@ use crate::printer::Printer;
 
 /// Check for incompatibilities in installed packages.
 pub(crate) fn pip_check(
-    python_selection: PythonSelection,
+    python_arch: Option<PythonArchitecture>,
     python: Option<&str>,
     system: bool,
     python_version: Option<&PythonVersion>,
@@ -35,7 +35,8 @@ pub(crate) fn pip_check(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
-        python_selection.with_preference(PythonPreference::default().with_system_flag(system)),
+        PythonPreference::default().with_system_flag(system),
+        python_arch,
         cache,
     )?;
 

@@ -14,8 +14,8 @@ use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
 use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
 use crate::{
-    EnvironmentPreference, Error, Interpreter, Prefix, PythonNotFound, PythonRequest,
-    PythonSelection, Target,
+    EnvironmentPreference, Error, Interpreter, Prefix, PythonArchitecture, PythonNotFound,
+    PythonPreference, PythonRequest, Target,
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
@@ -151,14 +151,20 @@ impl PythonEnvironment {
     pub fn find(
         request: &PythonRequest,
         preference: EnvironmentPreference,
-        python_selection: impl Into<PythonSelection>,
+        python_preference: PythonPreference,
+        python_arch: Option<PythonArchitecture>,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let installation =
-            match find_python_installation(request, preference, python_selection, cache)? {
-                Ok(installation) => installation,
-                Err(err) => return Err(EnvironmentNotFound::from(err).into()),
-            };
+        let installation = match find_python_installation(
+            request,
+            preference,
+            python_preference,
+            python_arch,
+            cache,
+        )? {
+            Ok(installation) => installation,
+            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
+        };
         Ok(Self::from_installation(installation))
     }
 

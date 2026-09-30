@@ -35,8 +35,8 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation, PythonRequest,
-    PythonSelection, PythonVersion, VersionRequest,
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::{
     GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
@@ -124,7 +124,8 @@ pub(crate) async fn pip_compile(
     link_mode: LinkMode,
     mut python: Option<String>,
     system: bool,
-    python_selection: PythonSelection,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     concurrency: Concurrency,
     quiet: bool,
     cache: Cache,
@@ -285,14 +286,15 @@ pub(crate) async fn pip_compile(
 
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
-    let python_selection = python_selection.with_system_flag(system);
+    let python_preference = python_preference.with_system_flag(system);
     let reporter = PythonDownloadReporter::single(printer);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
         PythonInstallation::find_or_download(
             Some(&request),
             environment_preference,
-            python_selection,
+            python_preference,
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
@@ -314,7 +316,8 @@ pub(crate) async fn pip_compile(
         PythonInstallation::find_best(
             &request,
             environment_preference,
-            python_selection,
+            python_preference,
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,

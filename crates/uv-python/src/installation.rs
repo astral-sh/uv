@@ -28,7 +28,7 @@ use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
     Error, ImplementationName, Interpreter, MissingPythonHint, PythonArchitecture, PythonDownloads,
-    PythonPreference, PythonSelection, PythonSource, PythonVariant, PythonVersion, downloads,
+    PythonPreference, PythonSource, PythonVariant, PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -107,11 +107,12 @@ impl PythonInstallation {
     pub fn find(
         request: &PythonRequest,
         environments: EnvironmentPreference,
-        selection: impl Into<PythonSelection>,
+        preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         download_list: &ManagedPythonDownloadList,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let installation = Self::find_existing(request, environments, selection, cache)?;
+        let installation = Self::find_existing(request, environments, preference, arch, cache)?;
         installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
@@ -120,13 +121,15 @@ impl PythonInstallation {
     pub fn find_existing(
         request: &PythonRequest,
         environments: EnvironmentPreference,
-        selection: impl Into<PythonSelection>,
+        preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         cache: &Cache,
     ) -> Result<Self, Error> {
         Ok(find_python_installation(
             request,
             environments,
-            selection,
+            preference,
+            arch,
             cache,
         )??)
     }
@@ -136,7 +139,8 @@ impl PythonInstallation {
     pub async fn find_best(
         request: &PythonRequest,
         environments: EnvironmentPreference,
-        selection: impl Into<PythonSelection>,
+        preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
@@ -145,14 +149,14 @@ impl PythonInstallation {
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
-        let selection = selection.into();
-        let downloads_enabled = selection.preference.allows_managed()
+        let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
         let installation = find_best_python_installation(
             request,
             environments,
-            selection,
+            preference,
+            arch,
             downloads_enabled,
             client_builder,
             cache,
@@ -179,7 +183,8 @@ impl PythonInstallation {
     pub async fn find_or_download(
         request: Option<&PythonRequest>,
         environments: EnvironmentPreference,
-        selection: impl Into<PythonSelection>,
+        preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
@@ -188,11 +193,9 @@ impl PythonInstallation {
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
-        let selection = selection.into();
-        let preference = selection.preference;
         let request = request.unwrap_or(&PythonRequest::Default);
 
-        let err = match Self::find_existing(request, environments, selection, cache) {
+        let err = match Self::find_existing(request, environments, preference, arch, cache) {
             Ok(installation) => {
                 installation
                     .download_and_warn_if_outdated_prerelease(
@@ -231,7 +234,7 @@ impl PythonInstallation {
 
         let download = download_request
             .clone()
-            .with_arch_if_unspecified(selection.arch.map(PythonArchitecture::into_inner))
+            .with_arch_if_unspecified(arch.map(PythonArchitecture::into_inner))
             .fill()
             .map(|request| download_list.find(&request));
 

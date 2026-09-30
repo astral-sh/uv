@@ -228,6 +228,7 @@ mod tests {
             &PythonRequest::Any,
             EnvironmentPreference::Any,
             PythonPreference::System,
+            None,
             &cache,
         )
         .expect("Python environment should be available")

@@ -15,8 +15,8 @@ use uv_fs::normalize_path;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonRequest, PythonSelection,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -64,7 +64,8 @@ pub(crate) async fn check(
     show_command: bool,
     script: Option<Pep723Script>,
     client_builder: BaseClientBuilder<'_>,
-    python_selection: PythonSelection,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -297,7 +298,8 @@ pub(crate) async fn check(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
-                python_selection,
+                python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 false,
@@ -327,7 +329,8 @@ pub(crate) async fn check(
             let interpreter = PythonInstallation::find_or_download(
                 python_request.as_ref(),
                 EnvironmentPreference::Any,
-                python_selection,
+                python_preference,
+                python_arch,
                 python_downloads,
                 &client_builder,
                 cache,
@@ -376,7 +379,8 @@ pub(crate) async fn check(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
-                python_selection,
+                python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 no_sync,
@@ -514,7 +518,8 @@ pub(crate) async fn check(
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &client_builder,
-                python_selection,
+                python_preference,
+                python_arch,
                 python_downloads,
                 no_sync,
                 config_discovery,
@@ -545,7 +550,8 @@ pub(crate) async fn check(
                     &groups,
                     workspace_python,
                     &client_builder,
-                    python_selection,
+                    python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
@@ -724,7 +730,9 @@ pub(crate) async fn check(
     let python_version = if let Some(python) = python {
         let request = PythonRequest::parse(&python);
         if let Some(venv) = venv.as_ref()
-            && python_selection.satisfies_request(Some(&request), venv.interpreter(), cache)
+            && request
+                .with_arch_if_unspecified(python_arch.map(PythonArchitecture::into_inner))
+                .satisfied(venv.interpreter(), cache)
         {
             Some(venv.interpreter().python_minor_version())
         } else {
@@ -733,7 +741,8 @@ pub(crate) async fn check(
             let installation = PythonInstallation::find_or_download(
                 Some(&request),
                 EnvironmentPreference::Any,
-                python_selection,
+                python_preference,
+                python_arch,
                 python_downloads,
                 &client_builder,
                 cache,

@@ -69,10 +69,8 @@ fn show_settings_returns_before_running_commands() {
         preview: Preview {
             flags: [],
         },
-        python_selection: PythonSelection {
-            preference: Managed,
-            arch: None,
-        },
+        python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -206,10 +204,8 @@ fn pip_compile_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_selection: PythonSelection {
-            preference: Managed,
-            arch: None,
-        },
+        python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -417,10 +413,8 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         preview: Preview {
             flags: [],
         },
-        python_selection: PythonSelection {
-            preference: Managed,
-            arch: None,
-        },
+        python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -589,10 +583,8 @@ fn pip_install_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_selection: PythonSelection {
-            preference: Managed,
-            arch: None,
-        },
+        python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -783,10 +775,8 @@ fn lock_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_selection: PythonSelection {
-            preference: Managed,
-            arch: None,
-        },
+        python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -913,10 +903,8 @@ fn version_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_selection: PythonSelection {
-            preference: Managed,
-            arch: None,
-        },
+        python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -1058,10 +1046,8 @@ fn tool_install_baseline() {
         preview: Preview {
             flags: [],
         },
-        python_selection: PythonSelection {
-            preference: Managed,
-            arch: None,
-        },
+        python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -2555,8 +2541,8 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     +            Pylock,
     +        ],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
              malware_check_url: None,
          },
@@ -2592,8 +2578,8 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     -        ],
     +        flags: [],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
 
      ----- stderr -----
@@ -3976,8 +3962,8 @@ fn preview_features() {
     +            BuildLazyImports,
     +        ],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
     "
     );
@@ -4004,8 +3990,8 @@ fn preview_features() {
     +            JsonOutput,
     +        ],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
     "
     );
@@ -4176,8 +4162,8 @@ fn preview_precedence() -> anyhow::Result<()> {
     +            Pylock,
     +        ],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
     "
     );
@@ -4252,8 +4238,8 @@ fn preview_precedence() -> anyhow::Result<()> {
     +            FormatCommand,
     +        ],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
     "
     );
@@ -4304,7 +4290,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     +            Pylock,
              ],
          },
-         python_selection: PythonSelection {
+         python_preference: Managed,
     ...
     "
     );
@@ -4422,8 +4408,8 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     +            FormatCommand,
     +        ],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
     "
     );
@@ -4562,8 +4548,8 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
     +            FormatCommand,
     +        ],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
     "
     );
@@ -4694,8 +4680,8 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
     +            FormatCommand,
     +        ],
          },
-         python_selection: PythonSelection {
-             preference: Managed,
+         python_preference: Managed,
+         python_arch: None,
     ...
     "
     );

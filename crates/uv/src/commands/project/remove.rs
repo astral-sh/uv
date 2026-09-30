@@ -16,7 +16,9 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
 use uv_preview::Preview;
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonRequest, PythonSelection};
+use uv_python::{
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+};
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user_once;
@@ -54,7 +56,8 @@ pub(crate) async fn remove(
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     script: Option<Pep723Script>,
-    python_selection: PythonSelection,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -254,7 +257,8 @@ pub(crate) async fn remove(
                     &groups,
                     workspace_python,
                     &client_builder,
-                    python_selection,
+                    python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
@@ -276,7 +280,8 @@ pub(crate) async fn remove(
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
                     &client_builder,
-                    python_selection,
+                    python_preference,
+                    python_arch,
                     python_downloads,
                     no_sync,
                     config_discovery,
@@ -297,7 +302,8 @@ pub(crate) async fn remove(
                 (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
-                python_selection,
+                python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 no_sync,
