@@ -9,6 +9,19 @@ Unreleased.
 
 ### Breaking changes
 
+- **Omit the distutils startup patch on Python 3.10 and later**
+  ([#22096](https://github.com/astral-sh/uv/pull/22096))
+
+  Previously, uv installed `_virtualenv.py` and `_virtualenv.pth` into every new virtual environment
+  to prevent distutils configuration from changing installation paths. Now, uv omits these files on
+  Python 3.10 and later, which already ignore the affected configuration keys. This reduces Python
+  startup overhead. Python 3.9 and earlier retain the patch.
+
+  You cannot opt out of this behavior. Existing virtual environments are not modified automatically.
+  Recreate an environment with Python 3.10 or later to remove the patch.
+
+  This stabilizes the `no-distutils-patch` preview feature.
+
 ## 0.12.x
 
 See [changelogs/0.12.x](./changelogs/0.12.x.md)

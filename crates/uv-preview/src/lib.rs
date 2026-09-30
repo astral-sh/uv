@@ -318,9 +318,6 @@ pub enum PreviewFeature {
     ToolInstallLocks,
     /// Allows using `uv workspace list --scripts`.
     WorkspaceListScripts,
-    /// Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
-    /// in virtual environments for Python 3.10 and later.
-    NoDistutilsPatch,
     /// Allows requiring a hash algorithm for configured package indexes.
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.

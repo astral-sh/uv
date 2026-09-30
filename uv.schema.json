@@ -1890,7 +1890,6 @@
             "centralized-project-envs",
             "tool-install-locks",
             "workspace-list-scripts",
-            "no-distutils-patch",
             "index-hash-algorithm",
             "lockfile-format-check",
             "lockfile-normalization",
