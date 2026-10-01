@@ -3949,7 +3949,6 @@ fn preview_features() {
     +            LockfileFormatCheck,
     +            LockfileNormalization,
     +            LockWithoutMetadata,
-    +            TarCodec,
     +            IndexByName,
     +            ArtifactHashFiltering,
     +            ContentAddressedCache,

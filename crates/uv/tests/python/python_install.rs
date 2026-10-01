@@ -3873,8 +3873,11 @@ fn python_install_armv7() {
     error: uv does not yet provide musl Python distributions on armv7.
     ");
 
-    // Explicitly request a gnuabi build for armv7l
-    uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.12.12-linux-armv7-gnueabi"), @"
+    // The gnuabi build for armv7l contains duplicate terminfo symlinks.
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
+        .arg("cpython-3.12.12-linux-armv7-gnueabi"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.12 in [TIME]
@@ -3883,12 +3886,10 @@ fn python_install_armv7() {
 
     context.python_uninstall().arg("--all").assert().success();
 
-    // Exercise the tar-codec symlink handling against the armv7 archive that contains duplicate
-    // terminfo symlinks.
+    // Exercise the legacy tar backend against the same archive.
     uv_snapshot!(context.filters(), context
         .python_install()
-        .arg("--preview-features")
-        .arg("tar-codec")
+        .env(EnvVars::UV_LEGACY_TAR_BACKEND, "1")
         .arg("cpython-3.12.12-linux-armv7-gnueabi"), @"
     exit_code: 0 (success)
     ----- stderr -----

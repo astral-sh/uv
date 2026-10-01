@@ -19,6 +19,7 @@ use uv_publish::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
+use uv_static::TarBackend;
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::ExitStatus;
@@ -151,6 +152,7 @@ pub(crate) async fn publish(
         &upload_client,
         &oidc_client,
         client_builder.retry_policy(),
+        TarBackend::from_env(),
     );
     if let Some(index_url) = check_url {
         let registry_client_builder =

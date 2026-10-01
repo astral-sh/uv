@@ -6003,6 +6003,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-resolver",
+ "uv-static",
  "uv-types",
  "uv-workspace",
 ]
@@ -6094,6 +6095,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
+ "uv-static",
  "uv-toml",
  "uv-version",
  "uv-warnings",
@@ -6449,6 +6451,7 @@ dependencies = [
  "uv-python",
  "uv-requirements",
  "uv-resolver",
+ "uv-static",
  "uv-types",
  "uv-version",
  "uv-workspace",
@@ -6503,6 +6506,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-static",
  "uv-threads",
  "uv-types",
  "uv-workspace",
@@ -6611,7 +6615,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uv-distribution-filename",
- "uv-preview",
  "uv-pypi-types",
  "uv-static",
  "uv-threads",
@@ -7602,6 +7605,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-static",
  "uv-workspace",
 ]
 
