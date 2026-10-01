@@ -76,6 +76,7 @@ uv-python-managed = { workspace = true }
 uv-python-interpreter = { workspace = true }
 uv-python-types = { workspace = true }
 uv-resolver = { workspace = true }
+uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 

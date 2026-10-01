@@ -3642,8 +3642,8 @@ fn venv_included_in_sdist() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
 
-    // The default astral-tokio-tar backend recognizes the external virtual-environment link.
-    uv_snapshot!(context.filters(), context.build(), @"
+    // The astral-tokio-tar fallback recognizes the external virtual-environment link.
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_LEGACY_TAR_BACKEND, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -3661,12 +3661,9 @@ fn venv_included_in_sdist() -> Result<()> {
     fs_err::remove_file(&venv_python)?;
     venv_python.symlink_to_file(context.root.child("python").child("3.12").child("python3"))?;
 
-    // The preview tar-codec backend reports a structured unsafe-link error and preserves the same
+    // The default tar-codec backend reports a structured unsafe-link error with the same
     // user-facing hint, regardless of the base interpreter's installation layout.
-    uv_snapshot!(context.filters(), context
-        .build()
-        .arg("--preview-features")
-        .arg("tar-codec"), @r#"
+    uv_snapshot!(context.filters(), context.build().env_remove(EnvVars::UV_LEGACY_TAR_BACKEND), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -3677,7 +3674,7 @@ fn venv_included_in_sdist() -> Result<()> {
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     "#);
 
-    uv_snapshot!(context.filters(), context.build().arg("-q"), @"
+    uv_snapshot!(context.filters(), context.build().arg("-q").env(EnvVars::UV_LEGACY_TAR_BACKEND, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/`
