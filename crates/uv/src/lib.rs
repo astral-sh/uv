@@ -539,7 +539,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     }
 
     // Resolve the cache settings.
-    let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+    let cache_settings =
+        CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref(), &environment);
 
     if global_initialization.needs_initialization() {
         // Set and finalize the global preview configuration.
