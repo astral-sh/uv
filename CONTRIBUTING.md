@@ -180,7 +180,7 @@ against the checked-in uv schema also requires [jq](https://jqlang.org/).
 ```shell
 # Rust
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo +1.98.1 hawk check --target-dir target/hawk -D warnings
+cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
 
 # Python
 uv run --only-group=check ruff check .
