@@ -1488,6 +1488,8 @@ impl<'lock> EnvironmentSpecification<'lock> {
 #[derive(Clone, Copy)]
 pub enum EnvironmentResolution {
     Specific,
+    /// Select compatible versions of the requested packages without resolving their dependencies.
+    Direct,
     Universal,
 }
 
@@ -1551,7 +1553,7 @@ pub async fn resolve_environment(
 
     // Determine the tags and marker environment to use for resolution.
     let (tags, resolver_environment) = match resolution_scope {
-        EnvironmentResolution::Specific => {
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => {
             let tags = uv_resolve_operations::resolution_tags(None, python_platform, interpreter)?;
             let marker_environment =
                 uv_resolve_operations::resolution_markers(None, python_platform, interpreter);
@@ -1563,7 +1565,9 @@ pub async fn resolve_environment(
         EnvironmentResolution::Universal => (None, ResolverEnvironment::universal(Vec::new())),
     };
     let python_requirement = match resolution_scope {
-        EnvironmentResolution::Specific => PythonRequirement::from_interpreter(interpreter),
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => {
+            PythonRequirement::from_interpreter(interpreter)
+        }
         EnvironmentResolution::Universal => PythonRequirement::from_requires_python(
             interpreter,
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version()),
@@ -1571,7 +1575,7 @@ pub async fn resolve_environment(
     };
 
     let python_platform = match resolution_scope {
-        EnvironmentResolution::Specific => python_platform,
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => python_platform,
         EnvironmentResolution::Universal => None,
     };
 
@@ -1614,7 +1618,14 @@ pub async fn resolve_environment(
         }
     };
 
+    let dependency_mode = match resolution_scope {
+        EnvironmentResolution::Direct => DependencyMode::Direct,
+        EnvironmentResolution::Specific | EnvironmentResolution::Universal => {
+            DependencyMode::Transitive
+        }
+    };
     let options = OptionsBuilder::new()
+        .dependency_mode(dependency_mode)
         .resolution_mode(*resolution)
         .prerelease(prerelease.clone())
         .fork_strategy(*fork_strategy)
@@ -1628,7 +1639,7 @@ pub async fn resolve_environment(
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
     let hasher = match resolution_scope {
-        EnvironmentResolution::Specific => HashStrategy::default(),
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => HashStrategy::default(),
         EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
     };
     let build_hasher = HashStrategy::from_constraints(
@@ -1642,7 +1653,7 @@ pub async fn resolve_environment(
     // a preference source.
     let reinstall = Reinstall::default();
     let upgrade = match resolution_scope {
-        EnvironmentResolution::Specific => Upgrade::default(),
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => Upgrade::default(),
         EnvironmentResolution::Universal => upgrade.clone(),
     };
 

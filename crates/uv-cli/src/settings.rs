@@ -894,6 +894,7 @@ impl RunSettings {
 /// The resolved settings to use for a `tool run` invocation.
 #[derive(Debug, Clone)]
 pub struct ToolRunSettings {
+    pub locked: Option<bool>,
     pub command: Option<Vec<OsString>>,
     pub from: Option<String>,
     pub with: Vec<String>,
@@ -924,6 +925,8 @@ impl ToolRunSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let ToolRunArgs {
+            locked,
+            unlocked,
             command,
             from,
             with,
@@ -1007,6 +1010,13 @@ impl ToolRunSettings {
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
 
         Ok(Self {
+            locked: if locked {
+                Some(true)
+            } else if unlocked {
+                Some(false)
+            } else {
+                environment.tool_locked.value
+            },
             command: command.map(|ExternalCommand::Cmd(command)| command),
             from,
             with: with
@@ -1047,6 +1057,7 @@ impl ToolRunSettings {
 /// The resolved settings to use for a `tool install` invocation.
 #[derive(Debug, Clone)]
 pub struct ToolInstallSettings {
+    pub locked: Option<bool>,
     pub package: String,
     pub from: Option<String>,
     pub with: Vec<String>,
@@ -1076,6 +1087,8 @@ impl ToolInstallSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let ToolInstallArgs {
+            locked,
+            unlocked,
             package,
             editable,
             from,
@@ -1130,6 +1143,13 @@ impl ToolInstallSettings {
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Ok(Self {
+            locked: if locked {
+                Some(true)
+            } else if unlocked {
+                Some(false)
+            } else {
+                environment.tool_locked.value
+            },
             package,
             from,
             with: with
@@ -1173,6 +1193,7 @@ impl ToolInstallSettings {
 /// The resolved settings to use for a `tool upgrade` invocation.
 #[derive(Debug, Clone)]
 pub struct ToolUpgradeSettings {
+    pub locked: Option<bool>,
     pub names: Vec<String>,
     pub python: Option<String>,
     pub python_platform: Option<TargetTriple>,
@@ -1188,6 +1209,8 @@ impl ToolUpgradeSettings {
         environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let ToolUpgradeArgs {
+            locked,
+            unlocked,
             name,
             python,
             python_platform,
@@ -1250,6 +1273,13 @@ impl ToolUpgradeSettings {
         );
 
         Ok(Self {
+            locked: if locked {
+                Some(true)
+            } else if unlocked {
+                Some(false)
+            } else {
+                environment.tool_locked.value
+            },
             names: if all { vec![] } else { name },
             python: python.and_then(Maybe::into_option),
             python_platform,
