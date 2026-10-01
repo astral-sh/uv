@@ -26,7 +26,7 @@ uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-errors = { workspace = true }
 uv-extract = { workspace = true }
-uv-fastid = { workspace = true }
+uv-fastid = { workspace = true, features = ["serde"] }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
