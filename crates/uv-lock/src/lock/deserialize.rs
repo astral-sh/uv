@@ -529,6 +529,17 @@ impl<'de> DocumentMapAccess<'_, 'de> {
                 "[package.metadata]",
             )),
             (
+                MapKind::Package,
+                "[package.metadata.requires-dev]" | "[package.metadata.dependency-groups]",
+            ) => {
+                // The metadata map consumes the subtable when its parent is implicit.
+                self.track_key("metadata")?;
+                self.pending = Some(Pending::Map(MapKind::PackageMetadata));
+                return seed
+                    .deserialize(de::value::BorrowedStrDeserializer::new("metadata"))
+                    .map(Some);
+            }
+            (
                 MapKind::PackageMetadata,
                 "[package.metadata.requires-dev]" | "[package.metadata.dependency-groups]",
             ) => Some((

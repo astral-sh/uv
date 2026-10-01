@@ -487,7 +487,11 @@ fn write_package(
         || !metadata.dependency_groups.is_empty()
         || !metadata.provides_extra.is_empty();
     if has_metadata {
-        writer.table(&["package", "metadata"])?;
+        // Dependency-group subtables establish their parent implicitly.
+        if version < 2 || !metadata.requires_dist.is_empty() || !metadata.provides_extra.is_empty()
+        {
+            writer.table(&["package", "metadata"])?;
+        }
         let field = if version >= 2 {
             "dependencies"
         } else {
