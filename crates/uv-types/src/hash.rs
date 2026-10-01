@@ -7,8 +7,9 @@ use rustc_hash::FxHashMap;
 
 use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
-    ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
-    Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
+    ArchiveHashGroups, ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation,
+    MetadataHashPolicy, Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement,
+    VersionId, parse_all_url_hashes,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -23,6 +24,8 @@ use uv_redacted::DisplaySafeUrl;
 pub struct HashStrategy {
     collection: HashCollection,
     verification: HashVerification,
+    independent_hashes: Option<Arc<FxHashMap<PackageName, ArchiveHashGroups>>>,
+    independent_url_hashes: Option<Arc<FxHashMap<VersionId, Vec<HashDigest>>>>,
 }
 
 /// The trusted hashes to enforce when retrieving distributions.
@@ -49,6 +52,66 @@ impl HashStrategy {
     /// Validate hashes when present.
     pub fn verify(hashes: Arc<FxHashMap<VersionId, Vec<HashDigest>>>) -> Self {
         Self::default().with_verification(HashVerification::IfPresent(hashes))
+    }
+
+    /// Verify each supplied set of hashes independently before building a source archive.
+    pub fn with_independent_hashes<'a>(
+        mut self,
+        requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
+        constraints: impl Iterator<Item = (&'a Requirement, &'a [String])>,
+        marker_env: Option<&ResolverMarkerEnvironment>,
+    ) -> Result<Self, HashStrategyError> {
+        let mut groups = FxHashMap::<PackageName, Vec<Vec<HashDigest>>>::default();
+        let mut add =
+            |requirement: &Requirement, hashes: &[String]| -> Result<(), HashStrategyError> {
+                if !requirement
+                    .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
+                {
+                    return Ok(());
+                }
+                let digests = hashes
+                    .iter()
+                    .map(|hash| HashDigest::from_str(hash))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let entries = groups.entry(requirement.name.clone()).or_default();
+                if !digests.is_empty() {
+                    match &requirement.source {
+                        RequirementSource::Registry { .. } => entries.push(digests),
+                        RequirementSource::Url { .. }
+                        | RequirementSource::Path { .. }
+                        | RequirementSource::GitDirectory { .. }
+                        | RequirementSource::GitPath { .. }
+                        | RequirementSource::Directory { .. } => {
+                            entries.extend(digests.into_iter().map(|hash| vec![hash]));
+                        }
+                    }
+                }
+                if let Some(url) = requirement.source.to_verbatim_parsed_url() {
+                    entries.extend(
+                        parse_all_url_hashes(&url.verbatim)?
+                            .into_iter()
+                            .map(|hash| vec![hash]),
+                    );
+                }
+                Ok(())
+            };
+        for (requirement, hashes) in requirements {
+            if let UnresolvedRequirement::Named(requirement) = requirement {
+                add(requirement, hashes)?;
+            }
+        }
+        for (requirement, hashes) in constraints {
+            add(requirement, hashes)?;
+        }
+        groups.retain(|_, entries| !entries.is_empty());
+        self.independent_hashes = Some(Arc::new(
+            groups
+                .into_iter()
+                .map(|(id, entries)| (id, ArchiveHashGroups::new(entries)))
+                .collect(),
+        ));
+        self.independent_url_hashes = Some(Arc::new(FxHashMap::default()));
+        Ok(self)
     }
 
     /// Require a matching trusted hash for every distribution.
@@ -130,11 +193,21 @@ impl HashStrategy {
         &self.verification
     }
 
+    /// Return whether independent user-supplied hashes are being enforced.
+    pub fn has_independent_hashes(&self) -> bool {
+        self.independent_hashes.is_some()
+    }
+
     /// Return the [`ArchiveHashPolicy`] for the given distribution.
     pub fn archive_policy<T: DistributionMetadata>(
         &self,
         distribution: &T,
     ) -> ArchiveHashPolicy<'_> {
+        if let Some(groups) = &self.independent_hashes {
+            return groups
+                .get(distribution.name())
+                .map_or(ArchiveHashPolicy::None, ArchiveHashPolicy::AllOfAny);
+        }
         self.archive_policy_for_id(|| distribution.version_id())
     }
 
@@ -145,7 +218,18 @@ impl HashStrategy {
     ) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
             collection: self.collection,
-            validation: self.validation_for_id(|| distribution.version_id()),
+            validation: if let Some(groups) = &self.independent_hashes {
+                HashValidation::Independent {
+                    groups: groups.get(distribution.name()),
+                    url_hashes: self
+                        .independent_url_hashes
+                        .as_ref()
+                        .and_then(|hashes| hashes.get(&distribution.version_id()))
+                        .map(Vec::as_slice),
+                }
+            } else {
+                self.validation_for_id(|| distribution.version_id())
+            },
         }
     }
 
@@ -155,6 +239,11 @@ impl HashStrategy {
         name: &PackageName,
         version: &Version,
     ) -> ArchiveHashPolicy<'_> {
+        if let Some(groups) = &self.independent_hashes {
+            return groups
+                .get(name)
+                .map_or(ArchiveHashPolicy::None, ArchiveHashPolicy::AllOfAny);
+        }
         self.archive_policy_for_id(|| VersionId::from_registry(name.clone(), version.clone()))
     }
 
@@ -169,7 +258,18 @@ impl HashStrategy {
     pub fn metadata_policy_for_url(&self, url: &DisplaySafeUrl) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
             collection: self.collection,
-            validation: self.validation_for_id(|| VersionId::from_url(url)),
+            validation: if self.independent_hashes.is_some() {
+                HashValidation::Independent {
+                    groups: None,
+                    url_hashes: self
+                        .independent_url_hashes
+                        .as_ref()
+                        .and_then(|hashes| hashes.get(&VersionId::from_url(url)))
+                        .map(Vec::as_slice),
+                }
+            } else {
+                self.validation_for_id(|| VersionId::from_url(url))
+            },
         }
     }
 
@@ -181,12 +281,20 @@ impl HashStrategy {
                 HashCollection::None => ArchiveHashPolicy::None,
                 HashCollection::Url | HashCollection::All => ArchiveHashPolicy::Generate,
             },
-            HashValidation::Any(_) | HashValidation::All(_) => validation.into(),
+            HashValidation::Any(_)
+            | HashValidation::All(_)
+            | HashValidation::Independent { .. } => validation.into(),
         }
     }
 
     /// Construct an identity only when verification requires a lookup.
     fn validation_for_id(&self, id: impl FnOnce() -> VersionId) -> HashValidation<'_> {
+        if self.independent_hashes.is_some() {
+            return HashValidation::Independent {
+                groups: None,
+                url_hashes: None,
+            };
+        }
         match &self.verification {
             HashVerification::IfPresent(_) => {
                 let id = id();
@@ -255,6 +363,22 @@ impl HashStrategy {
         mut self,
         requirements: impl Iterator<Item = &'a Requirement>,
     ) -> Result<Self, HashStrategyError> {
+        if let Some(existing) = &mut self.independent_url_hashes {
+            let hashes = Arc::make_mut(existing);
+            for requirement in requirements {
+                let Some(url) = requirement.source.to_verbatim_parsed_url() else {
+                    continue;
+                };
+                let digests = parse_all_url_hashes(&url.verbatim)?;
+                let Some(id) = Self::pin(requirement) else {
+                    continue;
+                };
+                if !digests.is_empty() {
+                    merge_digests(hashes.entry(id).or_default(), &digests, requirement)?;
+                }
+            }
+            return Ok(self);
+        }
         match &mut self.verification {
             HashVerification::None => {}
             HashVerification::IfPresent(existing) | HashVerification::Required(existing) => {
