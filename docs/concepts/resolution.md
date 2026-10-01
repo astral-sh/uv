@@ -982,7 +982,8 @@ requirements store `requires-python` alongside their `dependencies`, instead of 
 Declared dependencies use `package.metadata.dependencies` and `manifest.dependencies`, replacing
 `package.metadata.requires-dist` and `manifest.requirements`. Static dependency metadata also uses
 `dependencies` instead of `requires-dist`. Both metadata sections record declared extras as `extras`
-instead of `provides-extras`.
+instead of `provides-extras`. A metadata table containing only dependency-group subtables omits
+the empty parent header.
 
 Name-only dependency edges and declarations use strings, such as `"requests"`, instead of inline
 tables. Declarations with specifiers, sources, extras, groups, or markers retain their tables.

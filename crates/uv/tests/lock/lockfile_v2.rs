@@ -287,8 +287,6 @@ fn lockfile_v2_upgrade() -> Result<()> {
         "child",
     ]
 
-    [package.metadata]
-
     [package.metadata.dependency-groups]
     docs = [{ name = "child", virtual = "child" }]
     "#);
@@ -818,7 +816,7 @@ fn lockfile_v2_group_requires_python() -> Result<()> {
      requires-python = ">=3.12"
      resolution-markers = [
          "python_full_version >= '3.14'",
-    @@ -15,15 +14,10 @@
+    @@ -15,16 +14,11 @@
      ]
 
      [manifest.dependency-groups]
@@ -829,15 +827,16 @@ fn lockfile_v2_group_requires_python() -> Result<()> {
     +empty = { requires-python = ">=3.13", dependencies = [] }
     +inherited = { requires-python = ">=3.12,<3.14", dependencies = [{ name = "member", marker = "python_full_version >= '3.12' and python_full_version < '3.14'", virtual = "member" }] }
      plain = []
-    -
+
     -[manifest.group-requires-python]
     -docs = ">=3.12"
     -empty = ">=3.13"
     -inherited = ">=3.12,<3.14"
-
+    -
      [[package]]
      name = "leaf"
-    @@ -35,22 +29,14 @@
+     version = "1.0.0"
+    @@ -35,22 +29,12 @@
      version = "1.0.0"
      source = { virtual = "member" }
 
@@ -858,8 +857,8 @@ fn lockfile_v2_group_requires_python() -> Result<()> {
     +empty = { requires-python = ">=3.13", dependencies = [] }
     +inherited = { requires-python = ">=3.12,<3.14", dependencies = [{ name = "leaf", marker = "python_full_version < '3.14'" }] }
 
-     [package.metadata]
-
+    -[package.metadata]
+    -
     -[package.metadata.requires-dev]
     +[package.metadata.dependency-groups]
      docs = [{ name = "leaf", marker = "python_full_version >= '3.12'", virtual = "leaf" }]
