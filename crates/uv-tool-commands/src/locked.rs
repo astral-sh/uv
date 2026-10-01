@@ -58,6 +58,13 @@ pub(super) fn root_selection_error(err: anyhow::Error) -> Result<EnvironmentErro
         .map(|RootSelectionError(err)| err)
 }
 
+pub(super) fn unwrap_root_selection_error(err: anyhow::Error) -> anyhow::Error {
+    match root_selection_error(err) {
+        Ok(err) => err.into(),
+        Err(err) => err,
+    }
+}
+
 /// Resolve the tool, retrying root selection with a compatible interpreter when possible.
 pub(super) async fn resolve_with_interpreter(
     spec: RequirementsSpecification,

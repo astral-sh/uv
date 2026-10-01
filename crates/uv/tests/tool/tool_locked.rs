@@ -72,7 +72,7 @@ fn tool(
 }
 
 #[tokio::test]
-async fn packaged_lock_preserves_tool_url_hash() -> Result<()> {
+async fn packaged_lock_preserves_tool_url_hash_on_upgrade() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_tool_dirs();
@@ -124,6 +124,59 @@ async fn packaged_lock_preserves_tool_url_hash() -> Result<()> {
     let receipt = context.read("tools/locked-tool/uv-receipt.toml");
     assert!(receipt.contains(&hash));
     assert!(!receipt.contains("egg=locked-tool"));
+    let output = context
+        .tool_install()
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--from",
+            &requirement,
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .output()?;
+    assert!(output.status.success());
+    let receipt = context.read("tools/locked-tool/uv-receipt.toml");
+    assert!(
+        receipt.contains("locked = true"),
+        "{}\n{receipt}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(receipt.contains(&hash));
+    context
+        .tool_upgrade()
+        .args([
+            "--unlocked",
+            "--preview-features",
+            "locked-tools",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .assert()
+        .success();
+    let receipt = context.read("tools/locked-tool/uv-receipt.toml");
+    assert!(!receipt.contains("locked = true"));
+    assert!(receipt.contains(&hash));
+    context
+        .temp_dir
+        .child("tools/locked-tool/uv-receipt.toml")
+        .write_str(&receipt.replace(&hash, &"0".repeat(64)))?;
+    let output = context
+        .tool_upgrade()
+        .args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .output()?;
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("does not match the required hashes"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     Ok(())
 }
 
