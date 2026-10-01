@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 use serde::Serialize;
 use toml_edit::Value;
 use toml_writer::{TomlWrite, WriteTomlValue};
-use uv_distribution_types::{RequiresPython, SimplifiedMarkerTree};
+use uv_distribution_types::{Requirement, RequirementSource, RequiresPython, SimplifiedMarkerTree};
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
@@ -261,7 +261,9 @@ fn write_manifest(
     } else {
         "requirements"
     };
-    write_serialized_non_empty_array(writer, field, &manifest.requirements)?;
+    if !manifest.requirements.is_empty() {
+        write_requirements(writer, field, &manifest.requirements, version)?;
+    }
     write_serialized_non_empty_array(writer, "constraints", &manifest.constraints)?;
     write_serialized_non_empty_array(writer, "overrides", &manifest.overrides)?;
     write_serialized_non_empty_array(writer, "excludes", &manifest.excludes)?;
@@ -283,10 +285,10 @@ fn write_manifest(
                     group.as_ref(),
                     requires_python,
                     requirements,
-                    |writer, requirement| writer.value(serialize_value(requirement)?),
+                    |writer, requirement| write_requirement_inline(writer, requirement, version),
                 )?;
             } else {
-                write_serialized_array(writer, group.as_ref(), requirements)?;
+                write_requirements(writer, group.as_ref(), requirements, version)?;
             }
         }
     }
@@ -464,7 +466,9 @@ fn write_package(
         } else {
             "requires-dist"
         };
-        write_serialized_non_empty_array(writer, field, &metadata.requires_dist)?;
+        if !metadata.requires_dist.is_empty() {
+            write_requirements(writer, field, &metadata.requires_dist, version)?;
+        }
         if !metadata.provides_extra.is_empty() {
             writer.key_start("provides-extras")?;
             writer.array(&metadata.provides_extra, |writer, extra| {
@@ -481,7 +485,7 @@ fn write_package(
             };
             writer.table(&["package", "metadata", field])?;
             for (group, requirements) in &metadata.dependency_groups {
-                write_serialized_array(writer, group.as_ref(), requirements)?;
+                write_requirements(writer, group.as_ref(), requirements, version)?;
             }
         }
     }
@@ -727,6 +731,56 @@ where
     writer.finish_inline_table(first);
     writer.raw("\n");
     Ok(())
+}
+
+/// Writes declared requirements using the canonical layout for their cardinality.
+fn write_requirements(
+    writer: &mut LockWriter,
+    key: &str,
+    requirements: &BTreeSet<Requirement>,
+    version: u32,
+) -> Result<(), WriteError> {
+    writer.key_start(key)?;
+    let write_requirement = |writer: &mut LockWriter, requirement: &Requirement| {
+        write_requirement_inline(writer, requirement, version)
+    };
+    if requirements.len() <= 1 {
+        writer.array(requirements, write_requirement)?;
+        writer.raw("\n");
+    } else {
+        writer.multiline_array(requirements, write_requirement)?;
+    }
+    Ok(())
+}
+
+/// Writes unqualified requirements as names in v2, retaining tables for all other declarations.
+fn write_requirement_inline(
+    writer: &mut LockWriter,
+    requirement: &Requirement,
+    version: u32,
+) -> Result<(), WriteError> {
+    let name_only = match &requirement.source {
+        RequirementSource::Registry {
+            specifier,
+            index,
+            conflict,
+        } => specifier.is_empty() && index.is_none() && conflict.is_none(),
+        RequirementSource::Url { .. }
+        | RequirementSource::GitDirectory { .. }
+        | RequirementSource::GitPath { .. }
+        | RequirementSource::Path { .. }
+        | RequirementSource::Directory { .. } => false,
+    };
+    if version >= 2
+        && name_only
+        && requirement.extras.is_empty()
+        && requirement.groups.is_empty()
+        && requirement.marker.is_true()
+    {
+        writer.value(requirement.name.as_ref())
+    } else {
+        writer.value(serialize_value(requirement)?)
+    }
 }
 
 /// Writes a Serde-backed array, omitting the key when the array is empty.
