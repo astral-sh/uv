@@ -986,8 +986,8 @@ Name-only dependency edges and declarations use strings, such as `"requests"`, i
 tables. Declarations with specifiers, sources, extras, groups, or markers retain their tables.
 Resolved edges with extras, markers, or ambiguous package names also retain tables, with `extras`
 replacing `extra`.
-Relative `exclude-newer` cutoffs omit the placeholder timestamps used for compatibility in
-version 1.
+Global and package-specific relative `exclude-newer` cutoffs use `{ span = "P7D" }`, without the
+placeholder timestamps or separate `exclude-newer-span` field used in version 1.
 
 !!! warning
 
