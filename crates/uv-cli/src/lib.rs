@@ -7707,6 +7707,10 @@ pub struct DisplayTreeArgs {
 
 #[derive(Args, Debug)]
 pub struct PublishArgs {
+    // Hide the unsupported global offline option.
+    #[arg(long, hide = true, overrides_with("no_offline"))]
+    pub offline: bool,
+
     /// Paths to the files to upload. Accepts glob expressions.
     ///
     /// Defaults to the `dist` directory. Selects only wheels and source distributions
