@@ -67,7 +67,7 @@ fn win_amd64_marker_reachability() {
             Some("sys_platform == 'win32' and platform_machine == 'aarch64'"),
             false,
         ),
-        // Native Windows x64 environments must continue to retain their wheels.
+        // A Windows AMD64 environment can install a `win_amd64` wheel.
         (
             "windows_amd64",
             Some("sys_platform == 'win32' and platform_machine == 'AMD64'"),
@@ -216,14 +216,14 @@ fn mixed_platform_tags() {
 #[test]
 fn unaffected_platform_wheels() {
     for (case, filename, marker, expected) in [
-        // Native Windows ARM64 wheels must continue to be retained.
+        // A Windows ARM64 environment can install a native `win_arm64` wheel.
         (
             "native_arm64",
             "example-1.0-py3-none-win_arm64.whl",
             Some(WINDOWS_ARM),
             false,
         ),
-        // The exception must not disturb ordinary 32-bit Windows wheel selection.
+        // A 32-bit Windows environment can install a `win32` wheel.
         (
             "native_win32",
             "example-1.0-py3-none-win32.whl",
