@@ -2811,6 +2811,7 @@ async fn run_project(
             commands::export(
                 project_dir,
                 args.format,
+                args.multi_use,
                 args.all_packages,
                 args.package,
                 args.prune,

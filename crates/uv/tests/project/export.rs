@@ -580,6 +580,158 @@ fn requirements_txt_simplifies_selected_root_extra_markers_from_lock() -> Result
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn pep_751_multi_use() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["base"]
+
+        [project.optional-dependencies]
+        fast = ["helper"]
+
+        [dependency-groups]
+        dev = ["leaf"]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "base" }]
+        [package.optional-dependencies]
+        fast = [{ name = "helper" }]
+        [package.dev-dependencies]
+        dev = [{ name = "leaf" }]
+        [package.metadata]
+        requires-dist = [{ name = "base" }, { name = "helper", marker = "extra == 'fast'" }]
+        provides-extras = ["fast"]
+        [package.metadata.requires-dev]
+        dev = [{ name = "leaf" }]
+
+        [[package]]
+        name = "base"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [{ url = "https://example.com/base-1.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }]
+        [package.optional-dependencies]
+        feature = [{ name = "leaf" }]
+
+        [[package]]
+        name = "helper"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [{ name = "base", extra = ["feature"] }]
+        wheels = [{ url = "https://example.com/helper-1.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [{ url = "https://example.com/leaf-1.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export().args([
+        "--frozen", "--offline", "--format", "pylock.toml", "--multi-use", "--no-header",
+        "--no-emit-project", "--preview-features", "pylock-multi-use",
+    ]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+    extras = [
+        "fast",
+    ]
+    dependency-groups = [
+        "dev",
+    ]
+
+    [[packages]]
+    name = "base"
+    version = "1.0.0"
+    index = "https://pypi.org/simple"
+    wheels = [{ url = "https://example.com/base-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
+
+    [[packages]]
+    name = "helper"
+    version = "1.0.0"
+    marker = "'fast' in extras"
+    index = "https://pypi.org/simple"
+    wheels = [{ url = "https://example.com/helper-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
+
+    [[packages]]
+    name = "leaf"
+    version = "1.0.0"
+    marker = "'fast' in extras or 'dev' in dependency_groups"
+    index = "https://pypi.org/simple"
+    wheels = [{ url = "https://example.com/leaf-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
+    "#);
+
+    uv_snapshot!(context.filters(), context.export().args([
+        "--frozen", "--offline", "--format", "pylock.toml", "--all-extras", "--no-default-groups",
+        "--no-header", "--no-emit-project",
+    ]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "base"
+    version = "1.0.0"
+    index = "https://pypi.org/simple"
+    wheels = [{ url = "https://example.com/base-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
+
+    [[packages]]
+    name = "helper"
+    version = "1.0.0"
+    index = "https://pypi.org/simple"
+    wheels = [{ url = "https://example.com/helper-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
+
+    [[packages]]
+    name = "leaf"
+    version = "1.0.0"
+    index = "https://pypi.org/simple"
+    wheels = [{ url = "https://example.com/leaf-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
+    "#);
+
+    uv_snapshot!(context.filters(), context.export().args([
+        "--frozen", "--offline", "--multi-use", "--all-extras",
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument '--multi-use' cannot be used with '--all-extras'
+
+    Usage: uv export --cache-dir [CACHE_DIR] --frozen --offline --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    uv_snapshot!(context.filters(), context.export().args([
+        "--frozen", "--offline", "--multi-use", "--format", "requirements.txt",
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --multi-use` is experimental and may change without warning. Pass `--preview-features pylock-multi-use` to disable this warning.
+    error: `--multi-use` requires the `pylock.toml` export format
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn requirements_txt_prune() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

@@ -2939,6 +2939,7 @@ impl TreeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct ExportSettings {
     pub(super) format: Option<ExportFormat>,
+    pub(super) multi_use: bool,
     pub(super) all_packages: bool,
     pub(super) package: Vec<PackageName>,
     pub(super) prune: Vec<PackageName>,
@@ -2971,6 +2972,7 @@ impl ExportSettings {
     ) -> anyhow::Result<Self> {
         let ExportArgs {
             format,
+            multi_use,
             all_packages,
             package,
             prune,
@@ -3057,6 +3059,7 @@ impl ExportSettings {
 
         Ok(Self {
             format,
+            multi_use,
             all_packages,
             package,
             prune,

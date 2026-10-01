@@ -4761,6 +4761,15 @@ pub struct ExportArgs {
     #[arg(long, value_enum)]
     pub format: Option<ExportFormat>,
 
+    /// Export a multi-use `pylock.toml` with selectable extras and dependency groups.
+    ///
+    /// No dependency groups are selected by default. This option is experimental.
+    #[arg(long, hide = true, conflicts_with_all = [
+        "batch", "script", "all_packages", "extra", "all_extras", "no_extra", "no_all_extras",
+        "group", "no_group", "only_group", "all_groups", "no_default_groups", "dev", "no_dev", "only_dev",
+    ])]
+    pub multi_use: bool,
+
     /// Export the entire workspace.
     ///
     /// The dependencies for all workspace members will be included in the exported requirements
