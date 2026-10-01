@@ -9,6 +9,14 @@ Unreleased.
 
 ### Breaking changes
 
+- **Prefer native Python on Windows ARM64** ([#22100](https://github.com/astral-sh/uv/pull/22100))
+
+  Previously, native ARM64 builds of uv preferred emulated `x86_64` Python installations because native wheel support was limited, now uv prefers ARM64 (a.k.a. `aarch64`) interpreters across Python versions. This follows the ecosystem-wide transition including [CPython](https://discuss.python.org/t/python-on-windows-arm64/104524), the official Windows [Python install manager](https://discuss.python.org/t/python-install-manager-26-4/108846), and GitHub's [actions/setup-python](https://github.com/actions/setup-python#supported-architectures).
+
+  When a native interpreter is unavailable, uv continues to fall back to `x86_64`, then 32-bit `x86`.
+
+  Set `UV_PYTHON_ARCH=x86_64` to keep using emulated Python, or request an explicit architecture such as `cpython-3.14-windows-x86_64`.
+
 - **Omit the distutils startup patch on Python 3.10 and later**
   ([#22096](https://github.com/astral-sh/uv/pull/22096))
 
