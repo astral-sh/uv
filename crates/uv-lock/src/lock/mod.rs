@@ -40,8 +40,8 @@ use uv_distribution_types::{
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    Requirement, RequirementScope, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -6351,10 +6351,15 @@ struct ResolverManifestWire {
     default_groups: Option<DefaultGroups>,
     #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
-    #[serde(default, rename = "dependencies", alias = "requirements")]
+    #[serde(
+        default,
+        rename = "dependencies",
+        alias = "requirements",
+        deserialize_with = "deserialize_requirements"
+    )]
     requirements: BTreeSet<Requirement>,
     #[serde(default)]
-    dependency_groups: BTreeMap<GroupName, DependencyGroupWire<Requirement>>,
+    dependency_groups: BTreeMap<GroupName, DependencyGroupWire<RequirementWire>>,
     #[serde(default)]
     constraints: BTreeSet<Requirement>,
     #[serde(default)]
@@ -6375,7 +6380,13 @@ impl From<ResolverManifestWire> for ResolverManifest {
             .into_iter()
             .map(|(name, group)| {
                 let dependencies = group.into_dependencies(&name, &mut group_requires_python);
-                (name, dependencies.into_iter().collect())
+                (
+                    name,
+                    dependencies
+                        .into_iter()
+                        .map(|requirement| requirement.0)
+                        .collect(),
+                )
             })
             .collect();
         Self {
@@ -7538,11 +7549,20 @@ struct PackageMetadata {
     expecting = "struct PackageMetadata"
 )]
 struct PackageMetadataWire {
-    #[serde(default, rename = "dependencies", alias = "requires-dist")]
+    #[serde(
+        default,
+        rename = "dependencies",
+        alias = "requires-dist",
+        deserialize_with = "deserialize_requirements"
+    )]
     requires_dist: BTreeSet<Requirement>,
     #[serde(default, rename = "provides-extras")]
     provides_extra: Box<[ExtraName]>,
-    #[serde(default, alias = "requires-dev")]
+    #[serde(
+        default,
+        alias = "requires-dev",
+        deserialize_with = "deserialize_requirement_groups"
+    )]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
@@ -7560,6 +7580,71 @@ impl From<PackageMetadataWire> for PackageMetadata {
                 .collect(),
         }
     }
+}
+
+/// A declared requirement, accepting a bare package name or its full table representation.
+#[derive(Clone, Debug)]
+struct RequirementWire(Requirement);
+
+impl<'de> serde::Deserialize<'de> for RequirementWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|name| {
+                Ok(Self(Requirement {
+                    name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
+                    extras: Box::new([]),
+                    groups: Box::new([]),
+                    marker: MarkerTree::TRUE,
+                    source: RequirementSource::Registry {
+                        specifier: VersionSpecifiers::empty(),
+                        index: None,
+                        conflict: None,
+                    },
+                    scope: RequirementScope::Global,
+                    origin: None,
+                }))
+            })
+            .map(|map| map.deserialize().map(Self))
+            .deserialize(deserializer)
+    }
+}
+
+/// Read requirement arrays with either strings or tables for their entries.
+fn deserialize_requirements<'de, D>(deserializer: D) -> Result<BTreeSet<Requirement>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let requirements: Vec<RequirementWire> = serde::Deserialize::deserialize(deserializer)?;
+    Ok(requirements
+        .into_iter()
+        .map(|requirement| requirement.0)
+        .collect())
+}
+
+/// Read the declared requirements in each dependency group.
+fn deserialize_requirement_groups<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<GroupName, BTreeSet<Requirement>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let groups: BTreeMap<GroupName, Vec<RequirementWire>> =
+        serde::Deserialize::deserialize(deserializer)?;
+    Ok(groups
+        .into_iter()
+        .map(|(name, requirements)| {
+            (
+                name,
+                requirements
+                    .into_iter()
+                    .map(|requirement| requirement.0)
+                    .collect(),
+            )
+        })
+        .collect())
 }
 
 impl PackageMetadata {

@@ -982,8 +982,10 @@ requirements store `requires-python` alongside their `dependencies`, instead of 
 Declared dependencies use `package.metadata.dependencies` and `manifest.dependencies`, replacing
 `package.metadata.requires-dist` and `manifest.requirements`.
 
-Name-only dependency edges use strings, such as `"requests"`, instead of inline tables. Edges with
-extras, markers, or ambiguous package names continue to use tables, with `extras` replacing `extra`.
+Name-only dependency edges and declarations use strings, such as `"requests"`, instead of inline
+tables. Declarations with specifiers, sources, extras, groups, or markers retain their tables.
+Resolved edges with extras, markers, or ambiguous package names also retain tables, with `extras`
+replacing `extra`.
 Relative `exclude-newer` cutoffs omit the placeholder timestamps used for compatibility in
 version 1.
 
