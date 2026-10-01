@@ -256,7 +256,12 @@ fn write_manifest(
     if let Some(groups) = &manifest.default_groups {
         writer.key_value("default-groups", serialize_value(groups)?)?;
     }
-    write_serialized_non_empty_array(writer, "requirements", &manifest.requirements)?;
+    let field = if version >= 2 {
+        "dependencies"
+    } else {
+        "requirements"
+    };
+    write_serialized_non_empty_array(writer, field, &manifest.requirements)?;
     write_serialized_non_empty_array(writer, "constraints", &manifest.constraints)?;
     write_serialized_non_empty_array(writer, "overrides", &manifest.overrides)?;
     write_serialized_non_empty_array(writer, "excludes", &manifest.excludes)?;
@@ -454,7 +459,12 @@ fn write_package(
         || !metadata.provides_extra.is_empty();
     if has_metadata {
         writer.table(&["package", "metadata"])?;
-        write_serialized_non_empty_array(writer, "requires-dist", &metadata.requires_dist)?;
+        let field = if version >= 2 {
+            "dependencies"
+        } else {
+            "requires-dist"
+        };
+        write_serialized_non_empty_array(writer, field, &metadata.requires_dist)?;
         if !metadata.provides_extra.is_empty() {
             writer.key_start("provides-extras")?;
             writer.array(&metadata.provides_extra, |writer, extra| {
