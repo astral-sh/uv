@@ -6351,7 +6351,7 @@ struct ResolverManifestWire {
     default_groups: Option<DefaultGroups>,
     #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
-    #[serde(default)]
+    #[serde(default, rename = "dependencies", alias = "requirements")]
     requirements: BTreeSet<Requirement>,
     #[serde(default)]
     dependency_groups: BTreeMap<GroupName, DependencyGroupWire<Requirement>>,
@@ -7538,7 +7538,7 @@ struct PackageMetadata {
     expecting = "struct PackageMetadata"
 )]
 struct PackageMetadataWire {
-    #[serde(default)]
+    #[serde(default, rename = "dependencies", alias = "requires-dist")]
     requires_dist: BTreeSet<Requirement>,
     #[serde(default, rename = "provides-extras")]
     provides_extra: Box<[ExtraName]>,
