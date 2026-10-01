@@ -11,11 +11,14 @@ use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, HashCheckingMode, Modifications, TargetTriple,
+    Concurrency, Constraints, DryRun, HashCheckingMode, Modifications, Override, TargetTriple,
 };
 use uv_dispatch::PlatformState;
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
+use uv_distribution_types::{
+    ExtraBuildRequires, Index, Name, NameRequirementSpecification, Requirement, RequirementSource,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use uv_fs::{CWD, Simplified};
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
@@ -352,12 +355,20 @@ async fn upgrade_tool(
     let settings = ResolverInstallerSettings::from(options.clone());
 
     let build_constraints = existing_tool_receipt.build_constraints().to_vec();
-    let manifest_constraints = existing_tool_receipt
+    let constraint_specifications = existing_tool_receipt
         .constraints()
         .iter()
-        .map(|entry| &entry.requirement)
-        .chain(constraints)
         .cloned()
+        .chain(
+            constraints
+                .iter()
+                .cloned()
+                .map(NameRequirementSpecification::from),
+        )
+        .collect::<Vec<_>>();
+    let manifest_constraints = constraint_specifications
+        .iter()
+        .map(|constraint| constraint.requirement.clone())
         .collect::<Vec<_>>();
     let manifest_overrides = existing_tool_receipt.overrides().to_vec();
     let manifest_excludes = existing_tool_receipt.excludes().to_vec();
@@ -365,6 +376,7 @@ async fn upgrade_tool(
         existing_tool_receipt.requirements(),
         &manifest_constraints,
         &manifest_overrides,
+        existing_tool_receipt.scoped_overrides(),
         &manifest_excludes,
         &build_constraints,
         &settings.resolver.dependency_metadata,
@@ -372,12 +384,30 @@ async fn upgrade_tool(
     let build_constraints = Constraints::from_specifications(build_constraints);
 
     // Resolve the requirements.
-    let spec = RequirementsSpecification::from_excludes(
+    let mut spec = RequirementsSpecification::from_excludes(
         existing_tool_receipt.requirements().to_vec(),
         manifest_constraints,
         manifest_overrides,
         manifest_excludes,
     );
+    spec.constraints = constraint_specifications;
+    spec.override_dependencies = existing_tool_receipt
+        .scoped_overrides()
+        .iter()
+        .cloned()
+        .map(Override::Package)
+        .collect();
+    if !existing_tool_receipt.override_specifications().is_empty() {
+        spec.overrides = existing_tool_receipt
+            .override_specifications()
+            .iter()
+            .cloned()
+            .map(|entry| UnresolvedRequirementSpecification {
+                requirement: UnresolvedRequirement::Named(entry.requirement),
+                hashes: entry.hashes,
+            })
+            .collect();
+    }
     // Initialize any shared state.
     let state = PlatformState::default();
     // Check if we need to create a new environment — if so, resolve it first, then install the
@@ -620,12 +650,10 @@ async fn upgrade_tool(
             true,
             existing_tool_receipt.python().to_owned(),
             existing_tool_receipt.requirements().to_vec(),
-            existing_tool_receipt
-                .constraints()
-                .iter()
-                .map(|entry| entry.requirement.clone())
-                .collect(),
+            existing_tool_receipt.constraints().to_vec(),
             existing_tool_receipt.overrides().to_vec(),
+            existing_tool_receipt.override_specifications().to_vec(),
+            existing_tool_receipt.scoped_overrides().to_vec(),
             existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
             tool_lock.as_ref(),
