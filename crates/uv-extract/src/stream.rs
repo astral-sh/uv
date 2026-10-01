@@ -14,7 +14,7 @@ use tar_codec::{
     PaxVendorExtensionPolicy, TarArchive,
 };
 use tempfile::TempDir;
-use tokio::io::{AsyncReadExt as TokioAsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt as TokioAsyncReadExt, AsyncWriteExt};
 use tokio_util::compat::{
     FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt, TokioAsyncReadCompatExt,
 };
@@ -938,8 +938,9 @@ async fn untar<R: tokio::io::AsyncRead + Unpin>(
 ///
 /// Returns the temporary directory and the list of unpacked files and their sizes.
 /// ZIP extraction transfers ownership of the directory to a blocking worker; see [`unzip`].
-pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
+pub async fn archive(
+    // Share dispatch and decompression across file, network, and hashing reader adapters.
+    reader: &mut (dyn AsyncRead + Unpin),
     ext: SourceDistExtension,
     target: TempDir,
 ) -> Result<(TempDir, Vec<UnhashedFile>), Error> {

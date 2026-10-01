@@ -793,11 +793,12 @@ async fn build_package(
 
             // Extract the source distribution into a temporary directory.
             let path = output_dir.join(sdist_build.raw_filename());
-            let reader = fs_err::tokio::File::open(&path).await?;
+            let mut reader = fs_err::tokio::File::open(&path).await?;
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
+            let (temp_dir, _) = uv_extract::stream::archive(&mut reader, ext, temp_dir).await?;
+            drop(reader);
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -904,12 +905,13 @@ async fn build_package(
         }
         BuildPlan::WheelFromSdist => {
             // Extract the source distribution into a temporary directory.
-            let reader = fs_err::tokio::File::open(source.path()).await?;
+            let mut reader = fs_err::tokio::File::open(source.path()).await?;
             let ext = SourceDistExtension::from_path(source.path()).map_err(|err| {
                 Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
-            let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
+            let (temp_dir, _) = uv_extract::stream::archive(&mut reader, ext, temp_dir).await?;
+            drop(reader);
 
             // If the source distribution has a normalized filename, check its identity.
             let source_dist = source
