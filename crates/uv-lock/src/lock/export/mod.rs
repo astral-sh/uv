@@ -55,10 +55,43 @@ struct ExportableRequirement<'lock> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ExportSelection {
+#[derive(Clone, Copy)]
+enum ExportSelection<'a> {
     Activated,
-    MarkSelections,
+    MarkSelections {
+        default_groups: &'a DependencyGroupsWithDefaults,
+        synthetic_default: Option<&'a GroupName>,
+    },
+}
+
+impl ExportSelection<'_> {
+    fn marks_selections(self) -> bool {
+        match self {
+            Self::Activated => false,
+            Self::MarkSelections { .. } => true,
+        }
+    }
+
+    fn group_marker(self, group: &GroupName) -> MarkerTree {
+        match self {
+            Self::Activated => MarkerTree::TRUE,
+            Self::MarkSelections {
+                default_groups,
+                synthetic_default,
+            } => {
+                let marker = MarkerTree::dependency_group_in_pep751(group.clone());
+                if default_groups.contains(group)
+                    && let Some(synthetic_default) = synthetic_default
+                {
+                    marker.or(MarkerTree::dependency_group_in_pep751(
+                        synthetic_default.clone(),
+                    ))
+                } else {
+                    marker
+                }
+            }
+        }
+    }
 }
 
 impl<'lock> ExportableRequirements<'lock> {
@@ -92,6 +125,8 @@ impl<'lock> ExportableRequirements<'lock> {
         prune: &[PackageName],
         extras: &ExtrasSpecificationWithDefaults,
         groups: &DependencyGroupsWithDefaults,
+        default_groups: &DependencyGroupsWithDefaults,
+        synthetic_default: Option<&GroupName>,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
         Self::from_lock_impl(
@@ -102,7 +137,10 @@ impl<'lock> ExportableRequirements<'lock> {
             false,
             install_options,
             VirtualPackages::Exclude,
-            ExportSelection::MarkSelections,
+            ExportSelection::MarkSelections {
+                default_groups,
+                synthetic_default,
+            },
         )
     }
 
@@ -114,7 +152,7 @@ impl<'lock> ExportableRequirements<'lock> {
         annotate: bool,
         install_options: &'lock InstallOptions,
         virtual_packages: VirtualPackages,
-        selection: ExportSelection,
+        selection: ExportSelection<'_>,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
@@ -174,14 +212,14 @@ impl<'lock> ExportableRequirements<'lock> {
                     dist.optional_dependencies
                         .keys()
                         .chain(dist.provides_extras().iter().filter(|extra| {
-                            selection == ExportSelection::MarkSelections
+                            selection.marks_selections()
                                 && !dist.optional_dependencies.contains_key(*extra)
                         }));
                 for extra in extras.extra_names(available_extras) {
                     queue.push_back((package_index, Some(extra)));
                     activated_items.insert(
                         ConflictItem::from((dist.id.name.clone(), extra.clone())),
-                        if selection == ExportSelection::MarkSelections {
+                        if selection.marks_selections() {
                             MarkerTree::extra_in_pep751(extra.clone())
                         } else {
                             MarkerTree::TRUE
@@ -196,11 +234,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 .iter()
                 .filter(|(group, _)| target.includes_group(Some(&dist.id.name), group, groups))
             {
-                let group_marker = if selection == ExportSelection::MarkSelections {
-                    MarkerTree::dependency_group_in_pep751(group.clone())
-                } else {
-                    MarkerTree::TRUE
-                };
+                let group_marker = selection.group_marker(group);
                 // Empty selected groups still participate in conflicts.
                 activated_items.insert(
                     ConflictItem::from((dist.id.name.clone(), group.clone())),
