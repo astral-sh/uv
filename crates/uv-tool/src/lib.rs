@@ -22,7 +22,7 @@ use uv_virtualenv::UpgradePolicy;
 use uv_warnings::warn_user;
 
 pub(crate) use receipt::ToolReceipt;
-pub use tool::{Tool, ToolEntrypoint};
+pub use tool::{Tool, ToolEntrypoint, receipt_requirements_equal};
 
 mod receipt;
 mod tool;
