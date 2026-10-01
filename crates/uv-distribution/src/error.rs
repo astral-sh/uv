@@ -36,6 +36,8 @@ impl fmt::Display for PythonVersion {
 pub enum Error {
     #[error("Wheel variants are not supported yet: `{0}`")]
     UnsupportedWheelVariant(Box<WheelFilename>),
+    #[error(transparent)]
+    Hash(#[from] uv_pypi_types::HashError),
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -295,6 +297,7 @@ impl Error {
     pub fn is_user_failure(&self) -> bool {
         match self {
             Self::UnsupportedWheelVariant(_)
+            | Self::Hash(_)
             | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
