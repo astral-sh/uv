@@ -75,6 +75,8 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 async_zip = { workspace = true }
 async-compression = { workspace = true }
+base64 = { workspace = true }
+csv = { workspace = true }
 axoupdater = { workspace = true, features = [
   "github_releases",
   "tokio",
@@ -101,6 +103,7 @@ rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tar-codec = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
@@ -151,7 +154,6 @@ insta = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, default-features = false }
-sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 wiremock = { workspace = true }

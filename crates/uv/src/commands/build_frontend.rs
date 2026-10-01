@@ -1077,20 +1077,6 @@ async fn build_package(
             {
                 verify_sdist_metadata(source.path(), filename, lock).await?;
             }
-            let build_action = if exported_lock.is_some()
-                && !force_pep517
-                && check_direct_build(
-                    &extracted,
-                    uv_version::version(),
-                    &interpreter.to_resolver_marker_environment(),
-                    build_constraints.requirements().cloned().map(Into::into),
-                )
-                .is_ok()
-            {
-                BuildAction::DirectBuild
-            } else {
-                build_action
-            };
             let wheel_build = build_wheel(
                 &extracted,
                 &output_dir,
@@ -1418,11 +1404,6 @@ async fn build_sdist(
             }
         }
         BuildAction::Pep517 => {
-            if lock.is_some() {
-                return Err(Error::BuildLock(anyhow::anyhow!(
-                    "Exporting a lock requires a direct build with `uv_build`"
-                )));
-            }
             writeln!(
                 printer.stderr(),
                 "{}",
@@ -1453,12 +1434,24 @@ async fn build_sdist(
                     .check(&builder, source.path(), sources.clone())
                     .await?;
             }
-            let filename = builder.build(output_dir).await?;
+            let temporary = lock
+                .as_ref()
+                .map(|_| tempfile::tempdir_in(output_dir))
+                .transpose()?;
+            let build_dir = temporary.as_ref().map_or(output_dir, |dir| dir.path());
+            let filename = builder.build(build_dir).await?;
+            let parsed = SourceDistFilename::parsed_normalized_filename(&filename)
+                .map_err(Error::InvalidBuiltSourceDistFilename)?;
+            if let (Some(lock), Some(temporary)) = (lock.as_deref(), temporary) {
+                let path = temporary.path().join(&filename);
+                verify_sdist_metadata(&path, &parsed, lock).await?;
+                archive::add_to_sdist(&path, &parsed, lock.pylock.as_bytes())
+                    .await
+                    .map_err(Error::BuildLock)?;
+                uv_fs::rename_with_retry(&path, output_dir.join(&filename)).await?;
+            }
             BuildMessage::Build {
-                normalized_filename: DistFilename::SourceDistFilename(
-                    SourceDistFilename::parsed_normalized_filename(&filename)
-                        .map_err(Error::InvalidBuiltSourceDistFilename)?,
-                ),
+                normalized_filename: DistFilename::SourceDistFilename(parsed),
                 raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
@@ -1566,11 +1559,6 @@ async fn build_wheel(
             }
         }
         BuildAction::Pep517 => {
-            if lock.is_some() {
-                return Err(Error::BuildLock(anyhow::anyhow!(
-                    "Exporting a lock requires a direct build with `uv_build`"
-                )));
-            }
             writeln!(
                 printer.stderr(),
                 "{}",
@@ -1601,11 +1589,24 @@ async fn build_wheel(
                     .check(&builder, source.path(), sources.clone())
                     .await?;
             }
-            let filename = builder.build(output_dir).await?;
+            let temporary = lock
+                .as_ref()
+                .map(|_| tempfile::tempdir_in(output_dir))
+                .transpose()?;
+            let build_dir = temporary.as_ref().map_or(output_dir, |dir| dir.path());
+            let filename = builder.build(build_dir).await?;
+            let parsed =
+                WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?;
+            if let (Some(lock), Some(temporary)) = (lock.as_deref(), temporary) {
+                let path = temporary.path().join(&filename);
+                wheel_matches_lock(&path, &parsed, lock).await?;
+                archive::add_to_wheel(&path, &parsed, lock.pylock.as_bytes())
+                    .await
+                    .map_err(Error::BuildLock)?;
+                uv_fs::rename_with_retry(&path, output_dir.join(&filename)).await?;
+            }
             BuildMessage::Build {
-                normalized_filename: DistFilename::WheelFilename(
-                    WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?,
-                ),
+                normalized_filename: DistFilename::WheelFilename(parsed),
                 raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }

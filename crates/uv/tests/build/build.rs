@@ -4643,6 +4643,50 @@ fn build_with_packaged_lock() -> Result<()> {
         "#})
         .assert()
         .success();
+    fs_err::write(
+        context.temp_dir.child("src/locked_tool/large.bin"),
+        vec![0; 16 * 1024 * 1024 + 1],
+    )?;
+    build_with_uv_build(&context)
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--force-pep517",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "forced",
+        ])
+        .assert()
+        .success();
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("forced/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            assert wheel.read("locked_tool/large.bin") == bytes(16 * 1024 * 1024 + 1)
+            assert "locked_tool-1.0.0.dist-info/pylock.toml" in wheel.namelist()
+    "#})
+        .assert()
+        .success();
+    context
+        .build()
+        .current_dir(context.home_dir.path())
+        .env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--preview-features", "locked-tools", "--wheel"])
+        .arg(context.temp_dir.join("../temp"))
+        .assert()
+        .success();
+    assert!(
+        zip_file_names(
+            &context
+                .temp_dir
+                .child("dist/locked_tool-1.0.0-py3-none-any.whl")
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+
     Ok(())
 }
 
@@ -4865,6 +4909,227 @@ fn build_packaged_lock_configuration() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/`
       cause: Failed to package the project lock
       cause: Cannot export a lock without project metadata
+    ");
+    Ok(())
+}
+
+/// Other build backends include a lock only when export is explicitly enabled.
+#[test]
+fn build_packaged_lock_other_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = []
+        build-backend = "test_backend"
+        backend-path = ["."]
+    "#})?;
+    context.temp_dir.child("test_backend.py").write_str(indoc! {r#"
+        import io, pathlib, tarfile, zipfile
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = pathlib.Path(metadata_directory) / "Locked_Tool-1.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text("Metadata-Version: 2.4\nName: locked-tool\nVersion: 1.0.0\nRequires-Python: >=3.12\n")
+            return dist_info.name
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "Locked_Tool-2.0.0-py3-none-any.whl" if pathlib.Path("wrong_filename").exists() else "Locked_Tool-1.0.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("Locked_Tool-1.0.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                metadata = "Metadata-Version: 2.4\nName: locked-tool\nVersion: 1.0.0\nRequires-Python: >=3.12\n"
+                if pathlib.Path("mismatch").exists():
+                    metadata += "Requires-Dist: requests\n"
+                wheel.writestr("Locked_Tool-1.0.0.dist-info/METADATA", metadata)
+                wheel.writestr("Locked_Tool-1.0.0.dist-info/RECORD", "Locked_Tool-1.0.0.dist-info/RECORD,,\n")
+                if pathlib.Path("signed").exists():
+                    wheel.writestr("Locked_Tool-1.0.0.dist-info/RECORD.jws", "signature")
+            return filename
+        def build_sdist(sdist_directory, config_settings=None):
+            filename = "locked-tool-1.0.0.tar.gz"
+            with tarfile.open(pathlib.Path(sdist_directory) / filename, "w:gz") as archive:
+                for path in ["pyproject.toml", "test_backend.py", "uv.lock"]:
+                    archive.add(path, arcname=f"locked-tool-1.0.0/{path}")
+                metadata = b"Metadata-Version: 2.4\nName: locked-tool\nVersion: 1.0.0\nRequires-Python: >=3.12\n"
+                if pathlib.Path("mismatch_sdist").exists():
+                    metadata += b"Requires-Dist: unexpected\n"
+                info = tarfile.TarInfo("locked-tool-1.0.0/PKG-INFO")
+                info.size = len(metadata)
+                archive.addfile(info, io.BytesIO(metadata))
+                link = tarfile.TarInfo("locked-tool-1.0.0/long-link")
+                link.type = tarfile.SYMTYPE
+                link.linkname = "a" * 140
+                archive.addfile(link)
+            return filename
+        build_editable = build_wheel
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    let wheel = context
+        .temp_dir
+        .child("dist/Locked_Tool-1.0.0-py3-none-any.whl");
+    context
+        .build()
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--wheel",
+            "--no-build-isolation",
+        ])
+        .assert()
+        .success();
+    assert!(
+        !zip_file_names(wheel.path())?
+            .contains(&"Locked_Tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    context
+        .build()
+        .env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--preview-features", "locked-tools", "--no-build-isolation"])
+        .assert()
+        .success();
+    assert!(
+        zip_file_names(wheel.path())?
+            .contains(&"Locked_Tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    context
+        .python_command()
+        .args([
+            "-c",
+            indoc! {r#"
+        import tarfile
+        with tarfile.open("dist/locked-tool-1.0.0.tar.gz") as archive:
+            assert "locked-tool-1.0.0/pylock.toml" in archive.getnames()
+            assert "locked-tool-1.0.0/uv.lock" in archive.getnames()
+            assert all(name.startswith("locked-tool-1.0.0/") for name in archive.getnames())
+            assert archive.getmember("locked-tool-1.0.0/long-link").linkname == "a" * 140
+    "#},
+        ])
+        .assert()
+        .success();
+    context.temp_dir.child("mismatch_sdist").touch()?;
+    context
+        .build()
+        .env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--sdist",
+            "--out-dir",
+            "bad-sdist",
+        ])
+        .assert()
+        .failure();
+    assert!(
+        !context
+            .temp_dir
+            .child("bad-sdist/locked-tool-1.0.0.tar.gz")
+            .path()
+            .is_file()
+    );
+    fs_err::remove_file(context.temp_dir.child("mismatch_sdist"))?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(pyproject.path())?.replace(
+        "requires-python = \">=3.12\"",
+        "requires-python = \">=3.12\"\ndynamic = [\"dependencies\"]",
+    );
+    pyproject.write_str(&contents)?;
+    context
+        .lock()
+        .args(["--offline", "--no-build-isolation"])
+        .assert()
+        .success();
+    context
+        .build()
+        .env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--wheel",
+            "--no-build-isolation",
+        ])
+        .assert()
+        .success();
+    assert!(
+        zip_file_names(wheel.path())?
+            .contains(&"Locked_Tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    context.temp_dir.child("mismatch").touch()?;
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--preview-features", "locked-tools", "--wheel", "--no-build-isolation"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to package the project lock
+      cause: The built wheel's metadata does not match the project lock
+    ");
+    fs_err::remove_file(context.temp_dir.child("mismatch"))?;
+    context.temp_dir.child("signed").touch()?;
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--preview-features", "locked-tools", "--wheel", "--no-build-isolation"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to package the project lock
+      cause: Cannot add a lock to a signed wheel
+    ");
+    fs_err::remove_file(context.temp_dir.child("signed"))?;
+    context.temp_dir.child("wrong_filename").touch()?;
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--preview-features", "locked-tools", "--wheel", "--no-build-isolation"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to package the project lock
+      cause: The built wheel's metadata does not match the project lock
+    ");
+    fs_err::remove_file(context.temp_dir.child("wrong_filename"))?;
+    pyproject.write_str(&contents.replace(
+        "requires-python = \">=3.12\"\ndynamic = [\"dependencies\"]",
+        "dynamic = [\"requires-python\"]",
+    ))?;
+    context
+        .lock()
+        .args(["--offline", "--no-build-isolation"])
+        .assert()
+        .success();
+    context
+        .build()
+        .env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--wheel",
+            "--no-build-isolation",
+        ])
+        .assert()
+        .success();
+    context.temp_dir.child("missing").create_dir_all()?;
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+        import tarfile
+        with tarfile.open("missing/locked-tool-1.0.0.tar.gz", "w:gz") as archive:
+            archive.add("pyproject.toml", arcname="locked-tool-1.0.0/pyproject.toml")
+    "#})
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--preview-features", "locked-tools", "--wheel", "--no-build-isolation",
+            "missing/locked-tool-1.0.0.tar.gz"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/missing/locked-tool-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: Cannot export a lock: the source distribution has no `pylock.toml`
     ");
     Ok(())
 }
