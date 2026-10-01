@@ -174,7 +174,7 @@ impl CachedEnvironment {
         .await
     }
 
-    async fn from_resolution(
+    pub async fn from_resolution(
         resolution: &Resolution,
         hash_strategy: HashStrategy,
         build_constraints: Constraints,
