@@ -1114,3 +1114,62 @@ fn lockfile_v2_git_locked() -> Result<()> {
     assert_eq!(context.read("uv.lock"), lock);
     Ok(())
 }
+
+/// Supported and required environments round-trip and remain valid under `--locked`.
+#[test]
+fn lockfile_v2_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    let original = context.read("uv.lock");
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "lockfile-v2"])
+        .assert()
+        .success();
+    let upgraded = context.read("uv.lock");
+    assert_snapshot!(diff_snapshot(&original, &upgraded, 3), @r#"
+    --- old
+    +++ new
+    @@ -1,15 +1,14 @@
+    -version = 1
+    -revision = 5
+    +version = 2
+     requires-python = ">=3.12"
+     resolution-markers = [
+         "sys_platform == 'linux'",
+         "sys_platform == 'darwin'",
+     ]
+    -supported-markers = [
+    +supported-environments = [
+         "sys_platform == 'linux'",
+         "sys_platform == 'darwin'",
+     ]
+    -required-markers = [
+    +required-environments = [
+         "platform_machine == 'x86_64' and sys_platform == 'linux'",
+     ]
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?.to_toml()?, upgraded);
+    assert_eq!(toml::from_str::<Lock>(&upgraded)?.to_toml()?, upgraded);
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), upgraded);
+    Ok(())
+}

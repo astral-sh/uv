@@ -63,9 +63,12 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .copied()
             .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
             .filter_map(SimplifiedMarkerTree::try_to_string);
-        writer.key_multiline_array("supported-markers", markers, |writer, marker| {
-            writer.value(&marker)
-        })?;
+        let field = if lock.version >= 2 {
+            "supported-environments"
+        } else {
+            "supported-markers"
+        };
+        writer.key_multiline_array(field, markers, |writer, marker| writer.value(&marker))?;
     }
 
     if !lock.required_environments.is_empty() {
@@ -75,9 +78,12 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .copied()
             .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
             .filter_map(SimplifiedMarkerTree::try_to_string);
-        writer.key_multiline_array("required-markers", markers, |writer, marker| {
-            writer.value(&marker)
-        })?;
+        let field = if lock.version >= 2 {
+            "required-environments"
+        } else {
+            "required-markers"
+        };
+        writer.key_multiline_array(field, markers, |writer, marker| writer.value(&marker))?;
     }
 
     if !lock.conflicts.is_empty() {
