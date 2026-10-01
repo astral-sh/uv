@@ -41,7 +41,8 @@ impl Arch {
             .then_with(|| self.family.to_string().cmp(&other.family.to_string()))
     }
 
-    /// Prefer the native architecture, then compatible Windows architectures.
+    /// Return this architecture's preference rank for the given OS and native architecture.
+    /// Lower ranks are preferred when sorting architecture candidates.
     fn preference(self, os: Os, native: Self) -> u8 {
         // Prefer native architectures.
         if self.family == native.family {
