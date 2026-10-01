@@ -155,6 +155,7 @@ fn resolve_lockfile_groups(
 pub async fn export(
     project_dir: &Path,
     format: Option<ExportFormat>,
+    multi_use: bool,
     all_packages: bool,
     package: Vec<PackageName>,
     prune: Vec<PackageName>,
@@ -187,6 +188,12 @@ pub async fn export(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if multi_use && !preview.is_enabled(PreviewFeature::PylockMultiUse) {
+        warn_user!(
+            "`uv export --multi-use` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::PylockMultiUse
+        );
+    }
     let batch = if let Some(path) = batch {
         if !preview.is_enabled(PreviewFeature::BatchExport) {
             warn_user!(
@@ -417,6 +424,7 @@ pub async fn export(
                     &source,
                     lock,
                     format,
+                    false,
                     entry.all_packages,
                     &entry.package,
                     &prune,
@@ -469,6 +477,7 @@ pub async fn export(
         &source,
         lock,
         format,
+        multi_use,
         all_packages,
         &package,
         &prune,
@@ -502,6 +511,7 @@ async fn render_export<'output>(
     source: &ExportSource<'_>,
     lock: &Lock,
     format: Option<ExportFormat>,
+    multi_use: bool,
     all_packages: bool,
     package: &[PackageName],
     prune: &[PackageName],
@@ -543,9 +553,15 @@ async fn render_export<'output>(
         },
     };
 
-    // Validate that the set of requested extras and development groups are defined in the lockfile.
-    target.validate_extras(extras)?;
-    target.validate_groups(groups)?;
+    // Validate selections for single-use exports; multi-use exports record all selections.
+    if multi_use {
+        if !extras.is_empty() || !groups.history().as_flags_pretty().is_empty() {
+            bail!("`--multi-use` cannot be combined with extra or dependency group selections");
+        }
+    } else {
+        target.validate_extras(extras)?;
+        target.validate_groups(groups)?;
+    }
 
     if output_file
         .and_then(Path::file_name)
@@ -583,8 +599,12 @@ async fn render_export<'output>(
         }
     });
 
+    if multi_use && format != ExportFormat::PylockToml {
+        bail!("`--multi-use` requires the `pylock.toml` export format");
+    }
+
     // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
-    if !matches!(format, ExportFormat::CycloneDX1_5) {
+    if !multi_use && !matches!(format, ExportFormat::CycloneDX1_5) {
         detect_conflicts(&target, extras, groups)?;
     }
 
@@ -677,16 +697,26 @@ async fn render_export<'output>(
                 .as_deref()
                 .and_then(Path::parent)
                 .unwrap_or(&CWD);
-            let mut export = PylockToml::from_lock(
-                &target,
-                output_dir,
-                prune,
-                extras,
-                groups,
-                include_annotations,
-                editable.as_ref(),
-                install_options,
-            )?;
+            let mut export = if multi_use {
+                PylockToml::from_lock_with_selection_markers(
+                    &target,
+                    output_dir,
+                    prune,
+                    editable.as_ref(),
+                    install_options,
+                )?
+            } else {
+                PylockToml::from_lock(
+                    &target,
+                    output_dir,
+                    prune,
+                    extras,
+                    groups,
+                    include_annotations,
+                    editable.as_ref(),
+                    install_options,
+                )?
+            };
 
             // Registries don't always provide hashes, but `packages.*.hashes` is a required
             // key in PEP 751, so we have to download and hash files with missing hashes.
