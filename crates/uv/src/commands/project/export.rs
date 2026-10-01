@@ -510,15 +510,11 @@ async fn render_export<'output>(
         ExportTarget::Script(script) => InstallTarget::Script { script, lock },
     };
 
-    // Validate selections for single-use exports; multi-use exports record all selections.
-    if multi_use {
-        if !extras.is_empty() || !groups.history().as_flags_pretty().is_empty() {
-            bail!("`--multi-use` cannot be combined with extra or dependency group selections");
-        }
-    } else {
-        target.validate_extras(extras)?;
-        target.validate_groups(groups)?;
+    if multi_use && (!extras.is_empty() || !groups.prod()) {
+        bail!("`--multi-use` cannot be combined with extra selections or only-group options");
     }
+    target.validate_extras(extras)?;
+    target.validate_groups(groups)?;
 
     if output_file
         .and_then(Path::file_name)
@@ -659,6 +655,7 @@ async fn render_export<'output>(
                     &target,
                     output_dir,
                     prune,
+                    groups,
                     editable.as_ref(),
                     install_options,
                 )?

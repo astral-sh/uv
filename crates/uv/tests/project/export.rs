@@ -595,8 +595,13 @@ fn pep_751_multi_use() -> Result<()> {
         [project.optional-dependencies]
         fast = ["helper"]
 
+        [tool.uv]
+        default-groups = ["test"]
+
         [dependency-groups]
         dev = ["leaf"]
+        test = ["helper"]
+        uv-default = []
     "#})?;
     context.temp_dir.child("uv.lock").write_str(indoc! {r#"
         version = 1
@@ -612,11 +617,15 @@ fn pep_751_multi_use() -> Result<()> {
         fast = [{ name = "helper" }]
         [package.dev-dependencies]
         dev = [{ name = "leaf" }]
+        test = [{ name = "helper" }]
+        uv-default = []
         [package.metadata]
         requires-dist = [{ name = "base" }, { name = "helper", marker = "extra == 'fast'" }]
         provides-extras = ["fast"]
         [package.metadata.requires-dev]
         dev = [{ name = "leaf" }]
+        test = [{ name = "helper" }]
+        uv-default = []
 
         [[package]]
         name = "base"
@@ -642,7 +651,7 @@ fn pep_751_multi_use() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.export().args([
         "--frozen", "--offline", "--format", "pylock.toml", "--multi-use", "--no-header",
-        "--no-emit-project",
+        "--no-emit-project", "--output-file", "pylock.toml",
     ]), @r#"
     exit_code: 0 (success)
     ----- stdout -----
@@ -654,6 +663,11 @@ fn pep_751_multi_use() -> Result<()> {
     ]
     dependency-groups = [
         "dev",
+        "test",
+        "uv-default",
+    ]
+    default-groups = [
+        "uv-default-default",
     ]
 
     [[packages]]
@@ -665,17 +679,70 @@ fn pep_751_multi_use() -> Result<()> {
     [[packages]]
     name = "helper"
     version = "1.0.0"
-    marker = "'fast' in extras"
+    marker = "'fast' in extras or 'test' in dependency_groups or 'uv-default-default' in dependency_groups"
     index = "https://pypi.org/simple"
     wheels = [{ url = "https://example.com/helper-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
 
     [[packages]]
     name = "leaf"
     version = "1.0.0"
-    marker = "'fast' in extras or 'dev' in dependency_groups"
+    marker = "'fast' in extras or 'dev' in dependency_groups or 'test' in dependency_groups or 'uv-default-default' in dependency_groups"
     index = "https://pypi.org/simple"
     wheels = [{ url = "https://example.com/leaf-1.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
     "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync().args([
+        "--preview", "--offline", "--dry-run", "pylock.toml",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 3 packages
+    Would install 3 packages
+     + base==1.0.0
+     + helper==1.0.0
+     + leaf==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_sync().args([
+        "--preview", "--offline", "--dry-run", "pylock.toml", "--group", "uv-default",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + base==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export().args([
+        "--frozen", "--offline", "--multi-use", "--no-emit-project", "--no-header",
+        "--no-default-groups", "--quiet", "--output-file", "pylock.none.toml",
+    ]), @"exit_code: 0 (success)");
+
+    uv_snapshot!(context.filters(), context.pip_sync().args([
+        "--preview", "--offline", "--dry-run", "pylock.none.toml",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + base==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export().args([
+        "--frozen", "--offline", "--multi-use", "--no-emit-project", "--no-header",
+        "--no-default-groups", "--group", "dev", "--quiet", "--output-file", "pylock.dev.toml",
+    ]), @"exit_code: 0 (success)");
+
+    uv_snapshot!(context.filters(), context.pip_sync().args([
+        "--preview", "--offline", "--dry-run", "pylock.dev.toml",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 2 packages
+    Would install 2 packages
+     + base==1.0.0
+     + leaf==1.0.0
+    ");
 
     uv_snapshot!(context.filters(), context.export().args([
         "--frozen", "--offline", "--format", "pylock.toml", "--all-extras", "--no-default-groups",

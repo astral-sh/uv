@@ -33,7 +33,9 @@ use uv_distribution_types::{
 use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
-use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_normalize::{
+    DefaultExtras, DefaultGroups, ExtraName, GroupName, InvalidNameError, PackageName,
+};
 use uv_pep440::Version;
 use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
@@ -64,6 +66,8 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
+    #[error(transparent)]
+    InvalidName(#[from] InvalidNameError),
     #[error("A multi-use pylock.toml requires exactly one project")]
     MultiUseRequiresOneRoot,
     #[error("A multi-use pylock.toml does not support declared conflicts")]
@@ -803,17 +807,26 @@ impl<'lock> PylockToml {
             install_options,
         )?;
 
-        Self::from_nodes(target, output_dir, editable, nodes, Vec::new(), Vec::new())
+        Self::from_nodes(
+            target,
+            output_dir,
+            editable,
+            nodes,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
     }
 
     /// Export one project's dependencies with selectable extras and dependency groups.
     ///
-    /// Optional dependencies are guarded by PEP 751 markers. No groups are selected by default.
+    /// Optional dependencies are guarded by PEP 751 markers.
     /// Empty extras and groups are included when recorded in the uv lockfile.
     pub fn from_lock_with_selection_markers(
         target: &impl Installable<'lock>,
         output_dir: &Path,
         prune: &[PackageName],
+        default_groups: &DependencyGroupsWithDefaults,
         editable: Option<&EditableMode>,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
@@ -871,6 +884,22 @@ impl<'lock> PylockToml {
                 return Err(PylockTomlErrorKind::MultiUseGroupRequiresPython);
             }
         }
+
+        // Synthetic default groups stay separate from the groups selectable by name.
+        let synthetic_default = if default_groups
+            .group_names(dependency_groups.iter())
+            .next()
+            .is_some()
+        {
+            let mut name = String::from("uv-default");
+            while dependency_groups.iter().any(|group| group.as_str() == name) {
+                name.push_str("-default");
+            }
+            Some(name.parse::<GroupName>()?)
+        } else {
+            None
+        };
+
         // A negative marker can become false when a transitive extra is activated, so its
         // reachability cannot be accumulated by the graph traversal.
         if target.lock().packages().iter().any(|package| {
@@ -900,6 +929,8 @@ impl<'lock> PylockToml {
                 prune,
                 &selection,
                 &groups,
+                default_groups,
+                synthetic_default.as_ref(),
                 install_options,
             )?;
         Self::from_nodes(
@@ -909,6 +940,7 @@ impl<'lock> PylockToml {
             nodes,
             extras,
             dependency_groups,
+            synthetic_default.into_iter().collect(),
         )
     }
 
@@ -919,6 +951,7 @@ impl<'lock> PylockToml {
         mut nodes: Vec<super::ExportableRequirement<'lock>>,
         extras: Vec<ExtraName>,
         dependency_groups: Vec<GroupName>,
+        default_groups: Vec<GroupName>,
     ) -> Result<Self, PylockTomlErrorKind> {
         // Sort the nodes.
         nodes.sort_unstable_by_key(|node| &node.package.id);
@@ -931,9 +964,6 @@ impl<'lock> PylockToml {
 
         // Use the `requires-python` from the target lockfile.
         let requires_python = target.lock().requires_python.clone();
-
-        // No dependency groups are selected by default.
-        let default_groups = vec![];
 
         // We don't support attestation identities at time of writing.
         let attestation_identities = vec![];

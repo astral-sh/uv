@@ -4763,12 +4763,13 @@ pub struct ExportArgs {
 
     /// Export a `pylock.toml` with selectable extras and dependency groups.
     ///
-    /// No extras or dependency groups are selected by default. Multi-use exports require a single
-    /// project and do not support conflicts, negative extra markers, dependency groups with Python
-    /// requirements, or workspace-root dependencies and groups.
+    /// The selected dependency groups are included by default. Extras must be selected when
+    /// installing. Multi-use exports require a single project and do not support conflicts,
+    /// negative extra markers, dependency groups with Python requirements, or workspace-root
+    /// dependencies and groups.
     #[arg(long, conflicts_with_all = [
         "batch", "script", "all_packages", "extra", "all_extras", "no_extra", "no_all_extras",
-        "group", "no_group", "only_group", "all_groups", "no_default_groups", "dev", "no_dev", "only_dev",
+        "only_group", "only_dev",
     ])]
     pub multi_use: bool,
 

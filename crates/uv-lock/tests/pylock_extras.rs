@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use uv_configuration::InstallOptions;
+use uv_configuration::{DependencyGroups, InstallOptions};
 use uv_lock::{Installable, Lock, PylockToml};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerTree};
 
 struct Project<'a> {
@@ -97,10 +97,12 @@ fn selectable_extras() -> Result<(), Box<dyn std::error::Error>> {
     };
     let install_options =
         InstallOptions::new(true, false, false, false, false, false, vec![], vec![]);
+    let groups = DependencyGroups::default().with_defaults(DefaultGroups::default());
     let exported = PylockToml::from_lock_with_selection_markers(
         &project,
         Path::new("."),
         &[],
+        &groups,
         None,
         &install_options,
     )?;
@@ -217,6 +219,7 @@ fn selectable_extras() -> Result<(), Box<dyn std::error::Error>> {
 fn selectable_extras_rejects_unsupported_locks() -> Result<(), Box<dyn std::error::Error>> {
     let install_options =
         InstallOptions::new(true, false, false, false, false, false, vec![], vec![]);
+    let groups = DependencyGroups::default().with_defaults(DefaultGroups::default());
     let cases = [
         (
             LOCK.replace("revision = 5", "revision = 3"),
@@ -251,6 +254,7 @@ fn selectable_extras_rejects_unsupported_locks() -> Result<(), Box<dyn std::erro
             &project,
             Path::new("."),
             &[],
+            &groups,
             None,
             &install_options,
         )
