@@ -7380,7 +7380,6 @@ dependencies = [
  "fs-err",
  "schemars",
  "serde",
- "serde-untagged",
  "textwrap",
  "thiserror",
  "toml",

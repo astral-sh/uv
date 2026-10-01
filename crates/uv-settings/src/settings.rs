@@ -1,8 +1,14 @@
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
-use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
+use std::{
+    fmt::{self, Debug},
+    num::NonZeroUsize,
+    path::Path,
+    path::PathBuf,
+};
 
-use serde::{Deserialize, Serialize};
+use serde::de::{Error, SeqAccess, Visitor, value::SeqAccessDeserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
@@ -3001,18 +3007,37 @@ pub enum PreviewFeaturesOption {
     Features(Vec<MaybePreviewFeature>),
 }
 
-// A derived `#[serde(untagged)]` implementation collapses detailed type and element errors into
-// "data did not match any variant", so use a type-directed visitor to preserve useful diagnostics.
+// Dispatch by input type so invalid list elements retain their detailed diagnostics.
+struct PreviewFeaturesVisitor;
+
+impl<'de> Visitor<'de> for PreviewFeaturesVisitor {
+    type Value = PreviewFeaturesOption;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a boolean or a list of preview feature names")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(PreviewFeaturesOption::Toggle(value))
+    }
+
+    fn visit_seq<S>(self, sequence: S) -> Result<Self::Value, S::Error>
+    where
+        S: SeqAccess<'de>,
+    {
+        Vec::deserialize(SeqAccessDeserializer::new(sequence)).map(PreviewFeaturesOption::Features)
+    }
+}
+
 impl<'de> Deserialize<'de> for PreviewFeaturesOption {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .expecting("a boolean or a list of preview feature names")
-            .bool(|value| Ok(Self::Toggle(value)))
-            .seq(|sequence| sequence.deserialize().map(Self::Features))
-            .deserialize(deserializer)
+        deserializer.deserialize_any(PreviewFeaturesVisitor)
     }
 }
 
