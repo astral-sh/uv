@@ -4175,6 +4175,224 @@ async fn build_packaged_lock_respects_build_hashes() -> Result<()> {
     Ok(())
 }
 
+/// The frontend packages the lock in both distributions and can use it when rebuilding a wheel.
+#[test]
+fn build_with_packaged_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ignored>=1,<2; python_version < '3'"]
+        [project.optional-dependencies]
+        z = []
+        a = []
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+        [tool.uv]
+        resolution = "lowest"
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(
+        &fs_err::read_to_string(pyproject.path())?.replace("z = []\na = []", "a = []\nz = []"),
+    )?;
+
+    context.build().arg("--wheel").assert().success();
+    assert!(
+        !zip_file_names(
+            &context
+                .temp_dir
+                .child("dist/locked_tool-1.0.0-py3-none-any.whl")
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    context
+        .build()
+        .args(["--preview-features", "locked-tools"])
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.build().args(["--preview-features", "locked-tools", "--wheel", "--list"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Building locked_tool-1.0.0-py3-none-any.whl will include the following files:
+    locked_tool/__init__.py (src/locked_tool/__init__.py)
+    locked_tool-1.0.0.dist-info/WHEEL (generated)
+    locked_tool-1.0.0.dist-info/METADATA (generated)
+    locked_tool-1.0.0.dist-info/pylock.toml (generated)
+    ");
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import base64, csv, hashlib, io, pathlib, tarfile, tomllib, zipfile
+        sdist = pathlib.Path("dist/locked_tool-1.0.0.tar.gz")
+        with tarfile.open(sdist) as archive:
+            print("source lock:", "locked_tool-1.0.0/pylock.toml" in archive.getnames() and "locked_tool-1.0.0/uv.lock" not in archive.getnames())
+            print("regular file:", archive.getmember("locked_tool-1.0.0/pylock.toml").type == tarfile.REGTYPE)
+        wheel_path = pathlib.Path("dist/locked_tool-1.0.0-py3-none-any.whl")
+        with zipfile.ZipFile(wheel_path) as wheel:
+            lock_path = "locked_tool-1.0.0.dist-info/pylock.toml"
+            lock = wheel.read(lock_path)
+            record = list(csv.reader(io.StringIO(wheel.read("locked_tool-1.0.0.dist-info/RECORD").decode())))
+            digest = base64.urlsafe_b64encode(hashlib.sha256(lock).digest()).rstrip(b"=").decode()
+            print("record:", [lock_path, "sha256=" + digest, str(len(lock))] in record)
+            print("valid wheel:", wheel.testzip() is None)
+            parsed = tomllib.loads(lock.decode())
+            print("standard lock:", parsed)
+    "#}), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    source lock: True
+    regular file: True
+    record: True
+    valid wheel: True
+    standard lock: {'lock-version': '1.0', 'created-by': 'uv', 'requires-python': '>=3.12', 'packages': []}
+    "#);
+    Ok(())
+}
+
+/// Automatically exported locks must not include unchecked URLs.
+#[test]
+fn build_packaged_lock_unchecked_contents() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+        [tool.uv.build-backend]
+        source-include = ["uv.lock", "PYLOCK.TOML"]
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    context
+        .temp_dir
+        .child("PYLOCK.TOML")
+        .write_str("untrusted source lock")?;
+    uv_snapshot!(context.filters(), context.build().args(["--offline", "--preview-features", "locked-tools", "--sdist", "--list"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Building locked_tool-1.0.0.tar.gz will include the following files:
+    locked_tool-1.0.0/PKG-INFO (generated)
+    locked_tool-1.0.0/pyproject.toml (generated)
+    locked_tool-1.0.0/pyproject.toml.orig (pyproject.toml)
+    locked_tool-1.0.0/src/locked_tool/__init__.py (src/locked_tool/__init__.py)
+    locked_tool-1.0.0/uv.lock (uv.lock)
+    locked_tool-1.0.0/pylock.toml (generated)
+    ");
+    let path = context.temp_dir.child("uv.lock");
+    let original = fs_err::read_to_string(path.path())?;
+    path.write_str(&format!("unknown = \"https://private.example/field\"\n{original}\n# https://private.example/comment\n"))?;
+    let output = context
+        .build()
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--sdist",
+            "--wheel",
+            "--verbose",
+        ])
+        .output()?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8(output.stderr)?;
+    let skipped = stderr
+        .lines()
+        .filter_map(|line| {
+            line.split_once("Skipping included file ")
+                .map(|(_, message)| message)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_snapshot!(skipped, @"
+    `locked_tool-1.0.0/PYLOCK.TOML`: supplied by the build frontend
+    ");
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import tarfile, zipfile
+        with tarfile.open("dist/locked_tool-1.0.0.tar.gz") as sdist:
+            names = sdist.getnames()
+            contents = sdist.extractfile("locked_tool-1.0.0/pylock.toml").read()
+            print("raw lock included:", "locked_tool-1.0.0/uv.lock" in names)
+            print("one source lock:", names.count("locked_tool-1.0.0/pylock.toml") == 1)
+            print("private data excluded:", b"private.example" not in contents)
+            print("source lock replaced:", b"untrusted source lock" not in contents)
+        with zipfile.ZipFile("dist/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            print("locks match:", contents == wheel.read("locked_tool-1.0.0.dist-info/pylock.toml"))
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    raw lock included: True
+    one source lock: True
+    private data excluded: True
+    source lock replaced: True
+    locks match: True
+    ");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    fs_err::remove_file(context.temp_dir.child("PYLOCK.TOML"))?;
+    context.temp_dir.child("pylock.toml").create_dir_all()?;
+    context
+        .temp_dir
+        .child("pylock.toml/child")
+        .write_str("source")?;
+    pyproject.write_str(
+        &fs_err::read_to_string(pyproject.path())?.replace("PYLOCK.TOML", "pylock.toml/**"),
+    )?;
+    uv_snapshot!(context.filters(), context.build().args(["--offline", "--preview-features", "locked-tools", "--sdist", "--list"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Building locked_tool-1.0.0.tar.gz will include the following files:
+    locked_tool-1.0.0/PKG-INFO (generated)
+    locked_tool-1.0.0/pyproject.toml (generated)
+    locked_tool-1.0.0/pyproject.toml.orig (pyproject.toml)
+    locked_tool-1.0.0/pylock.toml/child (pylock.toml/child)
+    locked_tool-1.0.0/src/locked_tool/__init__.py (src/locked_tool/__init__.py)
+    locked_tool-1.0.0/uv.lock (uv.lock)
+    locked_tool-1.0.0/pylock.toml (generated)
+    ");
+    let contents = fs_err::read_to_string(pyproject.path())?.replace(
+        "requires-python = \">=3.12\"",
+        "requires-python = \">=3.12\"\ndependencies = [\"ignored; python_version < '3' and platform_release == 'https://private.example/secret'\"]",
+    );
+    pyproject.write_str(&contents)?;
+    context.lock().arg("--offline").assert().success();
+    context
+        .build()
+        .args(["--offline", "--preview-features", "locked-tools", "--wheel"])
+        .assert()
+        .success();
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("dist/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            lock = wheel.read("locked_tool-1.0.0.dist-info/pylock.toml")
+            print("private data excluded:", b"private.example" not in lock)
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    private data excluded: True
+    ");
+    Ok(())
+}
+
 /// Export is controlled by the preview feature and the environment takes precedence over the setting.
 #[test]
 fn build_packaged_lock_configuration() -> Result<()> {

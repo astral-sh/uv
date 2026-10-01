@@ -851,12 +851,6 @@ async fn build_package(
         Source::File(_) => None,
     };
 
-    if exported_lock.is_some() && plan != BuildPlan::Wheel {
-        return Err(Error::BuildLock(anyhow::anyhow!(
-            "Exporting a lock requires a direct wheel build"
-        )));
-    }
-
     // Validate a workspace lock without making the build depend on network access. Extracted
     // source distributions do not contain the full workspace needed for this check.
     if exported_lock.is_some() {
@@ -900,6 +894,7 @@ async fn build_package(
                     subdirectory,
                     version_id,
                     build_output,
+                    exported_lock.clone(),
                 )
                 .await?;
                 build_results.push(sdist_list);
@@ -918,6 +913,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
+                exported_lock.clone(),
             )
             .await?;
             build_results.push(sdist_build.clone());
@@ -972,6 +968,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
+                exported_lock.clone(),
             )
             .await?;
             build_results.push(sdist_build);
@@ -1012,6 +1009,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
+                exported_lock.clone(),
             )
             .await?;
 
@@ -1070,6 +1068,11 @@ async fn build_package(
             )
             .map_err(Error::BuildLock)?
             .map(Arc::new);
+            if let (Some(lock), Some(DistFilename::SourceDistFilename(filename))) =
+                (&exported_lock, &source_dist)
+            {
+                verify_sdist_metadata(source.path(), filename, lock).await?;
+            }
             let wheel_build = build_wheel(
                 &extracted,
                 &output_dir,
@@ -1153,6 +1156,15 @@ fn add_build_lock(message: &mut BuildMessage, lock: Option<&lock::ExportedLock>)
         return;
     };
     match normalized_filename {
+        DistFilename::SourceDistFilename(filename) => {
+            let path = format!(
+                "{}-{}/pylock.toml",
+                filename.name.as_dist_info_name(),
+                filename.version
+            );
+            file_list.retain(|(name, _)| !name.eq_ignore_ascii_case(&path));
+            file_list.push((path, None));
+        }
         DistFilename::WheelFilename(filename) => {
             file_list.push((
                 format!(
@@ -1163,8 +1175,26 @@ fn add_build_lock(message: &mut BuildMessage, lock: Option<&lock::ExportedLock>)
                 None,
             ));
         }
-        DistFilename::SourceDistFilename(_) => {}
     }
+}
+
+async fn verify_sdist_metadata(
+    path: &Path,
+    filename: &SourceDistFilename,
+    lock: &lock::ExportedLock,
+) -> Result<(), Error> {
+    let metadata = archive::sdist_metadata(path, filename)
+        .await
+        .map_err(Error::BuildLock)?;
+    if metadata.name != filename.name
+        || metadata.version != filename.version
+        || !lock.matches_wheel(metadata).map_err(Error::BuildLock)?
+    {
+        return Err(Error::BuildLock(anyhow::anyhow!(
+            "The source distribution's metadata does not match the project lock"
+        )));
+    }
+    Ok(())
 }
 
 async fn wheel_matches_lock(
@@ -1296,8 +1326,9 @@ async fn build_sdist(
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
     build_output: BuildOutput,
+    lock: Option<Arc<lock::ExportedLock>>,
 ) -> Result<BuildMessage, Error> {
-    let build_result = match action {
+    let mut build_result = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
             let sources_enabled = sources.is_none();
@@ -1329,29 +1360,51 @@ async fn build_sdist(
                 .bold()
             )?;
             let source_tree = source_tree.to_path_buf();
-            let output_dir_ = output_dir.to_path_buf();
+            let temporary = lock
+                .as_ref()
+                .map(|_| tempfile::tempdir_in(output_dir))
+                .transpose()?;
+            let output_dir_ = temporary
+                .as_ref()
+                .map_or(output_dir, |directory| directory.path())
+                .to_path_buf();
             let sources_enabled = sources.is_none();
+            let lock_for_build = lock.clone();
             let filename = tokio::task::spawn_blocking(move || {
-                uv_build_backend::build_source_dist(
+                let files = lock_for_build
+                    .as_ref()
+                    .map(|lock| [("pylock.toml", lock.pylock.as_bytes())]);
+                uv_build_backend::build_source_dist_with_files(
                     &source_tree,
                     &output_dir_,
                     uv_version::version(),
                     sources_enabled,
+                    files.as_ref().map_or(&[], |files| files),
                 )
             })
             .await??
             .to_string();
 
+            let parsed = SourceDistFilename::parsed_normalized_filename(&filename)
+                .map_err(Error::InvalidBuiltSourceDistFilename)?;
+            if let (Some(lock), Some(temporary)) = (lock.as_deref(), temporary) {
+                let path = temporary.path().join(&filename);
+                verify_sdist_metadata(&path, &parsed, lock).await?;
+                uv_fs::rename_with_retry(&path, output_dir.join(&filename)).await?;
+            }
+
             BuildMessage::Build {
-                normalized_filename: DistFilename::SourceDistFilename(
-                    SourceDistFilename::parsed_normalized_filename(&filename)
-                        .map_err(Error::InvalidBuiltSourceDistFilename)?,
-                ),
+                normalized_filename: DistFilename::SourceDistFilename(parsed),
                 raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
         BuildAction::Pep517 => {
+            if lock.is_some() {
+                return Err(Error::BuildLock(anyhow::anyhow!(
+                    "Exporting a lock requires a direct build with `uv_build`"
+                )));
+            }
             writeln!(
                 printer.stderr(),
                 "{}",
@@ -1393,6 +1446,7 @@ async fn build_sdist(
             }
         }
     };
+    add_build_lock(&mut build_result, lock.as_deref());
     Ok(build_result)
 }
 
