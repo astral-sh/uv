@@ -16,7 +16,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirementSpecification,
+    RequirementSource, UnresolvedRequirementSpecification, parse_all_url_hashes,
 };
 use uv_installer::{BuildSettings, InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -457,6 +457,27 @@ pub(crate) async fn install(
     )
     .await?;
 
+    for requirement in requirements
+        .iter()
+        .chain(receipt_constraints.iter())
+        .chain(receipt_overrides.iter())
+        .chain(
+            receipt_build_constraints
+                .iter()
+                .map(|entry| &entry.requirement),
+        )
+    {
+        match &requirement.source {
+            RequirementSource::Url { url, .. } | RequirementSource::Path { url, .. } => {
+                parse_all_url_hashes(url)?;
+            }
+            RequirementSource::Registry { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
+            | RequirementSource::Directory { .. } => {}
+        }
+    }
+
     // Resolve the excludes.
     let receipt_excludes = spec.excludes.clone();
 
@@ -580,7 +601,10 @@ pub(crate) async fn install(
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
             if !tool_locks
                 && requirements == tool_receipt.requirements()
-                && receipt_constraints == tool_receipt.constraints()
+                && receipt_constraints.iter().eq(tool_receipt
+                    .constraints()
+                    .iter()
+                    .map(|entry| &entry.requirement))
                 && receipt_overrides == tool_receipt.overrides()
                 && receipt_excludes == tool_receipt.excludes()
                 && receipt_build_constraints == tool_receipt.build_constraints()
@@ -811,7 +835,11 @@ pub(crate) async fn install(
                     package_name,
                     Tool::new(
                         requirements.clone(),
-                        receipt_constraints.clone(),
+                        receipt_constraints
+                            .iter()
+                            .cloned()
+                            .map(Into::into)
+                            .collect(),
                         receipt_overrides.clone(),
                         receipt_excludes.clone(),
                         receipt_build_constraints.clone(),

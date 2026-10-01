@@ -352,6 +352,7 @@ async fn upgrade_tool(
     let manifest_constraints = existing_tool_receipt
         .constraints()
         .iter()
+        .map(|entry| &entry.requirement)
         .chain(constraints)
         .cloned()
         .collect::<Vec<_>>();
@@ -616,7 +617,11 @@ async fn upgrade_tool(
             true,
             existing_tool_receipt.python().to_owned(),
             existing_tool_receipt.requirements().to_vec(),
-            existing_tool_receipt.constraints().to_vec(),
+            existing_tool_receipt
+                .constraints()
+                .iter()
+                .map(|entry| entry.requirement.clone())
+                .collect(),
             existing_tool_receipt.overrides().to_vec(),
             existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
@@ -648,13 +653,19 @@ async fn upgrade_tool(
 }
 
 fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {
-    pinned_version_from(tool.requirements(), name)
-        .or_else(|| pinned_version_from(tool.constraints(), name))
+    pinned_version_from(tool.requirements().iter(), name).or_else(|| {
+        pinned_version_from(
+            tool.constraints().iter().map(|entry| &entry.requirement),
+            name,
+        )
+    })
 }
 
-fn pinned_version_from(requirements: &[Requirement], name: &PackageName) -> Option<Version> {
+fn pinned_version_from<'a>(
+    requirements: impl Iterator<Item = &'a Requirement>,
+    name: &PackageName,
+) -> Option<Version> {
     requirements
-        .iter()
         .filter(|requirement| requirement.name == *name)
         .find_map(|requirement| match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
