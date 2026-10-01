@@ -13,7 +13,7 @@ Unreleased.
 
   Previously, native ARM64 builds of uv preferred emulated `x86_64` Python installations because native wheel support was limited, now uv prefers ARM64 (a.k.a. `aarch64`) interpreters across Python versions. This follows the ecosystem-wide transition including [CPython](https://discuss.python.org/t/python-on-windows-arm64/104524), the official Windows [Python install manager](https://discuss.python.org/t/python-install-manager-26-4/108846), and GitHub's [actions/setup-python](https://github.com/actions/setup-python#supported-architectures).
   
-  uv continues falls back to `x86_64`, then 32-bit `x86`, when a native interpreter is unavailable.
+  When a native interpreter is unavailable, uv continues to fall back to `x86_64`, then 32-bit `x86`.
 
   Set `UV_PYTHON_ARCH=x86_64` to keep using emulated Python, or request an explicit architecture such as `cpython-3.14-windows-x86_64`.
 
