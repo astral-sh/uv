@@ -235,8 +235,6 @@ pub enum PreviewFeature {
     JsonOutput,
     /// Allows installing from `pylock.toml` files.
     Pylock,
-    /// Allows exporting a multi-use `pylock.toml`.
-    PylockMultiUse,
     /// Allows configuring the [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
     AddBounds,
     /// Allows defining workspace conflicts at the package level.

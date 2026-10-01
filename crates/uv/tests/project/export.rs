@@ -642,7 +642,7 @@ fn pep_751_multi_use() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.export().args([
         "--frozen", "--offline", "--format", "pylock.toml", "--multi-use", "--no-header",
-        "--no-emit-project", "--preview-features", "pylock-multi-use",
+        "--no-emit-project",
     ]), @r#"
     exit_code: 0 (success)
     ----- stdout -----
@@ -713,7 +713,7 @@ fn pep_751_multi_use() -> Result<()> {
     ----- stderr -----
     error: the argument '--multi-use' cannot be used with '--all-extras'
 
-    Usage: uv export --cache-dir [CACHE_DIR] --frozen --offline --exclude-newer <EXCLUDE_NEWER>
+    Usage: uv export --cache-dir [CACHE_DIR] --frozen --offline --multi-use --exclude-newer <EXCLUDE_NEWER>
 
     For more information, try '--help'.
     ");
@@ -723,7 +723,6 @@ fn pep_751_multi_use() -> Result<()> {
     ]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    warning: `uv export --multi-use` is experimental and may change without warning. Pass `--preview-features pylock-multi-use` to disable this warning.
     error: `--multi-use` requires the `pylock.toml` export format
     ");
 

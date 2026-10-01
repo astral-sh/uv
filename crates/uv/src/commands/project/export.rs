@@ -164,12 +164,6 @@ pub(crate) async fn export(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if multi_use && !preview.is_enabled(PreviewFeature::PylockMultiUse) {
-        warn_user!(
-            "`uv export --multi-use` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::PylockMultiUse
-        );
-    }
     let batch = if let Some(path) = batch {
         if !preview.is_enabled(PreviewFeature::BatchExport) {
             warn_user!(
