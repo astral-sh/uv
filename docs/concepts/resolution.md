@@ -989,6 +989,8 @@ replacing `extra`. Global and package-specific relative `exclude-newer` cutoffs 
 `{ span = "P7D" }`, without the placeholder timestamps or separate `exclude-newer-span` field used
 in version 1.
 
+Dependency edges include only the version or source needed to identify their target uniquely.
+
 Git sources record the repository URL separately from `branch`, `tag`, or `rev`, the resolved
 `commit`, and any `subdirectory`, archive `path`, or `lfs` setting. These fields replace the query
 parameters and fragment used in version 1.

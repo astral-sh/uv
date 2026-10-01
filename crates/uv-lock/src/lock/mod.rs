@@ -6587,22 +6587,12 @@ impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Self, LockError> {
-        // Count the number of sources for each package name. When
-        // there's only one source for a particular package name (the
-        // overwhelmingly common case), we can omit some data (like source and
-        // version) on dependency edges since it is strictly redundant.
-        let mut unambiguous_package_ids: FxHashMap<PackageName, PackageId> = FxHashMap::default();
-        let mut ambiguous = FxHashSet::default();
-        for dist in &wire.packages {
-            if ambiguous.contains(&dist.id.name) {
-                continue;
-            }
-            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
-                ambiguous.insert(id.name);
-                continue;
-            }
-            unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
-        }
+        let ids = wire
+            .packages
+            .iter()
+            .map(|package| package.id.clone())
+            .collect::<Vec<_>>();
+        let package_ids = PackageIdLookup::new(wire.version, ids.iter());
 
         let fork_markers = wire
             .fork_markers
@@ -6621,14 +6611,7 @@ impl TryFrom<LockWire> for Lock {
         let packages = wire
             .packages
             .into_iter()
-            .map(|dist| {
-                dist.unwire(
-                    &wire.requires_python,
-                    environment,
-                    default,
-                    &unambiguous_package_ids,
-                )
-            })
+            .map(|dist| dist.unwire(&wire.requires_python, environment, default, &package_ids))
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
@@ -7713,7 +7696,7 @@ impl PackageWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        package_ids: &PackageIdLookup<'_>,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -7756,14 +7739,7 @@ impl PackageWire {
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| {
-                    dep.unwire(
-                        requires_python,
-                        environment,
-                        default,
-                        unambiguous_package_ids,
-                    )
-                })
+                .map(|dep| dep.unwire(requires_python, environment, default, package_ids))
                 .collect()
         };
 
@@ -7835,6 +7811,45 @@ impl PackageId {
     }
 }
 
+/// Resolve dependency identities using the fields supported by the lockfile version.
+struct PackageIdLookup<'lock> {
+    version: u32,
+    by_name: FxHashMap<&'lock PackageName, Vec<&'lock PackageId>>,
+}
+
+impl<'lock> PackageIdLookup<'lock> {
+    /// Index package identities without copying their source data.
+    fn new(version: u32, packages: impl IntoIterator<Item = &'lock PackageId>) -> Self {
+        let mut by_name: FxHashMap<_, Vec<_>> = FxHashMap::default();
+        for package in packages {
+            by_name.entry(&package.name).or_default().push(package);
+        }
+        Self { version, by_name }
+    }
+
+    /// Return the sole matching identity, allowing partial identities in v2.
+    fn unambiguous(
+        &self,
+        name: &PackageName,
+        version: Option<&Version>,
+        source: Option<&Source>,
+    ) -> Option<&'lock PackageId> {
+        let packages = self.by_name.get(name)?;
+        if self.version < 2 {
+            return match packages.as_slice() {
+                [package] => Some(*package),
+                _ => None,
+            };
+        }
+        let mut matches = packages.iter().copied().filter(|package| {
+            version.is_none_or(|version| package.version.as_ref() == Some(version))
+                && source.is_none_or(|source| &package.source == source)
+        });
+        let package = matches.next()?;
+        matches.next().is_none().then_some(package)
+    }
+}
+
 impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if let Some(version) = &self.version {
@@ -7854,11 +7869,9 @@ struct PackageIdForDependency {
 }
 
 impl PackageIdForDependency {
-    fn unwire(
-        self,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
-    ) -> Result<PackageId, LockError> {
-        let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
+    fn unwire(self, package_ids: &PackageIdLookup<'_>) -> Result<PackageId, LockError> {
+        let unambiguous_package_id =
+            package_ids.unambiguous(&self.name, self.version.as_ref(), self.source.as_ref());
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -9589,7 +9602,7 @@ impl DependencyWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        package_ids: &PackageIdLookup<'_>,
     ) -> Result<Dependency, LockError> {
         let Self(dependency) = self;
         let (simplified_marker, complexified_marker) =
@@ -9603,7 +9616,7 @@ impl DependencyWire {
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
-            package_id: dependency.package_id.unwire(unambiguous_package_ids)?,
+            package_id: dependency.package_id.unwire(package_ids)?,
             index: PackageIndex(0),
             extra: dependency.extra,
             simplified_marker,

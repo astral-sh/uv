@@ -14,6 +14,140 @@ use url::Url;
 use uv_lock::Lock;
 use uv_test::{diff_snapshot, uv_snapshot};
 
+/// Partial identities resolve uniquely, including source trees without a static version.
+#[test]
+fn lockfile_v2_dependency_identities() -> Result<()> {
+    let input = indoc! {r#"
+        version = 2
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "versioned"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "versioned"
+        version = "2.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "sourced"
+        version = "1.0.0"
+        source = { virtual = "one" }
+
+        [[package]]
+        name = "sourced"
+        version = "1.0.0"
+        source = { virtual = "two" }
+
+        [[package]]
+        name = "ambiguous"
+        version = "1.0.0"
+        source = { virtual = "one" }
+
+        [[package]]
+        name = "ambiguous"
+        version = "1.0.0"
+        source = { virtual = "two" }
+
+        [[package]]
+        name = "ambiguous"
+        version = "2.0.0"
+        source = { virtual = "one" }
+
+        [[package]]
+        name = "dynamic"
+        source = { virtual = "one" }
+
+        [[package]]
+        name = "dynamic"
+        source = { virtual = "two" }
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "versioned", version = "1.0.0", source = { registry = "https://example.com/simple" } },
+            { name = "sourced", version = "1.0.0", source = { virtual = "one" } },
+            { name = "ambiguous", version = "1.0.0", source = { virtual = "one" } },
+            { name = "dynamic", source = { virtual = "one" } },
+        ]
+    "#};
+    let expected = toml::from_str::<Lock>(input)?;
+    let canonical = expected.to_toml()?;
+    assert_snapshot!(canonical, @r#"
+    version = 2
+    requires-python = ">=3.12"
+
+    [[package]]
+    name = "ambiguous"
+    version = "1.0.0"
+    source = { virtual = "one" }
+
+    [[package]]
+    name = "ambiguous"
+    version = "1.0.0"
+    source = { virtual = "two" }
+
+    [[package]]
+    name = "ambiguous"
+    version = "2.0.0"
+    source = { virtual = "one" }
+
+    [[package]]
+    name = "dynamic"
+    source = { virtual = "one" }
+
+    [[package]]
+    name = "dynamic"
+    source = { virtual = "two" }
+
+    [[package]]
+    name = "project"
+    version = "1.0.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "ambiguous", version = "1.0.0", source = { virtual = "one" } },
+        { name = "dynamic", source = { virtual = "one" } },
+        { name = "sourced", source = { virtual = "one" } },
+        { name = "versioned", version = "1.0.0" },
+    ]
+
+    [[package]]
+    name = "sourced"
+    version = "1.0.0"
+    source = { virtual = "one" }
+
+    [[package]]
+    name = "sourced"
+    version = "1.0.0"
+    source = { virtual = "two" }
+
+    [[package]]
+    name = "versioned"
+    version = "1.0.0"
+    source = { registry = "https://example.com/simple" }
+
+    [[package]]
+    name = "versioned"
+    version = "2.0.0"
+    source = { registry = "https://example.com/simple" }
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&canonical)?, expected);
+    assert_eq!(toml::from_str::<Lock>(&canonical)?, expected);
+
+    // A version shared by different sources cannot identify a package on its own.
+    let ambiguous = input.replace(
+        r#"{ name = "ambiguous", version = "1.0.0", source = { virtual = "one" } }"#,
+        r#"{ name = "ambiguous", version = "1.0.0" }"#,
+    );
+    assert!(toml::from_str::<Lock>(&ambiguous).is_err());
+    assert!(Lock::from_canonical_toml(&ambiguous).is_err());
+    Ok(())
+}
+
 /// Upgrade an existing lockfile without silently accepting it under `--locked`.
 #[test]
 fn lockfile_v2_upgrade() -> Result<()> {
@@ -462,9 +596,11 @@ fn lockfile_v2_dependencies() -> Result<()> {
     -    { name = "base", extra = ["feature"] },
     +    { name = "base", extras = ["feature"] },
          { name = "conditional", marker = "sys_platform == 'win32'" },
-         { name = "forked", version = "1.0.0", source = { virtual = "forked-v1" }, marker = "sys_platform == 'win32'" },
-         { name = "forked", version = "2.0.0", source = { virtual = "forked-v2" }, marker = "sys_platform != 'win32'" },
+    -    { name = "forked", version = "1.0.0", source = { virtual = "forked-v1" }, marker = "sys_platform == 'win32'" },
+    -    { name = "forked", version = "2.0.0", source = { virtual = "forked-v2" }, marker = "sys_platform != 'win32'" },
     -    { name = "plain" },
+    +    { name = "forked", version = "1.0.0", marker = "sys_platform == 'win32'" },
+    +    { name = "forked", version = "2.0.0", marker = "sys_platform != 'win32'" },
     +    "plain",
      ]
 
@@ -998,8 +1134,8 @@ fn lockfile_v2_git_sources() -> Result<()> {
      dependencies = [
     -    { name = "child", version = "1.0.0", source = { git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork#0123456789012345678901234567890123456789" } },
     -    { name = "child", version = "2.0.0", source = { git = "https://example.com/repo?tag=v2#abcdefabcdefabcdefabcdefabcdefabcdefabcd" } },
-    +    { name = "child", version = "1.0.0", source = { git = "https://example.com/repo", branch = "feature/work", commit = "0123456789012345678901234567890123456789", subdirectory = "python", lfs = true } },
-    +    { name = "child", version = "2.0.0", source = { git = "https://example.com/repo", tag = "v2", commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd" } },
+    +    { name = "child", version = "1.0.0" },
+    +    { name = "child", version = "2.0.0" },
      ]
 
      [package.metadata]
