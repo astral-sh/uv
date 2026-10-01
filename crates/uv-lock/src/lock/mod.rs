@@ -6612,7 +6612,7 @@ struct LockWire {
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptionsWire,
-    #[serde(default)]
+    #[serde(rename = "workspace", alias = "manifest", default)]
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,

@@ -974,12 +974,14 @@ This upgrades an existing version 1 lockfile, retaining its locked package versi
 lockfiles remain readable when the feature is enabled. Reading a version 2 lockfile requires the
 feature, including when using `--frozen`.
 
-Version 2 uses `package.dependency-groups` instead of `package.dev-dependencies`, and
-`package.metadata.dependency-groups` instead of `package.metadata.requires-dev`. Groups with Python
-requirements store `requires-python` alongside their `dependencies`, instead of in a separate
-`group-requires-python` table. This applies to both package groups and projectless workspace roots.
+Version 2 uses `[workspace]` instead of `[manifest]`, including its dependency-group and static
+dependency-metadata subtables. It uses `package.dependency-groups` instead of
+`package.dev-dependencies`, and `package.metadata.dependency-groups` instead of
+`package.metadata.requires-dev`. Groups with Python requirements store `requires-python` alongside
+their `dependencies`, instead of in a separate `group-requires-python` table. This applies to both
+package groups and projectless workspace roots.
 
-Declared dependencies use `package.metadata.dependencies` and `manifest.dependencies`, replacing
+Declared dependencies use `package.metadata.dependencies` and `workspace.dependencies`, replacing
 `package.metadata.requires-dist` and `manifest.requirements`. Static dependency metadata also uses
 `dependencies` instead of `requires-dist`. Both metadata sections record declared extras as `extras`
 instead of `provides-extras`. A metadata table containing only dependency-group subtables omits the

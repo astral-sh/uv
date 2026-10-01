@@ -235,6 +235,11 @@ fn write_manifest(
     manifest: &ResolverManifest,
     version: u32,
 ) -> Result<(), WriteError> {
+    let table = if version >= 2 {
+        "workspace"
+    } else {
+        "manifest"
+    };
     let groups = manifest
         .dependency_groups
         .keys()
@@ -254,7 +259,7 @@ fn write_manifest(
         || !manifest.build_constraints.is_empty();
     // Subtables define their parent implicitly, so only write the header for direct entries.
     if has_manifest {
-        writer.table(&["manifest"])?;
+        writer.table(&[table])?;
     }
 
     if !manifest.members.is_empty() {
@@ -284,7 +289,7 @@ fn write_manifest(
     )?;
 
     if !groups.is_empty() {
-        writer.table(&["manifest", "dependency-groups"])?;
+        writer.table(&[table, "dependency-groups"])?;
         for group in groups {
             let empty = BTreeSet::new();
             let requirements = manifest.dependency_groups.get(group).unwrap_or(&empty);
@@ -308,7 +313,7 @@ fn write_manifest(
     }
 
     if version < 2 && !manifest.group_requires_python.is_empty() {
-        writer.table(&["manifest", "group-requires-python"])?;
+        writer.table(&[table, "group-requires-python"])?;
         for (group, metadata) in &manifest.group_requires_python {
             if let Some(requires_python) = &metadata.requires_python {
                 writer.key_value(group.as_ref(), serialize_value(requires_python)?)?;
@@ -317,7 +322,7 @@ fn write_manifest(
     }
 
     for metadata in &manifest.dependency_metadata {
-        writer.array_of_tables(&["manifest", "dependency-metadata"])?;
+        writer.array_of_tables(&[table, "dependency-metadata"])?;
         writer.key_value("name", metadata.name.as_ref())?;
         if let Some(version) = metadata.version.as_ref() {
             writer.key_value("version", version.to_string())?;
