@@ -490,6 +490,7 @@ fn python_list_downloads() {
     exit_code: 0 (success)
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM]    <download available>
+    cpython-3.10.21-[PLATFORM]    <download available>
     cpython-3.10.20-[PLATFORM]    <download available>
     cpython-3.10.19-[PLATFORM]    <download available>
     cpython-3.10.18-[PLATFORM]    <download available>
