@@ -943,7 +943,7 @@ pub(super) fn finalize_tool_install(
     debug!("Adding receipt for tool `{name}`");
     let tool = Tool::new(
         requirements,
-        constraints,
+        constraints.into_iter().map(Into::into).collect(),
         overrides,
         excludes,
         build_constraints,
