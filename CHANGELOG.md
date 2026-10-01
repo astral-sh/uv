@@ -19,6 +19,7 @@ Released on 2026-10-01.
 - Record default groups for non-project workspace roots in lockfiles ([#22104](https://github.com/astral-sh/uv/pull/22104))
 - Record dependency-group Python requirements for non-project workspace roots in lockfiles ([#22104](https://github.com/astral-sh/uv/pull/22104))
 - Format URLs and paths consistently in CLI messages ([#21937](https://github.com/astral-sh/uv/pull/21937))
+- Hide the unsupported `--offline` option from `uv publish` help ([#22124](https://github.com/astral-sh/uv/pull/22124))
 
 ### Preview features
 
@@ -43,8 +44,6 @@ Released on 2026-10-01.
 ### Other changes
 
 - Raise the minimum supported Rust version for building uv to 1.97 and update the toolchain to Rust 1.99 ([#22121](https://github.com/astral-sh/uv/pull/22121))
-- Hide the unsupported `--offline` option from `uv publish` help ([#22124](https://github.com/astral-sh/uv/pull/22124))
-- Update the ZIP archive and HTTP range-reading dependencies ([#22119](https://github.com/astral-sh/uv/pull/22119))
 
 ## 0.12.21
 
