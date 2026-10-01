@@ -379,6 +379,7 @@ pub struct ToolUv {
     /// for projects using `uv_build` when all dependencies come from PyPI. If automatic export
     /// cannot be completed, the build continues without the lock. Set this to `true` to require
     /// export, including for other build backends or indexes, or to `false` to disable export.
+    #[option(default = "None", value_type = "bool", example = "export-lock = true")]
     export_lock: Option<bool>,
 
     /// The sources to use when resolving dependencies.
