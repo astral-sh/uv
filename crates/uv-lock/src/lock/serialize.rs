@@ -1,13 +1,11 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use rustc_hash::FxHashMap;
 use serde::Serialize;
 use toml_edit::Value;
 use toml_writer::{TomlWrite, WriteTomlValue};
 use uv_distribution_types::{Requirement, RequirementSource, RequiresPython, SimplifiedMarkerTree};
 use uv_fs::PortablePath;
-use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
@@ -16,8 +14,8 @@ use uv_redacted::DisplaySafeUrl;
 use super::git::GitSourceWire;
 use super::{
     Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
-    PackageId, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest, ResolverOptions,
-    Source, SourceDist, Wheel, WheelWireSource, simplified_universal_markers,
+    PackageId, PackageIdLookup, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest,
+    ResolverOptions, Source, SourceDist, Wheel, WheelWireSource, simplified_universal_markers,
 };
 
 /// Serializes a lockfile directly while preserving the canonical `uv.lock` layout.
@@ -120,15 +118,10 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     write_options(writer, &lock.options, lock.version)?;
     write_manifest(writer, &lock.manifest, lock.version)?;
 
-    // Count the number of packages for each package name. When there's only one package for a
-    // particular package name (the overwhelmingly common case), we can omit some data (like
-    // source and version) on dependency edges since it is strictly redundant.
-    let mut dist_count_by_name: FxHashMap<PackageName, u64> = FxHashMap::default();
-    for package in &lock.packages {
-        *dist_count_by_name
-            .entry(package.id.name.clone())
-            .or_default() += 1;
-    }
+    let package_ids = PackageIdLookup::new(
+        lock.version,
+        lock.packages.iter().map(|package| &package.id),
+    );
 
     for package in &lock.packages {
         write_package(
@@ -137,7 +130,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             lock.version,
             &lock.requires_python,
             simplified_environment,
-            &dist_count_by_name,
+            &package_ids,
         )?;
     }
 
@@ -351,7 +344,7 @@ fn write_package(
     version: u32,
     requires_python: &RequiresPython,
     simplified_environment: MarkerTree,
-    dist_count_by_name: &FxHashMap<PackageName, u64>,
+    package_ids: &PackageIdLookup<'_>,
 ) -> Result<(), WriteError> {
     writer.array_of_tables(&["package"])?;
     write_package_id(writer, &package.id, version, None, PackageIdLocation::Table)?;
@@ -378,7 +371,7 @@ fn write_package(
                     dependency,
                     version,
                     simplified_environment,
-                    dist_count_by_name,
+                    package_ids,
                 )
             },
         )?;
@@ -408,7 +401,7 @@ fn write_package(
                     dependency,
                     version,
                     simplified_environment,
-                    dist_count_by_name,
+                    package_ids,
                 )
             })?;
         }
@@ -447,7 +440,7 @@ fn write_package(
                     dependency,
                     version,
                     simplified_environment,
-                    dist_count_by_name,
+                    package_ids,
                 )
             };
             if let Some(requires_python) = requires_python {
@@ -514,26 +507,48 @@ fn write_package(
     Ok(())
 }
 
-/// Writes a package identity, omitting fields that a unique package name makes redundant.
+/// Writes the minimum package identity supported by the lockfile version.
 ///
-/// Passing no distribution counts forces the full version and source identity to be written.
+/// Package entries carry the full identity; dependency edges may omit redundant fields.
 fn write_package_id(
     writer: &mut LockWriter,
     package_id: &PackageId,
     version: u32,
-    dist_count_by_name: Option<&FxHashMap<PackageName, u64>>,
+    package_ids: Option<&PackageIdLookup<'_>>,
     mut location: PackageIdLocation<'_>,
 ) -> Result<(), WriteError> {
-    let count = dist_count_by_name.and_then(|map| map.get(&package_id.name).copied());
     location.value(writer, "name", package_id.name.as_ref())?;
-    if count.is_none_or(|count| count > 1) {
-        if let Some(version) = &package_id.version {
-            location.value(writer, "version", version.to_string())?;
+    if let Some(package_ids) = package_ids {
+        if package_ids
+            .unambiguous(&package_id.name, None, None)
+            .is_some()
+        {
+            return Ok(());
         }
-        location.nested_value(writer, "source", |writer| {
-            write_source_inline(writer, &package_id.source, version)
-        })?;
+        if version >= 2 {
+            if let Some(package_version) = &package_id.version
+                && package_ids
+                    .unambiguous(&package_id.name, Some(package_version), None)
+                    .is_some()
+            {
+                return location.value(writer, "version", package_version.to_string());
+            }
+            if package_ids
+                .unambiguous(&package_id.name, None, Some(&package_id.source))
+                .is_some()
+            {
+                return location.nested_value(writer, "source", |writer| {
+                    write_source_inline(writer, &package_id.source, version)
+                });
+            }
+        }
     }
+    if let Some(package_version) = &package_id.version {
+        location.value(writer, "version", package_version.to_string())?;
+    }
+    location.nested_value(writer, "source", |writer| {
+        write_source_inline(writer, &package_id.source, version)
+    })?;
     Ok(())
 }
 
@@ -696,7 +711,7 @@ fn write_dependency_inline(
     dependency: &Dependency,
     version: u32,
     simplified_environment: MarkerTree,
-    dist_count_by_name: &FxHashMap<PackageName, u64>,
+    package_ids: &PackageIdLookup<'_>,
 ) -> Result<(), WriteError> {
     // Avoid restating the resolution's environment on every dependency edge.
     let marker = dependency
@@ -705,7 +720,9 @@ fn write_dependency_inline(
         .restrict(simplified_environment)
         .try_to_string();
     if version >= 2
-        && dist_count_by_name.get(&dependency.package_id.name) == Some(&1)
+        && package_ids
+            .unambiguous(&dependency.package_id.name, None, None)
+            .is_some()
         && dependency.extra.is_empty()
         && marker.is_none()
     {
@@ -719,7 +736,7 @@ fn write_dependency_inline(
         writer,
         &dependency.package_id,
         version,
-        Some(dist_count_by_name),
+        Some(package_ids),
         PackageIdLocation::Inline(&mut first),
     )?;
 
