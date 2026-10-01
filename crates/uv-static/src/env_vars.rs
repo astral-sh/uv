@@ -223,7 +223,7 @@ impl EnvVars {
 
     /// Selects the architecture for Python requests that do not specify one, e.g., `x86_64`
     /// or `aarch64`. Requests that name an interpreter executable take precedence.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.12.22")]
     pub const UV_PYTHON_ARCH: &'static str = "UV_PYTHON_ARCH";
 
     /// Require use of uv-managed Python versions.

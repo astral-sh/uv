@@ -1,6 +1,6 @@
 [package]
 name = "uv-windows"
-version = "0.0.88"
+version = "0.0.89"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }

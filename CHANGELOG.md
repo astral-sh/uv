@@ -3,6 +3,48 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.22
+
+Released on 2026-10-01.
+
+### Python
+
+- Add CPython 3.10.22, 3.11.17, 3.12.15, 3.13.16, and 3.14.8 ([#22147](https://github.com/astral-sh/uv/pull/22147))
+
+### Enhancements
+
+- Accept uppercase release suffixes in wheel platform tags ([#22113](https://github.com/astral-sh/uv/pull/22113))
+- Record workspace-member default groups in lockfiles ([#22010](https://github.com/astral-sh/uv/pull/22010), [#22103](https://github.com/astral-sh/uv/pull/22103))
+- Record workspace-member dependency-group Python requirements in lockfiles ([#22044](https://github.com/astral-sh/uv/pull/22044), [#22103](https://github.com/astral-sh/uv/pull/22103))
+- Record default groups for non-project workspace roots in lockfiles ([#22104](https://github.com/astral-sh/uv/pull/22104))
+- Record dependency-group Python requirements for non-project workspace roots in lockfiles ([#22104](https://github.com/astral-sh/uv/pull/22104))
+- Format URLs and paths consistently in CLI messages ([#21937](https://github.com/astral-sh/uv/pull/21937))
+- Hide the unsupported `--offline` option from `uv publish` help ([#22124](https://github.com/astral-sh/uv/pull/22124))
+
+### Preview features
+
+- Honor `--no-default-groups` in `uv audit` ([#22090](https://github.com/astral-sh/uv/pull/22090))
+- Report a clear error when `uv audit` or `uv tool audit` runs offline and hide the unsupported option from help ([#22114](https://github.com/astral-sh/uv/pull/22114))
+
+### Configuration
+
+- Add `UV_PYTHON_ARCH` to select an interpreter architecture independently of its Python version ([#22098](https://github.com/astral-sh/uv/pull/22098))
+
+### Performance
+
+- Reduce uv's binary size by compressing embedded Python download metadata ([#22126](https://github.com/astral-sh/uv/pull/22126))
+
+### Bug fixes
+
+- Verify unchanged requirements against existing lockfile hashes when relocking ([#22083](https://github.com/astral-sh/uv/pull/22083))
+- Honor dependency-group Python requirements at non-project workspace roots ([#22101](https://github.com/astral-sh/uv/pull/22101))
+- Use each selected workspace member's recorded default groups during frozen sync ([#22015](https://github.com/astral-sh/uv/pull/22015))
+- Avoid false entry-point warnings for required workspace members ([#22112](https://github.com/astral-sh/uv/pull/22112))
+
+### Other changes
+
+- Raise the minimum supported Rust version for building uv to 1.97 and update the toolchain to Rust 1.99 ([#22121](https://github.com/astral-sh/uv/pull/22121))
+
 ## 0.12.21
 
 Released on 2026-09-29.
