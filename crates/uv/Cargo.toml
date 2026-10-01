@@ -40,6 +40,7 @@ uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
+uv-metadata = { workspace = true }
 uv-logging = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
@@ -73,6 +74,7 @@ uv-workspace = { workspace = true, features = ["clap"] }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 async_zip = { workspace = true }
+async-compression = { workspace = true }
 axoupdater = { workspace = true, features = [
   "github_releases",
   "tokio",
@@ -104,6 +106,8 @@ tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+astral-tokio-tar = { workspace = true }
+tokio-util = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 toml_parser = { workspace = true }
@@ -150,7 +154,6 @@ reqwest = { workspace = true, default-features = false }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
-tokio-util = { workspace = true }
 wiremock = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

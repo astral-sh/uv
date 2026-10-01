@@ -4332,6 +4332,36 @@ pub(crate) struct BuildSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
+    pub(crate) lock_settings: BuildLockSettings,
+}
+
+/// Inputs needed to resolve settings for the workspace being built.
+#[derive(Debug, Clone)]
+pub(crate) struct BuildLockSettings {
+    resolver: ResolverOptions,
+    filesystem: Option<FilesystemOptions>,
+    environment: EnvironmentOptions,
+    discover_workspace: bool,
+}
+
+impl BuildLockSettings {
+    fn filesystem(&self, root: &Path) -> Result<Option<FilesystemOptions>> {
+        if self.discover_workspace {
+            Ok(FilesystemOptions::find(root)?
+                .combine(FilesystemOptions::user()?)
+                .combine(FilesystemOptions::system()?))
+        } else {
+            Ok(self.filesystem.clone())
+        }
+    }
+
+    pub(crate) fn resolve(&self, root: &Path) -> Result<ResolverSettings> {
+        Ok(ResolverSettings::combine(
+            self.resolver.clone(),
+            self.filesystem(root)?,
+            &self.environment,
+        ))
+    }
 }
 
 impl BuildSettings {
@@ -4340,6 +4370,7 @@ impl BuildSettings {
         args: BuildArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
+        discover_workspace: bool,
     ) -> anyhow::Result<Self> {
         let BuildArgs {
             skip_dependency_check,
@@ -4393,6 +4424,16 @@ impl BuildSettings {
             Vec::new()
         };
 
+        let resolver = resolver_options(resolver, build, configured_indexes(filesystem.as_ref()))?;
+        let settings =
+            ResolverSettings::combine(resolver.clone(), filesystem.clone(), &environment);
+        let lock_settings = BuildLockSettings {
+            resolver,
+            filesystem,
+            environment: environment.clone(),
+            discover_workspace,
+        };
+
         Ok(Self {
             skip_dependency_check,
             src,
@@ -4418,7 +4459,8 @@ impl BuildSettings {
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
+            settings,
+            lock_settings,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
