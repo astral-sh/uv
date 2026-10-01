@@ -153,6 +153,98 @@ fn install_crlf_wheel_script_preserves_encoding_cookie() -> Result<()> {
     Ok(())
 }
 
+fn write_lf_script_wheel(path: &Path) -> Result<()> {
+    let mut writer = ZipFileWriter::new(Vec::new());
+    let metadata = indoc! {"
+        Metadata-Version: 2.1
+        Name: encoded-script
+        Version: 1.0.0
+    "};
+    let wheel = indoc! {"
+        Wheel-Version: 1.0
+        Generator: uv-test
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+    "};
+    let entries: [(&str, &[u8]); 4] = [
+        ("encoded_script/__init__.py", b"VALUE = 1\n"),
+        (
+            "encoded_script-1.0.0.dist-info/METADATA",
+            metadata.as_bytes(),
+        ),
+        ("encoded_script-1.0.0.dist-info/WHEEL", wheel.as_bytes()),
+        (
+            "encoded_script-1.0.0.data/scripts/encoded-script",
+            b"#!python\n# coding: latin-1\nprint('\x63\x61\x66\xe9')\n",
+        ),
+    ];
+    let mut record = String::new();
+    for (entry_name, contents) in entries {
+        let entry = ZipEntryBuilder::new(entry_name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents))?;
+        writeln!(record, "{entry_name},,")?;
+    }
+    record.push_str("encoded_script-1.0.0.dist-info/RECORD,,\n");
+    let entry = ZipEntryBuilder::new(
+        "encoded_script-1.0.0.dist-info/RECORD".into(),
+        Compression::Stored,
+    );
+    block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
+    fs_err::write(path, block_on(writer.close())?)?;
+    Ok(())
+}
+
+/// A PEP 263 encoding cookie must stay on the second line even when the
+/// shebang rewrite expands into the three-line `/bin/sh` re-director, which
+/// would otherwise push the cookie to line four where Python ignores it.
+#[test]
+fn install_lf_wheel_script_preserves_encoding_cookie_with_redirector() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .temp_dir
+        .join("encoded_script-1.0.0-py3-none-any.whl");
+    write_lf_script_wheel(&wheel)?;
+
+    // A venv path beyond 127 characters forces the `exec` re-director shebang.
+    let venv = context
+        .temp_dir
+        .child("a".repeat(80))
+        .child("b".repeat(80))
+        .child("c".repeat(80));
+    context
+        .venv()
+        .arg("-p")
+        .arg("3.12")
+        .arg(&venv)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python").arg(&venv).arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + encoded-script==1.0.0 (from file://[TEMP_DIR]/encoded_script-1.0.0-py3-none-any.whl)
+    ");
+
+    let script = venv_bin_path(&venv).join("encoded-script");
+
+    // The cookie is re-emitted on the second line, ahead of the re-director.
+    let contents = fs::read(&script)?;
+    let mut lines = contents.split(|byte| *byte == b'\n');
+    assert_eq!(lines.next(), Some(&b"#!/bin/sh"[..]));
+    assert_eq!(lines.next(), Some(&b"# coding: latin-1"[..]));
+
+    uv_snapshot!(context.python_command().arg(&script), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    café
+    ");
+
+    Ok(())
+}
+
 /// Hash the entire HTTP response even when extraction stops before trailing bytes.
 #[test]
 fn install_http_wheel_hashes_trailing_bytes() -> Result<()> {

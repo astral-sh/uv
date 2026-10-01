@@ -138,6 +138,57 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
     format!("#!{executable}")
 }
 
+/// Returns the [PEP 263](https://peps.python.org/pep-0263/) source encoding
+/// declaration on `line`, if it carries one.
+///
+/// Python only honors a cookie on the first or second line of a file, and only
+/// when it matches `^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)`. The
+/// returned bytes exclude the line terminator.
+fn read_encoding_cookie(line: &[u8]) -> Option<&[u8]> {
+    // Strip the line terminator, tolerating CRLF.
+    let line = line.strip_suffix(b"\n").unwrap_or(line);
+    let line = line.strip_suffix(b"\r").unwrap_or(line);
+
+    // `[ \t\f]*#` — the cookie must be a comment.
+    let comment = line
+        .iter()
+        .position(|byte| !matches!(byte, b' ' | b'\t' | 0x0C))
+        .and_then(|index| line.get(index..).filter(|rest| rest.starts_with(b"#")))?;
+
+    // `.*?coding[:=]` — a `coding` token followed by `:` or `=`.
+    let after = comment
+        .windows(b"coding".len())
+        .position(|window| window == b"coding")
+        .map(|index| &comment[index + b"coding".len()..])?;
+
+    // `[ \t]*[:=][ \t]*([-_.a-zA-Z0-9]+)` — the separator, then at least one
+    // character of the encoding name.
+    let after = after
+        .iter()
+        .position(|byte| !matches!(byte, b' ' | b'\t'))
+        .and_then(|index| after.get(index..))?;
+    let name = match after.first() {
+        Some(b':' | b'=') => &after[1..],
+        _ => return None,
+    };
+    let name = name
+        .iter()
+        .position(|byte| !matches!(byte, b' ' | b'\t'))
+        .and_then(|index| name.get(index..))?;
+    let end = name
+        .iter()
+        .position(
+            |byte| !matches!(byte, b'-' | b'_' | b'.' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z'),
+        )
+        .unwrap_or(name.len());
+    if end == 0 {
+        return None;
+    }
+
+    // The cookie is everything from the `#` through the encoding name.
+    Some(&line[line.len() - comment.len()..line.len() - name.len() + end])
+}
+
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.
 ///
 /// <https://github.com/pypa/pip/blob/76e82a43f8fb04695e834810df64f2d9a2ff6020/src/pip/_vendor/distlib/scripts.py#L121-L126>
@@ -604,6 +655,29 @@ fn install_script(
         let mut start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
+
+        // A `/bin/sh` re-director shebang spans three lines, so a PEP 263
+        // encoding cookie on the script's second line is pushed to the fourth,
+        // where Python ignores it and a non-UTF-8 script fails to parse. Hoist
+        // the cookie back onto the second line; the rest of the script is
+        // copied through untouched. Only the re-director form needs this, since
+        // a single-line shebang already leaves the cookie on line two (#21276).
+        if start.contains(&b'\n') {
+            // `script` is positioned just past the `#!python` line, so the
+            // cookie, if any, is on the line that starts at the current offset.
+            // `fill_buf` peeks without consuming, leaving the body intact
+            // whether or not a cookie is present.
+            let buffered = script.fill_buf()?;
+            let line_end = buffered
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(buffered.len(), |index| index + 1);
+            if let Some(cookie) = read_encoding_cookie(&buffered[..line_end]) {
+                let offset = start.iter().position(|byte| *byte == b'\n').unwrap() + 1;
+                start.splice(offset..offset, cookie.iter().copied());
+                start.insert(offset + cookie.len(), b'\n');
+            }
+        }
 
         // Use appropriate line ending for the platform.
         if layout.os_name == "nt" {
@@ -1425,6 +1499,46 @@ mod test {
             format_shebang(executable, os_name, false),
             "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
         );
+    }
+
+    #[test]
+    fn test_read_encoding_cookie() {
+        // A PEP 263 declaration is recognized on either separator, with or
+        // without a trailing newline, and with a CRLF terminator.
+        for (line, expected) in [
+            (&b"# coding: latin-1\n"[..], &b"# coding: latin-1"[..]),
+            (b"# coding=latin-1\n", b"# coding=latin-1"),
+            (b"#coding:latin-1\n", b"#coding:latin-1"),
+            (b"# -*- coding: utf-8 -*-\n", b"# -*- coding: utf-8"),
+            (b"# vim: set coding=utf-8\n", b"# vim: set coding=utf-8"),
+            (b"# coding: latin-1", b"# coding: latin-1"),
+            (b"# coding: latin-1\r\n", b"# coding: latin-1"),
+        ] {
+            assert_eq!(
+                read_encoding_cookie(line),
+                Some(expected),
+                "expected a cookie in {:?}",
+                String::from_utf8_lossy(line)
+            );
+        }
+
+        // A shebang, a plain line, and a `coding` token without a separator or
+        // without an encoding name are all not cookies.
+        for line in [
+            &b"#!python\n"[..],
+            b"#!/bin/sh\n",
+            b"print('x')\n",
+            b"# no cookie here\n",
+            b"# coding latin-1\n",
+            b"# coding:\n",
+        ] {
+            assert_eq!(
+                read_encoding_cookie(line),
+                None,
+                "expected no cookie in {:?}",
+                String::from_utf8_lossy(line)
+            );
+        }
     }
 
     #[test]
