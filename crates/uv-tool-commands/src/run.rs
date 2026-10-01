@@ -19,7 +19,7 @@ use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyMode, DependencyModifiers, Excludes, GitLfsSetting,
-    Overrides, TargetTriple, ToolRunCommand,
+    HashCheckingMode, Overrides, TargetTriple, ToolRunCommand,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
@@ -44,6 +44,7 @@ use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
+use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -182,9 +183,6 @@ pub async fn run(
     }
 
     super::locked::check_preview(lock_mode.is_locked(), preview)?;
-    if lock_mode.is_locked() {
-        bail!("`--locked` is not supported for tool execution");
-    }
 
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
@@ -286,6 +284,11 @@ pub async fn run(
     }
 
     let request = ToolRequest::parse(target, from.as_deref())?;
+    if lock_mode.is_locked()
+        && let ToolRequest::Python { .. } = request
+    {
+        bail!("`--locked` requires a tool package with a bundled lock, not a Python interpreter");
+    }
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let cache = if request.is_latest() {
@@ -296,6 +299,7 @@ pub async fn run(
 
     // Get or create a compatible environment in which to execute the tool.
     let result = Box::pin(get_or_create_environment(
+        lock_mode,
         &request,
         with,
         constraints,
@@ -749,6 +753,7 @@ impl std::fmt::Display for ToolRequirement {
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
 async fn get_or_create_environment(
+    lock_mode: ToolLockMode,
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -773,6 +778,8 @@ async fn get_or_create_environment(
     printer: Printer,
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ToolError> {
+    let locked = lock_mode.is_locked();
+    super::locked::check_arguments(locked, with)?;
     let reporter = PythonDownloadReporter::single(printer);
 
     // Initialize any shared state.
@@ -785,6 +792,9 @@ async fn get_or_create_environment(
         } => Some(RequirementsSpecification::parse_package(requirement)?),
         _ => None,
     };
+    if locked && let Some(requirement) = &unresolved_target_requirement {
+        super::locked::check_tool_requirement(&requirement.requirement)?;
+    }
 
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
@@ -1036,6 +1046,7 @@ async fn get_or_create_environment(
         client_builder,
     )
     .await?;
+    super::locked::check_supported_modifiers(locked, &spec)?;
     let exclusions = Excludes::from_entries(spec.excludes.iter().cloned());
 
     // Resolve the `--from` and `--with` requirements.
@@ -1074,6 +1085,10 @@ async fn get_or_create_environment(
         .collect::<Vec<_>>();
 
     // Resolve the overrides.
+    if locked {
+        super::locked::check_constraints(&spec.constraints)?;
+    }
+    let override_hashes = Vec::new();
     let overrides = resolve_names(
         spec.overrides.clone(),
         &interpreter,
@@ -1089,9 +1104,11 @@ async fn get_or_create_environment(
         lfs,
     )
     .await?;
+    let override_specifications =
+        super::locked::override_specifications(&overrides, &override_hashes);
 
     // Check if the tool is already installed in a compatible environment.
-    if !isolated && !request.is_latest() {
+    if !locked && !isolated && !request.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
         let _lock = installed_tools.lock().await?;
 
@@ -1172,22 +1189,77 @@ async fn get_or_create_environment(
     }
 
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
-    let spec = EnvironmentSpecification::from(RequirementsSpecification {
+    let spec = RequirementsSpecification {
         requirements: requirements
             .into_iter()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
-        constraints: constraints
+        constraints: spec
+            .constraints
             .into_iter()
-            .chain(latest)
-            .map(NameRequirementSpecification::from)
+            .chain(latest.map(NameRequirementSpecification::from))
             .collect(),
-        overrides: overrides
+        overrides: override_specifications
             .into_iter()
-            .map(UnresolvedRequirementSpecification::from)
+            .map(|entry| UnresolvedRequirementSpecification {
+                requirement: UnresolvedRequirement::Named(entry.requirement),
+                hashes: entry.hashes,
+            })
             .collect(),
         ..spec
-    });
+    };
+    if locked {
+        let interpreter = CachedEnvironment::base_interpreter(&interpreter, cache)?;
+        let (resolution, interpreter) = Box::pin(super::locked::resolve_with_interpreter(
+            spec,
+            interpreter,
+            true,
+            python_request.as_ref(),
+            python_platform.as_ref(),
+            &build_constraints,
+            &settings.resolver,
+            client_builder,
+            &reporter,
+            &install_mirrors,
+            python_preference,
+            python_arch,
+            python_downloads,
+            &state,
+            concurrency,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+        ))
+        .await
+        .map_err(|err| match super::locked::root_selection_error(err) {
+            Ok(err) => ToolError::from(err),
+            Err(err) => ToolError::from(err),
+        })?;
+        let environment = CachedEnvironment::from_resolution(
+            &resolution,
+            HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)
+                .map_err(EnvironmentError::from)?,
+            build_constraints,
+            &interpreter,
+            settings,
+            client_builder,
+            &state,
+            if show_resolution {
+                Box::new(DefaultInstallLogger)
+            } else {
+                Box::new(SummaryInstallLogger)
+            },
+            installer_metadata,
+            concurrency,
+            cache,
+            printer,
+            preview,
+        )
+        .await?;
+        return Ok((from, environment.into()));
+    }
+    let spec = EnvironmentSpecification::from(spec);
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
