@@ -124,7 +124,9 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
       - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        env:
+          CARGO_BUILD_WARNINGS: deny
+        run: cargo clippy --workspace --all-targets --all-features --locked
 
   clippy-windows:
     name: "clippy on windows"
@@ -154,7 +156,9 @@ jobs:
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        env:
+          CARGO_BUILD_WARNINGS: deny
+        run: cargo clippy --workspace --all-targets --all-features --locked
 
   cargo-deny:
     name: "cargo deny"
