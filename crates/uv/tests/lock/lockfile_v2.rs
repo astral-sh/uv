@@ -1,3 +1,6 @@
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -5,6 +8,8 @@ use assert_fs::prelude::*;
 use indoc::formatdoc;
 use indoc::indoc;
 use insta::assert_snapshot;
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+use url::Url;
 
 use uv_lock::Lock;
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -914,5 +919,198 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
     +[package.metadata.dependency-groups]
     +dev = ["plain"]
     "#);
+    Ok(())
+}
+
+/// Git checkout settings round-trip in package identities, dependency edges, and declarations.
+#[test]
+fn lockfile_v2_git_sources() -> Result<()> {
+    let input = indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "child", git = "https://example.com/repo?branch=main" }]
+        overrides = [{ name = "child", git = "https://example.com/repo?tag=v1" }]
+        build-constraints = [{ name = "child", git = "https://example.com/repo?rev=main", hashes = ["sha256:1234"] }]
+
+        [[package]]
+        name = "child"
+        version = "1.0.0"
+        source = { git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork#0123456789012345678901234567890123456789" }
+
+        [[package]]
+        name = "child"
+        version = "2.0.0"
+        source = { git = "https://example.com/repo?tag=v2#abcdefabcdefabcdefabcdefabcdefabcdefabcd" }
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child", version = "1.0.0", source = { git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork#0123456789012345678901234567890123456789" } },
+            { name = "child", version = "2.0.0", source = { git = "https://example.com/repo?tag=v2#abcdefabcdefabcdefabcdefabcdefabcdefabcd" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork" },
+            { name = "archive", git = "https://example.com/repo?path=dist%2Farchive-1.0.0.tar.gz&lfs=true&rev=main" },
+            { name = "pinned", git = "https://example.com/repo?rev=0123456789012345678901234567890123456789#0123456789012345678901234567890123456789" },
+        ]
+    "#};
+    let original = toml::from_str::<Lock>(input)?.to_toml()?;
+    let expected = toml::from_str::<Lock>(&input.replace("version = 1\n", "version = 2\n"))?;
+    let upgraded = expected.to_toml()?;
+    assert_snapshot!(diff_snapshot(&original, &upgraded, 3), @r#"
+    --- old
+    +++ new
+    @@ -1,33 +1,33 @@
+    -version = 1
+    +version = 2
+     requires-python = ">=3.12"
+
+     [manifest]
+    -constraints = [{ name = "child", git = "https://example.com/repo?branch=main" }]
+    -overrides = [{ name = "child", git = "https://example.com/repo?tag=v1" }]
+    -build-constraints = [{ name = "child", git = "https://example.com/repo?rev=main", hashes = ["sha256:1234"] }]
+    +constraints = [{ name = "child", git = "https://example.com/repo", branch = "main" }]
+    +overrides = [{ name = "child", git = "https://example.com/repo", tag = "v1" }]
+    +build-constraints = [{ name = "child", hashes = ["sha256:1234"], git = "https://example.com/repo", rev = "main" }]
+
+     [[package]]
+     name = "child"
+     version = "1.0.0"
+    -source = { git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork#0123456789012345678901234567890123456789" }
+    +source = { git = "https://example.com/repo", branch = "feature/work", commit = "0123456789012345678901234567890123456789", subdirectory = "python", lfs = true }
+
+     [[package]]
+     name = "child"
+     version = "2.0.0"
+    -source = { git = "https://example.com/repo?tag=v2#abcdefabcdefabcdefabcdefabcdefabcdefabcd" }
+    +source = { git = "https://example.com/repo", tag = "v2", commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd" }
+
+     [[package]]
+     name = "project"
+     version = "1.0.0"
+     source = { virtual = "." }
+     dependencies = [
+    -    { name = "child", version = "1.0.0", source = { git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork#0123456789012345678901234567890123456789" } },
+    -    { name = "child", version = "2.0.0", source = { git = "https://example.com/repo?tag=v2#abcdefabcdefabcdefabcdefabcdefabcdefabcd" } },
+    +    { name = "child", version = "1.0.0", source = { git = "https://example.com/repo", branch = "feature/work", commit = "0123456789012345678901234567890123456789", subdirectory = "python", lfs = true } },
+    +    { name = "child", version = "2.0.0", source = { git = "https://example.com/repo", tag = "v2", commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd" } },
+     ]
+
+     [package.metadata]
+    -requires-dist = [
+    -    { name = "archive", git = "https://example.com/repo?path=dist%2Farchive-1.0.0.tar.gz&rev=main&lfs=true" },
+    -    { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork" },
+    -    { name = "pinned", git = "https://example.com/repo?rev=0123456789012345678901234567890123456789#0123456789012345678901234567890123456789" },
+    +dependencies = [
+    +    { name = "archive", git = "https://example.com/repo", rev = "main", path = "dist/archive-1.0.0.tar.gz", lfs = true },
+    +    { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo", branch = "feature/work", subdirectory = "python", lfs = true },
+    +    { name = "pinned", git = "https://example.com/repo", rev = "0123456789012345678901234567890123456789", commit = "0123456789012345678901234567890123456789" },
+     ]
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?, expected);
+    assert_eq!(toml::from_str::<Lock>(&upgraded)?, expected);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?.to_toml()?, upgraded);
+    Ok(())
+}
+
+/// Explicit Git fields must identify one checkout and a valid pinned commit.
+#[test]
+fn lockfile_v2_invalid_git_sources() {
+    for fields in [
+        r#"branch = "main""#,
+        r#"commit = "not-a-commit""#,
+        r#"branch = "main", tag = "v1", commit = "0123456789012345678901234567890123456789""#,
+        r#"rev = "abcdefabcdefabcdefabcdefabcdefabcdefabcd", commit = "0123456789012345678901234567890123456789""#,
+        r#"path = "child-1.0.0.tar.gz", subdirectory = "python", commit = "0123456789012345678901234567890123456789""#,
+        r#"path = "child-1.0.0.tar.gz", lfs = "true", commit = "0123456789012345678901234567890123456789""#,
+    ] {
+        let input = format!(
+            "version = 2\nrequires-python = \">=3.12\"\n\n[[package]]\nname = \"child\"\nversion = \"1.0.0\"\nsource = {{ git = \"https://example.com/repo\", {fields} }}\n"
+        );
+        assert!(toml::from_str::<Lock>(&input).is_err(), "accepted {fields}");
+        assert!(
+            Lock::from_canonical_toml(&input).is_err(),
+            "accepted {fields}"
+        );
+    }
+}
+
+/// A generated Git lock can be revalidated after reading its structured checkout fields.
+#[test]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+fn lockfile_v2_git_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repository = context.temp_dir.child("repository");
+    repository
+        .child("python/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+    "#})?;
+    Command::new("git")
+        .args(["init", "--initial-branch=main"])
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = {{ git = "{repository_url}", branch = "main", subdirectory = "python" }}
+    "#})?;
+    context
+        .lock()
+        .args(["--no-index", "--preview-features", "lockfile-v2"])
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    assert_eq!(Lock::from_canonical_toml(&lock)?.to_toml()?, lock);
+    assert_eq!(toml::from_str::<Lock>(&lock)?.to_toml()?, lock);
+    uv_snapshot!(context.filters(), context.lock().args(["--locked", "--offline", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
     Ok(())
 }
