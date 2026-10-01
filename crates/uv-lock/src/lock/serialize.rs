@@ -10,7 +10,9 @@ use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
+use uv_redacted::DisplaySafeUrl;
 
+use super::git::GitSourceWire;
 use super::{
     Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
     PackageId, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest, ResolverOptions,
@@ -271,10 +273,15 @@ fn write_manifest(
     if !manifest.requirements.is_empty() {
         write_requirements(writer, field, &manifest.requirements, version)?;
     }
-    write_serialized_non_empty_array(writer, "constraints", &manifest.constraints)?;
-    write_serialized_non_empty_array(writer, "overrides", &manifest.overrides)?;
-    write_serialized_non_empty_array(writer, "excludes", &manifest.excludes)?;
-    write_serialized_non_empty_array(writer, "build-constraints", &manifest.build_constraints)?;
+    write_serialized_non_empty_array(writer, "constraints", &manifest.constraints, version)?;
+    write_serialized_non_empty_array(writer, "overrides", &manifest.overrides, version)?;
+    write_serialized_non_empty_array(writer, "excludes", &manifest.excludes, version)?;
+    write_serialized_non_empty_array(
+        writer,
+        "build-constraints",
+        &manifest.build_constraints,
+        version,
+    )?;
 
     if !groups.is_empty() {
         writer.table(&["manifest", "dependency-groups"])?;
@@ -340,7 +347,7 @@ fn write_package(
     dist_count_by_name: &FxHashMap<PackageName, u64>,
 ) -> Result<(), WriteError> {
     writer.array_of_tables(&["package"])?;
-    write_package_id(writer, &package.id, None, PackageIdLocation::Table)?;
+    write_package_id(writer, &package.id, version, None, PackageIdLocation::Table)?;
     if let Some(groups) = &package.default_groups {
         writer.key_value("default-groups", serialize_value(groups)?)?;
     }
@@ -506,6 +513,7 @@ fn write_package(
 fn write_package_id(
     writer: &mut LockWriter,
     package_id: &PackageId,
+    version: u32,
     dist_count_by_name: Option<&FxHashMap<PackageName, u64>>,
     mut location: PackageIdLocation<'_>,
 ) -> Result<(), WriteError> {
@@ -516,7 +524,7 @@ fn write_package_id(
             location.value(writer, "version", version.to_string())?;
         }
         location.nested_value(writer, "source", |writer| {
-            write_source_inline(writer, &package_id.source)
+            write_source_inline(writer, &package_id.source, version)
         })?;
     }
     Ok(())
@@ -561,7 +569,16 @@ impl PackageIdLocation<'_> {
     }
 }
 
-fn write_source_inline(writer: &mut LockWriter, source: &Source) -> Result<(), WriteError> {
+fn write_source_inline(
+    writer: &mut LockWriter,
+    source: &Source,
+    version: u32,
+) -> Result<(), WriteError> {
+    if version >= 2
+        && let Source::Git(url, _) = source
+    {
+        return writer.value(serialize_git_source(url.as_ref())?);
+    }
     let mut first = true;
     writer.start_inline_table();
     match source {
@@ -694,6 +711,7 @@ fn write_dependency_inline(
     write_package_id(
         writer,
         &dependency.package_id,
+        version,
         Some(dist_count_by_name),
         PackageIdLocation::Inline(&mut first),
     )?;
@@ -786,8 +804,50 @@ fn write_requirement_inline(
     {
         writer.value(requirement.name.as_ref())
     } else {
-        writer.value(serialize_value(requirement)?)
+        let mut value = serialize_value(requirement)?;
+        if version >= 2 {
+            structure_git_sources(&mut value.0)?;
+        }
+        writer.value(value)
     }
+}
+
+/// Expands Git URLs in requirements and nested package override dependencies.
+fn structure_git_sources(value: &mut Value) -> Result<(), WriteError> {
+    match value {
+        Value::InlineTable(table) => {
+            if let Some(git) = table.get("git").and_then(Value::as_str) {
+                let source = serialize_git_source(git)?;
+                if let Some(source) = source.0.as_inline_table() {
+                    table.remove("git");
+                    for (key, value) in source {
+                        table.insert(key, value.clone());
+                    }
+                }
+            }
+            if let Some(dependencies) = table.get_mut("dependencies") {
+                structure_git_sources(dependencies)?;
+            }
+        }
+        Value::Array(array) => {
+            for value in array.iter_mut() {
+                structure_git_sources(value)?;
+            }
+        }
+        Value::String(_)
+        | Value::Integer(_)
+        | Value::Float(_)
+        | Value::Boolean(_)
+        | Value::Datetime(_) => {}
+    }
+    Ok(())
+}
+
+/// Adapts the internal Git URL to explicit repository and checkout fields.
+fn serialize_git_source(url: &str) -> Result<SerializedValue, WriteError> {
+    let url =
+        DisplaySafeUrl::parse(url).map_err(|err| toml_edit::ser::Error::Custom(err.to_string()))?;
+    serialize_value(&GitSourceWire::from_url(url))
 }
 
 /// Writes a Serde-backed array, omitting the key when the array is empty.
@@ -795,12 +855,13 @@ fn write_serialized_non_empty_array<T: Serialize>(
     writer: &mut LockWriter,
     key: &str,
     values: impl IntoIterator<Item = T, IntoIter: ExactSizeIterator>,
+    version: u32,
 ) -> Result<(), WriteError> {
     let values = values.into_iter();
     if values.len() == 0 {
         return Ok(());
     }
-    write_serialized_array(writer, key, values)
+    write_serialized_array(writer, key, values, version)
 }
 
 /// Writes a Serde-backed array using the canonical layout for its cardinality.
@@ -811,11 +872,15 @@ fn write_serialized_array<T: Serialize>(
     writer: &mut LockWriter,
     key: &str,
     values: impl IntoIterator<Item = T, IntoIter: ExactSizeIterator>,
+    version: u32,
 ) -> Result<(), WriteError> {
     let values = values.into_iter();
     writer.key_start(key)?;
     let write_value = |writer: &mut LockWriter, value: T| {
-        let value = serialize_value(&value)?;
+        let mut value = serialize_value(&value)?;
+        if version >= 2 {
+            structure_git_sources(&mut value.0)?;
+        }
         writer.value(value)
     };
     if values.len() <= 1 {
