@@ -5134,6 +5134,194 @@ fn build_packaged_lock_other_backend() -> Result<()> {
     Ok(())
 }
 
+/// Automatic export uses the registry source recorded in the lock.
+#[test]
+fn build_packaged_lock_pypi_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+    "#})?;
+    let write_lock = |url: &str| -> Result<()> {
+        context.temp_dir.child("uv.lock").write_str(&formatdoc! {r#"
+            version = 1
+            revision = 3
+            requires-python = ">=3.12"
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+            [[package]]
+            name = "locked-tool"
+            version = "1.0.0"
+            source = {{ editable = "." }}
+            dependencies = [{{ name = "dependency" }}]
+            [package.metadata]
+            requires-dist = [{{ name = "dependency" }}]
+            [[package]]
+            name = "dependency"
+            version = "1.0.0"
+            source = {{ registry = "https://pypi.org/simple" }}
+            wheels = [{{ url = "{url}", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }}]
+        "#})?;
+        Ok(())
+    };
+    let wheel = context
+        .temp_dir
+        .child("dist/locked_tool-1.0.0-py3-none-any.whl");
+    let has_lock = || -> Result<bool> {
+        Ok(zip_file_names(wheel.path())?
+            .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string()))
+    };
+    write_lock("https://example.com/dependency-1.0.0-py3-none-any.whl")?;
+    context
+        .build()
+        .args(["--preview-features", "locked-tools", "--wheel"])
+        .assert()
+        .success();
+    assert!(has_lock()?);
+    write_lock("http://example.com/dependency-1.0.0-py3-none-any.whl")?;
+    context
+        .build()
+        .args(["--preview-features", "locked-tools", "--wheel"])
+        .assert()
+        .success();
+    assert!(!has_lock()?);
+    write_lock(
+        "https://files.pythonhosted.org/packages/dependency-1.0.0-py3-none-any.whl?token=secret",
+    )?;
+    context
+        .build()
+        .args(["--preview-features", "locked-tools"])
+        .assert()
+        .success();
+    assert!(!has_lock()?);
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+        import tarfile
+        with tarfile.open("dist/locked_tool-1.0.0.tar.gz") as sdist:
+            assert "locked_tool-1.0.0/pylock.toml" not in sdist.getnames()
+    "#})
+        .assert()
+        .success();
+    write_lock("https://files.pythonhosted.org/packages/other-1.0.0-py3-none-any.whl")?;
+    uv_snapshot!(context.filters(), context.build()
+        .args(["--preview-features", "locked-tools", "--sdist"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to package the project lock
+      cause: Cannot export an invalid lock
+      cause: Wheel filename `other-1.0.0-py3-none-any.whl` does not match package name `dependency`
+    ");
+    write_lock("https://files.pythonhosted.org/packages/dependency-1.0.0-py3-none-any.whl")?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let original = fs_err::read_to_string(pyproject.path())?;
+    pyproject.write_str(&format!(
+        "{original}\n[tool.uv]\noverride-dependencies = [\"dependency==2.0.0\"]\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.build()
+        .args(["--preview-features", "locked-tools", "--wheel"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to package the project lock
+      cause: Cannot verify that `uv.lock` is up to date offline; run `uv lock` before building
+      cause: Because dependency was not found in the cache and your project depends on dependency==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+    pyproject.write_str(&original)?;
+    let lock_path = context.temp_dir.child("uv.lock");
+    let lock = fs_err::read_to_string(lock_path.path())?;
+    lock_path.write_str(&lock.replace(
+        ", hash = \"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"",
+        "",
+    ))?;
+    uv_snapshot!(context.filters(), context.build()
+        .args(["--preview-features", "locked-tools", "--wheel"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to package the project lock
+      cause: Cannot export a lock with missing artifact hashes; regenerate `uv.lock` with artifact hashes before building
+    ");
+    lock_path.write_str(&lock.replace(
+        "wheels = [{ url = \"https://files.pythonhosted.org/packages/dependency-1.0.0-py3-none-any.whl\", hash = \"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }]\n",
+        "",
+    ))?;
+    context
+        .build()
+        .args(["--preview-features", "locked-tools", "--wheel"])
+        .assert()
+        .failure();
+    let wheel = "wheels = [{ url = \"https://files.pythonhosted.org/packages/dependency-1.0.0-py3-none-any.whl\", hash = \"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }]";
+    for artifact in [
+        "wheels = [{ filename = \"dependency-1.0.0-py3-none-any.whl\", hash = \"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }]",
+        "wheels = [{ path = \"dependency-1.0.0-py3-none-any.whl\", hash = \"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }]",
+        "sdist = { path = \"dependency-1.0.0.tar.gz\", hash = \"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }",
+        "sdist = { hash = \"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }",
+    ] {
+        lock_path.write_str(&lock.replace(wheel, artifact))?;
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.build()
+                .args(["--preview-features", "locked-tools", "--wheel"]), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: Failed to build `[TEMP_DIR]/`
+              cause: Failed to package the project lock
+              cause: Cannot export a lock with registry artifacts without URLs; run `uv lock` before building
+            ");
+        }
+    }
+    // Non-PyPI sources disable automatic export, even if a PyPI artifact is missing its URL.
+    pyproject.write_str(&original.replace(
+        "dependencies = [\"dependency\"]",
+        "dependencies = [\"dependency\", \"private\"]",
+    ))?;
+    lock_path.write_str(&format!(
+        "{}\n[[package]]\nname = \"private\"\nversion = \"1.0.0\"\nsource = {{ registry = \"https://private.example/simple\" }}\n",
+        lock.replace(wheel, "wheels = [{ filename = \"dependency-1.0.0-py3-none-any.whl\" }]")
+            .replace("dependencies = [{ name = \"dependency\" }]", "dependencies = [{ name = \"dependency\" }, { name = \"private\" }]")
+            .replace("requires-dist = [{ name = \"dependency\" }]", "requires-dist = [{ name = \"dependency\" }, { name = \"private\" }]"),
+    ))?;
+    context
+        .build()
+        .args(["--preview-features", "locked-tools", "--wheel"])
+        .assert()
+        .success();
+    assert!(!has_lock()?);
+    pyproject.write_str(&original)?;
+    let restricted = lock.replacen(
+        "version = 1\n",
+        "version = 1\nsupported-markers = [\"sys_platform == 'linux'\"]\n",
+        1,
+    );
+    lock_path.write_str(&restricted)?;
+    uv_snapshot!(context.filters(), context.build()
+        .args(["--preview-features", "locked-tools", "--wheel"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to package the project lock
+      cause: Cannot export a lock restricted to specific environments
+    ");
+    Ok(())
+}
+
 /// Packaged locks contain base dependencies, but private optional sources still prevent export.
 #[test]
 fn build_packaged_lock_extras() -> Result<()> {
@@ -5299,6 +5487,102 @@ fn build_packaged_lock_extras() -> Result<()> {
     Ok(())
 }
 
+/// A PyPI index ending in a slash is eligible for automatic lock export.
+#[test]
+fn build_packaged_lock_pypi_trailing_slash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+        [tool.uv.sources]
+        dependency = { index = "pypi-explicit" }
+        [[tool.uv.index]]
+        name = "pypi-explicit"
+        url = "https://pypi.org/simple/"
+        explicit = true
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        [[package]]
+        name = "locked-tool"
+        version = "1.0.0"
+        source = { editable = "." }
+        dependencies = [{ name = "dependency" }]
+        [package.metadata]
+        requires-dist = [{ name = "dependency", index = "https://pypi.org/simple/" }]
+        [[package]]
+        name = "dependency"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple/" }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/dependency-1.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }]
+    "#})?;
+    context
+        .build()
+        .args(["--offline", "--preview-features", "locked-tools"])
+        .assert()
+        .success();
+    assert!(
+        zip_file_names(
+            context
+                .temp_dir
+                .child("dist/locked_tool-1.0.0-py3-none-any.whl")
+                .path()
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+        import tarfile
+        with tarfile.open("dist/locked_tool-1.0.0.tar.gz") as sdist:
+            assert "locked_tool-1.0.0/pylock.toml" in sdist.getnames()
+    "#})
+        .assert()
+        .success();
+    write_uv_build_backend(&context)?;
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "rebuilt",
+            "dist/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    assert!(
+        zip_file_names(
+            context
+                .temp_dir
+                .child("rebuilt/locked_tool-1.0.0-py3-none-any.whl")
+                .path()
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    Ok(())
+}
+
 /// Do not package a stale lock when project dependencies or supported Python versions change.
 #[test]
 fn build_packaged_lock_stale() -> Result<()> {
@@ -5394,6 +5678,173 @@ fn build_packaged_lock_stale() -> Result<()> {
         .args(["--preview-features", "locked-tools", "--wheel"])
         .assert()
         .failure();
+    Ok(())
+}
+
+/// A workspace member can use the workspace lock unless its runtime dependencies include a member.
+#[test]
+fn build_packaged_lock_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    context
+        .temp_dir
+        .child("packages/tool/src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("packages/shared/src/shared/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("local-dependency/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "local-dependency"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+    "#})?;
+    let member = context.temp_dir.child("packages/tool/pyproject.toml");
+    member.write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("packages/shared/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "shared"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["local-dependency"]
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+        [tool.uv.sources]
+        local-dependency = { path = "../../local-dependency" }
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    context
+        .build()
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--package",
+            "locked-tool",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import pathlib, tarfile, tomllib, zipfile
+        with tarfile.open("dist/locked_tool-1.0.0.tar.gz") as sdist:
+            print("project lock:", "locked_tool-1.0.0/pylock.toml" in sdist.getnames() and "locked_tool-1.0.0/uv.lock" not in sdist.getnames())
+        with zipfile.ZipFile("dist/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            print("wheel lock:", "locked_tool-1.0.0.dist-info/pylock.toml" in wheel.namelist())
+            lock = tomllib.loads(wheel.read("locked_tool-1.0.0.dist-info/pylock.toml").decode())
+            print("dependencies:", lock["packages"])
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project lock: True
+    wheel lock: True
+    dependencies: []
+    ");
+    context
+        .build()
+        .env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--offline", "--preview-features", "locked-tools", "--wheel"])
+        .arg(context.temp_dir.join("packages/tool/../../packages/tool"))
+        .assert()
+        .success();
+    assert!(
+        zip_file_names(
+            &context
+                .temp_dir
+                .child("dist/locked_tool-1.0.0-py3-none-any.whl")
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    // A workspace member can be rebuilt without access to the original workspace.
+    write_uv_build_backend(&context)?;
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "rebuilt",
+            "dist/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    assert!(
+        zip_file_names(
+            &context
+                .temp_dir
+                .child("rebuilt/locked_tool-1.0.0-py3-none-any.whl")
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    let original = fs_err::read_to_string(member.path())?;
+    let pyproject = original.replace(
+        r#"requires-python = ">=3.12""#,
+        "requires-python = \">=3.12\"\ndependencies = [\"shared\"]",
+    ) + "\n[tool.uv.sources]\nshared = { workspace = true }\n";
+    member.write_str(&pyproject)?;
+    context.lock().arg("--offline").assert().success();
+    // Export remains ineligible when another workspace member is unavailable.
+    fs_err::remove_dir_all(context.temp_dir.child("packages/shared"))?;
+    context
+        .build()
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--package",
+            "locked-tool",
+            "--wheel",
+        ])
+        .assert()
+        .success();
+    assert!(
+        !zip_file_names(
+            &context
+                .temp_dir
+                .child("dist/locked_tool-1.0.0-py3-none-any.whl")
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--offline", "--preview-features", "locked-tools", "--package", "locked-tool", "--wheel"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/packages/tool`
+      cause: Failed to package the project lock
+      cause: Cannot export a lock with workspace dependency `shared`
+    ");
+    member.write_str(&original)?;
+    uv_snapshot!(context.filters(), context.build()
+        .args(["--offline", "--preview-features", "locked-tools", "--package", "locked-tool", "--wheel"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/packages/tool`
+      cause: Failed to package the project lock
+      cause: `uv.lock` does not match the dependencies of `locked-tool`; run `uv lock` before building
+    ");
     Ok(())
 }
 
