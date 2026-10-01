@@ -41,9 +41,9 @@ use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_archive_metadata;
-use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_static::TarBackend;
 use uv_warnings::warn_user;
 
 pub use crate::trusted_publishing::TrustedPublishingToken;
@@ -260,6 +260,7 @@ impl PreparedDistribution {
     async fn read_metadata(
         &self,
         reporter: Arc<impl Reporter>,
+        tar_backend: TarBackend,
     ) -> Result<(FormMetadata, Option<String>, u64), PublishError> {
         let size = fs_err::tokio::metadata(&self.file)
             .await
@@ -274,7 +275,8 @@ impl PreparedDistribution {
 
         let metadata: Result<_, PublishPrepareError> = async {
             let form_metadata =
-                FormMetadata::read_from_file(&self.file, &self.filename, reporter).await?;
+                FormMetadata::read_from_file(&self.file, &self.filename, reporter, tar_backend)
+                    .await?;
             let mut attestations = Vec::with_capacity(self.attestations.len());
             for attestation_path in &self.attestations {
                 let contents = fs_err::tokio::read_to_string(attestation_path).await?;
@@ -320,6 +322,7 @@ pub struct PublishSession<'a> {
     upload_client: &'a BaseClient,
     oidc_client: &'a BaseClient,
     retry_policy: ExponentialBackoff,
+    tar_backend: TarBackend,
     check_url_client: Option<CheckUrlClient<'a>>,
     download_concurrency: Semaphore,
 }
@@ -610,6 +613,7 @@ impl<'a> PublishSession<'a> {
         upload_client: &'a BaseClient,
         oidc_client: &'a BaseClient,
         retry_policy: ExponentialBackoff,
+        tar_backend: TarBackend,
     ) -> Self {
         Self {
             publish_url,
@@ -617,6 +621,7 @@ impl<'a> PublishSession<'a> {
             upload_client,
             oidc_client,
             retry_policy,
+            tar_backend,
             check_url_client: None,
             // Check URL requests are made one at a time against a single index.
             download_concurrency: Semaphore::new(1),
@@ -665,7 +670,7 @@ impl<'a> PublishSession<'a> {
         prepared: &PreparedDistribution,
         reporter: Arc<impl Reporter>,
     ) -> Result<(), PublishError> {
-        prepared.read_metadata(reporter).await?;
+        prepared.read_metadata(reporter, self.tar_backend).await?;
         Ok(())
     }
 
@@ -679,7 +684,9 @@ impl<'a> PublishSession<'a> {
         prepared: PreparedDistribution,
         reporter: Arc<impl Reporter>,
     ) -> Result<UploadOutcome, PublishError> {
-        let (form_metadata, attestations, size) = prepared.read_metadata(reporter.clone()).await?;
+        let (form_metadata, attestations, size) = prepared
+            .read_metadata(reporter.clone(), self.tar_backend)
+            .await?;
         reporter.on_upload_ready(&prepared.filename, size)?;
 
         let mut n_past_redirections = 0;
@@ -987,11 +994,13 @@ async fn hash_file<const COUNT: usize>(
 }
 
 // Not in `uv-metadata` because we only support tar files here.
-async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
-    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
-        source_dist_pkg_info_tar_codec(file).await
-    } else {
-        source_dist_pkg_info_tokio_tar(file).await
+async fn source_dist_pkg_info(
+    file: &Path,
+    tar_backend: TarBackend,
+) -> Result<Vec<u8>, PublishPrepareError> {
+    match tar_backend {
+        TarBackend::TarCodec => source_dist_pkg_info_tar_codec(file).await,
+        TarBackend::TokioTar => source_dist_pkg_info_tokio_tar(file).await,
     }
 }
 
@@ -1085,7 +1094,11 @@ async fn source_dist_pkg_info_tar_codec(file: &Path) -> Result<Vec<u8>, PublishP
     }
 }
 
-async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, PublishPrepareError> {
+async fn metadata(
+    file: &Path,
+    filename: &DistFilename,
+    tar_backend: TarBackend,
+) -> Result<Metadata23, PublishPrepareError> {
     let contents = match filename {
         DistFilename::SourceDistFilename(source_dist) => {
             if source_dist.extension != SourceDistExtension::TarGz {
@@ -1093,7 +1106,7 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
                 // support creating and uploading them.
                 return Err(PublishPrepareError::InvalidExtension(source_dist.clone()));
             }
-            source_dist_pkg_info(file).await?
+            source_dist_pkg_info(file, tar_backend).await?
         }
         DistFilename::WheelFilename(wheel) => {
             let file = file.to_path_buf();
@@ -1121,6 +1134,7 @@ impl FormMetadata {
         file: &Path,
         filename: &DistFilename,
         reporter: Arc<impl Reporter>,
+        tar_backend: TarBackend,
     ) -> Result<Self, PublishPrepareError> {
         let [sha256_hash, blake2b_hash] = hash_file(
             file,
@@ -1133,7 +1147,7 @@ impl FormMetadata {
         )
         .await?;
 
-        let metadata = metadata(file, filename).await?;
+        let metadata = metadata(file, filename, tar_backend).await?;
 
         Ok(Self::from_metadata(
             metadata,
@@ -1430,9 +1444,9 @@ mod tests {
     use uv_auth::Credentials;
     use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
-    use uv_preview::PreviewFeature;
     use uv_pypi_types::{HashDigest, Metadata23};
     use uv_redacted::DisplaySafeUrl;
+    use uv_static::TarBackend;
 
     use crate::{
         FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSession,
@@ -1444,7 +1458,7 @@ mod tests {
 
     struct DummyReporter;
 
-    const TAR_BACKENDS: &[&[PreviewFeature]] = &[&[], &[PreviewFeature::TarCodec]];
+    const TAR_BACKENDS: [TarBackend; 2] = [TarBackend::TarCodec, TarBackend::TokioTar];
 
     impl Reporter for DummyReporter {
         fn on_progress(&self, _name: &str, _id: usize) {}
@@ -1492,10 +1506,9 @@ mod tests {
         ])
         .await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_eq!(
-                source_dist_pkg_info(file.path())
+                source_dist_pkg_info(file.path(), backend)
                     .await
                     .expect("top-level PKG-INFO should be read"),
                 expected
@@ -1507,10 +1520,9 @@ mod tests {
     async fn source_dist_pkg_info_requires_a_file() {
         let file = source_dist(&[("example-1.0/nested/PKG-INFO", b"ignored")]).await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_matches!(
-                source_dist_pkg_info(file.path()).await,
+                source_dist_pkg_info(file.path(), backend).await,
                 Err(PublishPrepareError::MissingPkgInfo)
             );
         }
@@ -1524,10 +1536,9 @@ mod tests {
         ])
         .await;
 
-        for features in TAR_BACKENDS {
-            let _preview = uv_preview::test::with_features(features);
+        for backend in TAR_BACKENDS {
             assert_matches!(
-                source_dist_pkg_info(file.path()).await,
+                source_dist_pkg_info(file.path(), backend).await,
                 Err(PublishPrepareError::MultiplePkgInfo(paths))
                     if paths == ["example-1.0/PKG-INFO", "other-1.0/PKG-INFO"]
             );
@@ -1544,6 +1555,7 @@ mod tests {
             client,
             client,
             client.retry_policy(),
+            TarBackend::default(),
         )
     }
 
@@ -1919,7 +1931,7 @@ mod tests {
         let session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let (form_metadata, attestations, _) = prepared
-            .read_metadata(Arc::new(DummyReporter))
+            .read_metadata(Arc::new(DummyReporter), TarBackend::default())
             .await
             .expect("Failed to read upload metadata");
 
@@ -2048,7 +2060,7 @@ mod tests {
         let session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let (form_metadata, attestations, _) = prepared
-            .read_metadata(Arc::new(DummyReporter))
+            .read_metadata(Arc::new(DummyReporter), TarBackend::default())
             .await
             .expect("Failed to read upload metadata");
 

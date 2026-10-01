@@ -33,10 +33,11 @@ use uv_distribution_types::Requirement;
 use uv_extract::dirhash::UnhashedFile;
 use uv_extract::hash::{HashReader, Hasher};
 use uv_install_wheel::{InstallState, Layout, LinkMode};
-use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_pypi_types::{HashAlgorithm, Scheme};
 use uv_python_interpreter::PythonEnvironment;
 use uv_resolver::Manifest;
+use uv_static::TarBackend;
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
@@ -238,11 +239,6 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
         .build()
         .expect("Failed to create Tokio runtime");
 
-    uv_preview::set(Preview::from_feature_names(&[MaybePreviewFeature::Known(
-        PreviewFeature::TarCodec,
-    )]))
-    .expect("Failed to configure tar backend preview features");
-
     c.bench_function("unpack_sdist_many_files", |b| {
         b.iter_batched(
             || {
@@ -259,6 +255,7 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                         &mut archive,
                         SourceDistExtension::TarGz,
                         extracted_sdist,
+                        TarBackend::default(),
                     ))
                     .expect("Failed to unpack sdist");
                 drop(archive);
