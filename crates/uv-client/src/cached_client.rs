@@ -859,8 +859,7 @@ enum CachedResponse {
         /// from data received in a revalidation response, which might change
         /// the parameters of cache behavior.
         ///
-        /// The policy is large (352 bytes at time of writing), so we reduce
-        /// the stack size by boxing it.
+        /// Box the policy to reduce the enum's stack size.
         new_policy: Box<CachePolicy>,
     },
     /// There was no prior cached response or the cache was outdated
@@ -872,8 +871,7 @@ enum CachedResponse {
         /// The [`CachePolicy`] is used to determine if the response is fresh or
         /// stale when making subsequent requests for the same resource.
         ///
-        /// The policy is large (352 bytes at time of writing), so we reduce
-        /// the stack size by boxing it.
+        /// Box the policy to reduce the enum's stack size.
         cache_policy: Option<Box<CachePolicy>>,
     },
 }
