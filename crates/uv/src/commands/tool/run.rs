@@ -1045,7 +1045,6 @@ async fn get_or_create_environment(
         client_builder,
     )
     .await?;
-    super::locked::check_supported_modifiers(locked, &spec)?;
     let exclusions = Excludes::from_entries(spec.excludes.iter().cloned());
 
     // Resolve the `--from` and `--with` requirements.
@@ -1084,10 +1083,15 @@ async fn get_or_create_environment(
         .collect::<Vec<_>>();
 
     // Resolve the overrides.
-    if locked {
-        super::locked::check_constraints(&spec.constraints)?;
-    }
-    let override_hashes = Vec::new();
+    let override_hashes = if locked {
+        super::locked::named_override_hashes(
+            &spec.overrides,
+            &spec.constraints,
+            &spec.override_dependencies,
+        )?
+    } else {
+        Vec::new()
+    };
     let overrides = resolve_names(
         spec.overrides.clone(),
         &interpreter,

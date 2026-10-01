@@ -420,7 +420,6 @@ async fn upgrade_tool(
             })
             .collect();
     }
-    super::locked::check_supported_modifiers(locked, &spec)?;
     // Initialize any shared state.
     let state = PlatformState::default();
     // Check if we need to create a new environment — if so, resolve it first, then install the

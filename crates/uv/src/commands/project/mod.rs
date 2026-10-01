@@ -2723,6 +2723,8 @@ pub(crate) struct EnvironmentSpecification<'lock> {
     requirements: RequirementsSpecification,
     /// The preferences to respect when resolving.
     preferences: Option<PreferenceLocation<'lock>>,
+    /// Hashes to verify while resolving the environment.
+    hash_strategy: Option<HashStrategy>,
 }
 
 impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
@@ -2730,11 +2732,18 @@ impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
         Self {
             requirements,
             preferences: None,
+            hash_strategy: None,
         }
     }
 }
 
 impl<'lock> EnvironmentSpecification<'lock> {
+    #[must_use]
+    pub(crate) fn with_hash_strategy(mut self, hash_strategy: HashStrategy) -> Self {
+        self.hash_strategy = Some(hash_strategy);
+        self
+    }
+
     /// Set the [`PreferenceLocation`] for the specification.
     #[must_use]
     pub(crate) fn with_preferences(self, preferences: PreferenceLocation<'lock>) -> Self {
@@ -2771,6 +2780,45 @@ pub(crate) async fn resolve_environment(
     printer: Printer,
     preview: Preview,
 ) -> Result<ResolverOutput, ProjectError> {
+    resolve_environment_with_hashes(
+        spec,
+        resolution_scope,
+        interpreter,
+        python_platform,
+        source_tree_editable_policy,
+        build_constraints,
+        settings,
+        client_builder,
+        state,
+        logger,
+        concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
+    )
+    .await
+    .map(|(output, _)| output)
+}
+
+/// Run dependency resolution, returning the hash strategy used by the resolver.
+pub(crate) async fn resolve_environment_with_hashes(
+    spec: EnvironmentSpecification<'_>,
+    resolution_scope: EnvironmentResolution,
+    interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
+    build_constraints: Constraints,
+    settings: &ResolverSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    logger: Box<dyn ResolveLogger>,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<(ResolverOutput, HashStrategy), ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettings {
@@ -2896,10 +2944,14 @@ pub(crate) async fn resolve_environment(
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
-    let hasher = match resolution_scope {
-        EnvironmentResolution::Specific | EnvironmentResolution::Direct => HashStrategy::default(),
-        EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
-    };
+    let hasher = spec
+        .hash_strategy
+        .unwrap_or_else(|| match resolution_scope {
+            EnvironmentResolution::Specific | EnvironmentResolution::Direct => {
+                HashStrategy::default()
+            }
+            EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
+        });
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
@@ -3000,8 +3052,7 @@ pub(crate) async fn resolve_environment(
         logger,
         printer,
     )
-    .await?
-    .0)
+    .await?)
 }
 
 /// Sync a [`PythonEnvironment`] with a set of resolved requirements.

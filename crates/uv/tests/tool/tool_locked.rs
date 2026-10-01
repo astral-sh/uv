@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -73,6 +74,538 @@ fn tool(
         .child("wheels")
         .child(filename)
         .write_binary(&bytes)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_overrides_and_excludes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let server = MockServer::start().await;
+    let index = format!("{}/simple", server.uri());
+    let mut index_files = BTreeMap::<String, Vec<serde_json::Value>>::new();
+    let mut locked_files = BTreeMap::new();
+    let mut override_hash = None;
+    for (name, version, dependencies) in [
+        ("idna", "3.3", vec!["beta==2.0"]),
+        ("idna", "3.5", vec!["beta[feature]", "gamma==1.0"]),
+        ("beta", "1.0", vec![]),
+        ("delta", "1.0", vec![]),
+        ("gamma", "1.0", vec![]),
+    ] {
+        let dependencies = dependencies
+            .into_iter()
+            .map(str::parse)
+            .collect::<Result<Vec<_>, _>>()?;
+        let extras = if name == "beta" {
+            BTreeMap::from([("feature".parse()?, vec!["delta==1.0".parse()?])])
+        } else {
+            BTreeMap::new()
+        };
+        let (filename, wheel) = generate_wheel_with_files(
+            &name.parse()?,
+            &version.parse()?,
+            &dependencies,
+            &extras,
+            None,
+            "py3-none-any",
+            &[],
+        );
+        let hash = hex::encode(Sha256::digest(&wheel));
+        let url = format!("{}/files/{filename}", server.uri());
+        index_files
+            .entry(name.to_string())
+            .or_default()
+            .push(json!({
+                "filename": filename,
+                "url": url,
+                "hashes": { "sha256": hash },
+                "upload-time": "2023-01-01T00:00:00Z",
+            }));
+        Mock::given(method("GET"))
+            .and(path(format!("/files/{filename}")))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+            .mount(&server)
+            .await;
+        if (name, version) == ("idna", "3.3") || (name, version) == ("beta", "1.0") {
+            locked_files.insert(name, (version, url, hash));
+        } else if (name, version) == ("idna", "3.5") {
+            override_hash = Some(hash);
+        }
+    }
+    for (name, files) in index_files {
+        Mock::given(method("GET"))
+            .and(path(format!("/simple/{name}/")))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                json!({"meta": {"api-version": "1.1"}, "name": name, "files": files}).to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ))
+            .mount(&server)
+            .await;
+    }
+    let mut lock = String::from("lock-version = \"1.0\"\ncreated-by = \"test\"\n");
+    for (name, (version, url, hash)) in locked_files {
+        writeln!(
+            lock,
+            "[[packages]]\nname = \"{name}\"\nversion = \"{version}\"\nindex = \"{index}\"\nwheels = [{{ url = \"{url}\", hashes = {{ sha256 = \"{hash}\" }} }}]"
+        )?;
+    }
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    let override_hash = override_hash.context("missing override hash")?;
+    let context = context.with_filter((override_hash.clone(), "[OVERRIDE_HASH]"));
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str(&format!("idna==3.5 --hash=sha256:{override_hash}\n"))?;
+    context.temp_dir.child("bad-override.txt").write_str(
+        "idna==3.5 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000\n",
+    )?;
+    context.temp_dir.child("excludes.txt").write_str("idna\n")?;
+    context.temp_dir.child("invalid-inactive-override.txt").write_str(&format!(
+        "idna @ {}/files/idna-3.5-py3-none-any.whl#sha256={override_hash}&sha512=bad ; sys_platform == 'never'\n",
+        server.uri()
+    ))?;
+    let output = context
+        .tool_install()
+        .args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            &index,
+            "--find-links",
+            "wheels",
+            "--override",
+            "invalid-inactive-override.txt",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .output()?;
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Invalid hash digest length"));
+    assert!(
+        !context
+            .temp_dir
+            .child("tools/locked-tool/uv-receipt.toml")
+            .path()
+            .exists()
+    );
+    context
+        .temp_dir
+        .child("unused-exclude.txt")
+        .write_str("unused-package\n")?;
+
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "overrides.txt", "locked-tool"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.5
+
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + beta==1.0
+     + delta==1.0
+     + gamma==1.0
+     + idna==3.5
+     + locked-tool==1.0.0
+    ");
+
+    let scoped = context.temp_dir.child("scoped.py");
+    let scoped_script = indoc! {r#"
+        # /// script
+        # dependencies = []
+        # [tool.uv]
+        # override-dependencies = [{ package = { name = "locked-tool", version = "1.0.0" }, dependencies = ["idna==3.5"] }]
+        # ///
+    "#};
+    scoped.write_str(scoped_script)?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "-", "locked-tool"]).stdin(fs_err::File::open(scoped.path())?.into_file()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.5
+    ");
+    scoped.write_str(&scoped_script.replace("version = \"1.0.0\"", "version = \"2.0.0\""))?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "-", "locked-tool"]).stdin(fs_err::File::open(scoped.path())?.into_file()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.3
+
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + beta==1.0
+     + idna==3.3
+     + locked-tool==1.0.0
+    ");
+
+    scoped.write_str(indoc! {r#"
+        # /// script
+        # dependencies = []
+        # [tool.uv]
+        # override-dependencies = [{ package = { name = "idna", version = "3.3" }, dependencies = ["gamma==1.0"] }]
+        # ///
+    "#})?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "-", "locked-tool"]).stdin(fs_err::File::open(scoped.path())?.into_file()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.3
+
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + beta==1.0
+     + gamma==1.0
+     + idna==3.3
+     + locked-tool==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "bad-override.txt", "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to download `idna==3.5`
+      cause: Hash mismatch for `idna==3.5`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+               sha256:[OVERRIDE_HASH]
+
+             Computed:
+               sha256:[OVERRIDE_HASH]
+    ");
+
+    let previous = server
+        .received_requests()
+        .await
+        .context("request recording disabled")?
+        .len();
+    uv_snapshot!(context.filters(), context.tool_install().args(["--locked", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--exclude", "excludes.txt", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + beta==1.0
+     + locked-tool==1.0.0
+    Installed 1 executable: locked-tool
+    ");
+    let requests = server
+        .received_requests()
+        .await
+        .context("request recording disabled")?;
+    assert!(
+        !requests[previous..]
+            .iter()
+            .any(|request| request.url.path().contains("/files/idna-3.3"))
+    );
+    uv_snapshot!(context.filters(), context.tool_install().args(["--locked", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--exclude", "unused-exclude.txt", "--force", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + beta==1.0
+     + idna==3.3
+     + locked-tool==1.0.0
+    Installed 1 executable: locked-tool
+    ");
+    uv_snapshot!(context.filters(), context.tool_install().args(["--locked", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "overrides.txt", "--force", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + beta==1.0
+     + delta==1.0
+     + gamma==1.0
+     + idna==3.5
+     + locked-tool==1.0.0
+    Installed 1 executable: locked-tool
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install().args(["--preview-features", "locked-tools,tool-install-locks", "--index-url", &index, "--find-links", "wheels", "--override", "overrides.txt", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    `locked-tool` is already installed
+    ");
+    uv_snapshot!(context.filters(), context.tool_install().args(["--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "bad-override.txt", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Checked [N] packages in [TIME]
+    Installed 1 executable: locked-tool
+    ");
+    let receipt = context.read("tools/locked-tool/uv-receipt.toml");
+    assert!(receipt.contains(&"0".repeat(64)));
+    assert!(!receipt.contains("locked = true"));
+    context
+        .tool_install()
+        .args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            &index,
+            "--find-links",
+            "wheels",
+            "--override",
+            "overrides.txt",
+            "--force",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .assert()
+        .success();
+    let receipt = context.read("tools/locked-tool/uv-receipt.toml");
+    assert!(receipt.contains(&override_hash));
+    assert!(receipt.contains("locked = true"));
+    context
+        .temp_dir
+        .child("tools/locked-tool/uv-receipt.toml")
+        .write_str(&receipt.replace(
+            &override_hash,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        ))?;
+    uv_snapshot!(context.filters(), context.tool_upgrade().args(["--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to upgrade locked-tool
+      cause: Failed to download `idna==3.5`
+      cause: Hash mismatch for `idna==3.5`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+               sha256:[OVERRIDE_HASH]
+
+             Computed:
+               sha256:[OVERRIDE_HASH]
+    ");
+    let script = context.temp_dir.child("overrides.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # dependencies = []
+        # [tool.uv]
+        # override-dependencies = ["idna==3.5"]
+        # ///
+    "#})?;
+    context
+        .tool_install()
+        .args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            &index,
+            "--find-links",
+            "wheels",
+            "--override",
+            "-",
+            "--force",
+            "locked-tool",
+        ])
+        .stdin(fs_err::File::open(script.path())?.into_file())
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .assert()
+        .success();
+    let receipt = context.read("tools/locked-tool/uv-receipt.toml");
+    let receipt: toml::Value = toml::from_str(&receipt)?;
+    let overrides = receipt["tool"]["overrides"]
+        .as_array()
+        .context("missing overrides")?;
+    assert!(
+        overrides
+            .iter()
+            .any(|entry| entry["name"].as_str() == Some("idna")
+                && entry["specifier"].as_str() == Some("==3.5"))
+    );
+    uv_snapshot!(context.filters(), context.tool_install().args(["--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "-", "locked-tool"]).stdin(fs_err::File::open(script.path())?.into_file()).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    `locked-tool` is already installed
+    ");
+    assert!(
+        context
+            .read("tools/locked-tool/uv-receipt.toml")
+            .contains("locked = true")
+    );
+    uv_snapshot!(context.filters(), context.tool_upgrade().args(["--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Modified locked-tool environment
+     ~ beta==1.0
+     ~ delta==1.0
+     ~ gamma==1.0
+     ~ idna==3.5
+     ~ locked-tool==1.0.0
+    Installed 1 executable: locked-tool
+    ");
+
+    scoped.write_str(scoped_script)?;
+    context
+        .tool_install()
+        .args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            &index,
+            "--find-links",
+            "wheels",
+            "--override",
+            "-",
+            "--force",
+            "locked-tool",
+        ])
+        .stdin(fs_err::File::open(scoped.path())?.into_file())
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .assert()
+        .success();
+    let receipt: toml::Value = toml::from_str(&context.read("tools/locked-tool/uv-receipt.toml"))?;
+    assert_eq!(
+        receipt["tool"]["scoped-overrides"].as_array().map(Vec::len),
+        Some(1)
+    );
+    context
+        .tool_upgrade()
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            &index,
+            "--find-links",
+            "wheels",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .assert()
+        .success();
+    let executable = context
+        .temp_dir
+        .child("bin")
+        .child(format!("locked-tool{}", std::env::consts::EXE_SUFFIX));
+    let output = std::process::Command::new(executable.path()).output()?;
+    assert!(output.status.success());
+    assert_eq!(std::str::from_utf8(&output.stdout)?.trim_end(), "3.5");
+
+    let grouped_lock = lock
+        .replace(
+            "created-by = \"test\"",
+            "created-by = \"test\"\ndependency-groups = [\"tools\"]\ndefault-groups = [\"tools\"]",
+        )
+        .replace(
+            "[[packages]]\nname = \"beta\"",
+            "[[packages]]\nmarker = \"'tools' in dependency_groups\"\nname = \"beta\"",
+        );
+    tool(&context, "1.1.0", Some(&grouped_lock), None)?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "overrides.txt", "locked-tool==1.1.0"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.5
+
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + beta==1.0
+     + delta==1.0
+     + gamma==1.0
+     + idna==3.5
+     + locked-tool==1.1.0
+    ");
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_removed_packages_do_not_require_old_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let index = "https://unconfigured.example/simple";
+    let mut lock = locked_artifact(
+        index,
+        "https://unconfigured.example/idna-3.3-py3-none-any.whl",
+        "idna-3.3-py3-none-any.whl",
+        &format!("sha256 = \"{}\"", "0".repeat(64)),
+        "wheels",
+    );
+    writeln!(
+        lock,
+        "[[packages]]\nname = \"beta\"\nversion = \"1.0\"\nindex = \"{index}\"\nwheels = [{{ url = \"https://unconfigured.example/beta-1.0-py3-none-any.whl\", hashes = {{ sha256 = \"{}\" }} }}]",
+        "0".repeat(64)
+    )?;
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    let mut overrides = String::new();
+    let mut constraint = String::new();
+    let mut idna_hash = None;
+    let mut beta_hash = None;
+    for (name, version) in [("idna", "3.5"), ("beta", "2.0")] {
+        let (filename, wheel) = generate_wheel_with_files(
+            &name.parse()?,
+            &version.parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        let path = context.temp_dir.child("wheels").child(filename);
+        path.write_binary(&wheel)?;
+        let url = url::Url::from_file_path(path.path())
+            .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
+        let hash = hex::encode(Sha256::digest(&wheel));
+        writeln!(overrides, "{name} @ {url}#sha256={hash}")?;
+        if name == "idna" {
+            writeln!(constraint, "{name} @ {url}#sha256={hash}")?;
+            idna_hash = Some(hash);
+        } else {
+            beta_hash = Some(hash);
+        }
+    }
+    let beta_hash = beta_hash.context("missing beta hash")?;
+    let idna_hash = idna_hash.context("missing idna hash")?;
+    let context = context
+        .with_filter((beta_hash, "[BETA_HASH]"))
+        .with_filter((idna_hash.clone(), "[IDNA_HASH]"));
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str(&overrides)?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&constraint)?;
+    context
+        .temp_dir
+        .child("excludes.txt")
+        .write_str("idna\nbeta\n")?;
+
+    uv_snapshot!(context.filters(), context.tool_install().args(["--locked", "--preview-features", "locked-tools", "--find-links", "wheels", "--override", "overrides.txt", "--constraint", "constraints.txt", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + beta==2.0 (from file://[TEMP_DIR]/wheels/beta-2.0-py3-none-any.whl#sha256=[BETA_HASH])
+     + idna==3.5 (from file://[TEMP_DIR]/wheels/idna-3.5-py3-none-any.whl#sha256=[IDNA_HASH])
+     + locked-tool==1.0.0
+    Installed 1 executable: locked-tool
+    ");
+    let receipt = context.read("tools/locked-tool/uv-receipt.toml");
+    assert!(receipt.contains(&idna_hash));
+    context
+        .temp_dir
+        .child("tools/locked-tool/uv-receipt.toml")
+        .write_str(&receipt.replace(&idna_hash, &"0".repeat(64)))?;
+    let output = context
+        .tool_upgrade()
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--find-links",
+            "wheels",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .output()?;
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Hash mismatch"));
+    uv_snapshot!(context.filters(), context.tool_install().args(["--locked", "--preview-features", "locked-tools", "--find-links", "wheels", "--exclude", "excludes.txt", "--force", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + locked-tool==1.0.0
+    Installed 1 executable: locked-tool
+    ");
     Ok(())
 }
 
@@ -182,6 +715,98 @@ async fn packaged_lock_preserves_tool_url_hash_on_upgrade() -> Result<()> {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_override_cannot_activate_tool_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let server = MockServer::start().await;
+    let index = format!("{}/simple", server.uri());
+    let (filename, bytes) = generate_wheel_with_files(
+        &"epsilon".parse()?,
+        &"1.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let hash = hex::encode(Sha256::digest(&bytes));
+    Mock::given(method("GET"))
+        .and(path("/simple/epsilon/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({"meta": {"api-version": "1.1"}, "name": "epsilon", "files": [{
+                    "filename": filename,
+                "url": format!("{}/files/{filename}", server.uri()),
+                "hashes": {"sha256": hash},
+                "upload-time": "2023-01-01T00:00:00Z",
+                }]})
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(bytes))
+        .mount(&server)
+        .await;
+    let (filename, bytes) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.5".parse()?,
+        &["locked-tool[feature]".parse()?],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let override_wheel = context.temp_dir.child("wheels").child(filename);
+    override_wheel.write_binary(&bytes)?;
+    let override_url = url::Url::from_file_path(override_wheel.path())
+        .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str(&format!("idna @ {override_url}\n"))?;
+    let lock = locked_artifact(
+        "https://unconfigured.example/simple",
+        "https://unconfigured.example/idna-3.3-py3-none-any.whl",
+        "idna-3.3-py3-none-any.whl",
+        &format!("sha256 = \"{}\"", "0".repeat(64)),
+        "wheels",
+    );
+    let (filename, bytes) = generate_wheel_with_files(
+        &"locked-tool".parse()?,
+        &"1.0.0".parse()?,
+        &["idna>=3.3,<3.5".parse()?],
+        &BTreeMap::from([("feature".parse()?, vec!["epsilon==1.0".parse()?])]),
+        None,
+        "py3-none-any",
+        &[
+            ("locked_tool-1.0.0.dist-info/pylock.toml", &lock),
+            (
+                "locked_tool-1.0.0.dist-info/entry_points.txt",
+                "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
+            ),
+            ("locked_tool/cli.py", "def main(): pass\n"),
+        ],
+    );
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&bytes)?;
+    uv_snapshot!(context.filters(), context.tool_install().args(["--locked", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "overrides.txt", "locked-tool"]).env(EnvVars::PATH, context.temp_dir.child("bin").path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: An override requires the extra `feature` of locked package `locked-tool`, but extras are not supported with `--locked`
+    ");
     Ok(())
 }
 
@@ -356,6 +981,83 @@ async fn packaged_lock_root_url_hash() -> Result<()> {
     ----- stderr -----
     error: The selected artifact for `locked-tool @ http://[LOCALHOST]/locked_tool-1.0.0-py3-none-any.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000` does not match the required hashes
     ");
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_root_direct_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let (filename, bytes) = generate_wheel_with_files(
+        &"locked-tool".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[
+            (
+                "locked_tool-1.0.0.dist-info/pylock.toml",
+                "lock-version = \"1.0\"\ncreated-by = \"test\"\npackages = []\n",
+            ),
+            (
+                "locked_tool-1.0.0.dist-info/entry_points.txt",
+                "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
+            ),
+            ("locked_tool/cli.py", "def main(): pass\n"),
+        ],
+    );
+    let wheel = context.temp_dir.child("wheels").child(filename);
+    wheel.write_binary(&bytes)?;
+    let url = url::Url::from_file_path(wheel.path())
+        .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
+    let hash = hex::encode(Sha256::digest(&bytes));
+    let requirement = format!(
+        "locked-tool @ {url} --hash=sha256:{hash} --hash=sha512:{}\n",
+        "0".repeat(128)
+    );
+    let input = context.temp_dir.child("hashes.txt");
+    input.write_str(&requirement)?;
+    let from = format!("locked-tool @ {url}");
+    let mut outputs = Vec::new();
+    for option in ["--constraint", "--override"] {
+        let output = context
+            .tool_install()
+            .args([
+                "--locked",
+                "--preview-features",
+                "locked-tools",
+                "--no-index",
+                option,
+                "hashes.txt",
+                "--from",
+                &from,
+                "locked-tool",
+            ])
+            .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+            .output()?;
+        outputs.push((option, output));
+    }
+    assert!(
+        outputs.iter().all(|(_, output)| {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            !output.status.success()
+                && (stderr.contains("Hash mismatch")
+                    || stderr.contains("does not match the required hashes"))
+        }),
+        "{}",
+        outputs
+            .iter()
+            .map(|(option, output)| format!(
+                "{option}: status {}\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
     Ok(())
 }
 
@@ -1801,4 +2503,22 @@ async fn packaged_lock_from_build_with_extras() -> Result<()> {
     error: Extras are not supported with `--locked`
     ");
     Ok(())
+}
+
+fn locked_artifact(index: &str, url: &str, filename: &str, hashes: &str, kind: &str) -> String {
+    let artifact = format!(r#"{{ name = "{filename}", url = "{url}", hashes = {{ {hashes} }} }}"#);
+    let artifact = if kind == "wheels" {
+        format!("[{artifact}]")
+    } else {
+        artifact
+    };
+    formatdoc! {r#"
+        lock-version = "1.0"
+        created-by = "test"
+        [[packages]]
+        name = "idna"
+        version = "3.3"
+        index = "{index}"
+        {kind} = {artifact}
+    "#}
 }
