@@ -980,7 +980,9 @@ requirements store `requires-python` alongside their `dependencies`, instead of 
 `group-requires-python` table. This applies to both package groups and projectless workspace roots.
 
 Declared dependencies use `package.metadata.dependencies` and `manifest.dependencies`, replacing
-`package.metadata.requires-dist` and `manifest.requirements`.
+`package.metadata.requires-dist` and `manifest.requirements`. Static dependency metadata also uses
+`dependencies` instead of `requires-dist`. Both metadata sections record declared extras as `extras`
+instead of `provides-extras`.
 
 Name-only dependency edges and declarations use strings, such as `"requests"`, instead of inline
 tables. Declarations with specifiers, sources, extras, groups, or markers retain their tables.

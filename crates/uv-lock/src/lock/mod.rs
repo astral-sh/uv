@@ -50,7 +50,8 @@ use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    MarkerEnvironment, MarkerTree, Requirement as Pep508Requirement, Scheme, VerbatimUrl,
+    VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
@@ -58,7 +59,7 @@ use uv_platform_tags::{
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml, VerbatimParsedUrl,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_resolver_types::{
@@ -6346,7 +6347,7 @@ struct ResolverManifestWire {
     #[serde(default)]
     build_constraints: Vec<NameRequirementSpecificationWire>,
     #[serde(default)]
-    dependency_metadata: BTreeSet<StaticMetadata>,
+    dependency_metadata: Vec<StaticMetadataWire>,
 }
 
 impl From<ResolverManifestWire> for ResolverManifest {
@@ -6398,7 +6399,36 @@ impl From<ResolverManifestWire> for ResolverManifest {
                     hashes: constraint.hashes,
                 })
                 .collect(),
-            dependency_metadata: wire.dependency_metadata,
+            dependency_metadata: wire
+                .dependency_metadata
+                .into_iter()
+                .map(StaticMetadata::from)
+                .collect(),
+        }
+    }
+}
+
+/// Static dependency metadata uses lockfile names independently of configuration keys.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct StaticMetadataWire {
+    name: PackageName,
+    version: Option<Version>,
+    #[serde(default, alias = "requires-dist")]
+    dependencies: Box<[Pep508Requirement<VerbatimParsedUrl>]>,
+    requires_python: Option<VersionSpecifiers>,
+    #[serde(default, alias = "provides-extra", alias = "provides-extras")]
+    extras: Box<[ExtraName]>,
+}
+
+impl From<StaticMetadataWire> for StaticMetadata {
+    fn from(wire: StaticMetadataWire) -> Self {
+        Self {
+            name: wire.name,
+            version: wire.version,
+            requires_dist: wire.dependencies,
+            requires_python: wire.requires_python,
+            provides_extra: wire.extras,
         }
     }
 }
@@ -7533,7 +7563,7 @@ struct PackageMetadata {
         deserialize_with = "deserialize_requirements"
     )]
     requires_dist: BTreeSet<Requirement>,
-    #[serde(default, rename = "provides-extras")]
+    #[serde(default, rename = "extras", alias = "provides-extras")]
     provides_extra: Box<[ExtraName]>,
     #[serde(
         default,
