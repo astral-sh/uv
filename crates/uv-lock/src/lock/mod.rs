@@ -10284,8 +10284,8 @@ fn is_wheel_unreachable_for_marker(
         return false;
     }
 
-    // An x86_64 interpreter on Windows ARM can report the host's ARM architecture.
-    // Keep its Windows wheel unless concrete tags or `Requires-Python` already rejected it.
+    // Emulated x86_64 Python on Windows ARM64 reports `ARM64` for `platform_machine` but requires
+    // `win_amd64` wheels. Keep them unless concrete tags or `Requires-Python` already rejected them.
     if platform_tags.contains(&PlatformTag::WinAmd64) && !marker.is_disjoint(*WINDOWS_ARM_MARKERS) {
         return false;
     }

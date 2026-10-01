@@ -13,6 +13,7 @@ const WINDOWS_ARM: &str =
     "os_name == 'nt' and sys_platform == 'win32' and platform_machine == 'ARM64'";
 
 fn assert_reachability(
+    case: &str,
     filename: &str,
     marker: Option<&str>,
     requires_python: &str,
@@ -43,210 +44,189 @@ fn assert_reachability(
     assert_eq!(
         is_wheel_unreachable_for_marker(&filename, &requires_python, &marker, tags.as_ref()),
         expected_unreachable,
+        "{case}: {filename}",
     );
 }
 
-macro_rules! reachability_case {
-    ($name:ident, $filename:literal, $marker:expr, $expected:literal) => {
-        reachability_case!($name, $filename, $marker, ">=3.8", None, $expected);
-    };
-    ($name:ident, $filename:literal, $marker:expr, $requires_python:literal, $platform:expr, $expected:literal) => {
-        #[test]
-        fn $name() {
-            assert_reachability($filename, $marker, $requires_python, $platform, $expected);
-        }
-    };
+#[test]
+fn win_amd64_marker_reachability() {
+    for (case, marker, expected) in [
+        ("windows_arm", Some(WINDOWS_ARM), false),
+        ("arm_without_os", Some("platform_machine == 'ARM64'"), false),
+        (
+            "arm64_lowercase",
+            Some("sys_platform == 'win32' and platform_machine == 'arm64'"),
+            false,
+        ),
+        (
+            "aarch64_alias",
+            Some("sys_platform == 'win32' and platform_machine == 'aarch64'"),
+            false,
+        ),
+        (
+            "windows_amd64",
+            Some("sys_platform == 'win32' and platform_machine == 'AMD64'"),
+            false,
+        ),
+        ("unconstrained", None, false),
+        (
+            "linux_arm",
+            Some("sys_platform == 'linux' and platform_machine == 'aarch64'"),
+            true,
+        ),
+        (
+            "macos_arm",
+            Some("sys_platform == 'darwin' and platform_machine == 'arm64'"),
+            true,
+        ),
+        (
+            "contradictory_os",
+            Some("sys_platform == 'win32' and sys_platform == 'linux'"),
+            true,
+        ),
+    ] {
+        assert_reachability(
+            case,
+            "example-1.0-py3-none-win_amd64.whl",
+            marker,
+            ">=3.8",
+            None,
+            expected,
+        );
+    }
 }
 
-reachability_case!(
-    windows_arm,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some(WINDOWS_ARM),
-    false
-);
+#[test]
+fn explicit_tags_take_precedence() {
+    for (case, filename, platform, expected) in [
+        (
+            "explicit_x64_tags",
+            "example-1.0-py3-none-win_amd64.whl",
+            Some(Platform::new(Os::Windows, Arch::X86_64)),
+            false,
+        ),
+        (
+            "explicit_arm64_tags",
+            "example-1.0-py3-none-win_amd64.whl",
+            Some(Platform::new(Os::Windows, Arch::Aarch64)),
+            true,
+        ),
+        (
+            "explicit_linux_tags",
+            "example-1.0-py3-none-win_amd64.whl",
+            Some(Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 17,
+                },
+                Arch::X86_64,
+            )),
+            true,
+        ),
+        (
+            "unknown_only_concrete_tags",
+            "example-1.0-py3-none-unrecognized_platform.whl",
+            Some(Platform::new(Os::Windows, Arch::X86_64)),
+            true,
+        ),
+    ] {
+        assert_reachability(
+            case,
+            filename,
+            Some(WINDOWS_ARM),
+            ">=3.8",
+            platform,
+            expected,
+        );
+    }
+}
 
-reachability_case!(
-    arm_without_os,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some("platform_machine == 'ARM64'"),
-    false
-);
+#[test]
+fn requires_python_takes_precedence() {
+    for (case, filename, requires_python, expected) in [
+        (
+            "requires_python_rejection",
+            "example-1.0-cp310-cp310-win_amd64.whl",
+            ">=3.13",
+            true,
+        ),
+        (
+            "stable_abi_control",
+            "example-1.0-cp39-abi3-win_amd64.whl",
+            ">=3.13",
+            false,
+        ),
+    ] {
+        assert_reachability(
+            case,
+            filename,
+            Some(WINDOWS_ARM),
+            requires_python,
+            None,
+            expected,
+        );
+    }
+}
 
-reachability_case!(
-    arm64_lowercase,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some("sys_platform == 'win32' and platform_machine == 'arm64'"),
-    false
-);
+#[test]
+fn mixed_platform_tags() {
+    for (case, filename) in [
+        (
+            "unknown_plus_x64",
+            "example-1.0-py3-none-unrecognized_platform.win_amd64.whl",
+        ),
+        (
+            "compressed_cross_os_x64",
+            "example-1.0-py3-none-win_amd64.manylinux_2_17_x86_64.whl",
+        ),
+        (
+            "compressed_windows_arches",
+            "example-1.0-py3-none-win_amd64.win_arm64.whl",
+        ),
+        (
+            "compressed_cross_os_arches",
+            "example-1.0-py3-none-win_amd64.manylinux_2_17_aarch64.whl",
+        ),
+        ("compressed_any", "example-1.0-py3-none-win_amd64.any.whl"),
+    ] {
+        assert_reachability(case, filename, Some(WINDOWS_ARM), ">=3.8", None, false);
+    }
+}
 
-reachability_case!(
-    aarch64_alias,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some("sys_platform == 'win32' and platform_machine == 'aarch64'"),
-    false
-);
-
-reachability_case!(
-    windows_amd64,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some("sys_platform == 'win32' and platform_machine == 'AMD64'"),
-    false
-);
-
-reachability_case!(
-    unconstrained,
-    "example-1.0-py3-none-win_amd64.whl",
-    None,
-    false
-);
-
-reachability_case!(
-    native_arm64,
-    "example-1.0-py3-none-win_arm64.whl",
-    Some(WINDOWS_ARM),
-    false
-);
-
-reachability_case!(
-    linux_arm,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some("sys_platform == 'linux' and platform_machine == 'aarch64'"),
-    true
-);
-
-reachability_case!(
-    macos_arm,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some("sys_platform == 'darwin' and platform_machine == 'arm64'"),
-    true
-);
-
-reachability_case!(
-    linux_x64_wheel_on_arm,
-    "example-1.0-py3-none-manylinux_2_17_x86_64.whl",
-    Some("sys_platform == 'linux' and platform_machine == 'aarch64'"),
-    true
-);
-
-reachability_case!(
-    contradictory_os,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some("sys_platform == 'win32' and sys_platform == 'linux'"),
-    true
-);
-
-reachability_case!(
-    explicit_x64_tags,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some(WINDOWS_ARM),
-    ">=3.8",
-    Some(Platform::new(Os::Windows, Arch::X86_64)),
-    false
-);
-
-reachability_case!(
-    explicit_arm64_tags,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some(WINDOWS_ARM),
-    ">=3.8",
-    Some(Platform::new(Os::Windows, Arch::Aarch64)),
-    true
-);
-
-reachability_case!(
-    explicit_linux_tags,
-    "example-1.0-py3-none-win_amd64.whl",
-    Some(WINDOWS_ARM),
-    ">=3.8",
-    Some(Platform::new(
-        Os::Manylinux {
-            major: 2,
-            minor: 17
-        },
-        Arch::X86_64,
-    )),
-    true
-);
-
-reachability_case!(
-    requires_python_rejection,
-    "example-1.0-cp310-cp310-win_amd64.whl",
-    Some(WINDOWS_ARM),
-    ">=3.13",
-    None,
-    true
-);
-
-reachability_case!(
-    stable_abi_control,
-    "example-1.0-cp39-abi3-win_amd64.whl",
-    Some(WINDOWS_ARM),
-    ">=3.13",
-    None,
-    false
-);
-
-reachability_case!(
-    universal_platform,
-    "example-1.0-py3-none-any.whl",
-    Some(WINDOWS_ARM),
-    false
-);
-
-reachability_case!(
-    unknown_only,
-    "example-1.0-py3-none-unrecognized_platform.whl",
-    Some(WINDOWS_ARM),
-    false
-);
-
-reachability_case!(
-    unknown_only_concrete_tags,
-    "example-1.0-py3-none-unrecognized_platform.whl",
-    Some(WINDOWS_ARM),
-    ">=3.8",
-    Some(Platform::new(Os::Windows, Arch::X86_64)),
-    true
-);
-
-reachability_case!(
-    unknown_plus_x64,
-    "example-1.0-py3-none-unrecognized_platform.win_amd64.whl",
-    Some(WINDOWS_ARM),
-    false
-);
-
-reachability_case!(
-    compressed_cross_os_x64,
-    "example-1.0-py3-none-win_amd64.manylinux_2_17_x86_64.whl",
-    Some(WINDOWS_ARM),
-    false
-);
-
-reachability_case!(
-    compressed_windows_arches,
-    "example-1.0-py3-none-win_amd64.win_arm64.whl",
-    Some(WINDOWS_ARM),
-    false
-);
-
-reachability_case!(
-    compressed_cross_os_arches,
-    "example-1.0-py3-none-win_amd64.manylinux_2_17_aarch64.whl",
-    Some(WINDOWS_ARM),
-    false
-);
-
-reachability_case!(
-    compressed_any,
-    "example-1.0-py3-none-win_amd64.any.whl",
-    Some(WINDOWS_ARM),
-    false
-);
-
-reachability_case!(
-    native_win32,
-    "example-1.0-py3-none-win32.whl",
-    Some("sys_platform == 'win32' and platform_machine == 'x86'"),
-    false
-);
+#[test]
+fn unaffected_platform_wheels() {
+    for (case, filename, marker, expected) in [
+        (
+            "native_arm64",
+            "example-1.0-py3-none-win_arm64.whl",
+            Some(WINDOWS_ARM),
+            false,
+        ),
+        (
+            "native_win32",
+            "example-1.0-py3-none-win32.whl",
+            Some("sys_platform == 'win32' and platform_machine == 'x86'"),
+            false,
+        ),
+        (
+            "universal_platform",
+            "example-1.0-py3-none-any.whl",
+            Some(WINDOWS_ARM),
+            false,
+        ),
+        (
+            "unknown_only",
+            "example-1.0-py3-none-unrecognized_platform.whl",
+            Some(WINDOWS_ARM),
+            false,
+        ),
+        (
+            "linux_x64_wheel_on_arm",
+            "example-1.0-py3-none-manylinux_2_17_x86_64.whl",
+            Some("sys_platform == 'linux' and platform_machine == 'aarch64'"),
+            true,
+        ),
+    ] {
+        assert_reachability(case, filename, marker, ">=3.8", None, expected);
+    }
+}
