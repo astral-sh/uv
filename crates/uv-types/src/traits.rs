@@ -17,6 +17,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_static::TarBackend;
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
@@ -90,6 +91,9 @@ impl SourceTreeEditablePolicy {
 /// them.
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
+
+    /// The tar implementation used for source archives.
+    fn tar_backend(&self) -> TarBackend;
 
     // Note: this function is async deliberately, because downstream code may need to
     // run async code to get the interpreter, to resolve the Python version.

@@ -421,6 +421,11 @@ impl EnvVars {
     #[attr_added_in("0.8.6")]
     pub const UV_INSECURE_NO_ZIP_VALIDATION: &'static str = "UV_INSECURE_NO_ZIP_VALIDATION";
 
+    /// Use the legacy backend to read and write tar archives.
+    /// Set to a true value (e.g., `1`) to enable this compatibility fallback.
+    #[attr_added_in("next release")]
+    pub const UV_LEGACY_TAR_BACKEND: &'static str = "UV_LEGACY_TAR_BACKEND";
+
     /// Sets the maximum number of in-flight concurrent downloads that uv will
     /// perform at any given time.
     #[attr_added_in("0.1.43")]

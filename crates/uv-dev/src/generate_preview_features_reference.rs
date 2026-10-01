@@ -160,7 +160,6 @@ mod tests {
         - <a id="s3-endpoint" href="#s3-endpoint"><code>s3-endpoint</code></a>: Allows signing requests to configured S3-compatible endpoints.
         - <a id="sbom-export" href="#sbom-export"><code>sbom-export</code></a>: Allows using `uv export --format=cyclonedx1.5`.
         - <a id="special-conda-env-names" href="#special-conda-env-names"><code>special-conda-env-names</code></a>: Stops treating Conda environments named `base` or `root` as special.
-        - <a id="tar-codec" href="#tar-codec"><code>tar-codec</code></a>: Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
         - <a id="target-workspace-discovery" href="#target-workspace-discovery"><code>target-workspace-discovery</code></a>: Uses the directory containing a local `uv run` target, rather than the current working
           directory, as the starting point for project and workspace discovery. This feature takes
           effect before configuration is loaded.
