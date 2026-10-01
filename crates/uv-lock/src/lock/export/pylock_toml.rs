@@ -21,7 +21,7 @@ use uv_configuration::{
     InstallOptions,
 };
 use uv_distribution_filename::{
-    BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
+    BuildTag, DistExtension, DistFilename, ExtensionError, SourceDistExtension, SourceDistFilename,
     SourceDistFilenameError, WheelFilename, WheelFilenameError,
 };
 use uv_distribution_types::{
@@ -348,6 +348,18 @@ pub struct PylockTomlPackage {
     sdist: Option<PylockTomlSdist>,
     #[serde(skip_serializing_if = "Option::is_none")]
     wheels: Option<Vec<PylockTomlWheel>>,
+}
+
+impl PylockTomlPackage {
+    /// Return whether this package is selected for the given lockfile environment.
+    pub fn is_active(
+        &self,
+        markers: &MarkerEnvironment,
+        extras: &[ExtraName],
+        groups: &[GroupName],
+    ) -> bool {
+        self.marker.evaluate_pep751(markers, extras, groups)
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -1360,6 +1372,21 @@ impl<'lock> PylockToml {
         Ok(doc.to_string())
     }
 
+    /// Check that the target matches at least one of the lockfile's supported environments.
+    pub fn validate_environment(
+        &self,
+        markers: &MarkerEnvironment,
+    ) -> Result<(), PylockTomlErrorKind> {
+        if let Some(environments) = &self.environments
+            && !environments
+                .iter()
+                .any(|marker| marker.evaluate(markers, &[]))
+        {
+            return Err(PylockTomlErrorKind::IncompatibleEnvironment);
+        }
+        Ok(())
+    }
+
     /// Convert the [`PylockToml`] to a [`Resolution`].
     pub fn to_resolution(
         self,
@@ -1370,13 +1397,7 @@ impl<'lock> PylockToml {
         tags: &Tags,
         build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
-        if let Some(environments) = &self.environments
-            && !environments
-                .iter()
-                .any(|marker| marker.evaluate(markers, &[]))
-        {
-            return Err(PylockTomlErrorKind::IncompatibleEnvironment.into());
-        }
+        self.validate_environment(markers)?;
 
         // Convert the extras and dependency groups specifications to a concrete environment.
         let mut graph =
@@ -1388,7 +1409,7 @@ impl<'lock> PylockToml {
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
-            if !package.marker.evaluate_pep751(markers, extras, groups) {
+            if !package.is_active(markers, extras, groups) {
                 continue;
             }
             if !active_packages.insert(package.name.clone()) {
@@ -1581,6 +1602,42 @@ impl PylockTomlPackage {
     /// Return whether the package uses a non-registry source.
     pub fn has_non_registry_source(&self) -> bool {
         self.archive.is_some() || self.directory.is_some() || self.vcs.is_some()
+    }
+
+    /// Return registry artifact URLs and their parsed filenames.
+    ///
+    /// The URLs and filenames must still be checked against the registry's metadata.
+    pub fn registry_artifacts(&self) -> Option<Vec<(&DisplaySafeUrl, DistFilename)>> {
+        if self.archive.is_some() || self.directory.is_some() || self.vcs.is_some() {
+            return None;
+        }
+        let mut artifacts = Vec::new();
+        if let Some(sdist) = &self.sdist {
+            if sdist.path.is_some() {
+                return None;
+            }
+            let url = sdist.url.as_ref()?;
+            let filename = sdist.filename(&self.name).ok()?;
+            let DistFilename::SourceDistFilename(filename) =
+                DistFilename::try_from_filename(&filename, &self.name)?
+            else {
+                return None;
+            };
+            artifacts.push((url, DistFilename::SourceDistFilename(filename)));
+        }
+        for wheel in self.wheels.iter().flatten() {
+            if wheel.path.is_some() {
+                return None;
+            }
+            let url = wheel.url.as_ref()?;
+            let filename = wheel.filename(&self.name).ok()?.into_owned();
+            artifacts.push((url, DistFilename::WheelFilename(filename)));
+        }
+        if artifacts.is_empty() {
+            None
+        } else {
+            Some(artifacts)
+        }
     }
 
     /// Return whether a registry package has artifact URLs and no local paths.
