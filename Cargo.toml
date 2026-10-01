@@ -161,6 +161,7 @@ clap = { version = "4.5.17", default-features = false, features = [
 clap_complete_command = { version = "0.6.1", default-features = false, features = ["nushell"] }
 configparser = { version = "3.1.0", default-features = false }
 console = { version = "0.16.0", default-features = false, features = ["std"] }
+crc32fast = { version = "1.5.0", default-features = false, features = ["std"] }
 csv = { version = "1.3.0", default-features = false }
 ctrlc = { version = "3.4.5", default-features = false }
 cyclonedx-bom = { version = "0.8.1", default-features = false }
@@ -378,6 +379,7 @@ windows = { version = "0.61.0", default-features = false, features = [
 windows-registry = { version = "0.5.0", default-features = false, features = ["std"] }
 windows-version = { version = "0.100.0", default-features = false }
 wiremock = { version = "0.6.4", default-features = false }
+zerocopy = { version = "0.8.56", default-features = false, features = ["derive"] }
 zeroize = { version = "1.8.1", default-features = false, features = ["alloc"] }
 zstd = { version = "0.13.3", default-features = false }
 
