@@ -15,8 +15,8 @@ use uv_python::downloads::{
     Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
 };
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonPreference, PythonRequest, PythonSource,
-    find_all_python_installations,
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+    PythonSource, find_all_python_installations,
 };
 
 use crate::commands::ExitStatus;
@@ -66,17 +66,25 @@ pub(crate) async fn list(
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let python_arch = if all_platforms || all_arches {
+        None
+    } else {
+        python_arch
+    };
     let request = request.as_deref().map(PythonRequest::parse);
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
         None
     } else {
         // If the user request cannot be mapped to a download request, we won't show any downloads
-        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
+        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any)).map(
+            |request| request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)),
+        )
     };
 
     let download_request = if let Some(base_download_request) = base_download_request {
@@ -157,6 +165,7 @@ pub(crate) async fn list(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
                 discovery_preference,
+                python_arch,
                 cache,
             )?;
             // Apply the original `PythonPreference` to discovered interpreters, since we may

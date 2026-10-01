@@ -31,8 +31,8 @@ use uv_python::managed::{
     python_executable_dir,
 };
 use uv_python::{
-    ConfigDiscovery, ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
-    PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
+    ConfigDiscovery, ImplementationName, Interpreter, PythonArchitecture, PythonDownloads,
+    PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
@@ -55,7 +55,11 @@ struct InstallRequest<'a> {
 }
 
 impl<'a> InstallRequest<'a> {
-    fn new(request: PythonRequest, download_list: &'a ManagedPythonDownloadList) -> Result<Self> {
+    fn new(
+        request: PythonRequest,
+        arch: Option<PythonArchitecture>,
+        download_list: &'a ManagedPythonDownloadList,
+    ) -> Result<Self> {
         // Make sure the request is a valid download request and fill platform information
         let download_request = PythonDownloadRequest::from_request(&request)
             .ok_or_else(|| {
@@ -64,6 +68,7 @@ impl<'a> InstallRequest<'a> {
                     request.to_canonical_string()
                 )
             })?
+            .with_default_arch(arch.map(PythonArchitecture::into_inner))
             .fill()?;
 
         // Find a matching download
@@ -214,6 +219,7 @@ pub(crate) async fn install(
     python_downloads_json_url: Option<String>,
     client_builder: BaseClientBuilder<'_>,
     default: bool,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     config_discovery: ConfigDiscovery,
     compile_bytecode: bool,
@@ -262,6 +268,7 @@ pub(crate) async fn install(
         client_builder,
         cache,
         default,
+        python_arch,
         python_downloads,
         config_discovery,
         compile_bytecode.then_some(sender),
@@ -321,6 +328,7 @@ async fn perform_install(
     client_builder: BaseClientBuilder<'_>,
     cache: &Cache,
     default: bool,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     config_discovery: ConfigDiscovery,
     bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
@@ -386,7 +394,7 @@ async fn perform_install(
                 // Drop the patch and prerelease parts from the request
                 request = request.with_version(version.only_minor());
                 let install_request =
-                    InstallRequest::new(PythonRequest::Key(request), &download_list)?;
+                    InstallRequest::new(PythonRequest::Key(request), python_arch, &download_list)?;
                 minor_version_requests.insert(install_request);
             }
             minor_version_requests.into_iter().collect::<Vec<_>>()
@@ -419,14 +427,14 @@ async fn perform_install(
                 }]
             })
             .into_iter()
-            .map(|request| InstallRequest::new(request, &download_list))
+            .map(|request| InstallRequest::new(request, python_arch, &download_list))
             .collect::<Result<Vec<_>>>()?
         }
     } else {
         targets
             .iter()
             .map(|target| PythonRequest::parse(target.as_str()))
-            .map(|request| InstallRequest::new(request, &download_list))
+            .map(|request| InstallRequest::new(request, python_arch, &download_list))
             .collect::<Result<Vec<_>>>()?
     };
 
@@ -508,7 +516,11 @@ async fn perform_install(
                 }
 
                 // Construct an install request matching the existing installation.
-                match InstallRequest::new(PythonRequest::Key(installation.into()), &download_list) {
+                match InstallRequest::new(
+                    PythonRequest::Key(installation.into()),
+                    python_arch,
+                    &download_list,
+                ) {
                     Ok(request) => {
                         debug!("Will reinstall `{}`", installation.key());
                         unsatisfied.push(Cow::Owned(request));

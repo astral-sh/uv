@@ -4,6 +4,7 @@ use thiserror::Error;
 #[cfg(test)]
 use uv_static::EnvVars;
 
+pub use crate::architecture::PythonArchitecture;
 #[cfg(all(test, unix))]
 use crate::discovery::find_python_installations;
 pub use crate::discovery::{
@@ -30,6 +31,7 @@ pub use crate::version_files::{
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
+mod architecture;
 mod discovery;
 pub mod downloads;
 mod environment;
@@ -226,8 +228,8 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        PythonDownloads, PythonNotFound, PythonRequest, PythonSource, PythonVersion,
-        find_all_python_installations, find_python_installations,
+        PythonArchitecture, PythonDownloads, PythonNotFound, PythonRequest, PythonSource,
+        PythonVersion, find_all_python_installations, find_python_installations,
         implementation::ImplementationName, installation::PythonInstallation,
         managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
     };
@@ -664,6 +666,95 @@ mod tests {
     }
 
     #[test]
+    fn find_python_default_arch() -> Result<()> {
+        let mut context = TestContext::new()?;
+        let version = PythonVersion::from_str("3.14.1").expect("valid Python version");
+        let x86_64 = context
+            .new_search_path_directory("x86_64")?
+            .join("python3.14");
+        let aarch64 = context
+            .new_search_path_directory("aarch64")?
+            .join("python3.14");
+        for executable in [&x86_64, &aarch64] {
+            TestContext::create_mock_interpreter(
+                executable,
+                &version,
+                ImplementationName::CPython,
+                true,
+                false,
+            )?;
+        }
+        let script = fs_err::read_to_string(&aarch64)?;
+        fs_err::write(&aarch64, script.replace("x86_64", "aarch64"))?;
+        let arch = Some("aarch64".parse()?);
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("3.14"),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                arch,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), aarch64);
+
+        // Relaxing the requested Python version still requires the selected architecture.
+        for request in ["3.14.99", "3.99"] {
+            let installation = context.run(|| {
+                find_best_python_installation_no_download(
+                    &PythonRequest::parse(request),
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    arch,
+                    &context.cache,
+                )
+            })?;
+            assert_eq!(installation.interpreter().sys_executable(), aarch64);
+        }
+
+        let installations = context.run(|| {
+            find_all_python_installations(
+                &PythonRequest::parse("3.14"),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                arch,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            installations
+                .iter()
+                .map(|installation| installation.interpreter().sys_executable())
+                .collect::<Vec<_>>(),
+            vec![aarch64.as_path()]
+        );
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("cpython-3.14-linux-x86_64-gnu"),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                arch,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), x86_64);
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::File(x86_64.clone()),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                arch,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), x86_64);
+        Ok(())
+    }
+
+    #[test]
     fn find_python_empty_path() -> Result<()> {
         let mut context = TestContext::new()?;
 
@@ -673,6 +764,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         });
@@ -688,6 +780,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         });
@@ -713,6 +806,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         });
@@ -735,6 +829,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         })??;
@@ -768,6 +863,7 @@ mod tests {
                     None,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     PythonDownloads::Never,
                     &client_builder,
                     &context.cache,
@@ -839,6 +935,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         })??;
@@ -869,6 +966,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             );
 
@@ -956,6 +1054,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1041,6 +1140,7 @@ mod tests {
                     &PythonRequest::File(cpython_312.clone()),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??
@@ -1072,6 +1172,7 @@ mod tests {
                     &request,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &sequential_cache,
                 ) {
                     match result {
@@ -1086,6 +1187,7 @@ mod tests {
                     &request,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &parallel_cache,
                 )?;
                 Ok::<_, discovery::Error>((sequential, parallel))
@@ -1126,6 +1228,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         });
@@ -1163,6 +1266,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         })??;
@@ -1192,6 +1296,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1213,6 +1318,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1238,6 +1344,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1263,6 +1370,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1285,6 +1393,7 @@ mod tests {
                 &PythonRequest::parse("3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1316,6 +1425,7 @@ mod tests {
                 &PythonRequest::parse("3.11.2"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1347,6 +1457,7 @@ mod tests {
                 &PythonRequest::parse("3.9"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -1369,6 +1480,7 @@ mod tests {
                 &PythonRequest::parse("3.11.9"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -1385,6 +1497,7 @@ mod tests {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         cache: &Cache,
     ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
@@ -1396,6 +1509,7 @@ mod tests {
                 request,
                 environments,
                 preference,
+                arch,
                 false,
                 &client_builder,
                 cache,
@@ -1416,6 +1530,7 @@ mod tests {
                 &PythonRequest::parse("3.11.3"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -1447,6 +1562,7 @@ mod tests {
                 &PythonRequest::parse("3.11.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -1481,6 +1597,7 @@ mod tests {
                     &PythonRequest::parse("3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })?;
@@ -1509,6 +1626,7 @@ mod tests {
                     &PythonRequest::parse("3.10.2"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })?;
@@ -1541,6 +1659,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -1566,6 +1685,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -1593,6 +1713,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1620,6 +1741,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1645,6 +1767,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlySystem,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1673,6 +1796,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1698,6 +1822,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1726,6 +1851,7 @@ mod tests {
                             &PythonRequest::Default,
                             EnvironmentPreference::OnlyVirtual,
                             PythonPreference::OnlySystem,
+                            None,
                             &context.cache,
                         )
                     },
@@ -1754,6 +1880,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1785,6 +1912,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1816,6 +1944,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1846,6 +1975,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1878,6 +2008,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1898,6 +2029,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1924,6 +2056,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1941,6 +2074,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1969,6 +2103,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -2006,6 +2141,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2033,6 +2169,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2057,6 +2194,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::ExplicitSystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2081,6 +2219,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2105,6 +2244,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2142,6 +2282,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2169,6 +2310,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -2185,6 +2327,7 @@ mod tests {
                     &PythonRequest::parse("3.12"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -2201,6 +2344,7 @@ mod tests {
                     &PythonRequest::parse("3.12.3"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })?;
@@ -2222,6 +2366,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -2239,6 +2384,7 @@ mod tests {
                     &PythonRequest::parse("3.12.3"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2266,6 +2412,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         });
@@ -2292,6 +2439,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         });
@@ -2318,6 +2466,7 @@ mod tests {
                 &PythonRequest::parse("foobar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2332,6 +2481,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -2346,6 +2496,7 @@ mod tests {
                 &PythonRequest::parse("3.10.0"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -2375,6 +2526,7 @@ mod tests {
                 &PythonRequest::parse("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2390,6 +2542,7 @@ mod tests {
                 &PythonRequest::parse("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2419,6 +2572,7 @@ mod tests {
                 &PythonRequest::parse(python_path.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2434,6 +2588,7 @@ mod tests {
                 &PythonRequest::parse(python_path.to_str().unwrap()),
                 EnvironmentPreference::ExplicitSystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2449,6 +2604,7 @@ mod tests {
                 &PythonRequest::parse(python_path.to_str().unwrap()),
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2464,6 +2620,7 @@ mod tests {
                 &PythonRequest::parse(python_path.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2487,6 +2644,7 @@ mod tests {
                 &PythonRequest::parse("../foo/.venv"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2501,6 +2659,7 @@ mod tests {
                 &PythonRequest::parse(venv.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2524,6 +2683,7 @@ mod tests {
                 &PythonRequest::parse(context.tempdir.child("bar").to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2543,6 +2703,7 @@ mod tests {
                     &PythonRequest::parse(venv.to_str().unwrap()),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2571,6 +2732,7 @@ mod tests {
                 &PythonRequest::parse("../proj/.venv"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2592,6 +2754,7 @@ mod tests {
                 &PythonRequest::parse("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -2622,6 +2785,7 @@ mod tests {
                 &PythonRequest::parse("bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2637,6 +2801,7 @@ mod tests {
                 &PythonRequest::parse("bar"),
                 EnvironmentPreference::ExplicitSystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -2664,6 +2829,7 @@ mod tests {
                     &PythonRequest::parse("bar"),
                     EnvironmentPreference::ExplicitSystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -2688,6 +2854,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -2705,6 +2872,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2719,6 +2887,7 @@ mod tests {
                 &PythonRequest::parse("pypy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2744,6 +2913,7 @@ mod tests {
                 &PythonRequest::parse("pypy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2758,6 +2928,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2783,6 +2954,7 @@ mod tests {
                 &PythonRequest::parse("pypy3.10"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2809,6 +2981,7 @@ mod tests {
                 &PythonRequest::parse("pypy@3.10"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2835,6 +3008,7 @@ mod tests {
                 &PythonRequest::parse(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2861,6 +3035,7 @@ mod tests {
                 &PythonRequest::parse(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2887,6 +3062,7 @@ mod tests {
                 &PythonRequest::parse(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2914,6 +3090,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -2936,6 +3113,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2950,6 +3128,7 @@ mod tests {
                 &PythonRequest::parse("graalpy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2975,6 +3154,7 @@ mod tests {
                 &PythonRequest::parse("graalpy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2989,6 +3169,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -3026,6 +3207,7 @@ mod tests {
                     &PythonRequest::parse("pypy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3043,6 +3225,7 @@ mod tests {
                     &PythonRequest::parse("pypy"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3084,6 +3267,7 @@ mod tests {
                     &PythonRequest::parse("pypy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3101,6 +3285,7 @@ mod tests {
                     &PythonRequest::parse("default"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3137,6 +3322,7 @@ mod tests {
                     &PythonRequest::parse("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3159,6 +3345,7 @@ mod tests {
                     &PythonRequest::parse("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3181,6 +3368,7 @@ mod tests {
                     &PythonRequest::parse("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3219,6 +3407,7 @@ mod tests {
                 &PythonRequest::parse("3.13t"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -3269,6 +3458,7 @@ mod tests {
                 &PythonRequest::parse("3.13"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -3306,6 +3496,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -3320,6 +3511,7 @@ mod tests {
                 &PythonRequest::Any,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -3336,6 +3528,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;

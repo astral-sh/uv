@@ -35,8 +35,8 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::{
     GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
@@ -125,6 +125,7 @@ pub(crate) async fn pip_compile(
     mut python: Option<String>,
     system: bool,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     concurrency: Concurrency,
     quiet: bool,
     cache: Cache,
@@ -293,6 +294,7 @@ pub(crate) async fn pip_compile(
             Some(&request),
             environment_preference,
             python_preference,
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
@@ -315,6 +317,7 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,

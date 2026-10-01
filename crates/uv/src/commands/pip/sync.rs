@@ -28,8 +28,8 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, Target,
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -94,6 +94,7 @@ pub(crate) async fn pip_sync(
     prefix: Option<Prefix>,
     sources: NoSources,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     concurrency: Concurrency,
     cache: Cache,
     workspace_cache: WorkspaceCache,
@@ -182,6 +183,7 @@ pub(crate) async fn pip_sync(
             python_request.as_ref(),
             EnvironmentPreference::from_system_flag(system, false),
             python_preference.with_system_flag(system),
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
@@ -201,6 +203,7 @@ pub(crate) async fn pip_sync(
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
             PythonPreference::default().with_system_flag(system),
+            python_arch,
             &cache,
         )?;
         report_target_environment(&environment, &cache, printer)?;

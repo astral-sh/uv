@@ -29,8 +29,8 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{
-    ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
-    PythonRequest,
+    ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::ExtrasResolver;
 use uv_resolver::{
@@ -99,6 +99,7 @@ pub(crate) async fn lock(
     client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -117,6 +118,7 @@ pub(crate) async fn lock(
                 project_dir,
                 false,
                 python_preference,
+                python_arch,
                 python_downloads,
                 config_discovery,
                 &client_builder,
@@ -168,6 +170,7 @@ pub(crate) async fn lock(
                     workspace_python,
                     &client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
@@ -183,6 +186,7 @@ pub(crate) async fn lock(
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 false,

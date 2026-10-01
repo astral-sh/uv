@@ -13,6 +13,47 @@ use wiremock::{
 };
 
 #[test]
+fn python_list_default_arch() {
+    let context = uv_test::test_context_with_versions!(&[]).with_collapsed_whitespace();
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.14.0-windows-any-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-windows-x86_64-none <download available>
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.14.0-windows-aarch64-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-windows-aarch64-none <download available>
+    ");
+
+    // Windows PyPy has only an x86-64 build, so the output order is host-independent.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("pypy-3.11.15-windows-any-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "aarch64"), @"
+    exit_code: 0 (success)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("pypy-3.11.15-windows-any-none")
+        .arg("--only-downloads")
+        .arg("--all-arches")
+        .env(EnvVars::UV_PYTHON_ARCH, "aarch64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    pypy-3.11.15-windows-x86_64-none <download available>
+    ");
+}
+
+#[test]
 fn python_list() {
     let mut context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()

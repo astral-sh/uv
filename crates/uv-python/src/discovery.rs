@@ -20,11 +20,14 @@ use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,
 };
+use uv_platform::{Arch, Platform};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user_once, warn_user_with_chain};
 use which::{which, which_all};
 
-use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
+use crate::downloads::{
+    ArchRequest, ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest,
+};
 use crate::implementation::ImplementationName;
 use crate::installation::{PythonInstallation, PythonInstallationKey};
 use crate::interpreter::Error as InterpreterError;
@@ -40,7 +43,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenLink, Interpreter, PythonVersion};
+use crate::{BrokenLink, Interpreter, PythonArchitecture, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -852,6 +855,7 @@ fn python_installations<'a>(
         )
         .filter_ok(move |installation| {
             installation.satisfies_preferences(version, environments, preference)
+                && platform.matches(&Platform::from(installation.interpreter.platform()))
         })
         .map_ok(PythonInstallation::maybe_with_test_source),
     )
@@ -1153,12 +1157,14 @@ pub(crate) fn find_python_installations<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     find_python_installations_with_strategy(
         request,
         environments,
         preference,
+        arch,
         cache,
         QueryStrategy::Sequential,
     )
@@ -1170,9 +1176,16 @@ fn find_python_installations_with_strategy<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     cache: &'a Cache,
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
+    let arch = arch.map(|arch| {
+        PythonDownloadRequest::from_request(request)
+            .and_then(|request| request.arch().map(ArchRequest::inner))
+            .unwrap_or_else(|| arch.into_inner())
+    });
+    let platform = PlatformRequest::default().with_default_arch(arch);
     let sources = DiscoveryPreferences {
         python_preference: preference,
         environment_preference: environments,
@@ -1258,7 +1271,7 @@ fn find_python_installations_with_strategy<'a>(
             python_installations(
                 &VersionRequest::Any,
                 None,
-                PlatformRequest::default(),
+                platform,
                 environments,
                 preference,
                 cache,
@@ -1271,7 +1284,7 @@ fn find_python_installations_with_strategy<'a>(
             python_installations(
                 &VersionRequest::Default,
                 None,
-                PlatformRequest::default(),
+                platform,
                 environments,
                 preference,
                 cache,
@@ -1288,7 +1301,7 @@ fn find_python_installations_with_strategy<'a>(
                 python_installations(
                     version,
                     None,
-                    PlatformRequest::default(),
+                    platform,
                     environments,
                     preference,
                     cache,
@@ -1302,7 +1315,7 @@ fn find_python_installations_with_strategy<'a>(
             python_installations(
                 &VersionRequest::Default,
                 Some(implementation),
-                PlatformRequest::default(),
+                platform,
                 environments,
                 preference,
                 cache,
@@ -1320,7 +1333,7 @@ fn find_python_installations_with_strategy<'a>(
                 python_installations(
                     version,
                     Some(implementation),
-                    PlatformRequest::default(),
+                    platform,
                     environments,
                     preference,
                     cache,
@@ -1344,7 +1357,7 @@ fn find_python_installations_with_strategy<'a>(
                 python_installations(
                     request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
-                    request.platform(),
+                    request.platform().with_default_arch(arch),
                     environments,
                     preference,
                     cache,
@@ -1369,12 +1382,14 @@ pub fn find_all_python_installations(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     cache: &Cache,
 ) -> Result<Vec<PythonInstallation>, Error> {
     let results = find_python_installations_with_strategy(
         request,
         environments,
         preference,
+        arch,
         cache,
         QueryStrategy::Parallel,
     );
@@ -1401,9 +1416,10 @@ pub(crate) fn find_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     cache: &Cache,
 ) -> Result<FindPythonResult, Error> {
-    let installations = find_python_installations(request, environments, preference, cache);
+    let installations = find_python_installations(request, environments, preference, arch, cache);
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;
@@ -1530,7 +1546,9 @@ pub(crate) fn find_python_installation(
     }
 
     Ok(Err(PythonNotFound {
-        request: request.clone(),
+        request: request
+            .with_default_arch(arch.map(PythonArchitecture::into_inner))
+            .into_owned(),
         environment_preference: environments,
         python_preference: preference,
     }))
@@ -1554,6 +1572,7 @@ pub(crate) async fn find_best_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     downloads_enabled: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
@@ -1595,7 +1614,7 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        let result = find_python_installation(request, environments, preference, cache);
+        let result = find_python_installation(request, environments, preference, arch, cache);
         let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1632,6 +1651,7 @@ pub(crate) async fn find_best_python_installation(
 
             let download = download_request
                 .clone()
+                .with_default_arch(arch.map(PythonArchitecture::into_inner))
                 .fill()
                 .map(|request| download_list.find(&request));
 
@@ -1689,7 +1709,9 @@ pub(crate) async fn find_best_python_installation(
             return Err(match error {
                 crate::Error::MissingPython(err, _) => PythonNotFound {
                     // Use a more general error in this case since we looked for multiple versions
-                    request: original_request.clone(),
+                    request: original_request
+                        .with_default_arch(arch.map(PythonArchitecture::into_inner))
+                        .into_owned(),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
                 }
@@ -2274,6 +2296,20 @@ impl PythonRequest {
             }
             Self::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
+    }
+
+    /// Require an exact architecture for requests that do not select one or name an executable.
+    pub fn with_default_arch(&self, arch: Option<Arch>) -> Cow<'_, Self> {
+        let Some(arch) = arch else {
+            return Cow::Borrowed(self);
+        };
+        let Some(request) = PythonDownloadRequest::from_request(self) else {
+            return Cow::Borrowed(self);
+        };
+        if request.arch().is_some() {
+            return Cow::Borrowed(self);
+        }
+        Cow::Owned(Self::Key(request.with_arch(arch)))
     }
 
     /// Whether this request opts-in to a pre-release Python version.

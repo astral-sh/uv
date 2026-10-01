@@ -12,6 +12,7 @@ use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_python::PythonArchitecture;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_torch::AmdGpuArchitecture;
@@ -739,6 +740,7 @@ pub struct EnvironmentOptions {
     pub skip_wheel_filename_check: Option<bool>,
     pub require_metadata_range_requests: Option<bool>,
     pub hide_build_output: Option<bool>,
+    pub python_arch: Option<PythonArchitecture>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub python_no_registry: EnvFlag,
@@ -833,6 +835,7 @@ impl EnvironmentOptions {
                 EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS,
             )?,
             hide_build_output: parse_boolish_environment_variable(EnvVars::UV_HIDE_BUILD_OUTPUT)?,
+            python_arch: parse_typed_environment_variable(EnvVars::UV_PYTHON_ARCH, None)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,

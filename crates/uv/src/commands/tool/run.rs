@@ -33,8 +33,8 @@ use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -163,6 +163,7 @@ pub(crate) async fn run(
     invocation_source: ToolRunCommand,
     isolated: bool,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -322,6 +323,7 @@ pub(crate) async fn run(
         isolated,
         lfs,
         python_preference,
+        python_arch,
         python_downloads,
         installer_metadata,
         &concurrency,
@@ -754,6 +756,7 @@ async fn get_or_create_environment(
     isolated: bool,
     lfs: GitLfsSetting,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
@@ -820,6 +823,7 @@ async fn get_or_create_environment(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_arch,
         python_downloads,
         client_builder,
         cache,
@@ -1088,9 +1092,11 @@ async fn get_or_create_environment(
             let existing_environment = installed_tools
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
-                    python_request.as_ref().is_none_or(|python_request| {
-                        python_request.satisfied(environment.environment().interpreter(), cache)
-                    })
+                    python_request
+                        .as_ref()
+                        .unwrap_or(&PythonRequest::Any)
+                        .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
+                        .satisfied(environment.environment().interpreter(), cache)
                 });
 
             // Check if the installed packages meet the requirements.
@@ -1223,6 +1229,7 @@ async fn get_or_create_environment(
                     &reporter,
                     &install_mirrors,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     cache,
                 )

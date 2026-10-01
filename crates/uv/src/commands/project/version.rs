@@ -19,7 +19,9 @@ use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
@@ -88,6 +90,7 @@ pub(crate) async fn project_version(
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -358,6 +361,7 @@ pub(crate) async fn project_version(
             &settings,
             client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             installer_metadata,
             &concurrency,
@@ -551,6 +555,7 @@ async fn lock_and_sync(
     settings: &ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
@@ -589,6 +594,7 @@ async fn lock_and_sync(
             workspace_python,
             &client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             &install_mirrors,
             ProjectEnvironmentPolicy::Optional,
@@ -610,6 +616,7 @@ async fn lock_and_sync(
             &install_mirrors,
             &client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             no_sync,
             config_discovery,

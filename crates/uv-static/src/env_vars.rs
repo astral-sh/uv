@@ -221,6 +221,11 @@ impl EnvVars {
     #[attr_added_in("0.3.2")]
     pub const UV_PYTHON_PREFERENCE: &'static str = "UV_PYTHON_PREFERENCE";
 
+    /// Selects the architecture for Python requests that do not specify one, e.g., `x86_64`
+    /// or `aarch64`. Requests that name an interpreter executable take precedence.
+    #[attr_added_in("next release")]
+    pub const UV_PYTHON_ARCH: &'static str = "UV_PYTHON_ARCH";
+
     /// Require use of uv-managed Python versions.
     #[attr_added_in("0.6.8")]
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";

@@ -7,7 +7,9 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_lock::Metadata;
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
@@ -43,6 +45,7 @@ pub(crate) async fn metadata(
     client_builder: BaseClientBuilder<'_>,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -86,6 +89,7 @@ pub(crate) async fn metadata(
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 false,
@@ -111,6 +115,7 @@ pub(crate) async fn metadata(
                     workspace_python,
                     &client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
                     if sync.is_some() {
@@ -184,6 +189,7 @@ pub(crate) async fn metadata(
                         &install_mirrors,
                         &client_builder,
                         python_preference,
+                        python_arch,
                         python_downloads,
                         false,
                         config_discovery,
@@ -200,6 +206,7 @@ pub(crate) async fn metadata(
                         python.as_deref().map(PythonRequest::parse),
                         &client_builder,
                         python_preference,
+                        python_arch,
                         python_downloads,
                         &install_mirrors,
                         false,

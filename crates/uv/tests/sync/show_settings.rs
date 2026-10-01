@@ -70,6 +70,7 @@ fn show_settings_returns_before_running_commands() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -204,6 +205,7 @@ fn pip_compile_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -412,6 +414,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -581,6 +584,7 @@ fn pip_install_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -772,6 +776,7 @@ fn lock_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -899,6 +904,7 @@ fn version_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -1041,6 +1047,7 @@ fn tool_install_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -2535,7 +2542,7 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
              malware_check_url: None,
          },
@@ -2572,7 +2579,7 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     +        flags: [],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
 
      ----- stderr -----
@@ -3956,7 +3963,7 @@ fn preview_features() {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -3984,7 +3991,7 @@ fn preview_features() {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4156,7 +4163,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4232,7 +4239,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4402,7 +4409,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4542,7 +4549,7 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4674,7 +4681,7 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Never,
+         python_arch: None,
     ...
     "
     );

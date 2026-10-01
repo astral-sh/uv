@@ -37,8 +37,9 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
@@ -219,6 +220,7 @@ pub(crate) async fn build_frontend(
     client_builder: &BaseClientBuilder<'_>,
     config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     cache: &Cache,
@@ -249,6 +251,7 @@ pub(crate) async fn build_frontend(
         client_builder,
         config_discovery,
         python_preference,
+        python_arch,
         python_downloads,
         &concurrency,
         cache,
@@ -299,6 +302,7 @@ async fn build_impl(
     client_builder: &BaseClientBuilder<'_>,
     config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: &Concurrency,
     cache: &Cache,
@@ -482,6 +486,7 @@ async fn build_impl(
             config_discovery,
             workspace.as_deref(),
             python_preference,
+            python_arch,
             python_downloads,
             cache,
             workspace_cache,
@@ -559,6 +564,7 @@ async fn build_package(
     config_discovery: ConfigDiscovery,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
@@ -636,6 +642,7 @@ async fn build_package(
         interpreter_request.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
+        python_arch,
         python_downloads,
         &client_builder,
         cache,

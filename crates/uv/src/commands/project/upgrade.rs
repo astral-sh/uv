@@ -19,7 +19,9 @@ use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
-use uv_python::{ConfigDiscovery, Interpreter, PythonDownloads, PythonPreference};
+use uv_python::{
+    ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonPreference,
+};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::MetadataResponse;
 use uv_settings::PythonInstallMirrors;
@@ -167,6 +169,7 @@ pub(crate) async fn upgrade(
     mut settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -221,6 +224,7 @@ pub(crate) async fn upgrade(
             workspace_python,
             &client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             &install_mirrors,
             ProjectEnvironmentPolicy::Optional,
@@ -380,6 +384,7 @@ pub(crate) async fn upgrade(
             workspace_python,
             &client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             &install_mirrors,
             ProjectEnvironmentPolicy::Optional,

@@ -11,8 +11,9 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonArchitecture, PythonDownloads,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    VersionFileDiscoveryOptions,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user_once, warn_user_once_with_chain};
@@ -30,6 +31,7 @@ pub(crate) async fn pin(
     request: Option<String>,
     resolved: bool,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     no_project: bool,
     global: bool,
@@ -119,6 +121,7 @@ pub(crate) async fn pin(
                         pin,
                         virtual_project,
                         python_preference,
+                        python_arch,
                         download_list,
                         cache,
                     );
@@ -140,6 +143,7 @@ pub(crate) async fn pin(
         Some(&request),
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_arch,
         python_downloads,
         &client_builder,
         cache,
@@ -259,6 +263,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     downloads_list: &ManagedPythonDownloadList,
     cache: &Cache,
 ) {
@@ -284,6 +289,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         pin,
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_arch,
         downloads_list,
         cache,
     ) {

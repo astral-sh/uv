@@ -231,7 +231,9 @@ pub struct PythonDownloadRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArchRequest {
+    /// Require an exact architecture.
     Explicit(Arch),
+    /// Allow architectures supported by the detected host architecture.
     Environment(Arch),
 }
 
@@ -243,6 +245,15 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
+    /// Require an exact match for the given architecture if this request does not specify one.
+    #[must_use]
+    pub(crate) fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
+        if self.arch.is_none() {
+            self.arch = arch.map(ArchRequest::Explicit);
+        }
+        self
+    }
+
     /// Check if this platform request is satisfied by a platform.
     pub(crate) fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os
@@ -355,6 +366,15 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_arch(mut self, arch: Arch) -> Self {
         self.arch = Some(ArchRequest::Explicit(arch));
+        self
+    }
+
+    /// Require an exact match for the given architecture if this request does not specify one.
+    #[must_use]
+    pub fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
+        if self.arch.is_none() {
+            self.arch = arch.map(ArchRequest::Explicit);
+        }
         self
     }
 
