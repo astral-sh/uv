@@ -9,7 +9,6 @@ pub struct EnvVars;
 impl EnvVars {
     /// Controls whether `uv build` includes the project lock in built distributions.
     #[attr_added_in("next release")]
-    #[attr_hidden]
     pub const UV_EXPORT_LOCK: &'static str = "UV_EXPORT_LOCK";
     /// The path to the binary that was used to invoke uv.
     ///
