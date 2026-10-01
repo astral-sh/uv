@@ -3,9 +3,9 @@ use uv_redacted::DisplaySafeUrl;
 /// A Git source with repository identity and checkout settings recorded separately.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(super) struct GitSourceWire {
-    pub(super) git: String,
+    git: String,
     #[serde(flatten)]
-    pub(super) fields: GitFieldsWire,
+    fields: GitFieldsWire,
 }
 
 /// Checkout settings shared by resolved Git sources and declared Git requirements.
