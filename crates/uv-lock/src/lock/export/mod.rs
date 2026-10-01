@@ -48,6 +48,12 @@ struct ExportableRequirement<'lock> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExportSelection {
+    Activated,
+    MarkSelections,
+}
+
 impl<'lock> ExportableRequirements<'lock> {
     /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
     fn from_lock(
@@ -57,6 +63,45 @@ impl<'lock> ExportableRequirements<'lock> {
         groups: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
+    ) -> Result<Self, LockError> {
+        Self::from_lock_impl(
+            target,
+            prune,
+            extras,
+            groups,
+            annotate,
+            install_options,
+            ExportSelection::Activated,
+        )
+    }
+
+    /// Keep root extras and groups as PEP 751 markers.
+    fn from_lock_with_selection_markers(
+        target: &impl Installable<'lock>,
+        prune: &[PackageName],
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        install_options: &'lock InstallOptions,
+    ) -> Result<Self, LockError> {
+        Self::from_lock_impl(
+            target,
+            prune,
+            extras,
+            groups,
+            false,
+            install_options,
+            ExportSelection::MarkSelections,
+        )
+    }
+
+    fn from_lock_impl(
+        target: &impl Installable<'lock>,
+        prune: &[PackageName],
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        annotate: bool,
+        install_options: &'lock InstallOptions,
+        selection: ExportSelection,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
@@ -114,11 +159,22 @@ impl<'lock> ExportableRequirements<'lock> {
 
                 // Push its dependencies on the queue.
                 queue.push_back((package_index, None));
-                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                let available_extras =
+                    dist.optional_dependencies
+                        .keys()
+                        .chain(dist.provides_extras().iter().filter(|extra| {
+                            selection == ExportSelection::MarkSelections
+                                && !dist.optional_dependencies.contains_key(*extra)
+                        }));
+                for extra in extras.extra_names(available_extras) {
                     queue.push_back((package_index, Some(extra)));
                     activated_items.insert(
                         ConflictItem::from((dist.id.name.clone(), extra.clone())),
-                        MarkerTree::TRUE,
+                        if selection == ExportSelection::MarkSelections {
+                            MarkerTree::extra_in_pep751(extra.clone())
+                        } else {
+                            MarkerTree::TRUE
+                        },
                     );
                 }
             }
@@ -139,7 +195,11 @@ impl<'lock> ExportableRequirements<'lock> {
                 // Track the activated group in the list of known conflicts.
                 activated_items.insert(
                     ConflictItem::from((dist.id.name.clone(), group.clone())),
-                    MarkerTree::TRUE,
+                    if selection == ExportSelection::MarkSelections {
+                        MarkerTree::dependency_group_in_pep751(group.clone())
+                    } else {
+                        MarkerTree::TRUE
+                    },
                 );
 
                 if prune.contains(&dep.package_id.name) {
@@ -160,7 +220,13 @@ impl<'lock> ExportableRequirements<'lock> {
                     dep_index,
                     Edge::Dev {
                         group,
-                        marker: dep.simplified_marker.as_simplified_marker_tree(),
+                        marker: if selection == ExportSelection::MarkSelections {
+                            dep.simplified_marker
+                                .as_simplified_marker_tree()
+                                .and(MarkerTree::dependency_group_in_pep751(group.clone()))
+                        } else {
+                            dep.simplified_marker.as_simplified_marker_tree()
+                        },
                         dep_extras: dep.extra.iter().collect(),
                     },
                 );
@@ -315,7 +381,12 @@ impl<'lock> ExportableRequirements<'lock> {
         }
 
         // Determine the reachability of each node in the graph.
-        let mut reachability = conflict_marker_reachability(&graph, &[], &activated_items);
+        let mut reachability = conflict_marker_reachability(
+            &graph,
+            &[],
+            &activated_items,
+            selection == ExportSelection::MarkSelections,
+        );
 
         // Collect all packages.
         let nodes = graph
@@ -429,6 +500,7 @@ fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     fork_markers: &[Edge<'lock>],
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+    mark_selections: bool,
 ) -> FxHashMap<NodeIndex, MarkerTree> {
     // For each node, track the conditions under which each conflict item is enabled.
     let mut conflict_maps =
@@ -496,7 +568,7 @@ fn conflict_marker_reachability<'lock>(
                 .cloned()
                 .unwrap_or_else(|| known_conflicts.clone());
 
-            if let Node::Package(child) = graph[child_edge.target()] {
+            if !mark_selections && let Node::Package(child) = graph[child_edge.target()] {
                 for extra in child_edge.weight().dep_extras() {
                     let item = ConflictItem::from((child.name().clone(), (*extra).clone()));
                     parent_map.insert(item, parent_marker);
@@ -541,6 +613,15 @@ fn conflict_marker_reachability<'lock>(
                 }
             };
 
+            // The edge marker refers to the parent's extras; the child's extras become active
+            // only after the edge has been traversed.
+            if mark_selections && let Node::Package(child) = graph[child_edge.target()] {
+                for extra in child_edge.weight().dep_extras() {
+                    let item = ConflictItem::from((child.name().clone(), (*extra).clone()));
+                    parent_map.insert(item, parent_marker);
+                }
+            }
+
             // Propagate the edge to the known conflicts.
             for value in parent_map.values_mut() {
                 *value = value.and(marker);
@@ -562,6 +643,7 @@ fn conflict_marker_reachability<'lock>(
                     }
                 }
                 Entry::Vacant(vacant) => {
+                    conflicts_changed = !parent_map.is_empty();
                     vacant.insert(parent_map);
                 }
             }

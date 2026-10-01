@@ -76,6 +76,23 @@ Relative local paths are written relative to the output file's directory. When w
 they are relative to the current working directory. Use `--output-file` when writing a `pylock.toml`
 in another directory.
 
+### Selectable extras and dependency groups
+
+The experimental `--multi-use` option, currently hidden from command help, exports one project's
+extras and dependency groups as selectable markers:
+
+```console
+$ uv export --multi-use -o pylock.toml
+$ uv pip sync pylock.toml --extra fast --group dev
+```
+
+No extras or dependency groups are selected by default in the exported file. Unlike `--all-extras`,
+which includes all extras in a single-use export, this option leaves their selection to the installer.
+Multi-use exports do not support declared conflicts, negative extra markers, groups with their own
+Python requirements, or workspace-root dependencies and groups. Groups require a recent `uv.lock`;
+run `uv lock` to update an older file.
+Pass `--preview-features pylock-multi-use` to opt in and silence the experimental warning.
+
 ## CycloneDX SBOM format
 
 uv can export your project's dependency lockfile as a Software Bill of Materials (SBOM) in CycloneDX
