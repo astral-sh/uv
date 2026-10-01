@@ -1073,6 +1073,20 @@ async fn build_package(
             {
                 verify_sdist_metadata(source.path(), filename, lock).await?;
             }
+            let build_action = if exported_lock.is_some()
+                && !force_pep517
+                && check_direct_build(
+                    &extracted,
+                    uv_version::version(),
+                    &interpreter.to_resolver_marker_environment(),
+                    build_constraints.requirements().cloned().map(Into::into),
+                )
+                .is_ok()
+            {
+                BuildAction::DirectBuild
+            } else {
+                build_action
+            };
             let wheel_build = build_wheel(
                 &extracted,
                 &output_dir,

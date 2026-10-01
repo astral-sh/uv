@@ -12,7 +12,8 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::SourceDistFilename;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, MetadataHashPolicy, Requirement, SourceUrl,
+    BuildableSource, DirectorySourceUrl, MetadataHashPolicy, PYPI_URL, Requirement, RequiresPython,
+    SourceUrl,
 };
 use uv_fs::is_same_file_allow_missing;
 use uv_lock::{Installable, Lock, PylockToml};
@@ -52,6 +53,11 @@ enum LockMetadata {
         requires_dist: Vec<Requirement>,
         project_metadata: ResolutionMetadata,
     },
+    Sdist {
+        root: PathBuf,
+        requires_python: RequiresPython,
+        metadata: ResolutionMetadata,
+    },
 }
 
 impl ExportedLock {
@@ -60,6 +66,7 @@ impl ExportedLock {
             LockMetadata::Project {
                 project_metadata, ..
             } => project_metadata,
+            LockMetadata::Sdist { metadata, .. } => metadata,
         }
     }
 
@@ -91,6 +98,11 @@ impl ExportedLock {
                     .collect::<Vec<_>>();
                 Ok(lock.matches_requirements(root, requires_dist, &actual_requirements)?)
             }
+            LockMetadata::Sdist {
+                root,
+                requires_python,
+                metadata: expected,
+            } => metadata_matches(expected, &metadata, root, requires_python),
         }
     }
 }
@@ -114,10 +126,37 @@ fn metadata_fields_match(expected: &ResolutionMetadata, actual: &ResolutionMetad
         && expected_extras == actual_extras
 }
 
-/// Reject lock export from an existing source distribution.
+fn metadata_matches(
+    expected: &ResolutionMetadata,
+    actual: &ResolutionMetadata,
+    root: &Path,
+    requires_python: &RequiresPython,
+) -> Result<bool> {
+    let expected_requirements: Vec<Requirement> = expected
+        .requires_dist
+        .iter()
+        .cloned()
+        .map(Into::into)
+        .collect();
+    let actual_requirements: Vec<Requirement> = actual
+        .requires_dist
+        .iter()
+        .cloned()
+        .map(Into::into)
+        .collect();
+    Ok(metadata_fields_match(expected, actual)
+        && Lock::matches_requirements_for_python(
+            root,
+            requires_python,
+            &expected_requirements,
+            &actual_requirements,
+        )?)
+}
+
+/// Read a lock from an extracted source distribution, checking its metadata before reuse.
 pub(super) fn from_sdist(
     source_tree: &Path,
-    _filename: Option<&SourceDistFilename>,
+    filename: Option<&SourceDistFilename>,
     preview: Preview,
 ) -> Result<Option<ExportedLock>> {
     let environment_export = parse_boolish_environment_variable(EnvVars::UV_EXPORT_LOCK)?;
@@ -155,7 +194,84 @@ pub(super) fn from_sdist(
         }
         return Ok(None);
     }
-    bail!("Exporting a lock from a source distribution is not supported")
+    let path = source_tree.join("pylock.toml");
+    let file_metadata = match fs_err::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            bail!("Cannot export a lock: the source distribution has no `pylock.toml`")
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if !file_metadata.is_file() || file_metadata.len() > 16 * 1024 * 1024 {
+        bail!("The source distribution has an invalid `pylock.toml` file");
+    }
+    let mut contents = fs_err::read_to_string(&path)?;
+    let raw: toml::Value = toml::from_str(&contents)?;
+    let lock: PylockToml = toml::from_str(&contents)?;
+    if enabled.is_none() && (!has_only_pypi_sources(&lock) || !has_no_unchecked_urls(&raw)) {
+        return Ok(None);
+    }
+    if lock.has_missing_hashes() || lock.has_non_registry_sources() {
+        bail!("The source distribution has an unsupported `pylock.toml`");
+    }
+    if enabled.is_none() && contents.contains('#') {
+        contents = toml::to_string(&raw)?;
+        if toml::from_str::<toml::Value>(&contents)? != raw {
+            bail!("Cannot sanitize the source distribution's `pylock.toml`");
+        }
+    }
+    lock.validate_registry_packages()
+        .context("The source distribution has an invalid `pylock.toml`")?;
+    let pkg_info = source_tree.join("PKG-INFO");
+    let info_metadata = fs_err::symlink_metadata(&pkg_info)?;
+    if !info_metadata.is_file() || info_metadata.len() > 16 * 1024 * 1024 {
+        bail!("The source distribution has an invalid `PKG-INFO` file");
+    }
+    let metadata = ResolutionMetadata::parse_pkg_info(&fs_err::read(&pkg_info)?)?;
+    if metadata.dynamic {
+        bail!("The source distribution has a dynamic version in `PKG-INFO`");
+    }
+    let requires_python = lock
+        .requires_python
+        .clone()
+        .unwrap_or_else(|| RequiresPython::from_specifiers(VersionSpecifiers::default()));
+    let filename = filename.context("Cannot verify the source distribution filename")?;
+    if metadata.name != filename.name || metadata.version != filename.version {
+        bail!("The source distribution's metadata does not match its filename");
+    }
+    let project_python = metadata
+        .requires_python
+        .clone()
+        .map(release_specifiers_to_ranges)
+        .unwrap_or_else(Ranges::full);
+    let lock_python = release_specifiers_to_ranges(requires_python.specifiers().clone());
+    if !project_python.subset_of(&lock_python) {
+        bail!("The source distribution's lock does not cover its supported Python versions");
+    }
+    Ok(Some(ExportedLock {
+        pylock: contents,
+        metadata: LockMetadata::Sdist {
+            root: source_tree.to_path_buf(),
+            requires_python,
+            metadata,
+        },
+    }))
+}
+
+/// Return whether the URL is the PyPI simple index, with or without a trailing slash.
+fn is_pypi_index_url(url: &str) -> bool {
+    url.strip_suffix('/').unwrap_or(url) == PYPI_URL.as_str()
+}
+
+/// Check the package indexes recorded in the source distribution's lock.
+fn has_only_pypi_sources(lock: &PylockToml) -> bool {
+    lock.packages.iter().all(|package| {
+        package
+            .index
+            .as_ref()
+            .is_none_or(|index| is_pypi_index_url(index.as_str()))
+            && !package.has_non_registry_source()
+    })
 }
 
 /// Export the runtime dependencies of the project supplied by the distribution.

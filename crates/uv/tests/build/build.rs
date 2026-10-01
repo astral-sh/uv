@@ -12,11 +12,13 @@ use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::path::Path;
+use std::process::Command;
+use tokio::io::AsyncWriteExt;
 use url::Url;
 use uv_static::EnvVars;
 use uv_test::package_server::PackageServer;
 use uv_test::packse::generate_wheel;
-use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
+use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, apply_filters, get_bin, uv_snapshot};
 
 fn zip_file_names(path: &Path) -> Result<Vec<String>> {
     block_on(async {
@@ -4175,6 +4177,25 @@ async fn build_packaged_lock_respects_build_hashes() -> Result<()> {
     Ok(())
 }
 
+fn write_uv_build_backend(context: &TestContext) -> Result<()> {
+    context.temp_dir.child("backend/uv_build.py").write_str(indoc! {r#"
+        import os, subprocess
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            return subprocess.check_output([os.environ["TEST_UV_BIN"], "build-backend", "build-wheel", wheel_directory], text=True).strip()
+        def build_sdist(sdist_directory, config_settings=None):
+            return subprocess.check_output([os.environ["TEST_UV_BIN"], "build-backend", "build-sdist", sdist_directory], text=True).strip()
+    "#})?;
+    Ok(())
+}
+
+fn build_with_uv_build(context: &TestContext) -> Command {
+    let mut command = context.build();
+    command
+        .env("PYTHONPATH", context.temp_dir.child("backend").path())
+        .env("TEST_UV_BIN", get_bin!());
+    command
+}
+
 /// The frontend packages the lock in both distributions and can use it when rebuilding a wheel.
 #[test]
 fn build_with_packaged_lock() -> Result<()> {
@@ -4255,6 +4276,373 @@ fn build_with_packaged_lock() -> Result<()> {
     valid wheel: True
     standard lock: {'lock-version': '1.0', 'created-by': 'uv', 'requires-python': '>=3.12', 'packages': []}
     "#);
+    // Use the local backend shim so rebuilding the sdist does not require an index.
+    write_uv_build_backend(&context)?;
+    build_with_uv_build(&context)
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "rebuilt",
+            "dist/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    assert!(
+        zip_file_names(
+            &context
+                .temp_dir
+                .child("rebuilt/locked_tool-1.0.0-py3-none-any.whl")
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    build_with_uv_build(&context)
+        .env(EnvVars::UV_EXPORT_LOCK, "false")
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "disabled",
+            "dist/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    assert!(
+        !zip_file_names(
+            context
+                .temp_dir
+                .child("disabled/locked_tool-1.0.0-py3-none-any.whl")
+                .path()
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    context.python_command().arg("-c").arg(indoc! {r#"
+        import io, pathlib, stat, tarfile, zipfile
+        source = pathlib.Path("dist/locked_tool-1.0.0.tar.gz")
+        for variant in ("private", "comment", "mismatch", "duplicate", "missing", "index", "artifact", "pypi", "directory", "archive", "archive-index", "missing-index", "missing-url", "missing-hash"):
+            pathlib.Path(variant).mkdir()
+            with tarfile.open(source) as src, tarfile.open(f"{variant}/{source.name}", "w:gz") as dst:
+                for entry in src:
+                    if entry.name.endswith("/pylock.toml") and variant == "missing":
+                        continue
+                    data = src.extractfile(entry).read() if entry.isfile() else None
+                    if entry.name.endswith("/pylock.toml") and variant == "private":
+                        data += b'\nunknown = "https://private.example/secret"\n'
+                    if entry.name.endswith("/pylock.toml") and variant == "comment":
+                        data += b'\n# https://private.example/secret\n'
+                    if entry.name.endswith("/pylock.toml") and variant in ("index", "artifact", "pypi"):
+                        index = "https://pypi.org/other" if variant == "index" else "https://pypi.org/simple"
+                        host = "pypi.org" if variant == "artifact" else "files.pythonhosted.org"
+                        data = data.replace(b"packages = []", b"")
+                        if variant == "pypi":
+                            data = data.replace(b'requires-python = ">=3.12"\n', b'')
+                        data += (f'\n[[packages]]\nname = "example"\nversion = "1.0.0"\nindex = "{index}"\n'
+                                 f'wheels = [{{ url = "https://{host}/packages/example-1.0.0-py3-none-any.whl", hashes = {{ sha256 = "{"0" * 64}" }} }}]\n').encode()
+                    if entry.name.endswith("/pylock.toml") and variant in ("directory", "archive", "archive-index", "missing-index", "missing-url", "missing-hash"):
+                        data = data.replace(b"packages = []", b"")
+                        if variant == "directory":
+                            package_source = 'directory = { path = "example" }'
+                        elif variant == "archive":
+                            package_source = f'archive = {{ url = "https://private.example/example-1.0.0-py3-none-any.whl", hashes = {{ sha256 = "{"0" * 64}" }} }}'
+                        elif variant == "archive-index":
+                            package_source = f'index = "https://pypi.org/simple"\narchive = {{ url = "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl", hashes = {{ sha256 = "{"0" * 64}" }} }}'
+                        elif variant == "missing-index":
+                            package_source = f'wheels = [{{ url = "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl", hashes = {{ sha256 = "{"0" * 64}" }} }}]'
+                        elif variant == "missing-url":
+                            package_source = f'index = "https://pypi.org/simple"\nwheels = [{{ path = "example-1.0.0-py3-none-any.whl", hashes = {{ sha256 = "{"0" * 64}" }} }}]'
+                        else:
+                            package_source = 'index = "https://pypi.org/simple"\nwheels = [{ url = "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl", hashes = {} }]'
+                        data += f'\n[[packages]]\nname = "example"\nversion = "1.0.0"\n{package_source}\n'.encode()
+                    if entry.name.endswith("/PKG-INFO") and variant == "mismatch":
+                        if b'\n\n' in data:
+                            data = data.replace(b'\n\n', b'\nRequires-Dist: unexpected\n\n', 1)
+                        else:
+                            data += b'Requires-Dist: unexpected\n'
+                    if entry.name.endswith("/PKG-INFO") and variant == "comment":
+                        assert b"python_full_version < '3'" in data
+                        data = data.replace(b"python_full_version < '3'", b"python_full_version < '3.1'")
+                    if data is not None:
+                        entry.size = len(data)
+                    dst.addfile(entry, io.BytesIO(data) if data is not None else None)
+                    if entry.name.endswith("/pylock.toml") and variant == "duplicate":
+                        dst.addfile(entry, io.BytesIO(data))
+        pathlib.Path("formats").mkdir()
+        for extension, mode in (("tar", "w"), ("tgz", "w:gz")):
+            with tarfile.open("dist/locked_tool-1.0.0.tar.gz") as src, tarfile.open(f"formats/locked_tool-1.0.0.{extension}", mode) as dst:
+                for entry in src:
+                    data = src.extractfile(entry).read() if entry.isfile() else None
+                    dst.addfile(entry, io.BytesIO(data) if data is not None else None)
+        for variant in ("normal", "duplicate", "symlink"):
+            pathlib.Path(f"formats/{variant}").mkdir()
+            with tarfile.open("dist/locked_tool-1.0.0.tar.gz") as src, zipfile.ZipFile(f"formats/{variant}/locked_tool-1.0.0.zip", "w") as dst:
+                for entry in src:
+                    if not entry.isfile():
+                        continue
+                    data = src.extractfile(entry).read()
+                    info = zipfile.ZipInfo(entry.name)
+                    info.create_system = 3
+                    info.external_attr = ((stat.S_IFLNK if variant == "symlink" and entry.name.endswith("/PKG-INFO") else stat.S_IFREG) | 0o644) << 16
+                    dst.writestr(info, data)
+                    if variant == "duplicate" and entry.name.endswith("/pylock.toml"):
+                        duplicate = zipfile.ZipInfo(entry.name)
+                        duplicate.create_system = info.create_system
+                        duplicate.external_attr = info.external_attr
+                        dst.writestr(duplicate, data)
+    "#}).assert().success();
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "private-wheel",
+            "private/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    assert!(
+        !zip_file_names(
+            context
+                .temp_dir
+                .child("private-wheel/locked_tool-1.0.0-py3-none-any.whl")
+                .path()
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "comment-wheel",
+            "comment/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("comment-wheel/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            contents = wheel.read("locked_tool-1.0.0.dist-info/pylock.toml")
+            assert b"private.example" not in contents
+    "#})
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), build_with_uv_build(&context)
+        .args(["--offline", "--preview-features", "locked-tools", "--no-build-isolation", "--wheel", "--out-dir", "missing-wheel", "missing/locked_tool-1.0.0.tar.gz"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/missing/locked_tool-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: Cannot export a lock: the source distribution has no `pylock.toml`
+    ");
+    build_with_uv_build(&context)
+        .env(EnvVars::UV_EXPORT_LOCK, "false")
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "missing-disabled",
+            "missing/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    for variant in ["index", "artifact", "directory", "archive", "archive-index"] {
+        let source = format!("{variant}/locked_tool-1.0.0.tar.gz");
+        let output = format!("{variant}-wheel");
+        build_with_uv_build(&context)
+            .args([
+                "--offline",
+                "--preview-features",
+                "locked-tools",
+                "--no-build-isolation",
+                "--wheel",
+                "--out-dir",
+                &output,
+                &source,
+            ])
+            .assert()
+            .success();
+        let has_lock = zip_file_names(
+            context
+                .temp_dir
+                .child(&output)
+                .child("locked_tool-1.0.0-py3-none-any.whl")
+                .path(),
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string());
+        assert_eq!(has_lock, variant == "artifact");
+    }
+    for variant in [
+        "directory",
+        "archive",
+        "archive-index",
+        "missing-index",
+        "missing-url",
+        "missing-hash",
+    ] {
+        build_with_uv_build(&context)
+            .env(EnvVars::UV_EXPORT_LOCK, "true")
+            .args([
+                "--offline",
+                "--preview-features",
+                "locked-tools",
+                "--no-build-isolation",
+                "--wheel",
+                "--out-dir",
+                &format!("{variant}-explicit"),
+                &format!("{variant}/locked_tool-1.0.0.tar.gz"),
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "The source distribution has an unsupported `pylock.toml`",
+            ));
+    }
+    for variant in ["missing-index", "missing-url", "missing-hash"] {
+        build_with_uv_build(&context)
+            .args([
+                "--offline",
+                "--preview-features",
+                "locked-tools",
+                "--no-build-isolation",
+                "--wheel",
+                "--out-dir",
+                &format!("{variant}-automatic"),
+                &format!("{variant}/locked_tool-1.0.0.tar.gz"),
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "The source distribution has an unsupported `pylock.toml`",
+            ));
+    }
+    let tar = fs_err::read(context.temp_dir.child("formats/locked_tool-1.0.0.tar"))?;
+    let compressed = block_on(async {
+        let mut encoder = async_compression::tokio::write::ZstdEncoder::new(Vec::new());
+        encoder.write_all(&tar).await?;
+        encoder.shutdown().await?;
+        Ok::<_, std::io::Error>(encoder.into_inner())
+    })?;
+    fs_err::write(
+        context.temp_dir.child("formats/locked_tool-1.0.0.tar.zst"),
+        compressed,
+    )?;
+    for source in [
+        "formats/locked_tool-1.0.0.tar",
+        "formats/locked_tool-1.0.0.tgz",
+        "formats/locked_tool-1.0.0.tar.zst",
+        "formats/normal/locked_tool-1.0.0.zip",
+    ] {
+        build_with_uv_build(&context)
+            .args([
+                "--offline",
+                "--preview-features",
+                "locked-tools",
+                "--no-build-isolation",
+                "--wheel",
+                "--out-dir",
+                "formats-wheel",
+                source,
+            ])
+            .assert()
+            .success();
+        assert!(
+            zip_file_names(
+                context
+                    .temp_dir
+                    .child("formats-wheel/locked_tool-1.0.0-py3-none-any.whl")
+                    .path()
+            )?
+            .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+        );
+    }
+    for (variant, error) in [
+        ("duplicate", "invalid or duplicate pylock.toml file"),
+        ("symlink", "invalid or duplicate PKG-INFO file"),
+    ] {
+        build_with_uv_build(&context)
+            .args([
+                "--offline",
+                "--preview-features",
+                "locked-tools",
+                "--no-build-isolation",
+                "--wheel",
+                "--out-dir",
+                "formats-wheel",
+                &format!("formats/{variant}/locked_tool-1.0.0.zip"),
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(error));
+    }
+    for variant in ["mismatch", "duplicate"] {
+        let source = format!("{variant}/locked_tool-1.0.0.tar.gz");
+        let output = format!("{variant}-wheel");
+        build_with_uv_build(&context)
+            .env(EnvVars::UV_EXPORT_LOCK, "true")
+            .args([
+                "--offline",
+                "--preview-features",
+                "locked-tools",
+                "--no-build-isolation",
+                "--wheel",
+                "--out-dir",
+                &output,
+                &source,
+            ])
+            .assert()
+            .failure();
+        assert!(
+            !context
+                .temp_dir
+                .child(output)
+                .child("locked_tool-1.0.0-py3-none-any.whl")
+                .path()
+                .is_file()
+        );
+    }
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "pypi-wheel",
+            "pypi/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import tomllib, zipfile
+            with zipfile.ZipFile("pypi-wheel/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+                lock = tomllib.loads(wheel.read("locked_tool-1.0.0.dist-info/pylock.toml").decode())
+                assert "tool" not in lock
+                assert "requires-python" not in lock
+                assert [package["name"] for package in lock["packages"]] == ["example"]
+        "#})
+        .assert()
+        .success();
     Ok(())
 }
 
