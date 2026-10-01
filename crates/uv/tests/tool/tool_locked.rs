@@ -21,7 +21,10 @@ use wiremock::{
     matchers::{method, path},
 };
 
+use uv_extract::hash::Hasher;
+use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_static::EnvVars;
+use uv_test::archive::generate_source_archive;
 use uv_test::packse::generate_wheel_with_files;
 use uv_test::{TestContext, uv_snapshot};
 
@@ -2505,6 +2508,48 @@ async fn packaged_lock_from_build_with_extras() -> Result<()> {
     Ok(())
 }
 
+async fn mount_locked_artifact(
+    server: &MockServer,
+    route: &str,
+    filename: &str,
+    bytes: &[u8],
+    index_hash: &str,
+    requires_python: Option<&str>,
+) -> (String, String) {
+    let index = format!("{}/{route}/simple", server.uri());
+    // An index may use URLs that do not contain the artifact's filename.
+    let url = format!("{}/{route}/artifact", server.uri());
+    let mut file = json!({
+        "filename": filename,
+        "url": url,
+        "hashes": { "sha256": index_hash },
+    });
+    if let Some(requires_python) = requires_python {
+        file["requires-python"] = json!(requires_python);
+    }
+    Mock::given(method("GET"))
+        .and(path(format!("/{route}/simple/idna/")))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "meta": { "api-version": "1.1" },
+                    "name": "idna",
+                    "files": [file],
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{route}/artifact")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(bytes.to_vec()))
+        .mount(server)
+        .await;
+    (index, url)
+}
+
 fn locked_artifact(index: &str, url: &str, filename: &str, hashes: &str, kind: &str) -> String {
     let artifact = format!(r#"{{ name = "{filename}", url = "{url}", hashes = {{ {hashes} }} }}"#);
     let artifact = if kind == "wheels" {
@@ -2521,4 +2566,264 @@ fn locked_artifact(index: &str, url: &str, filename: &str, hashes: &str, kind: &
         index = "{index}"
         {kind} = {artifact}
     "#}
+}
+
+#[tokio::test]
+async fn packaged_lock_rejects_weak_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.3".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let sha256 = hex::encode(Sha256::digest(&wheel));
+    let mut hasher = Hasher::from(HashAlgorithm::Md5);
+    hasher.update(&wheel);
+    let md5 = HashDigest::from(hasher).to_string();
+    let md5 = md5.strip_prefix("md5:").context("Expected an MD5 hash")?;
+    let (index, url) =
+        mount_locked_artifact(&server, "hashes", &filename, &wheel, &sha256, None).await;
+    let context = context.with_filter((sha256.clone(), "[SHA256]"));
+    let weak = locked_artifact(
+        &index,
+        &url,
+        &filename,
+        &format!("md5 = \"{md5}\""),
+        "wheels",
+    );
+    let mixed = locked_artifact(
+        &index,
+        &url,
+        &filename,
+        &format!("md5 = \"{md5}\", sha256 = \"{}\"", "0".repeat(64)),
+        "wheels",
+    );
+    let strong = locked_artifact(
+        &index,
+        &url,
+        &filename,
+        &format!("md5 = \"{md5}\", sha256 = \"{sha256}\""),
+        "wheels",
+    );
+    tool(&context, "1.0.0", Some(&weak), None)?;
+    tool(&context, "2.0.0", Some(&mixed), None)?;
+    tool(&context, "3.0.0", Some(&strong), None)?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "locked-tool==1.0.0"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The packaged lock for `locked-tool==1.0.0` has no secure hash for `idna==3.3`
+    ");
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "locked-tool==2.0.0"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Hash mismatch for `idna==3.3`
+
+    Expected:
+      sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+    Computed:
+      sha256:[SHA256]
+    ");
+    context
+        .tool_run()
+        .args([
+            "--locked",
+            "--isolated",
+            "--preview-features",
+            "locked-tools",
+            "--find-links",
+            "wheels",
+            "--index-url",
+            &index,
+            "locked-tool==3.0.0",
+        ])
+        .assert()
+        .success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_index_filename() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.3".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "cp313-cp313-win_amd64",
+        &[],
+    );
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let (index, url) =
+        mount_locked_artifact(&server, "filename", &filename, &wheel, &hash, None).await;
+    let lock = locked_artifact(
+        &index,
+        &url,
+        "idna-3.3-py3-none-any.whl",
+        &format!("sha256 = \"{hash}\""),
+        "wheels",
+    );
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The packaged lock for `locked-tool==1.0.0` contains unverified artifacts
+      cause: Filename `idna-3.3-py3-none-any.whl` for `idna==3.3` does not match the file listed at http://[LOCALHOST]/filename/artifact by http://[LOCALHOST]/filename/simple
+    ");
+    assert!(
+        !server
+            .received_requests()
+            .await
+            .context("request recording disabled")?
+            .iter()
+            .any(|request| request.url.path() == "/filename/artifact")
+    );
+    let sdist = generate_source_archive(&"idna".parse()?, &"3.3".parse()?, "", None)?;
+    let hash = hex::encode(Sha256::digest(&sdist));
+    let (index, url) = mount_locked_artifact(
+        &server,
+        "source-name",
+        "idna-3.3.tar.gz",
+        &sdist,
+        &hash,
+        None,
+    )
+    .await;
+    let lock = locked_artifact(
+        &index,
+        &url,
+        "idna-3.3.zip",
+        &format!("sha256 = \"{hash}\""),
+        "sdist",
+    );
+    tool(&context, "2.0.0", Some(&lock), None)?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "locked-tool==2.0.0"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The packaged lock for `locked-tool==2.0.0` contains unverified artifacts
+      cause: Filename `idna-3.3.zip` for `idna==3.3` does not match the file listed at http://[LOCALHOST]/source-name/artifact by http://[LOCALHOST]/source-name/simple
+    ");
+    assert!(
+        !server
+            .received_requests()
+            .await
+            .context("request recording disabled")?
+            .iter()
+            .any(|request| request.url.path() == "/source-name/artifact")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_dependency_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.3".parse()?,
+        &[],
+        &BTreeMap::new(),
+        Some(&">=99".parse()?),
+        "py3-none-any",
+        &[],
+    );
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let (indexed, indexed_url) =
+        mount_locked_artifact(&server, "indexed", &filename, &wheel, &hash, Some(">=99")).await;
+    let (unindexed, unindexed_url) =
+        mount_locked_artifact(&server, "unindexed", &filename, &wheel, &hash, None).await;
+    let hashes = format!("sha256 = \"{hash}\"");
+    tool(
+        &context,
+        "1.0.0",
+        Some(&locked_artifact(
+            &indexed,
+            &indexed_url,
+            &filename,
+            &hashes,
+            "wheels",
+        )),
+        None,
+    )?;
+    tool(
+        &context,
+        "2.0.0",
+        Some(&locked_artifact(
+            &unindexed,
+            &unindexed_url,
+            &filename,
+            &hashes,
+            "wheels",
+        )),
+        None,
+    )?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &indexed, "locked-tool==1.0.0"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `idna==3.3` requires Python `>=99`, but the selected interpreter is Python 3.12.[X]
+    ");
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &unindexed, "locked-tool==2.0.0"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `idna==3.3` requires Python `>=99`, but the selected interpreter is Python 3.12.[X]
+    ");
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_index_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let server = MockServer::start().await;
+    let (filename, wheel) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.3".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let (index, url) = mount_locked_artifact(
+        &server,
+        "index-hash",
+        &filename,
+        &wheel,
+        &"0".repeat(64),
+        None,
+    )
+    .await;
+    let lock = locked_artifact(
+        &index,
+        &url,
+        &filename,
+        &format!("sha256 = \"{hash}\""),
+        "wheels",
+    );
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The selected artifact for `idna==3.3` does not match the required hashes
+    ");
+    Ok(())
 }
