@@ -57,6 +57,7 @@ percent-encoding = { workspace = true }
 petgraph = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
+serde-untagged = { workspace = true }
 serde_json = { workspace = true }
 smallvec = { workspace = true }
 thiserror = { workspace = true }
@@ -68,6 +69,8 @@ tracing = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 indoc = { workspace = true }
 insta = { workspace = true }
 toml = { workspace = true }

@@ -975,7 +975,14 @@ lockfiles remain readable when the feature is enabled. Reading a version 2 lockf
 feature, including when using `--frozen`.
 
 Version 2 uses `package.dependency-groups` instead of `package.dev-dependencies`, and
-`package.metadata.dependency-groups` instead of `package.metadata.requires-dev`.
+`package.metadata.dependency-groups` instead of `package.metadata.requires-dev`. Groups with Python
+requirements store `requires-python` alongside their `dependencies`, instead of in a separate
+`group-requires-python` table. This applies to both package groups and projectless workspace roots.
+
+Name-only dependency edges use strings, such as `"requests"`, instead of inline tables. Edges with
+extras, markers, or ambiguous package names continue to use tables, with `extras` replacing `extra`.
+Relative `exclude-newer` cutoffs omit the placeholder timestamps used for compatibility in
+version 1.
 
 !!! warning
 
