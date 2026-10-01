@@ -14,6 +14,66 @@ use url::Url;
 use uv_lock::Lock;
 use uv_test::{diff_snapshot, uv_snapshot};
 
+/// Static and package metadata use the same dependency and extra field names.
+#[test]
+fn lockfile_v2_metadata_names() -> Result<()> {
+    let input = indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[manifest.dependency-metadata]]
+        name = "child"
+        version = "1.0.0"
+        requires-dist = ["leaf>=1 ; extra == 'feature'"]
+        requires-python = ">=3.12"
+        provides-extras = ["feature"]
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        feature = []
+
+        [package.metadata]
+        provides-extras = ["feature"]
+    "#};
+    let original = toml::from_str::<Lock>(input)?.to_toml()?;
+    let expected = toml::from_str::<Lock>(&input.replace("version = 1\n", "version = 2\n"))?;
+    let upgraded = expected.to_toml()?;
+    assert_snapshot!(diff_snapshot(&original, &upgraded, 3), @r#"
+    --- old
+    +++ new
+    @@ -1,12 +1,12 @@
+    -version = 1
+    +version = 2
+     requires-python = ">=3.12"
+
+     [[manifest.dependency-metadata]]
+     name = "child"
+     version = "1.0.0"
+    -requires-dist = ["leaf>=1 ; extra == 'feature'"]
+    +dependencies = ["leaf>=1 ; extra == 'feature'"]
+     requires-python = ">=3.12"
+    -provides-extras = ["feature"]
+    +extras = ["feature"]
+
+     [[package]]
+     name = "project"
+    @@ -17,4 +17,4 @@
+     feature = []
+
+     [package.metadata]
+    -provides-extras = ["feature"]
+    +extras = ["feature"]
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?, expected);
+    assert_eq!(toml::from_str::<Lock>(&upgraded)?, expected);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?.to_toml()?, upgraded);
+    Ok(())
+}
+
 /// Partial identities resolve uniquely, including source trees without a static version.
 #[test]
 fn lockfile_v2_dependency_identities() -> Result<()> {
@@ -569,7 +629,7 @@ fn lockfile_v2_dependencies() -> Result<()> {
          "sys_platform == 'win32'",
          "sys_platform != 'win32'",
      ]
-    @@ -14,15 +13,15 @@
+    @@ -14,16 +13,16 @@
      version = "1.0.0"
      source = { virtual = "base" }
 
@@ -581,12 +641,14 @@ fn lockfile_v2_dependencies() -> Result<()> {
 
      [package.metadata]
     -requires-dist = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
+    -provides-extras = ["feature"]
     +dependencies = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
-     provides-extras = ["feature"]
+    +extras = ["feature"]
 
      [[package]]
      name = "conditional"
      version = "1.0.0"
+     source = { virtual = "conditional" }
     @@ -52,35 +51,35 @@
      [[package]]
      name = "project"
@@ -627,7 +689,8 @@ fn lockfile_v2_dependencies() -> Result<()> {
          { name = "plain", virtual = "plain" },
          { name = "plain", marker = "extra == 'feature'", virtual = "plain" },
      ]
-     provides-extras = ["feature"]
+    -provides-extras = ["feature"]
+    +extras = ["feature"]
 
     -[package.metadata.requires-dev]
     +[package.metadata.dependency-groups]
