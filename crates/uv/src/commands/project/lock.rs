@@ -1,7 +1,8 @@
 #![expect(clippy::single_match_else)]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write;
+use std::error::Error;
+use std::fmt::{self, Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -21,6 +22,7 @@ use uv_distribution_types::{
     DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
     RequiresPython, ResolutionRecorder, UnresolvedRequirementSpecification,
 };
+use uv_errors::{Hinted, Hints};
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_lock::{GroupMetadata, Lock, Package, ResolverManifest, SatisfiesResult};
@@ -32,7 +34,7 @@ use uv_python::{
     ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonEnvironment,
     PythonPreference, PythonRequest,
 };
-use uv_requirements::ExtrasResolver;
+use uv_requirements::{Error as RequirementsError, ExtrasResolver};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Options, OptionsBuilder, PythonRequirement, ResolverEnvironment,
     UniversalMarker,
@@ -49,6 +51,7 @@ use uv_workspace::{
 
 use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
+use crate::commands::pip::operations::Error as OperationError;
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
     MissingLockfileSource, ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter,
@@ -1077,7 +1080,8 @@ async fn do_lock(
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Preferable(lock)
+                | ValidatedLock::MismatchedRequirements(lock, _) => Some(lock),
                 ValidatedLock::Versions(lock) => Some(lock),
                 ValidatedLock::Unusable(_) => None,
             });
@@ -1097,7 +1101,8 @@ async fn do_lock(
             // Determine whether we can reuse the existing package forks.
             let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
+                ValidatedLock::Preferable(lock)
+                | ValidatedLock::MismatchedRequirements(lock, _) => Some(lock),
                 ValidatedLock::Versions(_) => None,
                 ValidatedLock::Unusable(_) => None,
             });
@@ -1125,58 +1130,80 @@ async fn do_lock(
             );
 
             // Resolve the requirements.
-            let (resolution, _) = pip::operations::resolve(
-                ExtrasResolver::new(&hasher, state.index(), database)
-                    .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                    .resolve(target.members_requirements())
-                    .await
-                    .map_err(|err| ProjectError::Operation(err.into()))?
-                    .into_iter()
-                    .chain(target.group_requirements())
-                    .chain(requirements.iter().cloned())
-                    .chain(
-                        dependency_groups
-                            .values()
-                            .flat_map(|requirements| requirements.iter().cloned()),
+            let member_requirements = ExtrasResolver::new(&hasher, state.index(), database)
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
+                .resolve(target.members_requirements())
+                .await;
+            let resolution = match member_requirements {
+                Ok(member_requirements) => {
+                    pip::operations::resolve(
+                        member_requirements
+                            .into_iter()
+                            .chain(target.group_requirements())
+                            .chain(requirements.iter().cloned())
+                            .chain(
+                                dependency_groups
+                                    .values()
+                                    .flat_map(|requirements| requirements.iter().cloned()),
+                            )
+                            .map(UnresolvedRequirementSpecification::from)
+                            .collect(),
+                        constraints
+                            .iter()
+                            .cloned()
+                            .map(NameRequirementSpecification::from)
+                            .chain(external)
+                            .collect(),
+                        Vec::new(),
+                        overrides.clone(),
+                        excludes.clone(),
+                        source_trees,
+                        // The root is always null in workspaces, it "depends on" the projects
+                        None,
+                        packages.keys().cloned().collect(),
+                        &extras,
+                        &groups,
+                        preferences,
+                        EmptyInstalledPackages,
+                        &hasher,
+                        &Reinstall::default(),
+                        upgrade,
+                        None,
+                        resolver_env,
+                        python_requirement,
+                        interpreter.markers(),
+                        conflicts.clone(),
+                        &client,
+                        &flat_index,
+                        state.index(),
+                        &build_dispatch,
+                        concurrency,
+                        options,
+                        recorder.clone(),
+                        Box::new(SummaryResolveLogger),
+                        printer,
                     )
-                    .map(UnresolvedRequirementSpecification::from)
-                    .collect(),
-                constraints
-                    .iter()
-                    .cloned()
-                    .map(NameRequirementSpecification::from)
-                    .chain(external)
-                    .collect(),
-                Vec::new(),
-                overrides.clone(),
-                excludes.clone(),
-                source_trees,
-                // The root is always null in workspaces, it "depends on" the projects
-                None,
-                packages.keys().cloned().collect(),
-                &extras,
-                &groups,
-                preferences,
-                EmptyInstalledPackages,
-                &hasher,
-                &Reinstall::default(),
-                upgrade,
-                None,
-                resolver_env,
-                python_requirement,
-                interpreter.markers(),
-                conflicts.clone(),
-                &client,
-                &flat_index,
-                state.index(),
-                &build_dispatch,
-                concurrency,
-                options,
-                recorder.clone(),
-                Box::new(SummaryResolveLogger),
-                printer,
-            )
-            .await?;
+                    .await
+                }
+                Err(error) => Err(error.into()),
+            };
+            let (resolution, _) = match resolution {
+                Ok(resolution) => resolution,
+                Err(error) => {
+                    if let LockMode::Locked(..) = mode
+                        && let OperationError::Requirements(
+                            RequirementsError::Dist(..) | RequirementsError::Distribution(_),
+                        ) = &error
+                        && let Some(ValidatedLock::MismatchedRequirements(_, reason)) =
+                            existing_lock
+                    {
+                        return Err(ProjectError::OperationWithMismatch(Box::new(
+                            LockRequirementsError { error, reason },
+                        )));
+                    }
+                    return Err(error.into());
+                }
+            };
 
             // Print the success message after completing resolution.
             logger.on_complete(resolution.len(), start, printer)?;
@@ -1256,8 +1283,69 @@ pub(crate) enum ValidatedLock {
     /// An existing lockfile was provided, and the locked versions and forks should be preferred if
     /// possible, even though the lockfile does not satisfy the workspace requirements.
     Preferable(Lock),
+    /// Package requirements have changed, so the lockfile must be updated.
+    MismatchedRequirements(Lock, RequirementsMismatch),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
     Satisfies(Lock),
+}
+
+/// The requested and locked requirements for a package whose requirements changed.
+#[derive(Debug)]
+pub(crate) struct RequirementsMismatch {
+    name: PackageName,
+    expected: BTreeSet<Requirement>,
+    actual: BTreeSet<Requirement>,
+}
+
+impl fmt::Display for RequirementsMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "The lockfile needs to be updated because the requirements for `{}` have changed:",
+            self.name
+        )?;
+        for requirement in self.expected.difference(&self.actual) {
+            write!(f, "\n  Added {requirement}")?;
+        }
+        for requirement in self.actual.difference(&self.expected) {
+            write!(f, "\n  Removed {requirement}")?;
+        }
+        Ok(())
+    }
+}
+
+/// An operation error accompanied by a lockfile requirements mismatch.
+#[derive(Debug)]
+pub(crate) struct LockRequirementsError {
+    error: OperationError,
+    reason: RequirementsMismatch,
+}
+
+impl LockRequirementsError {
+    pub(crate) fn is_user_failure(&self) -> bool {
+        self.error.is_user_failure()
+    }
+}
+
+impl fmt::Display for LockRequirementsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.error, f)
+    }
+}
+
+impl Error for LockRequirementsError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        // The operation error's message is already displayed by this wrapper.
+        self.error.source()
+    }
+}
+
+impl Hinted for LockRequirementsError {
+    fn hints(&self) -> Hints<'_> {
+        let mut hints = self.error.hints();
+        hints.push(self.reason.to_string());
+        hints
+    }
 }
 
 impl ValidatedLock {
@@ -1685,7 +1773,12 @@ impl ValidatedLock {
                         expected, actual
                     );
                 }
-                Ok(Self::Preferable(lock))
+                let reason = RequirementsMismatch {
+                    name: name.clone(),
+                    expected,
+                    actual,
+                };
+                Ok(Self::MismatchedRequirements(lock, reason))
             }
             SatisfiesResult::MismatchedPackageDependencies(name, version, expected, actual) => {
                 if let Some(version) = version {
@@ -1754,7 +1847,7 @@ impl ValidatedLock {
         match self {
             Self::Unusable(lock) => lock,
             Self::Satisfies(lock) => lock,
-            Self::Preferable(lock) => lock,
+            Self::Preferable(lock) | Self::MismatchedRequirements(lock, _) => lock,
             Self::Versions(lock) => lock,
         }
     }

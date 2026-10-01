@@ -171,6 +171,15 @@ impl From<project::ProjectError> for UvError {
             | project::ProjectError::MissingLockfile(..)
             | project::ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
             project::ProjectError::Operation(error) => Self::from(error),
+            project::ProjectError::OperationWithMismatch(error) => {
+                let is_user_failure = error.is_user_failure();
+                let error = project::ProjectError::OperationWithMismatch(error);
+                if is_user_failure {
+                    Self::user(error)
+                } else {
+                    Self::unexpected(error.into())
+                }
+            }
             project::ProjectError::Requirements(error) => {
                 Self::from(pip::operations::Error::Requirements(error))
             }
