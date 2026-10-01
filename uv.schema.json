@@ -1893,6 +1893,7 @@
             "index-hash-algorithm",
             "lockfile-format-check",
             "lockfile-normalization",
+            "lockfile-v2",
             "lock-without-metadata",
             "index-by-name",
             "artifact-hash-filtering",

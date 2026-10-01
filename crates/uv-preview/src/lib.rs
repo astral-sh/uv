@@ -408,6 +408,9 @@ pub enum PreviewFeature {
     /// duplicated declarations in the recorded requirements, constraints, overrides, exclusions,
     /// and dependency groups.
     LockfileNormalization,
+    /// Writes version 2 lockfiles. Highly experimental: the format may change incompatibly in
+    /// patch releases.
+    LockfileV2,
     /// uv omits the `package.metadata` tables from `uv.lock`, except for remote URL and Git
     /// dependencies. Their metadata is retained so uv can check whether those sources are requested
     /// or stale without network access.
