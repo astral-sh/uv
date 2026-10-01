@@ -1305,7 +1305,7 @@ pub enum CacheBucket {
     /// Cached vulnerability data from [OSV](https://osv.dev/).
     ///
     /// Cache structure:
-    ///  * `osv-v0/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
+    ///  * `osv-v1/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
     Osv,
 }
 
@@ -1316,27 +1316,27 @@ impl CacheBucket {
             // in `crates/uv/tests/build/cache_prune.rs`.
             // TODO(ww): Remove `uv_pypi_types::HashDigestWire` on the next cache bump
             // or breaking release.
-            Self::SourceDistributions => "sdists-v9",
+            Self::SourceDistributions => "sdists-v10",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/lock/lock.rs`.
-            Self::FlatIndex => "flat-index-v5",
+            Self::FlatIndex => "flat-index-v6",
             Self::Git => "git-v1",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
-            Self::Simple => "simple-v25",
+            Self::Simple => "simple-v26",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
-            Self::Wheels => "wheels-v6",
+            Self::Wheels => "wheels-v7",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
             Self::Files => "files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
-            Self::Python => "python-v0",
+            Self::Python => "python-v1",
             Self::Binaries => "binaries-v0",
-            Self::Osv => "osv-v0",
+            Self::Osv => "osv-v1",
         }
     }
 

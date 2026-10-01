@@ -136,7 +136,7 @@ fn prune_stale_directory() -> Result<()> {
 fn prune_python_downloads() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let python_cache = context.cache_dir.child("python-v0");
+    let python_cache = context.cache_dir.child("python-v1");
     python_cache.create_dir_all()?;
     let download = python_cache.child("python.tar.gz");
     download.write_binary(b"cached Python download")?;
@@ -214,7 +214,7 @@ fn prune_stale_symlink() -> Result<()> {
         .success();
 
     // Remove the wheels directory, causing the symlink to become stale.
-    let wheels = context.cache_dir.child("wheels-v6");
+    let wheels = context.cache_dir.child("wheels-v7");
     fs_err::remove_dir_all(wheels)?;
 
     let filters: Vec<_> = context
@@ -441,7 +441,7 @@ fn prune_stale_revision() -> Result<()> {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v10/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     ");
@@ -543,7 +543,7 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v10/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 
