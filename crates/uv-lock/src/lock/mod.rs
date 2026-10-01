@@ -6564,9 +6564,13 @@ struct LockWire {
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
     fork_markers: Vec<SimplifiedMarkerTree>,
-    #[serde(rename = "supported-markers", default)]
+    #[serde(
+        rename = "supported-environments",
+        alias = "supported-markers",
+        default
+    )]
     supported_environments: Vec<SimplifiedMarkerTree>,
-    #[serde(rename = "required-markers", default)]
+    #[serde(rename = "required-environments", alias = "required-markers", default)]
     required_environments: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,

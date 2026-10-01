@@ -985,13 +985,16 @@ Declared dependencies use `package.metadata.dependencies` and `manifest.dependen
 Name-only dependency edges and declarations use strings, such as `"requests"`, instead of inline
 tables. Declarations with specifiers, sources, extras, groups, or markers retain their tables.
 Resolved edges with extras, markers, or ambiguous package names also retain tables, with `extras`
-replacing `extra`.
-Global and package-specific relative `exclude-newer` cutoffs use `{ span = "P7D" }`, without the
-placeholder timestamps or separate `exclude-newer-span` field used in version 1.
+replacing `extra`. Global and package-specific relative `exclude-newer` cutoffs use
+`{ span = "P7D" }`, without the placeholder timestamps or separate `exclude-newer-span` field used
+in version 1.
 
 Git sources record the repository URL separately from `branch`, `tag`, or `rev`, the resolved
 `commit`, and any `subdirectory`, archive `path`, or `lfs` setting. These fields replace the query
 parameters and fragment used in version 1.
+
+Supported and required environments use `supported-environments` and `required-environments`. The
+`resolution-markers` field continues to describe the resolution forks.
 
 !!! warning
 
