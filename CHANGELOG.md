@@ -3,6 +3,51 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.22
+
+Released on 2026-10-01.
+
+### Enhancements
+
+- Consistently quote URLs and paths in CLI messages ([#21937](https://github.com/astral-sh/uv/pull/21937))
+- Normalize wheel platform release tags ([#22113](https://github.com/astral-sh/uv/pull/22113))
+- Store dependency group metadata on packages ([#22103](https://github.com/astral-sh/uv/pull/22103))
+
+### Preview features
+
+- Hide the `--offline` flag for uv audit ([#22114](https://github.com/astral-sh/uv/pull/22114))
+
+### Performance
+
+- Align cached HTTP policies within the payload buffer ([#22079](https://github.com/astral-sh/uv/pull/22079))
+- Pack HTTP cache policy flags and optional integers ([#22078](https://github.com/astral-sh/uv/pull/22078))
+- Store source distribution revision IDs inline ([#22059](https://github.com/astral-sh/uv/pull/22059))
+
+### Bug fixes
+
+- Avoid false entry point warnings for required workspace members ([#22112](https://github.com/astral-sh/uv/pull/22112))
+- Honor group Python requirements in non-project workspaces ([#22101](https://github.com/astral-sh/uv/pull/22101))
+- Respect --no-default-groups in uv audit ([#22090](https://github.com/astral-sh/uv/pull/22090))
+- Use recorded member defaults for frozen sync ([#22015](https://github.com/astral-sh/uv/pull/22015))
+
+### Other changes
+
+- Add `UV_PYTHON_ARCH` for requesting an interpreter architecture ([#22098](https://github.com/astral-sh/uv/pull/22098))
+- Authorise STS for shared PR security-review (temporarily pinned to the draft PR for testing) ([#22097](https://github.com/astral-sh/uv/pull/22097))
+- Compress embedded Python download metadata ([#22126](https://github.com/astral-sh/uv/pull/22126))
+- Defer cache format changes to 0.13 ([#22128](https://github.com/astral-sh/uv/pull/22128))
+- Don't run hash_reader benches in walltime ([#22109](https://github.com/astral-sh/uv/pull/22109))
+- Don't skip hash checking for requirements that are not being updated ([#22083](https://github.com/astral-sh/uv/pull/22083))
+- Give ARM64 PGO builds more memory ([#22116](https://github.com/astral-sh/uv/pull/22116))
+- Hide the `--offline` flag in `uv publish` ([#22124](https://github.com/astral-sh/uv/pull/22124))
+- Record dependency group metadata for non-project roots ([#22104](https://github.com/astral-sh/uv/pull/22104))
+- Record dependency group metadata in lockfiles ([#22044](https://github.com/astral-sh/uv/pull/22044))
+- Record workspace member default groups in lockfiles ([#22010](https://github.com/astral-sh/uv/pull/22010))
+- Sync latest Python releases ([#22147](https://github.com/astral-sh/uv/pull/22147))
+- Update Rust to 1.99 and MSRV to 1.97 ([#22121](https://github.com/astral-sh/uv/pull/22121))
+- Update astral_async_zip, astral_async_http_range_reader ([#22119](https://github.com/astral-sh/uv/pull/22119))
+- Use shared reusable PR security-review workflow ([#21778](https://github.com/astral-sh/uv/pull/21778))
+
 ## 0.12.21
 
 Released on 2026-09-29.
