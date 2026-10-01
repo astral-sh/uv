@@ -179,7 +179,7 @@ against the checked-in uv schema also requires [jq](https://jqlang.org/).
 
 ```shell
 # Rust
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --all-targets --all-features --locked
 cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
 
 # Python
@@ -215,7 +215,7 @@ targets:
 rustup target add x86_64-pc-windows-msvc
 
 # Run clippy for Windows
-uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+CARGO_BUILD_WARNINGS=deny uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked
 ```
 
 ## Crate structure

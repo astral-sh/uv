@@ -105,7 +105,9 @@ jobs:
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
+        env:
+          CARGO_BUILD_WARNINGS: deny
+        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests
 
       - name: "Bloat Check"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
