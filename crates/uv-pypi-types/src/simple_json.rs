@@ -738,6 +738,7 @@ where
     }
 }
 
+#[inline]
 fn validate_hex(digest: &str, bytes: usize) -> Result<(), HashError> {
     if digest.len() != bytes * 2 {
         return Err(HashError::InvalidDigestLength {
@@ -745,7 +746,12 @@ fn validate_hex(digest: &str, bytes: usize) -> Result<(), HashError> {
             actual: digest.len(),
         });
     }
-    if !digest.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+    // Reduce over every byte to allow vectorization of this bounded validation.
+    if !digest
+        .as_bytes()
+        .iter()
+        .fold(true, |valid, byte| valid & byte.is_ascii_hexdigit())
+    {
         return Err(HashError::InvalidDigestCharacters(digest.to_string()));
     }
     Ok(())
@@ -1023,7 +1029,7 @@ mod tests {
                 ));
             }
             assert!(matches!(
-                HashDigest::new(algorithm, "g".repeat(bytes * 2)),
+                HashDigest::new(algorithm, format!("g{}", "a".repeat(bytes * 2 - 1))),
                 Err(HashError::InvalidDigestCharacters(_))
             ));
         }
