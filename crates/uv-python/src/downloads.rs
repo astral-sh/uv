@@ -2207,6 +2207,38 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "aarch64")]
+    fn windows_aarch64_download_selection() {
+        let downloads =
+            ManagedPythonDownloadList::new_only_embedded().expect("valid embedded downloads");
+        let native_arch = Arch::from_str("aarch64").expect("valid architecture");
+        let x86_64_arch = Arch::from_str("x86_64").expect("valid architecture");
+        let mut request = PythonDownloadRequest::from_str("cpython-windows")
+            .expect("valid download request")
+            .with_libc(Libc::None);
+        request.arch = Some(ArchRequest::Environment(native_arch));
+
+        // The native preference also applies to versions released before Python 3.15.
+        for version in ["3.11", "3.12", "3.13", "3.14", "3.15"] {
+            let request = request
+                .clone()
+                .with_version(VersionRequest::from_str(version).expect("valid version"));
+            let download = downloads.find(&request).expect("native download available");
+            assert_eq!(*download.key.arch(), native_arch);
+
+            let request = request.with_arch(x86_64_arch);
+            let download = downloads.find(&request).expect("x86_64 download available");
+            assert_eq!(*download.key.arch(), x86_64_arch);
+        }
+
+        // Python 3.10 has no managed Windows ARM64 build.
+        let request =
+            request.with_version(VersionRequest::from_str("3.10").expect("valid version"));
+        let download = downloads.find(&request).expect("x86_64 fallback available");
+        assert_eq!(*download.key.arch(), x86_64_arch);
+    }
+
+    #[test]
     fn upgrade_request_native_defaults() {
         let request = PythonDownloadRequest::default()
             .with_implementation(ImplementationName::CPython)
