@@ -77,7 +77,7 @@ they are relative to the current working directory. Use `--output-file` when wri
 in another directory.
 
 Use `--multi-use` to leave extras and dependency groups selectable when installing from the exported
-file. No extras or groups are selected by default.
+file. The selected dependency groups are included by default; extras are selected at installation.
 
 ## CycloneDX SBOM format
 
