@@ -3506,7 +3506,7 @@ impl HttpRevisionPointer {
     pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::File::open(path.as_ref()) {
             Ok(file) => {
-                let data = DataWithCachePolicy::from_reader(file)?.data;
+                let data = DataWithCachePolicy::from_reader(file)?.into_data();
                 let revision = rmp_serde::from_slice::<Revision>(&data)?;
                 Ok(Some(Self { revision }))
             }
