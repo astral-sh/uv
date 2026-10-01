@@ -1301,6 +1301,78 @@ fn parse_file_path(input: &str) -> Result<PathBuf, String> {
     }
 }
 
+/// Arguments for constraining, overriding, and excluding dependencies with requirements files.
+#[derive(Args)]
+#[group(skip)]
+pub struct DependencyConstraintsArgs {
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
+    #[arg(
+        long,
+        short,
+        alias = "constraint",
+        env = EnvVars::UV_CONSTRAINT,
+        value_delimiter = ' ',
+        value_hint = ValueHint::FilePath,
+    )]
+    constraints: Vec<Maybe<RequirementsInput>>,
+
+    /// Override versions using the given requirements files.
+    ///
+    /// Overrides files are `requirements.txt`-like files that force a specific version of a
+    /// requirement to be installed, regardless of the requirements declared by any constituent
+    /// package, and regardless of whether this would be considered an invalid resolution.
+    ///
+    /// While constraints are _additive_, in that they're combined with the requirements of the
+    /// constituent packages, overrides are _absolute_, in that they completely replace the
+    /// requirements of the constituent packages.
+    #[arg(
+        long,
+        alias = "override",
+        env = EnvVars::UV_OVERRIDE,
+        value_delimiter = ' ',
+        value_hint = ValueHint::FilePath,
+    )]
+    overrides: Vec<Maybe<RequirementsInput>>,
+
+    /// Exclude packages from resolution using the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
+    /// from the resolution. When a package is excluded, it will be omitted from the
+    /// dependency list entirely and its own dependencies will be ignored during the resolution
+    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
+    /// any package listed in the provided file will be omitted from all resolved environments.
+    #[arg(
+        long,
+        alias = "exclude",
+        env = EnvVars::UV_EXCLUDE,
+        value_delimiter = ' ',
+        value_hint = ValueHint::FilePath,
+    )]
+    excludes: Vec<Maybe<RequirementsInput>>,
+
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    #[arg(
+        long,
+        short,
+        alias = "build-constraint",
+        env = EnvVars::UV_BUILD_CONSTRAINT,
+        value_delimiter = ' ',
+        value_hint = ValueHint::FilePath,
+    )]
+    build_constraints: Vec<Maybe<RequirementsInput>>,
+}
+
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct PipCompileArgs {
@@ -1319,72 +1391,8 @@ pub struct PipCompileArgs {
     #[arg(group = "sources", value_hint = ValueHint::FilePath)]
     pub src_file: Vec<RequirementsInput>,
 
-    /// Constrain versions using the given requirements files.
-    ///
-    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
-    /// requirement that's installed. However, including a package in a constraints file will _not_
-    /// trigger the installation of that package.
-    ///
-    /// This is equivalent to pip's `--constraint` option.
-    #[arg(
-        long,
-        short,
-        alias = "constraint",
-        env = EnvVars::UV_CONSTRAINT,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    pub constraints: Vec<Maybe<RequirementsInput>>,
-
-    /// Override versions using the given requirements files.
-    ///
-    /// Overrides files are `requirements.txt`-like files that force a specific version of a
-    /// requirement to be installed, regardless of the requirements declared by any constituent
-    /// package, and regardless of whether this would be considered an invalid resolution.
-    ///
-    /// While constraints are _additive_, in that they're combined with the requirements of the
-    /// constituent packages, overrides are _absolute_, in that they completely replace the
-    /// requirements of the constituent packages.
-    #[arg(
-        long,
-        alias = "override",
-        env = EnvVars::UV_OVERRIDE,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    pub overrides: Vec<Maybe<RequirementsInput>>,
-
-    /// Exclude packages from resolution using the given requirements files.
-    ///
-    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
-    /// from the resolution. When a package is excluded, it will be omitted from the
-    /// dependency list entirely and its own dependencies will be ignored during the resolution
-    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
-    /// any package listed in the provided file will be omitted from all resolved environments.
-    #[arg(
-        long,
-        alias = "exclude",
-        env = EnvVars::UV_EXCLUDE,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    pub excludes: Vec<Maybe<RequirementsInput>>,
-
-    /// Constrain build dependencies using the given requirements files when building source
-    /// distributions.
-    ///
-    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
-    /// requirement that's installed. However, including a package in a constraints file will _not_
-    /// trigger the installation of that package.
-    #[arg(
-        long,
-        short,
-        alias = "build-constraint",
-        env = EnvVars::UV_BUILD_CONSTRAINT,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    pub build_constraints: Vec<Maybe<RequirementsInput>>,
+    #[command(flatten)]
+    pub constraints: DependencyConstraintsArgs,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
@@ -2020,72 +2028,8 @@ pub struct PipInstallArgs {
     #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     pub no_editable_package: Vec<PackageName>,
 
-    /// Constrain versions using the given requirements files.
-    ///
-    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
-    /// requirement that's installed. However, including a package in a constraints file will _not_
-    /// trigger the installation of that package.
-    ///
-    /// This is equivalent to pip's `--constraint` option.
-    #[arg(
-        long,
-        short,
-        alias = "constraint",
-        env = EnvVars::UV_CONSTRAINT,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    pub constraints: Vec<Maybe<RequirementsInput>>,
-
-    /// Override versions using the given requirements files.
-    ///
-    /// Overrides files are `requirements.txt`-like files that force a specific version of a
-    /// requirement to be installed, regardless of the requirements declared by any constituent
-    /// package, and regardless of whether this would be considered an invalid resolution.
-    ///
-    /// While constraints are _additive_, in that they're combined with the requirements of the
-    /// constituent packages, overrides are _absolute_, in that they completely replace the
-    /// requirements of the constituent packages.
-    #[arg(
-        long,
-        alias = "override",
-        env = EnvVars::UV_OVERRIDE,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    pub overrides: Vec<Maybe<RequirementsInput>>,
-
-    /// Exclude packages from resolution using the given requirements files.
-    ///
-    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
-    /// from the resolution. When a package is excluded, it will be omitted from the
-    /// dependency list entirely and its own dependencies will be ignored during the resolution
-    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
-    /// any package listed in the provided file will be omitted from all resolved environments.
-    #[arg(
-        long,
-        alias = "exclude",
-        env = EnvVars::UV_EXCLUDE,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    pub excludes: Vec<Maybe<RequirementsInput>>,
-
-    /// Constrain build dependencies using the given requirements files when building source
-    /// distributions.
-    ///
-    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
-    /// requirement that's installed. However, including a package in a constraints file will _not_
-    /// trigger the installation of that package.
-    #[arg(
-        long,
-        short,
-        alias = "build-constraint",
-        env = EnvVars::UV_BUILD_CONSTRAINT,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    pub build_constraints: Vec<Maybe<RequirementsInput>>,
+    #[command(flatten)]
+    pub constraints: DependencyConstraintsArgs,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
@@ -5526,72 +5470,8 @@ pub struct ToolInstallArgs {
     #[arg(long, value_hint = ValueHint::Other)]
     with_executables_from: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Constrain versions using the given requirements files.
-    ///
-    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
-    /// requirement that's installed. However, including a package in a constraints file will _not_
-    /// trigger the installation of that package.
-    ///
-    /// This is equivalent to pip's `--constraint` option.
-    #[arg(
-        long,
-        short,
-        alias = "constraint",
-        env = EnvVars::UV_CONSTRAINT,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    constraints: Vec<Maybe<RequirementsInput>>,
-
-    /// Override versions using the given requirements files.
-    ///
-    /// Overrides files are `requirements.txt`-like files that force a specific version of a
-    /// requirement to be installed, regardless of the requirements declared by any constituent
-    /// package, and regardless of whether this would be considered an invalid resolution.
-    ///
-    /// While constraints are _additive_, in that they're combined with the requirements of the
-    /// constituent packages, overrides are _absolute_, in that they completely replace the
-    /// requirements of the constituent packages.
-    #[arg(
-        long,
-        alias = "override",
-        env = EnvVars::UV_OVERRIDE,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    overrides: Vec<Maybe<RequirementsInput>>,
-
-    /// Exclude packages from resolution using the given requirements files.
-    ///
-    /// Excludes files are `requirements.txt`-like files that specify packages to exclude
-    /// from the resolution. When a package is excluded, it will be omitted from the
-    /// dependency list entirely and its own dependencies will be ignored during the resolution
-    /// phase. Excludes are unconditional in that requirement specifiers and markers are ignored;
-    /// any package listed in the provided file will be omitted from all resolved environments.
-    #[arg(
-        long,
-        alias = "exclude",
-        env = EnvVars::UV_EXCLUDE,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    excludes: Vec<Maybe<RequirementsInput>>,
-
-    /// Constrain build dependencies using the given requirements files when building source
-    /// distributions.
-    ///
-    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
-    /// requirement that's installed. However, including a package in a constraints file will _not_
-    /// trigger the installation of that package.
-    #[arg(
-        long,
-        short,
-        alias = "build-constraint",
-        env = EnvVars::UV_BUILD_CONSTRAINT,
-        value_delimiter = ' ',
-        value_hint = ValueHint::FilePath,
-    )]
-    build_constraints: Vec<Maybe<RequirementsInput>>,
+    #[command(flatten)]
+    constraints: DependencyConstraintsArgs,
 
     #[command(flatten)]
     installer: ResolverInstallerArgs,
