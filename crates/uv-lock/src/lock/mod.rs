@@ -6255,7 +6255,7 @@ impl From<PrereleaseWire> for Prerelease {
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerWire {
-    exclude_newer: Option<Timestamp>,
+    exclude_newer: Option<ExcludeNewerValue>,
     exclude_newer_span: Option<ExcludeNewerSpan>,
     #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
     exclude_newer_package: ExcludeNewerPackage,
@@ -6263,12 +6263,11 @@ struct ExcludeNewerWire {
 
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
-        let global = match (wire.exclude_newer, wire.exclude_newer_span) {
-            (Some(timestamp), None) => Some(ExcludeNewerValue::absolute(timestamp)),
-            // Version 1 includes a dummy timestamp for older readers; version 2 omits it.
-            (Some(_) | None, Some(span)) => Some(ExcludeNewerValue::relative(span)),
-            (None, None) => None,
-        };
+        // Version 1 stores relative cutoffs in a separate field alongside a dummy timestamp.
+        let global = wire
+            .exclude_newer_span
+            .map(ExcludeNewerValue::relative)
+            .or(wire.exclude_newer);
         Self {
             global,
             package: wire.exclude_newer_package,
@@ -6278,14 +6277,9 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
 
 impl From<ExcludeNewer> for ExcludeNewerWire {
     fn from(exclude_newer: ExcludeNewer) -> Self {
-        let (timestamp, span) = match exclude_newer.global {
-            Some(ExcludeNewerValue::Absolute(timestamp)) => (Some(timestamp), None),
-            Some(ExcludeNewerValue::Relative(span)) => (None, Some(span)),
-            None => (None, None),
-        };
         Self {
-            exclude_newer: timestamp,
-            exclude_newer_span: span,
+            exclude_newer: exclude_newer.global,
+            exclude_newer_span: None,
             exclude_newer_package: exclude_newer.package,
         }
     }
@@ -6618,10 +6612,7 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
-        let mut options_wire = wire.options;
-        if options_wire.exclude_newer.exclude_newer_span.is_some() {
-            options_wire.exclude_newer.exclude_newer = None;
-        }
+        let options_wire = wire.options;
         let options = ResolverOptions {
             resolution_mode: options_wire.resolution_mode,
             prerelease: options_wire.prerelease.into(),

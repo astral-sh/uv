@@ -296,7 +296,8 @@ fn lockfile_v2_exclude_newer() -> Result<()> {
 
      [options]
     -exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
-     exclude-newer-span = "P7D"
+    -exclude-newer-span = "P7D"
+    +exclude-newer = { span = "P7D" }
 
      [options.exclude-newer-package]
      absolute = "2024-01-01T00:00:00Z"
@@ -327,7 +328,7 @@ fn lockfile_v2_exclude_newer() -> Result<()> {
     context
         .temp_dir
         .child("uv.lock")
-        .write_str(&upgraded.replace("{ span = \"P7D\" }", "{}"))?;
+        .write_str(&upgraded.replace("relative = { span = \"P7D\" }", "relative = {}"))?;
     uv_snapshot!(context.filters(), context.lock().args(["--frozen", "--preview-features", "lockfile-v2"]), @"
     exit_code: 2 (failure)
     ----- stderr -----

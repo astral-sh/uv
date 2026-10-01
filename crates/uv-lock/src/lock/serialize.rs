@@ -167,12 +167,14 @@ fn write_options(
 
     let exclude_newer = &options.exclude_newer;
     if let Some(global) = &exclude_newer.global {
-        if let Some(span) = global.span() {
-            if version < 2 {
-                writer.key_start("exclude-newer")?;
-                writer.value(ExcludeNewerValue::PLACEHOLDER)?;
-                writer.raw(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.\n");
-            }
+        if version >= 2 {
+            writer.key_start("exclude-newer")?;
+            write_exclude_newer_value(writer, global, version)?;
+            writer.raw("\n");
+        } else if let Some(span) = global.span() {
+            writer.key_start("exclude-newer")?;
+            writer.value(ExcludeNewerValue::PLACEHOLDER)?;
+            writer.raw(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.\n");
             writer.key_value("exclude-newer-span", span.to_string())?;
         } else {
             writer.key_value("exclude-newer", global.to_string())?;
@@ -193,23 +195,9 @@ fn write_options(
         for (name, setting) in &exclude_newer.package {
             match setting {
                 ExcludeNewerOverride::Enabled(value) => {
-                    if let Some(span) = value.span() {
-                        writer.key_start(name.as_ref())?;
-                        let mut first = true;
-                        writer.start_inline_table();
-                        if version < 2 {
-                            writer.inline_value(
-                                &mut first,
-                                "timestamp",
-                                ExcludeNewerValue::PLACEHOLDER,
-                            )?;
-                        }
-                        writer.inline_value(&mut first, "span", span.to_string())?;
-                        writer.finish_inline_table(first);
-                        writer.raw("\n");
-                    } else {
-                        writer.key_value(name.as_ref(), value.to_string())?;
-                    }
+                    writer.key_start(name.as_ref())?;
+                    write_exclude_newer_value(writer, value, version)?;
+                    writer.raw("\n");
                 }
                 ExcludeNewerOverride::Disabled => {
                     writer.key_value(name.as_ref(), false)?;
@@ -219,6 +207,26 @@ fn write_options(
     }
 
     Ok(())
+}
+
+/// Writes the shared value format for global and package-specific upload cutoffs.
+fn write_exclude_newer_value(
+    writer: &mut LockWriter,
+    value: &ExcludeNewerValue,
+    version: u32,
+) -> Result<(), WriteError> {
+    if let Some(span) = value.span() {
+        let mut first = true;
+        writer.start_inline_table();
+        if version < 2 {
+            writer.inline_value(&mut first, "timestamp", ExcludeNewerValue::PLACEHOLDER)?;
+        }
+        writer.inline_value(&mut first, "span", span.to_string())?;
+        writer.finish_inline_table(first);
+        Ok(())
+    } else {
+        writer.value(value.to_string())
+    }
 }
 
 fn write_manifest(
