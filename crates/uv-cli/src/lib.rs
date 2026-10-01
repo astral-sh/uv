@@ -5564,6 +5564,17 @@ pub enum ToolCommand {
 
 #[derive(Args)]
 pub struct ToolRunArgs {
+    /// Install dependencies from the package's bundled `pylock.toml`.
+    ///
+    /// Requires the `locked-tools` preview feature. Fails if the selected package does not
+    /// contain a lock, or if that lock cannot be installed for the requested environment.
+    #[arg(long, hide = true, overrides_with = "unlocked")]
+    pub locked: bool,
+
+    /// Resolve dependencies instead of using the package's bundled lock.
+    #[arg(long, hide = true, overrides_with = "locked")]
+    pub unlocked: bool,
+
     /// The command to run.
     ///
     /// WARNING: The documentation for [`Self::command`] is not included in help output
@@ -5753,6 +5764,17 @@ pub struct UvxArgs {
 
 #[derive(Args)]
 pub struct ToolInstallArgs {
+    /// Install dependencies from the package's bundled `pylock.toml`.
+    ///
+    /// Requires the `locked-tools` preview feature. Fails if the selected package does not
+    /// contain a lock, or if that lock cannot be installed for the requested environment.
+    #[arg(long, hide = true, overrides_with = "unlocked")]
+    pub locked: bool,
+
+    /// Resolve dependencies instead of using the package's bundled lock.
+    #[arg(long, hide = true, overrides_with = "locked")]
+    pub unlocked: bool,
+
     /// The package to install commands from.
     #[arg(value_hint = ValueHint::Other)]
     pub package: String,
@@ -6014,6 +6036,17 @@ pub struct ToolUninstallArgs {
 
 #[derive(Args)]
 pub struct ToolUpgradeArgs {
+    /// Install dependencies from the package's bundled `pylock.toml`.
+    ///
+    /// Requires the `locked-tools` preview feature. Fails if the selected package does not
+    /// contain a lock, or if that lock cannot be installed for the requested environment.
+    #[arg(long, hide = true, overrides_with = "unlocked")]
+    pub locked: bool,
+
+    /// Resolve dependencies instead of using the package's bundled lock.
+    #[arg(long, hide = true, overrides_with = "locked")]
+    pub unlocked: bool,
+
     /// The name of the tool to upgrade, along with an optional version specifier.
     #[arg(required = true, value_hint = ValueHint::Other)]
     pub name: Vec<String>,

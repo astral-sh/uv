@@ -1059,6 +1059,7 @@ fn tool_install_baseline() {
         ),
     }
     ToolInstallSettings {
+        locked: None,
         package: "anyio",
         from: None,
         with: [],

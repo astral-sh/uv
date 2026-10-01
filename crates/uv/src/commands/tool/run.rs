@@ -58,7 +58,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
-use crate::commands::tool::{Target, ToolRequest};
+use crate::commands::tool::{Target, ToolLockMode, ToolRequest};
 use crate::commands::{UvError, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -146,6 +146,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
+    lock_mode: ToolLockMode,
     command: Option<ExternalCommand>,
     from: Option<String>,
     with: &[RequirementsSource],
@@ -195,6 +196,11 @@ pub(crate) async fn run(
             ),
             Err(_) => true,
         }
+    }
+
+    super::locked::check_preview(lock_mode.is_locked(), preview)?;
+    if lock_mode.is_locked() {
+        bail!("`--locked` is not supported for tool execution");
     }
 
     if settings.resolver.torch_backend.is_some() {

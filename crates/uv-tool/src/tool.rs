@@ -17,6 +17,8 @@ use uv_settings::{ToolOptions, ToolOptionsWire};
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "ToolWire")]
 pub struct Tool {
+    /// Whether dependencies must come from the package's bundled lock.
+    locked: bool,
     /// The requirements requested by the user during installation.
     ///
     /// The first requirement is the tool target itself; any remaining requirements come from
@@ -45,6 +47,8 @@ pub struct Tool {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ToolWire {
+    #[serde(default)]
+    locked: bool,
     #[serde(default)]
     requirements: Vec<RequirementWire>,
     #[serde(default)]
@@ -248,6 +252,7 @@ impl TryFrom<ToolWire> for Tool {
             .collect::<Result<Vec<_>, _>>()
             .map_err(Self::Error::custom)?;
         Ok(Self {
+            locked: tool.locked,
             requirements,
             constraints,
             overrides: override_specifications
@@ -334,6 +339,18 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 }
 
 impl Tool {
+    /// Whether dependencies must come from the package's bundled lock.
+    pub fn locked(&self) -> bool {
+        self.locked
+    }
+
+    /// Require the package's bundled lock for subsequent upgrades.
+    #[must_use]
+    pub fn with_locked(mut self, locked: bool) -> Self {
+        self.locked = locked;
+        self
+    }
+
     /// Create a new `Tool`.
     pub fn new(
         requirements: Vec<Requirement>,
@@ -348,6 +365,7 @@ impl Tool {
         let mut entrypoints: Vec<_> = entrypoints.into_iter().collect();
         entrypoints.sort();
         Self {
+            locked: false,
             requirements,
             constraints,
             overrides,
@@ -370,6 +388,10 @@ impl Tool {
     /// Returns the TOML table for this tool.
     pub(crate) fn to_toml(&self) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
+        if self.locked {
+            table.insert("locked", value(true));
+        }
+
         if !self.requirements.is_empty() {
             table.insert("requirements", {
                 let requirements = self

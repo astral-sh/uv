@@ -746,6 +746,7 @@ pub(crate) async fn refine_interpreter(
 ///
 /// Adds a receipt for the tool.
 pub(crate) fn finalize_tool_install(
+    locked: bool,
     environment: &PythonEnvironment,
     name: &PackageName,
     entrypoints: &[PackageName],
@@ -962,7 +963,8 @@ pub(crate) fn finalize_tool_install(
     installed_tools.add_tool_receipt(
         name,
         tool.with_override_specifications(override_specifications)
-            .with_scoped_overrides(scoped_overrides),
+            .with_scoped_overrides(scoped_overrides)
+            .with_locked(locked),
     )?;
 
     warn_out_of_path(&executable_directory);
