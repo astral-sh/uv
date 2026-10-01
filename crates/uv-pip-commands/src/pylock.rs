@@ -94,7 +94,7 @@ pub(crate) async fn read_pylock_toml(
 
 /// Verify Python compatibility and convert a parsed [`PylockToml`] into a [`Resolution`] with its
 /// [`HashStrategy`].
-pub(crate) fn resolve_pylock_toml(
+pub fn resolve_pylock_toml(
     lock: PylockToml,
     install_path: &Path,
     interpreter: &Interpreter,

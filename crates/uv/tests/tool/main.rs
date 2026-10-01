@@ -12,6 +12,9 @@ mod tool_dir;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod tool_install;
 
+#[cfg(feature = "test-python")]
+mod tool_locked;
+
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod tool_list;
 

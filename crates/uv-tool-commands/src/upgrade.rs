@@ -1,5 +1,6 @@
+use crate::ToolLockMode;
 use crate::common::finalize_tool_install;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
@@ -49,6 +50,7 @@ use uv_settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub async fn upgrade(
+    lock_mode: ToolLockMode,
     names: Vec<String>,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
@@ -67,6 +69,10 @@ pub async fn upgrade(
     preview: Preview,
     render_error: fn(&anyhow::Error, Printer) -> std::fmt::Result,
 ) -> Result<ExitStatus> {
+    super::locked::check_preview(lock_mode.is_locked(), preview)?;
+    if lock_mode.is_locked() {
+        bail!("`--locked` is not supported for tool upgrades");
+    }
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
@@ -139,6 +145,7 @@ pub async fn upgrade(
     for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
         let result = Box::pin(upgrade_tool(
+            lock_mode,
             name,
             constraints,
             interpreter.as_ref(),
@@ -272,6 +279,7 @@ struct UpgradeReport {
 
 /// Upgrade a specific tool.
 async fn upgrade_tool(
+    lock_mode: ToolLockMode,
     name: &PackageName,
     constraints: &[Requirement],
     interpreter: Option<&Interpreter>,
@@ -308,6 +316,12 @@ async fn upgrade_tool(
             ));
         }
     };
+
+    let locked = lock_mode.locked_for_upgrade(existing_tool_receipt.locked());
+    super::locked::check_preview(locked, preview)?;
+    if locked {
+        bail!("`--locked` is not supported for tool upgrades");
+    }
 
     let environment = match installed_tools.get_environment(name, cache) {
         Ok(Some(environment)) => environment,
@@ -642,6 +656,7 @@ async fn upgrade_tool(
 
         // If we modified the target tool, reinstall the entrypoints.
         finalize_tool_install(
+            false,
             &environment,
             name,
             &entrypoints,
@@ -660,14 +675,15 @@ async fn upgrade_tool(
             printer,
         )?;
     } else {
-        if tool_locks {
+        if tool_locks || existing_tool_receipt.locked() {
             ToolLock::write(&tool_dir, tool_lock.as_ref())?;
         }
         installed_tools.add_tool_receipt(
             name,
             existing_tool_receipt
                 .clone()
-                .with_options(ToolOptions::from(options)),
+                .with_options(ToolOptions::from(options))
+                .with_locked(false),
         )?;
     }
 

@@ -54,7 +54,7 @@ use uv_command_support::{
 use crate::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::error::ToolError;
 use crate::requirements::resolve_names;
-use crate::{Target, ToolRequest};
+use crate::{Target, ToolLockMode, ToolRequest};
 use uv_environment_operations::{EnvironmentError, EnvironmentSpecification};
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_discovery::PythonDownloadReporter;
@@ -129,6 +129,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
 pub async fn run(
+    lock_mode: ToolLockMode,
     command: Option<Vec<OsString>>,
     from: Option<String>,
     with: &[RequirementsSource],
@@ -178,6 +179,11 @@ pub async fn run(
             ),
             Err(_) => true,
         }
+    }
+
+    super::locked::check_preview(lock_mode.is_locked(), preview)?;
+    if lock_mode.is_locked() {
+        bail!("`--locked` is not supported for tool execution");
     }
 
     if settings.resolver.torch_backend.is_some() {
