@@ -83,6 +83,7 @@ pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 use self::artifacts::ArtifactBase;
 use self::git::GitFieldsWire;
+use self::markers::MarkerWire;
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
 
 mod artifacts;
@@ -92,6 +93,7 @@ mod git;
 mod inputs;
 mod installable;
 mod map;
+mod markers;
 mod requirements;
 mod serialize;
 mod tree;
@@ -6570,7 +6572,7 @@ struct LockWire {
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
-    fork_markers: Vec<SimplifiedMarkerTree>,
+    fork_markers: Vec<MarkerWire>,
     #[serde(
         rename = "supported-environments",
         alias = "supported-markers",
@@ -7485,7 +7487,7 @@ struct PackageWire {
     #[serde(default)]
     wheels: Vec<Wheel>,
     #[serde(default, rename = "resolution-markers")]
-    fork_markers: Vec<SimplifiedMarkerTree>,
+    fork_markers: Vec<MarkerWire>,
     #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
@@ -9586,7 +9588,7 @@ struct DependencyWireTable {
     #[serde(default, rename = "extras", alias = "extra")]
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
-    marker: SimplifiedMarkerTree,
+    marker: MarkerWire,
 }
 
 impl<'de> serde::Deserialize<'de> for DependencyWire {
@@ -9603,7 +9605,7 @@ impl<'de> serde::Deserialize<'de> for DependencyWire {
                         source: None,
                     },
                     extra: BTreeSet::new(),
-                    marker: SimplifiedMarkerTree::default(),
+                    marker: MarkerWire::default(),
                 }))
             })
             .map(|map| map.deserialize().map(Self))
@@ -9620,11 +9622,12 @@ impl DependencyWire {
         package_ids: &PackageIdLookup<'_>,
     ) -> Result<Dependency, LockError> {
         let Self(dependency) = self;
+        let marker = dependency.marker.into_simplified(requires_python);
         let (simplified_marker, complexified_marker) =
-            if dependency.marker.as_simplified_marker_tree().is_true() {
+            if marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
             } else {
-                let mut simplified_marker = dependency.marker;
+                let mut simplified_marker = marker;
                 simplified_marker.and(environment);
                 let complexified_marker =
                     UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
@@ -10594,20 +10597,6 @@ fn simplify_dependency_marker(
     let mut marker = SimplifiedMarkerTree::new(requires_python, marker);
     marker.and(environment);
     marker
-}
-
-/// Returns the simplified string-ified version of each marker given.
-///
-/// Note that the marker strings returned will include conflict markers if they
-/// are present.
-fn simplified_universal_markers(
-    markers: &[UniversalMarker],
-    requires_python: &RequiresPython,
-) -> Vec<String> {
-    canonical_marker_trees(markers, requires_python)
-        .into_iter()
-        .filter_map(MarkerTree::try_to_string)
-        .collect()
 }
 
 /// Canonicalize universal markers to match the form persisted in `uv.lock`.
