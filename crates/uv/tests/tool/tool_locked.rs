@@ -3304,3 +3304,487 @@ async fn packaged_lock_checks_sdist_constraints_before_building() -> Result<()> 
     assert!(!marker.path().exists());
     Ok(())
 }
+
+#[tokio::test]
+async fn packaged_lock_checks_all_artifact_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let marker = context.temp_dir.child("backend-executed");
+    let source =
+        generate_source_archive(&"idna".parse()?, &"3.3".parse()?, "", Some(marker.path()))?;
+    let source_hash = hex::encode(Sha256::digest(&source));
+    let (wheel_filename, wheel) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.3".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let wheel_hash = hex::encode(Sha256::digest(&wheel));
+    let server = MockServer::start().await;
+    let (source_index, source_url) = mount_locked_artifact(
+        &server,
+        "sdist",
+        "idna-3.3.tar.gz",
+        &source,
+        &source_hash,
+        None,
+    )
+    .await;
+    let (wheel_index, wheel_url) =
+        mount_locked_artifact(&server, "wheel", &wheel_filename, &wheel, &wheel_hash, None).await;
+    let bad_hash = "0".repeat(128);
+    let source_lock = locked_artifact(
+        &source_index,
+        &source_url,
+        "idna-3.3.tar.gz",
+        &format!("sha256 = \"{source_hash}\", sha512 = \"{bad_hash}\""),
+        "sdist",
+    );
+    let wheel_lock = locked_artifact(
+        &wheel_index,
+        &wheel_url,
+        &wheel_filename,
+        &format!("sha256 = \"{wheel_hash}\", sha512 = \"{bad_hash}\""),
+        "wheels",
+    );
+    tool(&context, "1.0.0", Some(&source_lock), None)?;
+    tool(&context, "2.0.0", Some(&wheel_lock), None)?;
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str("unused==1.0\n")?;
+    for (version, index, modified) in [
+        ("1.0.0", &source_index, false),
+        ("1.0.0", &source_index, true),
+        ("2.0.0", &wheel_index, false),
+        ("2.0.0", &wheel_index, true),
+    ] {
+        let mut command = context.tool_install();
+        command.args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            index,
+            "--find-links",
+            "wheels",
+            "--from",
+            &format!("locked-tool=={version}"),
+            "locked-tool",
+        ]);
+        if modified {
+            command.args(["--override", "overrides.txt"]);
+        }
+        let output = command
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+            .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+            .output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success()
+                && (stderr.contains("Hash mismatch")
+                    || stderr.contains("does not match the required hashes")),
+            "{version} (modified: {modified}): {stderr}"
+        );
+        assert!(!marker.path().exists());
+    }
+    tool(
+        &context,
+        "3.0.0",
+        Some(&source_lock.replace(&bad_hash, &hex::encode(Sha512::digest(&source)))),
+        None,
+    )?;
+    tool(
+        &context,
+        "4.0.0",
+        Some(&wheel_lock.replace(&bad_hash, &hex::encode(Sha512::digest(&wheel)))),
+        None,
+    )?;
+    for (version, index) in [("3.0.0", &source_index), ("4.0.0", &wheel_index)] {
+        context
+            .tool_run()
+            .args([
+                "--locked",
+                "--isolated",
+                "--preview-features",
+                "locked-tools",
+                "--index-url",
+                index,
+                "--find-links",
+                "wheels",
+                "--from",
+                &format!("locked-tool=={version}"),
+                "locked-tool",
+            ])
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+            .assert()
+            .success();
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_orphaned_source_url_constraint_before_building() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let marker = context.temp_dir.child("backend-executed");
+    let source =
+        generate_source_archive(&"idna".parse()?, &"3.3".parse()?, "", Some(marker.path()))?;
+    let hash = hex::encode(Sha256::digest(&source));
+    let server = MockServer::start().await;
+    let index = format!("{}/simple", server.uri());
+    let url = format!("{}/files/idna-3.3.tar.gz", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/idna/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({"meta": {"api-version": "1.1"}, "name": "idna", "files": [{
+                    "filename": "idna-3.3.tar.gz", "url": url, "hashes": {"sha256": hash},
+                    "upload-time": "2023-01-01T00:00:00Z",
+                }]})
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/idna-3.3.tar.gz"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(source))
+        .mount(&server)
+        .await;
+    let lock = locked_artifact(
+        &index,
+        &url,
+        "idna-3.3.tar.gz",
+        &format!("sha256 = \"{hash}\""),
+        "sdist",
+    );
+    let (filename, bytes) = generate_wheel_with_files(
+        &"locked-tool".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[
+            ("locked_tool-1.0.0.dist-info/pylock.toml", &lock),
+            (
+                "locked_tool-1.0.0.dist-info/entry_points.txt",
+                "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
+            ),
+            ("locked_tool/cli.py", "def main(): pass\n"),
+        ],
+    );
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&bytes)?;
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str("unused==1.0\n")?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!("idna @ {url}#sha512={}\n", "0".repeat(128)))?;
+    let output = context
+        .tool_install()
+        .args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            &index,
+            "--find-links",
+            "wheels",
+            "--override",
+            "overrides.txt",
+            "--constraint",
+            "constraints.txt",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .output()?;
+    assert!(!output.status.success());
+    assert!(
+        !marker.path().exists(),
+        "the backend ran before the constraint hash was checked: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Hash mismatch"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!(
+            "idna @ {url} --hash=sha256:{hash} --hash=sha512:{}\n",
+            "0".repeat(128)
+        ))?;
+    let output = context
+        .tool_install()
+        .args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            &index,
+            "--find-links",
+            "wheels",
+            "--override",
+            "overrides.txt",
+            "--constraint",
+            "constraints.txt",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .output()?;
+    assert!(!output.status.success());
+    assert!(
+        !marker.path().exists(),
+        "the backend ran before all direct URL hashes were checked: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Hash mismatch"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_artifact_url_hash_before_building() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let marker = context.temp_dir.child("backend-executed");
+    let sdist =
+        generate_source_archive(&"idna".parse()?, &"3.3".parse()?, "", Some(marker.path()))?;
+    let hash = hex::encode(Sha256::digest(&sdist));
+    let lock_hash = hex::encode(Sha512::digest(&sdist));
+    let context = context
+        .with_filter((hash.clone(), "[INDEX_HASH]"))
+        .with_filter((lock_hash.clone(), "[LOCK_HASH]"));
+    let server = MockServer::start().await;
+    let filename = "idna-3.3.tar.gz";
+    let (index, url) = mount_locked_artifact(&server, "sdist", filename, &sdist, &hash, None).await;
+    let lock = locked_artifact(
+        &index,
+        &format!("{url}#sha512={}", "0".repeat(128)),
+        filename,
+        &format!("sha512 = \"{lock_hash}\""),
+        "sdist",
+    );
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Hash mismatch for `idna==3.3`
+
+    Expected:
+      sha512:[LOCK_HASH]
+      sha512:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+      sha256:[INDEX_HASH]
+
+    Computed:
+      sha256:[INDEX_HASH]
+      sha512:[LOCK_HASH]
+    ");
+    assert!(!marker.path().exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_locked_source_reference_before_building() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let marker = context.temp_dir.child("backend-executed");
+    let source =
+        generate_source_archive(&"idna".parse()?, &"3.3".parse()?, "", Some(marker.path()))?;
+    let hash = hex::encode(Sha256::digest(&source));
+    let server = MockServer::start().await;
+    let index = format!("{}/simple", server.uri());
+    let source_url = format!("{}/files/idna-3.3.tar.gz", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/idna/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({"meta": {"api-version": "1.1"}, "name": "idna", "files": [{
+                    "filename": "idna-3.3.tar.gz",
+                    "url": source_url,
+                    "hashes": {"sha256": hash},
+                    "upload-time": "2023-01-01T00:00:00Z",
+                }]})
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/idna-3.3.tar.gz"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(source))
+        .mount(&server)
+        .await;
+    let mut lock = locked_artifact(
+        &index,
+        &source_url,
+        "idna-3.3.tar.gz",
+        &format!("sha256 = \"{hash}\""),
+        "sdist",
+    );
+    writeln!(
+        lock,
+        "[[packages]]\nname = \"beta\"\nversion = \"1.0\"\nindex = \"https://unconfigured.example/simple\"\nwheels = [{{ url = \"https://unconfigured.example/beta-1.0-py3-none-any.whl\", hashes = {{ sha256 = \"{}\" }} }}]",
+        "0".repeat(64)
+    )?;
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    let (filename, bytes) = generate_wheel_with_files(
+        &"beta".parse()?,
+        &"2.0".parse()?,
+        &[format!("idna @ {source_url}#sha512={}", "0".repeat(128)).parse()?],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let wheel = context.temp_dir.child("wheels").child(filename);
+    wheel.write_binary(&bytes)?;
+    let wheel_url = url::Url::from_file_path(wheel.path())
+        .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str(&format!("beta @ {wheel_url}\n"))?;
+    let output = context
+        .tool_install()
+        .args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--index-url",
+            &index,
+            "--find-links",
+            "wheels",
+            "--override",
+            "overrides.txt",
+            "locked-tool",
+        ])
+        .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+        .output()?;
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Hash mismatch"));
+    assert!(!marker.path().exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_repeated_source_hashes_before_building() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let marker = context.temp_dir.child("backend-executed");
+    let source =
+        generate_source_archive(&"beta".parse()?, &"1.0".parse()?, "", Some(marker.path()))?;
+    let hash = hex::encode(Sha256::digest(&source));
+    let context = context.with_filter((hash.clone(), "[SOURCE_HASH]"));
+    let server = MockServer::start().await;
+    let source_url = format!("{}/beta-1.0.tar.gz", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/beta-1.0.tar.gz"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(source))
+        .mount(&server)
+        .await;
+    let lock = locked_artifact(
+        "https://unconfigured.example/simple",
+        "https://unconfigured.example/idna-3.3-py3-none-any.whl",
+        "idna-3.3-py3-none-any.whl",
+        &format!("sha256 = \"{}\"", "0".repeat(64)),
+        "wheels",
+    );
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    let valid = format!("beta @ {source_url}#sha256={hash}");
+    let invalid = format!("beta @ {source_url}#sha512={}", "0".repeat(128));
+    let inactive = format!(
+        "beta @ {source_url}#sha256={} ; python_version < '2.0'",
+        "0".repeat(64)
+    );
+    for (version, requirements, metadata, success) in [
+        ("3.5", vec![&valid, &invalid], false, false),
+        // Supplied metadata must not bypass validation when building the source.
+        ("3.6", vec![&invalid, &valid], true, false),
+        // An inactive reference must not constrain the active source.
+        ("3.7", vec![&valid, &inactive], false, true),
+    ] {
+        let dependencies = requirements
+            .into_iter()
+            .map(|requirement| requirement.parse())
+            .collect::<Result<Vec<_>, _>>()?;
+        let (filename, bytes) = generate_wheel_with_files(
+            &"idna".parse()?,
+            &version.parse()?,
+            &dependencies,
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        let wheel = context.temp_dir.child("wheels").child(filename);
+        wheel.write_binary(&bytes)?;
+        let wheel_url = url::Url::from_file_path(wheel.path())
+            .map_err(|()| anyhow::anyhow!("Could not create a file URL"))?;
+        context
+            .temp_dir
+            .child("overrides.txt")
+            .write_str(&format!("idna @ {wheel_url}\n"))?;
+        let mut command = context.tool_install();
+        command.args([
+            "--locked",
+            "--preview-features",
+            "locked-tools",
+            "--find-links",
+            "wheels",
+            "--override",
+            "overrides.txt",
+            "locked-tool",
+        ]);
+        if metadata {
+            context.temp_dir.child("uv.toml").write_str(
+                "dependency-metadata = [{ name = \"beta\", version = \"1.0\", requires-dist = [] }]\n",
+            )?;
+            command.args(["--config-file", "uv.toml"]);
+        } else if success {
+            command.arg("--no-config");
+        }
+        let output = command
+            .env(EnvVars::PATH, context.temp_dir.child("bin").path())
+            .output()?;
+        assert_eq!(
+            output.status.success(),
+            success,
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if !success {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("Hash mismatch"));
+        }
+        assert_eq!(marker.path().exists(), success);
+    }
+    Ok(())
+}
