@@ -29,7 +29,7 @@ impl Ord for Arch {
 }
 
 impl Arch {
-    /// Prefer the native architecture, then compatible Windows architectures.
+    /// Compare architectures by their preference for the given OS and native architecture.
     pub(crate) fn cmp_for_os(self, other: Self, os: Os, native: Self) -> std::cmp::Ordering {
         if self.family == other.family {
             return self.variant.cmp(&other.variant);
@@ -37,10 +37,13 @@ impl Arch {
 
         self.preference(os, native)
             .cmp(&other.preference(os, native))
+            // Fall back to lexicographic order for equally preferred architecture families.
             .then_with(|| self.family.to_string().cmp(&other.family.to_string()))
     }
 
+    /// Prefer the native architecture, then compatible Windows architectures.
     fn preference(self, os: Os, native: Self) -> u8 {
+        // Prefer native architectures.
         if self.family == native.family {
             return 0;
         }
