@@ -605,11 +605,12 @@ jobs:
             arch: aarch64
             test_image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
             test_platform: linux/arm64
-            runner: depot-ubuntu-24.04-arm-8
+            # The instrumented PGO build can exceed 32 GB even with eight CPUs.
+            runner: depot-ubuntu-24.04-arm-16
             pgo: true
             # see https://github.com/astral-sh/ruff/issues/3791
             # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+            maturin_docker_options: --cpuset-cpus=0-7 -e CARGO_BUILD_JOBS=8 -e JEMALLOC_SYS_WITH_LG_PAGE=16
             # Build fails with 2_17 container: https://github.com/astral-sh/uv/actions/runs/20850906093/job/59905482208?pr=17358
             manylinux: 2_28
           - target: armv7-unknown-linux-gnueabihf
