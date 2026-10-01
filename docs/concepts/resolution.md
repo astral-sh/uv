@@ -982,8 +982,8 @@ requirements store `requires-python` alongside their `dependencies`, instead of 
 Declared dependencies use `package.metadata.dependencies` and `manifest.dependencies`, replacing
 `package.metadata.requires-dist` and `manifest.requirements`. Static dependency metadata also uses
 `dependencies` instead of `requires-dist`. Both metadata sections record declared extras as `extras`
-instead of `provides-extras`. A metadata table containing only dependency-group subtables omits
-the empty parent header.
+instead of `provides-extras`. A metadata table containing only dependency-group subtables omits the
+empty parent header.
 
 Name-only dependency edges and declarations use strings, such as `"requests"`, instead of inline
 tables. Declarations with specifiers, sources, extras, groups, or markers retain their tables.
@@ -992,7 +992,9 @@ replacing `extra`. Global and package-specific relative `exclude-newer` cutoffs 
 `{ span = "P7D" }`, without the placeholder timestamps or separate `exclude-newer-span` field used
 in version 1.
 
-Dependency edges include only the version or source needed to identify their target uniquely.
+Dependency edges include only the version or source needed to identify their target uniquely. They
+also omit conflict conditions already implied by reaching their parent; readers evaluate edges in
+that parent context.
 
 Git sources record the repository URL separately from `branch`, `tag`, or `rev`, the resolved
 `commit`, and any `subdirectory`, archive `path`, or `lfs` setting. These fields replace the query

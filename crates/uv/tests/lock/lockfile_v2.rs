@@ -14,6 +14,221 @@ use url::Url;
 use uv_lock::Lock;
 use uv_test::{diff_snapshot, uv_snapshot};
 
+/// V2 conflict locks retain extra and group selection across frozen reads and revalidation.
+#[test]
+#[cfg(feature = "test-universal")]
+fn lockfile_v2_conflicting_extras_and_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        foo = ["child==1"]
+        bar = ["child==2"]
+
+        [dependency-groups]
+        first = ["project[foo]"]
+        second = ["project[bar]"]
+
+        [tool.uv]
+        conflicts = [[{ extra = "foo" }, { extra = "bar" }]]
+
+        [tool.uv.sources]
+        project = { workspace = true }
+        child = [{ path = "one", extra = "foo" }, { path = "two", extra = "bar" }]
+    "#})?;
+    for (directory, version) in [("one", "1.0.0"), ("two", "2.0.0")] {
+        context
+            .temp_dir
+            .child(directory)
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "child"
+            version = "{version}"
+            dependencies = ["leaf"]
+
+            [tool.uv]
+            package = false
+
+            [tool.uv.sources]
+            leaf = {{ path = "../leaf" }}
+        "#})?;
+    }
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "lockfile-v2"])
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    assert_eq!(Lock::from_canonical_toml(&lock)?.to_toml()?, lock);
+    assert_eq!(toml::from_str::<Lock>(&lock)?.to_toml()?, lock);
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Resolved 4 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--extra", "foo", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Checked in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--extra", "bar", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Checked in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--group", "first", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Checked in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--group", "second", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Checked in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--all-extras", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    error: Extras `bar` and `foo` are incompatible with the declared conflicts: {`project[bar]`, `project[foo]`}
+    ");
+    // Revalidation without declaration metadata must use the same marker simplification.
+    context
+        .lock()
+        .args([
+            "--offline",
+            "--preview-features",
+            "lockfile-v2,lock-without-metadata",
+        ])
+        .assert()
+        .success();
+    context
+        .lock()
+        .args([
+            "--offline",
+            "--locked",
+            "--preview-features",
+            "lockfile-v2,lock-without-metadata",
+        ])
+        .assert()
+        .success();
+    Ok(())
+}
+
+/// Conflict discovery can provisionally visit a package that is later excluded after all
+/// transitive extras have been activated. Its dependencies must be evaluated under the package's
+/// reachability marker during that preliminary traversal.
+#[test]
+fn lockfile_v2_conflict_discovery_respects_parent_reachability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["x[foo]"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "x", extra = "foo" },
+            { package = "q", extra = "bar" },
+        ]]
+        "#,
+    )?;
+
+    // This is the lock shape produced when `parent`'s reachability marker is removed from its
+    // outgoing edge: the edge is only valid in the context of `parent`, but conflict discovery
+    // traverses `parent` before it knows that `x[foo]` makes the package unreachable.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 2
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "q", extra = "bar" },
+            { package = "x", extra = "foo" },
+        ]]
+
+        [[package]]
+        name = "parent"
+        source = { virtual = "parent" }
+        dependencies = [
+            { name = "q", extras = ["bar"] },
+        ]
+
+        [[package]]
+        name = "project"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent", marker = "extra != 'extra-1-x-foo'" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [
+            { name = "x", extras = ["foo"] },
+        ]
+
+        [package.metadata]
+        extras = ["feature"]
+
+        [[package]]
+        name = "q"
+        source = { virtual = "q" }
+
+        [package.optional-dependencies]
+        bar = []
+
+        [[package]]
+        name = "x"
+        source = { virtual = "x" }
+
+        [package.optional-dependencies]
+        foo = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--extra")
+        .arg("feature")
+        .args(["--frozen", "--offline", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Static and package metadata use the same dependency and extra field names.
 #[test]
 fn lockfile_v2_metadata_names() -> Result<()> {
