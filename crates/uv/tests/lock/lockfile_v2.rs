@@ -429,7 +429,7 @@ fn lockfile_v2_dependencies() -> Result<()> {
          "sys_platform == 'win32'",
          "sys_platform != 'win32'",
      ]
-    @@ -14,11 +13,11 @@
+    @@ -14,15 +13,15 @@
      version = "1.0.0"
      source = { virtual = "base" }
 
@@ -440,9 +440,14 @@ fn lockfile_v2_dependencies() -> Result<()> {
      ]
 
      [package.metadata]
-     requires-dist = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
+    -requires-dist = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
+    +dependencies = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
      provides-extras = ["feature"]
-    @@ -52,25 +51,25 @@
+
+     [[package]]
+     name = "conditional"
+     version = "1.0.0"
+    @@ -52,35 +51,35 @@
      [[package]]
      name = "project"
      version = "0.1.0"
@@ -471,9 +476,12 @@ fn lockfile_v2_dependencies() -> Result<()> {
      ]
 
      [package.metadata]
-     requires-dist = [
+    -requires-dist = [
+    +dependencies = [
          { name = "base", extras = ["feature"], virtual = "base" },
-    @@ -80,7 +79,7 @@
+         { name = "conditional", marker = "sys_platform == 'win32'", virtual = "conditional" },
+         { name = "forked", marker = "sys_platform != 'win32'", virtual = "forked-v2" },
+         { name = "forked", marker = "sys_platform == 'win32'", virtual = "forked-v1" },
          { name = "plain", virtual = "plain" },
          { name = "plain", marker = "extra == 'feature'", virtual = "plain" },
      ]
@@ -695,5 +703,82 @@ fn lockfile_v2_group_requires_python() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+    Ok(())
+}
+
+/// Script requirements use the same field name as package dependency declarations.
+#[test]
+fn lockfile_v2_manifest_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        # ///
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .lock()
+        .args(["--script", "script.py", "--offline"])
+        .assert()
+        .success();
+    let original = context.read("script.py.lock");
+    context
+        .lock()
+        .args([
+            "--script",
+            "script.py",
+            "--offline",
+            "--preview-features",
+            "lockfile-v2",
+        ])
+        .assert()
+        .success();
+    let upgraded = context.read("script.py.lock");
+    assert_snapshot!(diff_snapshot(&original, &upgraded, 3), @r#"
+    --- old
+    +++ new
+    @@ -1,12 +1,11 @@
+    -version = 1
+    -revision = 5
+    +version = 2
+     requires-python = ">=3.12"
+
+     [options]
+     exclude-newer = "2024-03-25T00:00:00Z"
+
+     [manifest]
+    -requirements = [{ name = "child", virtual = "child" }]
+    +dependencies = [{ name = "child", virtual = "child" }]
+
+     [[package]]
+     name = "child"
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?.to_toml()?, upgraded);
+    assert_eq!(toml::from_str::<Lock>(&upgraded)?.to_toml()?, upgraded);
+    context
+        .lock()
+        .args([
+            "--script",
+            "script.py",
+            "--offline",
+            "--locked",
+            "--preview-features",
+            "lockfile-v2",
+        ])
+        .assert()
+        .success();
     Ok(())
 }
