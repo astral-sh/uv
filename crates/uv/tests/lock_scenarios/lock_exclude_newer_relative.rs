@@ -1263,21 +1263,19 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     );
     context.temp_dir.child("uv.lock").write_str(&lock)?;
 
-    // Unlike the global case, a per-package entry with only a span (no timestamp) fails to
-    // deserialize.
+    // Like the global case, a per-package entry with only a span is valid when it matches
+    // the `pyproject.toml` configuration.
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Failed to parse `uv.lock`
-      cause: TOML parse error at line 5, column 1
-               |
-             5 | [options]
-               | ^^^^^^^^^
-             data did not match any variant of untagged enum Helper
+    Resolved 2 packages in [TIME]
     ");
+
+    // The lockfile retains the span without restoring the dummy timestamp.
+    assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
 }
