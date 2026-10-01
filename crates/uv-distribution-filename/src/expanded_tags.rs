@@ -10,6 +10,7 @@ use uv_platform_tags::{
 
 use crate::splitter::MemchrSplitter;
 use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
+use crate::{InvalidVariantLabel, VariantLabel};
 
 /// The expanded wheel tags as stored in a `WHEEL` file.
 ///
@@ -81,6 +82,8 @@ pub enum ExpandedTagError {
     InvalidAbiTag(String, #[source] ParseAbiTagError),
     #[error("The wheel tag \"{0}\" contains an invalid platform tag")]
     InvalidPlatformTag(String, #[source] ParsePlatformTagError),
+    #[error("The wheel tag \"{0}\" contains an invalid variant label")]
+    InvalidVariantLabel(String, #[source] InvalidVariantLabel),
 }
 
 /// Parse an expanded (i.e., simplified) wheel tag, e.g. `py3-none-any`.
@@ -100,13 +103,15 @@ fn parse_expanded_tag(tag: &str) -> Result<WheelTag, ExpandedTagError> {
     let Some(abi_tag_index) = splitter.next() else {
         return Err(ExpandedTagError::MissingPlatformTag(tag.to_string()));
     };
+    let variant = splitter.next();
     if splitter.next().is_some() {
         return Err(ExpandedTagError::ExtraSegment(tag.to_string()));
     }
 
     let python_tag = &tag[..python_tag_index];
     let abi_tag = &tag[python_tag_index + 1..abi_tag_index];
-    let platform_tag = &tag[abi_tag_index + 1..];
+    let platform_tag = &tag[abi_tag_index + 1..variant.unwrap_or(tag.len())];
+    let variant = variant.map(|variant| &tag[variant + 1..]);
 
     let is_small = memchr(b'.', tag.as_bytes()).is_none();
 
@@ -137,6 +142,10 @@ fn parse_expanded_tag(tag: &str) -> Result<WheelTag, ExpandedTagError> {
                     .map(PlatformTag::from_str)
                     .filter_map(Result::ok)
                     .collect(),
+                variant: variant
+                    .map(VariantLabel::from_str)
+                    .transpose()
+                    .map_err(|err| ExpandedTagError::InvalidVariantLabel(tag.to_string(), err))?,
                 repr: tag.into(),
             }),
         })
@@ -372,16 +381,6 @@ mod tests {
     }
 
     #[test]
-    fn test_error_extra_segment() {
-        let err = ExpandedTags::parse(vec!["py3-none-any-extra"]).unwrap_err();
-        insta::assert_debug_snapshot!(err, @r#"
-        ExtraSegment(
-            "py3-none-any-extra",
-        )
-        "#);
-    }
-
-    #[test]
     fn test_parse_expanded_tag_single_segment() {
         let result = parse_expanded_tag("py3-none-any");
         assert!(result.is_ok());
@@ -491,18 +490,6 @@ mod tests {
         insta::assert_debug_snapshot!(result.unwrap_err(), @r#"
         MissingPlatformTag(
             "py3-none",
-        )
-        "#);
-    }
-
-    #[test]
-    fn test_parse_expanded_tag_four_segments() {
-        let result = parse_expanded_tag("py3-none-any-extra");
-        assert!(result.is_err());
-
-        insta::assert_debug_snapshot!(result.unwrap_err(), @r#"
-        ExtraSegment(
-            "py3-none-any-extra",
         )
         "#);
     }

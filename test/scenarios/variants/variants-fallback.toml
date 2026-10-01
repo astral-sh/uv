@@ -1,0 +1,67 @@
+# Adapted from https://github.com/astral-sh/packse/pull/292 (f00a08fa16f60eb5b7c39409ce62cb9e2632ffed).
+name = "variants-fallback"
+description = "Non-matching variant wheels fall back to null variants or non-variant wheels"
+
+# These tests vary provider output and inspect installed variant metadata.
+# See crates/uv/tests/pip_install/variants_packse.rs.
+[testgen]
+disable = true
+
+[root]
+requires = ["only-fallback", "null-variant"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+only-fallback = "1.0.0"
+null-variant = "1.0.0"
+
+[packages.only-fallback.versions."2.0.0".variants]
+non_variant_wheel = false
+
+[packages.only-fallback.versions."2.0.0".variants.default_priorities]
+namespace = ["cpu"]
+
+[packages.only-fallback.versions."2.0.0".variants.properties]
+toohigh = { cpu = { level = ["v5"] } }
+
+[packages.only-fallback.versions."2.0.0".variants.providers.cpu]
+requires = ["cpu_provider >= 0.1, <0.2"]
+plugin-api = "cpu_provider.plugin"
+
+[packages.only-fallback.versions."1.0.0".variants]
+non_variant_wheel = true
+
+[packages.only-fallback.versions."1.0.0".variants.default_priorities]
+namespace = ["cpu"]
+
+[packages.only-fallback.versions."1.0.0".variants.properties]
+toohigh = { cpu = { level = ["v5"] } }
+
+[packages.only-fallback.versions."1.0.0".variants.providers.cpu]
+requires = ["cpu_provider >= 0.1, <0.2"]
+plugin-api = "cpu_provider.plugin"
+
+[packages.null-variant.versions."1.0.0".variants]
+non_variant_wheel = false
+
+[packages.null-variant.versions."1.0.0".variants.default_priorities]
+namespace = ["cpu"]
+
+[packages.null-variant.versions."1.0.0".variants.properties]
+toohigh = { cpu = { level = ["v5"] } }
+null = {}
+
+[packages.null-variant.versions."1.0.0".variants.providers.cpu]
+requires = ["cpu_provider >= 0.1, <0.2"]
+plugin-api = "cpu_provider.plugin"
+
+[packages.only-fallback.versions."2.0.0"]
+sdist = false
+
+[packages.only-fallback.versions."1.0.0"]
+sdist = false
+
+[packages.null-variant.versions."1.0.0"]
+sdist = false

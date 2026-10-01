@@ -1,0 +1,21 @@
+---
+source: crates/uv-distribution-filename/src/wheel.rs
+expression: errors
+---
+[
+    Err(
+        "The wheel filename \"numpy-2.3.2-3py-none-any.whl\" is invalid: Python tag must not start with a digit",
+    ),
+    Err(
+        "The wheel filename \"numpy-2.3.2-7-3py-none-any-null.whl\" is invalid: Python tag must not start with a digit",
+    ),
+    Err(
+        "The wheel filename \"numpy-2.3.2-py3-none-any-.whl\" has an invalid variant label: Variant label must not be empty",
+    ),
+    Err(
+        "The wheel filename \"numpy-2.3.2-py3-none-any-cpu_!v3.whl\" has an invalid variant label: Invalid character `!` in variant label, only [a-z0-9._] are allowed: cpu_!v3",
+    ),
+    Err(
+        "The wheel filename \"numpy-2.3.2-py3-none-any-cpu_É.whl\" has an invalid variant label: Invalid character `É` in variant label, only [a-z0-9._] are allowed: cpu_É",
+    ),
+]

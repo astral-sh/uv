@@ -36,6 +36,8 @@ uv-python = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
+uv-variant-frontend = { workspace = true }
+uv-variants = { workspace = true }
 uv-version = { workspace = true }
 uv-workspace = { workspace = true }
 

@@ -244,7 +244,6 @@ pub fn simplify_conflict_markers(
             // For example, when `a` and `b` conflict, this marker does not simplify:
             // ```
             // (platform_machine == 'x86_64' and extra == 'extra-5-foo-b') or extra == 'extra-5-foo-a'
-            // ````
             graph[edge_index].evaluate_only_extras(&extras, &groups)
         });
         if all_paths_satisfied {

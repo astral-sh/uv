@@ -42,6 +42,9 @@ use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
     HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
+use uv_variant_frontend::VariantBuild;
+use uv_variants::cache::VariantProviderCache;
+use uv_variants::variants_json::Provider;
 use uv_workspace::WorkspaceCache;
 
 #[derive(Debug, Error)]
@@ -243,6 +246,7 @@ impl<'a> BuildDispatch<'a> {
 #[allow(refining_impl_trait)]
 impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
+    type VariantsBuilder = VariantBuild;
 
     fn interpreter(&self) -> impl Future<Output = &Interpreter> + '_ {
         future::ready(self.interpreter)
@@ -254,6 +258,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn git(&self) -> &GitResolver {
         &self.shared_state.git
+    }
+
+    fn variants(&self) -> &VariantProviderCache {
+        self.shared_state.index.variant_providers()
     }
 
     fn build_arena(&self) -> &BuildArena<SourceBuild> {
@@ -483,6 +491,24 @@ impl BuildContext for BuildDispatch<'_> {
                 .await?
         };
 
+        let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+        let installer = Installer::new(venv, self.preview)
+            .with_link_mode(self.link_mode)
+            .with_cache(self.cache)
+            .with_variant_contexts(
+                &wheels,
+                resolution,
+                &DistributionDatabase::new(
+                    self.client,
+                    self,
+                    self.concurrency.downloads_semaphore.clone(),
+                )
+                .with_build_stack(build_stack),
+                self.interpreter.markers(),
+            )
+            .await
+            .context("Failed to resolve build dependency variants")?;
+
         // Remove any unnecessary packages.
         if !reinstalls.is_empty() {
             let layout = venv.interpreter().layout();
@@ -502,16 +528,13 @@ impl BuildContext for BuildDispatch<'_> {
         }
 
         // Install the resolved distributions.
-        let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
         if !wheels.is_empty() {
             debug!(
                 "Installing build requirement{}: {}",
                 if wheels.len() == 1 { "" } else { "s" },
                 wheels.iter().map(ToString::to_string).join(", ")
             );
-            wheels = Installer::new(venv, self.preview)
-                .with_link_mode(self.link_mode)
-                .with_cache(self.cache)
+            wheels = installer
                 .install(wheels)
                 .await
                 .context("Failed to install build dependencies")?;
@@ -666,6 +689,32 @@ impl BuildContext for BuildDispatch<'_> {
         .await??;
 
         Ok(Some(filename))
+    }
+
+    async fn setup_variants<'data>(
+        &'data self,
+        backend_name: String,
+        backend: &'data Provider,
+        build_output: BuildOutput,
+        build_stack: BuildStack,
+    ) -> anyhow::Result<VariantBuild> {
+        // Provider requirements can refer back to packages whose metadata is still being
+        // resolved. Separate in-flight caches let the build stack detect recursive providers
+        // without waiting for the parent resolution.
+        let build_context = self.fork(self.hasher);
+        let builder = VariantBuild::setup(
+            backend_name,
+            backend,
+            self.interpreter,
+            &build_context,
+            &build_stack,
+            self.build_extra_env_vars.clone(),
+            build_output,
+            self.concurrency.builds_semaphore.clone(),
+        )
+        .boxed_local()
+        .await?;
+        Ok(builder)
     }
 }
 

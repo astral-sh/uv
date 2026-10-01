@@ -155,7 +155,7 @@ pub fn read_archive_metadata(
 /// Find the `.dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
-fn find_flat_dist_info(
+pub fn find_flat_dist_info(
     filename: &WheelFilename,
     path: impl AsRef<Path>,
 ) -> Result<DistInfoStem<'static>, Error> {
@@ -209,7 +209,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
 }
 
 /// Read a named `.dist-info` file from a wheel without seeking.
-async fn read_dist_info_file_async_stream<R: futures::AsyncRead + Unpin>(
+pub async fn read_dist_info_file_async_stream<R: futures::AsyncRead + Unpin>(
     filename: &WheelFilename,
     entry_name: &str,
     reader: R,

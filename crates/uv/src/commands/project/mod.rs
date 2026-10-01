@@ -340,6 +340,9 @@ pub(crate) enum ProjectError {
     DefaultGroups(#[from] uv_workspace::DefaultGroupsError),
 
     #[error(transparent)]
+    Distribution(Box<uv_distribution::Error>),
+
+    #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]
@@ -362,6 +365,12 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+impl From<uv_distribution::Error> for ProjectError {
+    fn from(error: uv_distribution::Error) -> Self {
+        Self::Distribution(Box::new(error))
+    }
 }
 
 impl From<LockParseError> for ProjectError {
@@ -3092,6 +3101,7 @@ pub(crate) async fn sync_environment(
         compile_bytecode.then_some(pip::operations::BytecodeCompilation::All),
         &hasher,
         tags,
+        interpreter.markers(),
         &client,
         state.in_flight(),
         concurrency,
@@ -3386,6 +3396,7 @@ pub(crate) async fn update_environment(
         (*compile_bytecode).then_some(pip::operations::BytecodeCompilation::All),
         &hasher,
         &tags,
+        marker_env.markers(),
         &client,
         state.in_flight(),
         concurrency,

@@ -1,6 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
 
@@ -13,8 +14,9 @@ use uv_fs::Simplified;
 use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::{Requirement, VariantNamespace};
 use uv_platform_tags::Platform;
-use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_pypi_types::{HashAlgorithm, HashDigest, VerbatimParsedUrl};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
@@ -34,6 +36,14 @@ impl fmt::Display for PythonVersion {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Wheel variants require `--preview-features wheel-variants`")]
+    WheelVariantsPreview,
+    #[error("Failed to read wheel variant metadata")]
+    WheelVariantRead(#[source] std::io::Error),
+    #[error("Invalid wheel variant metadata")]
+    WheelVariantParse(#[source] serde_json::Error),
+    #[error(transparent)]
+    WheelVariantMetadata(#[from] uv_variants::variants_json::VariantMetadataError),
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -70,6 +80,8 @@ pub enum Error {
     CacheInfo(#[from] uv_cache_info::CacheInfoError),
 
     // Build error
+    #[error("Cyclic build dependency detected for `{0}`")]
+    CyclicBuildDependency(String),
     #[error(transparent)]
     Build(AnyErrorBuild),
     #[error("Built wheel has an invalid filename")]
@@ -119,6 +131,38 @@ pub enum Error {
         filename: WheelFilename,
         python_platform: Platform,
         python_version: PythonVersion,
+    },
+    #[error(
+        "Wheel variant `{variants}` for package `{name}` is incompatible with the target properties"
+    )]
+    WheelVariantMismatch { name: PackageName, variants: String },
+    #[error("Provider plugin is declared to use namespace {declared} but uses namespace {actual}")]
+    WheelVariantNamespaceMismatch {
+        declared: VariantNamespace,
+        actual: VariantNamespace,
+    },
+    #[error("Cyclic variant provider dependency detected for `{0}`")]
+    CyclicVariantProvider(VariantNamespace),
+    #[error(
+        "Cannot run variant provider `{0}` from an index when verifying wheel hashes; provide its properties with `UV_VARIANT_LOCK`"
+    )]
+    UntrustedVariantProvider(VariantNamespace),
+    #[error("Failed to read variant lock")]
+    VariantLockRead(#[source] std::io::Error),
+    #[error("Failed to parse variant lock: {}", _0.user_display())]
+    VariantLockParse(PathBuf, #[source] toml::de::Error),
+    #[error("Variant lock version {} is unsupported (supported: >=0.1, <0.2): {}", _1, _0.user_display())]
+    VariantLockVersion(PathBuf, Version),
+    #[error(
+        "Variant lock is missing a matching provider; set `UV_VARIANT_LOCK_INCOMPLETE=1` to query unmatched providers\n  variant lock: {}\n  requires: `{}`\n  plugin-api: {}",
+        variant_lock.user_display(),
+        requires.iter().join("`, `"),
+        plugin_api
+    )]
+    VariantLockMissing {
+        variant_lock: PathBuf,
+        requires: Vec<Requirement<VerbatimParsedUrl>>,
+        plugin_api: String,
     },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
@@ -292,7 +336,20 @@ impl Error {
     /// Return whether this is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
         match self {
-            Self::NoBuild
+            Self::WheelVariantsPreview
+            | Self::WheelVariantRead(_)
+            | Self::WheelVariantParse(_)
+            | Self::WheelVariantMetadata(_)
+            | Self::WheelVariantMismatch { .. }
+            | Self::WheelVariantNamespaceMismatch { .. }
+            | Self::CyclicVariantProvider(_)
+            | Self::UntrustedVariantProvider(_)
+            | Self::CyclicBuildDependency(_)
+            | Self::VariantLockRead(_)
+            | Self::VariantLockParse(..)
+            | Self::VariantLockVersion(..)
+            | Self::VariantLockMissing { .. }
+            | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
             | Self::NonFileUrl(_)

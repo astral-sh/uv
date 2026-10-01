@@ -264,11 +264,33 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
     /// Set the [`BuildStack`] to use for the [`SourceDistributionBuilder`].
     #[must_use]
-    pub(crate) fn with_build_stack(self, build_stack: &'a BuildStack) -> Self {
-        Self {
+    pub(crate) fn with_build_stack<'build>(
+        &self,
+        build_stack: &'build BuildStack,
+    ) -> SourceDistributionBuilder<'build, T>
+    where
+        'a: 'build,
+    {
+        SourceDistributionBuilder {
+            build_context: self.build_context,
             build_stack: Some(build_stack),
-            ..self
+            reporter: self.reporter.clone(),
+            metadata_first_party_packages: self.metadata_first_party_packages,
         }
+    }
+
+    /// Extend the build stack before acquiring a source cache lock.
+    fn build_stack_for_lock(
+        &self,
+        source: &BuildableSource<'_>,
+        cache_shard: &CacheShard,
+    ) -> Result<BuildStack, Error> {
+        let mut build_stack = self.build_stack.cloned().unwrap_or_default();
+        // An ancestor cannot release its lock while waiting for this source's build requirements.
+        if !build_stack.insert_source_lock(cache_shard.join(".lock")) {
+            return Err(Error::CyclicBuildDependency(source.to_string()));
+        }
+        Ok(build_stack)
     }
 
     /// Set the [`Reporter`] to use for the [`SourceDistributionBuilder`].
@@ -658,7 +680,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
+        let build_stack = self.build_stack_for_lock(source, cache_shard)?;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let builder = self.with_build_stack(&build_stack);
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -744,7 +768,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         // Build the source distribution.
-        let (disk_filename, wheel_filename, metadata) = self
+        let (disk_filename, wheel_filename, metadata) = builder
             .build_distribution(
                 source,
                 source_dist_entry.path(),
@@ -791,7 +815,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        let build_stack = self.build_stack_for_lock(source, cache_shard)?;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let builder = self.with_build_stack(&build_stack);
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -817,6 +843,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
                     return Ok(ArchiveMetadata {
+                        variant: None,
                         metadata: Metadata::from_metadata23(metadata),
                         hashes: revision.into_hashes(),
                     });
@@ -832,6 +859,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
                     return Ok(ArchiveMetadata {
+                        variant: None,
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
                     });
@@ -873,7 +901,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Otherwise, we either need to build the metadata.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
-        if let Some(metadata) = self
+        if let Some(metadata) = builder
             .build_metadata(
                 source,
                 source_dist_entry.path(),
@@ -902,6 +930,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata {
+                variant: None,
                 metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
@@ -927,7 +956,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         // Build the source distribution.
-        let (_disk_filename, _wheel_filename, metadata) = self
+        let (_disk_filename, _wheel_filename, metadata) = builder
             .build_distribution(
                 source,
                 source_dist_entry.path(),
@@ -959,6 +988,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata {
+            variant: None,
             metadata: Metadata::from_metadata23(metadata),
             hashes: revision.into_hashes(),
         })
@@ -1083,7 +1113,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
+        let build_stack = self.build_stack_for_lock(source, cache_shard)?;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let builder = self.with_build_stack(&build_stack);
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -1148,7 +1180,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .as_ref()
             .map(|reporter| reporter.on_build_start(source));
 
-        let (disk_filename, filename, metadata) = self
+        let (disk_filename, filename, metadata) = builder
             .build_distribution(
                 source,
                 source_entry.path(),
@@ -1191,7 +1223,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        let build_stack = self.build_stack_for_lock(source, cache_shard)?;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let builder = self.with_build_stack(&build_stack);
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1216,6 +1250,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata {
+                    variant: None,
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
                 });
@@ -1231,6 +1266,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
                     return Ok(ArchiveMetadata {
+                        variant: None,
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
                     });
@@ -1252,7 +1288,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
-        if let Some(metadata) = self
+        if let Some(metadata) = builder
             .build_metadata(source, source_entry.path(), None, NoSources::None)
             .boxed_local()
             .await?
@@ -1276,6 +1312,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata {
+                variant: None,
                 metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
@@ -1301,7 +1338,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .as_ref()
             .map(|reporter| reporter.on_build_start(source));
 
-        let (_disk_filename, _filename, metadata) = self
+        let (_disk_filename, _filename, metadata) = builder
             .build_distribution(
                 source,
                 source_entry.path(),
@@ -1333,6 +1370,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata {
+            variant: None,
             metadata: Metadata::from_metadata23(metadata),
             hashes: revision.into_hashes(),
         })
@@ -1421,7 +1459,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
+        let build_stack = self.build_stack_for_lock(source, &cache_shard)?;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let builder = self.with_build_stack(&build_stack);
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -1469,7 +1509,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .as_ref()
             .map(|reporter| reporter.on_build_start(source));
 
-        let (disk_filename, filename, metadata) = self
+        let (disk_filename, filename, metadata) = builder
             .build_distribution(
                 source,
                 resource.install_path,
@@ -1558,7 +1598,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
+        let build_stack = self.build_stack_for_lock(source, &cache_shard)?;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let builder = self.with_build_stack(&build_stack);
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1609,7 +1651,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
-        if let Some(metadata) = self
+        if let Some(metadata) = builder
             .build_metadata(
                 source,
                 resource.install_path,
@@ -1673,7 +1715,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .as_ref()
             .map(|reporter| reporter.on_build_start(source));
 
-        let (_disk_filename, _filename, metadata) = self
+        let (_disk_filename, _filename, metadata) = builder
             .build_distribution(
                 source,
                 resource.install_path,
@@ -2035,6 +2077,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata {
+                    variant: None,
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
                 });
@@ -2050,6 +2093,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
                     return Ok(ArchiveMetadata {
+                        variant: None,
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
                     });
@@ -2087,6 +2131,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata {
+                variant: None,
                 metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
@@ -2144,6 +2189,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata {
+            variant: None,
             metadata: Metadata::from_metadata23(metadata),
             hashes: revision.into_hashes(),
         })
@@ -2184,7 +2230,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
+        let build_stack = self.build_stack_for_lock(source, &cache_shard)?;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let builder = self.with_build_stack(&build_stack);
 
         // We don't track any cache information for Git-based source distributions; they're assumed
         // to be immutable.
@@ -2224,7 +2272,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .as_ref()
             .map(|reporter| reporter.on_build_start(source));
 
-        let (disk_filename, filename, metadata) = self
+        let (disk_filename, filename, metadata) = builder
             .build_distribution(
                 source,
                 fetch.path(),
@@ -2325,6 +2373,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                         "Found static metadata via GitHub fast path for: {source}"
                                     );
                                     return Ok(ArchiveMetadata {
+                                        variant: None,
                                         metadata: Metadata::from_metadata23(metadata),
                                         hashes: HashDigests::empty(),
                                     });
@@ -2376,7 +2425,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
+        let build_stack = self.build_stack_for_lock(source, &cache_shard)?;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let builder = self.with_build_stack(&build_stack);
 
         let path = if let Some(subdirectory) = resource.subdirectory {
             Cow::Owned(fetch.path().join(subdirectory))
@@ -2460,7 +2511,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
-        if let Some(metadata) = self
+        if let Some(metadata) = builder
             .build_metadata(
                 source,
                 fetch.path(),
@@ -2526,7 +2577,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .as_ref()
             .map(|reporter| reporter.on_build_start(source));
 
-        let (_disk_filename, _filename, metadata) = self
+        let (_disk_filename, _filename, metadata) = builder
             .build_distribution(
                 source,
                 fetch.path(),

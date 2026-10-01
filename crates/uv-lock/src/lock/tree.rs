@@ -18,7 +18,7 @@ use uv_console::human_readable_bytes;
 use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, MarkerVariantsUniversal};
 use uv_pypi_types::ResolverMarkerEnvironment;
 
 use uv_resolver_types::{ConflictMarker, UniversalMarker};
@@ -247,7 +247,9 @@ impl<'env> TreeDisplay<'env> {
                     if marker.is_false() {
                         continue;
                     }
-                    if markers.is_some_and(|markers| !marker.evaluate(markers, &[])) {
+                    if markers.is_some_and(|markers| {
+                        !marker.evaluate(markers, &MarkerVariantsUniversal, &[])
+                    }) {
                         continue;
                     }
                     // Add the package to the graph.
@@ -299,7 +301,9 @@ impl<'env> TreeDisplay<'env> {
                         if marker.is_false() {
                             continue;
                         }
-                        if markers.is_some_and(|markers| !marker.evaluate(markers, &[])) {
+                        if markers.is_some_and(|markers| {
+                            !marker.evaluate(markers, &MarkerVariantsUniversal, &[])
+                        }) {
                             continue;
                         }
                         // Add the package to the graph.
