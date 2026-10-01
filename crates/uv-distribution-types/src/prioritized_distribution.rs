@@ -227,6 +227,7 @@ impl IncompatibleDist {
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::Invalid) => None,
+                IncompatibleWheel::Tag(IncompatibleTag::Variant) => None,
                 IncompatibleWheel::NoBinary => None,
                 IncompatibleWheel::Yanked(..) => None,
                 IncompatibleWheel::ExcludeNewer(..) => None,
@@ -245,6 +246,7 @@ impl Display for IncompatibleDist {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => f.write_str("no source distribution"),
                 IncompatibleWheel::Tag(tag) => match tag {
+                    IncompatibleTag::Variant => f.write_str("only unsupported wheel variants"),
                     IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
                         f.write_str("no wheels with a matching Python implementation tag")

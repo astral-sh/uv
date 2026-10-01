@@ -814,6 +814,14 @@ impl VersionMapLazy {
             }
         }
 
+        // Variant wheels cannot be selected, including during universal resolution.
+        // TODO(konsti): Support wheel variants during resolution.
+        if filename.variant().is_some() {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                IncompatibleTag::Variant,
+            ));
+        }
+
         // Determine a compatibility for the wheel based on tags.
         let priority = if let Some(tags) = &self.tags {
             match filename.compatibility(tags) {

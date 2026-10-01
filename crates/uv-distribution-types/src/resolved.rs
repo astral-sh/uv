@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
 
+use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::Yanked;
@@ -47,6 +48,16 @@ pub enum ResolvedDistRef<'a> {
 }
 
 impl ResolvedDist {
+    /// Return the selected wheel filename, if this is a wheel distribution.
+    pub fn wheel_filename(&self) -> Option<&WheelFilename> {
+        match self {
+            Self::Installed { .. } => None,
+            Self::Installable { dist, .. } => match &**dist {
+                Dist::Built(dist) => Some(dist.wheel_filename()),
+                Dist::Source(_) => None,
+            },
+        }
+    }
     /// Return true if the distribution is editable.
     pub fn is_editable(&self) -> bool {
         match self {
