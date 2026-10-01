@@ -123,7 +123,7 @@ impl<'de> Cursor<'de> {
         Ok(remaining[..length].trim_end_matches('\r'))
     }
 
-    fn consume_header(&mut self, expected: &'static str) -> Result<(), Error> {
+    fn consume_header(&mut self, expected: &str) -> Result<(), Error> {
         if self.header()? != expected {
             return Err(self.unsupported("unknown or noncanonical table header"));
         }
@@ -516,20 +516,25 @@ impl<'de> DocumentMapAccess<'_, 'de> {
                 Pending::Map(MapKind::PackageGroupRequiresPython),
                 "[package.group-requires-python]",
             )),
-            (MapKind::Package, "[package.dev-dependencies]") => Some((
-                "dev-dependencies",
-                Pending::Map(MapKind::PackageDevDependencies),
-                "[package.dev-dependencies]",
-            )),
+            (MapKind::Package, "[package.dev-dependencies]" | "[package.dependency-groups]") => {
+                Some((
+                    "dependency-groups",
+                    Pending::Map(MapKind::PackageDevDependencies),
+                    header,
+                ))
+            }
             (MapKind::Package, "[package.metadata]") => Some((
                 "metadata",
                 Pending::Map(MapKind::PackageMetadata),
                 "[package.metadata]",
             )),
-            (MapKind::PackageMetadata, "[package.metadata.requires-dev]") => Some((
-                "requires-dev",
+            (
+                MapKind::PackageMetadata,
+                "[package.metadata.requires-dev]" | "[package.metadata.dependency-groups]",
+            ) => Some((
+                "dependency-groups",
                 Pending::Map(MapKind::PackageMetadataRequiresDev),
-                "[package.metadata.requires-dev]",
+                header,
             )),
             (MapKind::Root, _) => {
                 return Err(self
@@ -1086,6 +1091,7 @@ version = "1.0.0"
 
     #[test]
     fn unsupported_lock_version_is_rejected() {
+        let _preview = uv_preview::test::with_features(&[]);
         let version = VERSION + 1;
         let input = CANONICAL_LOCK.replacen("version = 1", &format!("version = {version}"), 1);
         let error = Lock::from_toml(&input).expect_err("unsupported lock versions are rejected");
@@ -1101,6 +1107,7 @@ version = "1.0.0"
 
     #[test]
     fn unparsable_unsupported_lock_version_is_identified() {
+        let _preview = uv_preview::test::with_features(&[]);
         let version = VERSION + 1;
         let input = CANONICAL_LOCK
             .replacen("version = 1", &format!("version = {version}"), 1)

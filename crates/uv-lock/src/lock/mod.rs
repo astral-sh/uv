@@ -92,19 +92,24 @@ mod requirements;
 mod serialize;
 mod tree;
 
-/// The current version of the lockfile format.
+/// The stable version of the lockfile format.
 const VERSION: u32 = 1;
+
+/// The highly experimental version of the lockfile format.
+const EXPERIMENTAL_VERSION: u32 = 2;
 
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
     /// The lockfile uses an unsupported schema version.
-    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
+    #[error(
+        "unsupported lockfile schema version (v{version}, but versions up to v{supported} are supported)"
+    )]
     UnsupportedVersion { supported: u32, version: u32 },
 
     /// The lockfile cannot be parsed and uses an unsupported schema version.
     #[error(
-        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
+        "failed to parse lockfile using an unsupported schema version (v{version}, but versions up to v{supported} are supported)"
     )]
     UnparsableVersion {
         supported: u32,
@@ -2634,9 +2639,10 @@ impl Lock {
         // that canonical form rather than the raw resolver output.
         let fork_markers =
             canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
+        let version = Self::current_version();
         let lock = Self::new(
-            VERSION,
-            REVISION,
+            version,
+            if version == VERSION { REVISION } else { 0 },
             packages,
             requires_python,
             options,
@@ -2945,8 +2951,20 @@ impl Lock {
         (self.version(), self.revision()) >= (1, 1)
     }
 
+    /// Returns the schema version used for new lockfiles with the enabled preview features.
+    pub fn current_version() -> u32 {
+        if uv_preview::is_enabled(PreviewFeature::LockfileV2) {
+            warn_user_once!(
+                "The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases."
+            );
+            EXPERIMENTAL_VERSION
+        } else {
+            VERSION
+        }
+    }
+
     /// Returns the lockfile version.
-    fn version(&self) -> u32 {
+    pub fn version(&self) -> u32 {
         self.version
     }
 
@@ -3763,9 +3781,11 @@ impl Lock {
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
                         && lock.version() != VERSION
+                        && (lock.version() != EXPERIMENTAL_VERSION
+                            || Self::current_version() != EXPERIMENTAL_VERSION)
                     {
                         return Err(LockParseError::UnparsableVersion {
-                            supported: VERSION,
+                            supported: Self::current_version(),
                             version: lock.version(),
                             source,
                         });
@@ -3775,9 +3795,12 @@ impl Lock {
             },
         };
 
-        if lock.version() != VERSION {
+        if lock.version() != VERSION
+            && (lock.version() != EXPERIMENTAL_VERSION
+                || Self::current_version() != EXPERIMENTAL_VERSION)
+        {
             return Err(LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: Self::current_version(),
                 version: lock.version(),
             });
         }
@@ -7410,7 +7433,7 @@ struct PackageWire {
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
     #[serde(default)]
     default_groups: Option<DefaultGroups>,
-    #[serde(default, rename = "dev-dependencies", alias = "dependency-groups")]
+    #[serde(default, alias = "dev-dependencies")]
     dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
     #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
@@ -7423,7 +7446,7 @@ struct PackageMetadata {
     requires_dist: BTreeSet<Requirement>,
     #[serde(default, rename = "provides-extras")]
     provides_extra: Box<[ExtraName]>,
-    #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
+    #[serde(default, alias = "requires-dev")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 

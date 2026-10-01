@@ -1899,6 +1899,7 @@ fn test_path_hopping() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
     "
     );
 

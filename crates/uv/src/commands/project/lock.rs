@@ -1442,6 +1442,12 @@ impl ValidatedLock {
             };
         }
 
+        // Upgrade the lockfile format while retaining existing versions and forks.
+        if lock.version() != Lock::current_version() {
+            debug!("Resolving despite existing lockfile due to change in lockfile version");
+            return Ok(Self::Preferable(lock));
+        }
+
         // If the pre-release mode has changed, we have to re-resolve, but can retain the existing
         // versions and forks.
         if lock.prerelease() != &options.prerelease {

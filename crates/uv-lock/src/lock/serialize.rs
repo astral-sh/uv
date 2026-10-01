@@ -125,6 +125,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
         write_package(
             writer,
             package,
+            lock.version,
             &lock.requires_python,
             simplified_environment,
             &dist_count_by_name,
@@ -280,6 +281,7 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
 fn write_package(
     writer: &mut LockWriter,
     package: &Package,
+    version: u32,
     requires_python: &RequiresPython,
     simplified_environment: MarkerTree,
     dist_count_by_name: &FxHashMap<PackageName, u64>,
@@ -344,7 +346,12 @@ fn write_package(
     }
 
     if !package.dependency_groups.is_empty() {
-        writer.table(&["package", "dev-dependencies"])?;
+        let field = if version >= 2 {
+            "dependency-groups"
+        } else {
+            "dev-dependencies"
+        };
+        writer.table(&["package", field])?;
         for (group, dependencies) in &package.dependency_groups {
             if dependencies.is_empty() {
                 writer.key_start(group.as_ref())?;
@@ -387,7 +394,12 @@ fn write_package(
         }
 
         if !metadata.dependency_groups.is_empty() {
-            writer.table(&["package", "metadata", "requires-dev"])?;
+            let field = if version >= 2 {
+                "dependency-groups"
+            } else {
+                "requires-dev"
+            };
+            writer.table(&["package", "metadata", field])?;
             for (group, requirements) in &metadata.dependency_groups {
                 write_serialized_array(writer, group.as_ref(), requirements)?;
             }
