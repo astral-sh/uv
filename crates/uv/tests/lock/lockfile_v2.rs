@@ -782,3 +782,136 @@ fn lockfile_v2_manifest_dependencies() -> Result<()> {
         .success();
     Ok(())
 }
+
+/// Shorthand declarations round-trip in package metadata and both forms of manifest groups,
+/// without dropping any qualifiers from other requirements.
+#[test]
+fn lockfile_v2_requirement_shorthand() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+    "#})?;
+    let input = indoc! {r#"
+        version = 2
+        requires-python = ">=3.12"
+
+        [manifest]
+        dependencies = [{ name = "plain" }]
+
+        [manifest.dependency-groups]
+        dev = [{ name = "plain" }]
+        docs = { requires-python = ">=3.13", dependencies = [{ name = "plain" }] }
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+        dependencies = [
+            { name = "plain" },
+            { name = "bounded", specifier = ">=1" },
+            { name = "extra", extras = ["feature"] },
+            { name = "group", groups = ["dev"] },
+            { name = "marker", marker = "sys_platform == 'linux'" },
+            { name = "index", index = "https://example.com/simple" },
+            { name = "source", virtual = "child" },
+        ]
+
+        [package.metadata.dependency-groups]
+        dev = [{ name = "plain" }]
+    "#};
+    let lock = toml::from_str::<Lock>(input)?.to_toml()?;
+    assert_snapshot!(lock, @r#"
+    version = 2
+    requires-python = ">=3.12"
+
+    [manifest]
+    dependencies = ["plain"]
+
+    [manifest.dependency-groups]
+    dev = ["plain"]
+    docs = { requires-python = ">=3.13", dependencies = ["plain"] }
+
+    [[package]]
+    name = "project"
+    version = "1.0.0"
+    source = { virtual = "." }
+
+    [package.metadata]
+    dependencies = [
+        { name = "bounded", specifier = ">=1" },
+        { name = "extra", extras = ["feature"] },
+        { name = "group", groups = ["dev"] },
+        { name = "index", index = "https://example.com/simple" },
+        { name = "marker", marker = "sys_platform == 'linux'" },
+        "plain",
+        { name = "source", virtual = "child" },
+    ]
+
+    [package.metadata.dependency-groups]
+    dev = ["plain"]
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&lock)?.to_toml()?, lock);
+    assert_eq!(toml::from_str::<Lock>(&lock)?.to_toml()?, lock);
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+    context
+        .lock()
+        .args(["--frozen", "--preview-features", "lockfile-v2"])
+        .assert()
+        .success();
+
+    // V1 continues to write tables even when its reader accepts shorthand.
+    let legacy = toml::from_str::<Lock>(&lock.replace("version = 2", "version = 1"))?.to_toml()?;
+    assert_snapshot!(diff_snapshot(&legacy, &lock, 3), @r#"
+    --- old
+    +++ new
+    @@ -1,15 +1,12 @@
+    -version = 1
+    +version = 2
+     requires-python = ">=3.12"
+
+     [manifest]
+    -requirements = [{ name = "plain" }]
+    +dependencies = ["plain"]
+
+     [manifest.dependency-groups]
+    -dev = [{ name = "plain" }]
+    -docs = [{ name = "plain" }]
+    -
+    -[manifest.group-requires-python]
+    -docs = ">=3.13"
+    +dev = ["plain"]
+    +docs = { requires-python = ">=3.13", dependencies = ["plain"] }
+
+     [[package]]
+     name = "project"
+    @@ -17,15 +14,15 @@
+     source = { virtual = "." }
+
+     [package.metadata]
+    -requires-dist = [
+    +dependencies = [
+         { name = "bounded", specifier = ">=1" },
+         { name = "extra", extras = ["feature"] },
+         { name = "group", groups = ["dev"] },
+         { name = "index", index = "https://example.com/simple" },
+         { name = "marker", marker = "sys_platform == 'linux'" },
+    -    { name = "plain" },
+    +    "plain",
+         { name = "source", virtual = "child" },
+     ]
+
+    -[package.metadata.requires-dev]
+    -dev = [{ name = "plain" }]
+    +[package.metadata.dependency-groups]
+    +dev = ["plain"]
+    "#);
+    Ok(())
+}
