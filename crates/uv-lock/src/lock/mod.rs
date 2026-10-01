@@ -81,10 +81,12 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+use self::git::GitFieldsWire;
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
 
 mod deserialize;
 pub(crate) mod export;
+mod git;
 mod inputs;
 mod installable;
 mod map;
@@ -6335,14 +6337,14 @@ struct ResolverManifestWire {
     requirements: BTreeSet<Requirement>,
     #[serde(default)]
     dependency_groups: BTreeMap<GroupName, DependencyGroupWire<RequirementWire>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_requirements")]
     constraints: BTreeSet<Requirement>,
     #[serde(default)]
-    overrides: BTreeSet<Override<Requirement>>,
+    overrides: Vec<Override<RequirementWire>>,
     #[serde(default)]
     excludes: BTreeSet<ExcludeDependency>,
     #[serde(default)]
-    build_constraints: BTreeSet<NameRequirementSpecification>,
+    build_constraints: Vec<NameRequirementSpecificationWire>,
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
 }
@@ -6371,9 +6373,31 @@ impl From<ResolverManifestWire> for ResolverManifest {
             requirements: wire.requirements,
             dependency_groups,
             constraints: wire.constraints,
-            overrides: wire.overrides,
+            overrides: wire
+                .overrides
+                .into_iter()
+                .map(|entry| match entry {
+                    Override::Requirement(requirement) => Override::Requirement(requirement.0),
+                    Override::Package(package) => Override::Package(PackageOverride {
+                        package: package.package,
+                        dependencies: package
+                            .dependencies
+                            .into_vec()
+                            .into_iter()
+                            .map(|requirement| requirement.0)
+                            .collect(),
+                    }),
+                })
+                .collect(),
             excludes: wire.excludes,
-            build_constraints: wire.build_constraints,
+            build_constraints: wire
+                .build_constraints
+                .into_iter()
+                .map(|constraint| NameRequirementSpecification {
+                    requirement: constraint.requirement.0,
+                    hashes: constraint.hashes,
+                })
+                .collect(),
             dependency_metadata: wire.dependency_metadata,
         }
     }
@@ -7557,9 +7581,53 @@ impl<'de> serde::Deserialize<'de> for RequirementWire {
                     origin: None,
                 }))
             })
-            .map(|map| map.deserialize().map(Self))
+            .map(|map| {
+                let RequirementTableWire {
+                    mut requirement,
+                    git_fields,
+                } = map.deserialize()?;
+                let url = match &requirement.source {
+                    RequirementSource::GitDirectory {
+                        git, subdirectory, ..
+                    } => Some(locked_git_url(git, subdirectory.as_deref(), None)),
+                    RequirementSource::GitPath {
+                        git, install_path, ..
+                    } => Some(locked_git_url(git, None, Some(install_path))),
+                    RequirementSource::Registry { .. }
+                    | RequirementSource::Url { .. }
+                    | RequirementSource::Path { .. }
+                    | RequirementSource::Directory { .. } => None,
+                };
+                if let Some(url) = url {
+                    let url = git_fields
+                        .apply_to_url(url)
+                        .map_err(serde::de::Error::custom)?;
+                    requirement.source = serde::Deserialize::deserialize(
+                        serde::de::value::MapDeserializer::new(iter::once(("git", url.as_str()))),
+                    )?;
+                }
+                Ok(Self(requirement))
+            })
             .deserialize(deserializer)
     }
+}
+
+/// Read ordinary source fields before collecting the additional structured Git fields.
+#[derive(serde::Deserialize)]
+struct RequirementTableWire {
+    #[serde(flatten)]
+    requirement: Requirement,
+    #[serde(flatten)]
+    git_fields: GitFieldsWire,
+}
+
+/// A build constraint with the same Git fields as other declared requirements.
+#[derive(serde::Deserialize)]
+struct NameRequirementSpecificationWire {
+    #[serde(flatten)]
+    requirement: RequirementWire,
+    #[serde(default)]
+    hashes: Vec<String>,
 }
 
 /// Read requirement arrays with either strings or tables for their entries.
@@ -8282,8 +8350,16 @@ impl Source {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+struct SourceWire {
+    #[serde(flatten)]
+    source: SourceKindWire,
+    #[serde(flatten)]
+    git_fields: GitFieldsWire,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
 #[serde(untagged, rename_all = "kebab-case")]
-enum SourceWire {
+enum SourceKindWire {
     Registry {
         registry: RegistrySourceWire,
     },
@@ -8312,9 +8388,9 @@ impl TryFrom<SourceWire> for Source {
     type Error = LockError;
 
     fn try_from(wire: SourceWire) -> Result<Self, LockError> {
-        use self::SourceWire::{Direct, Directory, Editable, Git, Path, Registry, Virtual};
+        use self::SourceKindWire::{Direct, Directory, Editable, Git, Path, Registry, Virtual};
 
-        match wire {
+        match wire.source {
             Registry { registry } => Ok(Self::Registry(registry.into())),
             Git { git } => {
                 let url = DisplaySafeUrl::parse(&git)
@@ -8324,6 +8400,10 @@ impl TryFrom<SourceWire> for Source {
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
+                let url = wire
+                    .git_fields
+                    .apply_to_url(url)
+                    .map_err(LockErrorKind::InvalidGitSourceFields)?;
                 let git_source = GitSource::from_url(&url).map_err(|err| match err {
                     GitSourceError::InvalidSha => {
                         LockErrorKind::InvalidGitSourceUrl(SourceParseError::InvalidSha {
@@ -10092,6 +10172,9 @@ enum LockErrorKind {
         #[source]
         SourceParseError,
     ),
+    /// The structured Git source fields are ambiguous.
+    #[error("Invalid Git source: {0}")]
+    InvalidGitSourceFields(&'static str),
     #[error("Failed to parse timestamp")]
     InvalidTimestamp(
         /// The underlying error that occurred. This includes the
