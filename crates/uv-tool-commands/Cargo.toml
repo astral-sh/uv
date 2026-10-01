@@ -68,6 +68,7 @@ fs-err = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
+rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
