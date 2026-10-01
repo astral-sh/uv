@@ -43,7 +43,6 @@ anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 configparser = { workspace = true }
 dunce = { workspace = true }
-flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indexmap = { workspace = true }
@@ -69,6 +68,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
 rayon = { workspace = true }
+zstd = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }
@@ -89,5 +89,5 @@ test-log = { workspace = true }
 [build-dependencies]
 uv-static = { workspace = true }
 
-flate2 = { workspace = true }
 serde_json = { workspace = true }
+zstd = { workspace = true }
