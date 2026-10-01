@@ -491,7 +491,26 @@ mod tests {
 
     #[test]
     fn ok_single_tags() {
-        insta::assert_debug_snapshot!(WheelFilename::from_str("foo-1.2.3-py3-none-any.whl"));
+        insta::assert_debug_snapshot!(WheelFilename::from_str("foo-1.2.3-py3-none-any.whl"), @r#"
+        Ok(
+            WheelFilename {
+                name: PackageName(
+                    "foo",
+                ),
+                version: "1.2.3",
+                tags: Small {
+                    small: WheelTagSmall {
+                        python_tag: Python {
+                            major: 3,
+                            minor: None,
+                        },
+                        abi_tag: None,
+                        platform_tag: Any,
+                    },
+                },
+            },
+        )
+        "#);
     }
 
     #[test]
@@ -532,14 +551,90 @@ mod tests {
     fn ok_multiple_tags() {
         insta::assert_debug_snapshot!(WheelFilename::from_str(
             "foo-1.2.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
-        ));
+        ), @r#"
+        Ok(
+            WheelFilename {
+                name: PackageName(
+                    "foo",
+                ),
+                version: "1.2.3",
+                tags: Large {
+                    large: WheelTagLarge {
+                        build_tag: None,
+                        python_tag: [
+                            CPython {
+                                python_version: (
+                                    3,
+                                    11,
+                                ),
+                            },
+                        ],
+                        abi_tag: [
+                            CPython {
+                                python_version: (
+                                    3,
+                                    11,
+                                ),
+                                variant: CPythonAbiVariants(
+                                    0,
+                                ),
+                            },
+                        ],
+                        platform_tag: [
+                            Manylinux {
+                                major: 2,
+                                minor: 17,
+                                arch: X86_64,
+                            },
+                            Manylinux2014 {
+                                arch: X86_64,
+                            },
+                        ],
+                        repr: "cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64",
+                    },
+                },
+            },
+        )
+        "#);
     }
 
     #[test]
     fn ok_build_tag() {
         insta::assert_debug_snapshot!(WheelFilename::from_str(
             "foo-1.2.3-202206090410-py3-none-any.whl"
-        ));
+        ), @r#"
+        Ok(
+            WheelFilename {
+                name: PackageName(
+                    "foo",
+                ),
+                version: "1.2.3",
+                tags: Large {
+                    large: WheelTagLarge {
+                        build_tag: Some(
+                            BuildTag(
+                                202206090410,
+                                None,
+                            ),
+                        ),
+                        python_tag: [
+                            Python {
+                                major: 3,
+                                minor: None,
+                            },
+                        ],
+                        abi_tag: [
+                            None,
+                        ],
+                        platform_tag: [
+                            Any,
+                        ],
+                        repr: "202206090410-py3-none-any",
+                    },
+                },
+            },
+        )
+        "#);
     }
 
     #[test]
