@@ -8042,6 +8042,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "owo-colors",
+ "rkyv",
  "rustc-hash",
  "self-replace",
  "serde_json",
