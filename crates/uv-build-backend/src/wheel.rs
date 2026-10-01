@@ -28,8 +28,8 @@ use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
-    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, FilteredWriter, ListWriter,
+    PyProjectToml, error_on_venv, find_roots, write_directory_once, write_file_with_directories,
 };
 
 // Files at or below this size are buffered and written with `write_entry_whole`,
@@ -49,6 +49,28 @@ pub fn build_wheel(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
+) -> Result<WheelFilename, Error> {
+    build_wheel_with_files(
+        source_tree,
+        wheel_dir,
+        metadata_directory,
+        uv_version,
+        show_warnings,
+        &[],
+    )
+}
+
+/// Build a wheel with additional files supplied by the frontend.
+///
+/// Paths are relative to the wheel root. Source files with the same path as an additional file are
+/// skipped. Paths use `/` as the separator and must not overlap generated metadata or each other.
+pub fn build_wheel_with_files(
+    source_tree: &Path,
+    wheel_dir: &Path,
+    metadata_directory: Option<&Path>,
+    uv_version: &str,
+    show_warnings: bool,
+    files: &[(&str, &[u8])],
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
@@ -84,6 +106,7 @@ pub fn build_wheel(
         uv_version,
         wheel_writer,
         show_warnings,
+        files,
     )?;
 
     temp_file
@@ -124,6 +147,7 @@ pub fn list_wheel(
         uv_version,
         writer,
         show_warnings,
+        &[],
     )?;
     Ok((filename, files))
 }
@@ -133,9 +157,11 @@ fn write_wheel(
     pyproject_toml: &PyProjectToml,
     filename: &WheelFilename,
     uv_version: &str,
-    mut wheel_writer: impl DirectoryWriter,
+    wheel_writer: impl DirectoryWriter,
     show_warnings: bool,
+    files: &[(&str, &[u8])],
 ) -> Result<(), Error> {
+    let mut wheel_writer = FilteredWriter::new(wheel_writer, files.iter().map(|(path, _)| *path));
     let settings = pyproject_toml
         .settings()
         .cloned()
@@ -242,6 +268,9 @@ fn write_wheel(
         source_tree,
         uv_version,
     )?;
+    for (path, contents) in files {
+        wheel_writer.write_bytes(path, contents)?;
+    }
     wheel_writer.close(&dist_info_dir)?;
 
     Ok(())

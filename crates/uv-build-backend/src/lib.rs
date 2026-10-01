@@ -8,9 +8,9 @@ mod wheel;
 pub(crate) use metadata::PyProjectToml;
 pub use metadata::check_direct_build;
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
-pub use source_dist::{build_source_dist, list_source_dist};
+pub use source_dist::{build_source_dist, build_source_dist_with_files, list_source_dist};
 use uv_warnings::warn_user_once;
-pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
+pub use wheel::{build_editable, build_wheel, build_wheel_with_files, list_wheel, metadata};
 
 use rustc_hash::FxHashSet;
 use std::collections::HashSet;
@@ -125,6 +125,47 @@ trait DirectoryWriter {
 
     /// Write the `RECORD` file and if applicable, the central directory.
     fn close(self, dist_info_dir: &str) -> Result<(), Error>;
+}
+
+/// Skip source files that would conflict with files supplied by the frontend.
+struct FilteredWriter<W> {
+    writer: W,
+    paths: Vec<String>,
+}
+
+impl<W> FilteredWriter<W> {
+    fn new(writer: W, paths: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            writer,
+            paths: paths.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl<W: DirectoryWriter> DirectoryWriter for FilteredWriter<W> {
+    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        self.writer.write_bytes(path, bytes)
+    }
+
+    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        if self
+            .paths
+            .iter()
+            .any(|reserved| path.eq_ignore_ascii_case(reserved))
+        {
+            debug!("Skipping included file `{path}`: supplied by the build frontend");
+            return Ok(());
+        }
+        self.writer.write_file(path, file)
+    }
+
+    fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        self.writer.write_directory(directory)
+    }
+
+    fn close(self, dist_info_dir: &str) -> Result<(), Error> {
+        self.writer.close(dist_info_dir)
+    }
 }
 
 fn write_directory_once(
@@ -526,6 +567,100 @@ mod tests {
 
         hint: Characters can be escaped with a backslash
         "#);
+    }
+
+    #[test]
+    fn frontend_files() -> Result<(), Box<dyn std::error::Error>> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let source = TempDir::new()?;
+        let output = TempDir::new()?;
+        fs_err::create_dir_all(source.path().join("src/example"))?;
+        fs_err::write(source.path().join("src/example/__init__.py"), "")?;
+        fs_err::write(source.path().join("LICENSE"), "source license")?;
+        fs_err::write(source.path().join("conflict.txt"), "source file")?;
+        fs_err::write(
+            source.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "example"
+            version = "1.0.0"
+            license-files = ["LICENSE"]
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<2"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            source-include = ["conflict.txt"]
+            "#},
+        )?;
+
+        let source_files: &[(&str, &[u8])] = &[
+            ("conflict.txt", b"frontend file"),
+            ("generated/data.txt", b"generated data"),
+        ];
+        let filename = build_source_dist_with_files(
+            source.path(),
+            output.path(),
+            MOCK_UV_VERSION,
+            false,
+            source_files,
+        )?;
+        let archive = output.path().join(filename.to_string());
+        let extracted = TempDir::new()?;
+        unpack_sdist(&archive, extracted.path())?;
+        let root = extracted.path().join("example-1.0.0");
+        assert_snapshot!(fs_err::read_to_string(root.join("conflict.txt"))?, @"frontend file");
+        assert_snapshot!(fs_err::read_to_string(root.join("generated/data.txt"))?, @"generated data");
+        assert_eq!(
+            sdist_contents(&archive)
+                .iter()
+                .filter(|path| path.ends_with("/conflict.txt"))
+                .count(),
+            1
+        );
+
+        let wheel_files: &[(&str, &[u8])] = &[
+            (
+                "example-1.0.0.dist-info/licenses/LICENSE",
+                b"frontend license",
+            ),
+            ("custom/data.txt", b"wheel data"),
+        ];
+        let filename = build_wheel_with_files(
+            source.path(),
+            output.path(),
+            None,
+            MOCK_UV_VERSION,
+            false,
+            wheel_files,
+        )?;
+        let wheel = output.path().join(filename.to_string());
+        assert_snapshot!(wheel_entry(&wheel, "example-1.0.0.dist-info/licenses/LICENSE"), @"frontend license");
+        assert_snapshot!(wheel_entry(&wheel, "custom/data.txt"), @"wheel data");
+        assert_eq!(
+            wheel_contents(&wheel)
+                .iter()
+                .filter(|path| path.ends_with("/licenses/LICENSE"))
+                .count(),
+            1
+        );
+
+        let mut listed = FileList::new();
+        let mut writer = FilteredWriter::new(
+            ListWriter::new(&mut listed),
+            ["example/parent", "example/other/child"],
+        );
+        writer.write_file("example/parent", Path::new("source"))?;
+        writer.write_file("example/parent/child", Path::new("source"))?;
+        writer.write_file("example/other", Path::new("source"))?;
+        writer.write_file("example/other/child", Path::new("source"))?;
+        writer.close("example")?;
+        assert_snapshot!(listed.iter().map(|(path, _)| path).join("\n"), @"
+        example/parent/child
+        example/other
+        ");
+        Ok(())
     }
 
     /// File listings, generated archives and archive contents for both a build with
