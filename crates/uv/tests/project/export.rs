@@ -11132,6 +11132,14 @@ fn frozen_lockfile_without_manifests() -> Result<()> {
         only-group = ["shared"]
     "#})?;
 
+    // Multiple selected members do not inherit groups from the workspace root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--only-group", "dev"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `dev` is not defined in any project's `dependency-groups` table
+    ");
+
     // Remove every manifest so package, extra, and group selection must come from the lockfile.
     fs_err::remove_file(root.join("pyproject.toml"))?;
     fs_err::remove_file(root.join("member/pyproject.toml"))?;
@@ -11182,6 +11190,30 @@ fn frozen_lockfile_without_manifests() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     -e ./dep
+    ");
+
+    // Root-only groups remain invalid for multiple selected members without manifests.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--only-group", "dev"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `dev` is not defined in any project's `dependency-groups` table
+    ");
+
+    // Excluded groups are validated against the same selected members.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--no-group", "dev"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `dev` is not defined in any project's `dependency-groups` table
+    ");
+
+    // A group defined by one of the selected members is valid.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--only-group", "shared"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
     ");
 
     // Select the workspace.

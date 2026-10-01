@@ -560,11 +560,15 @@ impl<'lock> InstallTarget<'lock> {
         }
 
         match self {
-            Self::Lockfile { lock, .. } => {
-                let roots = self
-                    .roots()
-                    .chain(lock.root().map(Package::name))
-                    .collect::<FxHashSet<_>>();
+            Self::Lockfile {
+                lock, selection, ..
+            } => {
+                // Only a single selected project inherits groups from the workspace root.
+                let workspace_root = self
+                    .selected_project()
+                    .and_then(|_| lock.root())
+                    .map(Package::name);
+                let roots = self.roots().chain(workspace_root).collect::<FxHashSet<_>>();
                 let known_groups = lock
                     .packages()
                     .iter()
@@ -579,7 +583,16 @@ impl<'lock> InstallTarget<'lock> {
                     .collect::<FxHashSet<_>>();
                 for group in groups.explicit_names() {
                     if !known_groups.contains(group) {
-                        return Err(ProjectError::MissingGroupProject(group.clone()));
+                        return match selection {
+                            PackageSelection::Projects([_]) => {
+                                Err(ProjectError::MissingGroupProject(group.clone()))
+                            }
+                            PackageSelection::Projects(_)
+                            | PackageSelection::Workspace
+                            | PackageSelection::NonProjectWorkspace => {
+                                Err(ProjectError::MissingGroupProjects(group.clone()))
+                            }
+                        };
                     }
                 }
             }
