@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
@@ -8,6 +9,7 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTimeError};
 use std::{env, io};
 
+use flate2::bufread::ZlibDecoder;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -962,8 +964,8 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-const BUILTIN_PYTHON_DOWNLOADS_JSON: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
+const BUILTIN_PYTHON_DOWNLOADS_ZLIB: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata.json.zlib"));
 
 pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
@@ -1068,10 +1070,7 @@ impl ManagedPythonDownloadList {
         };
 
         let json_downloads = match json_source {
-            Source::BuiltIn => parse_downloads_json(
-                BUILTIN_PYTHON_DOWNLOADS_JSON,
-                "EMBEDDED IN THE BINARY".to_owned(),
-            )?,
+            Source::BuiltIn => parse_builtin_downloads()?,
             Source::Path(ref path) => parse_downloads_json(
                 &fs_err::read(path.as_ref())?,
                 path.to_string_lossy().to_string(),
@@ -1099,13 +1098,17 @@ impl ManagedPythonDownloadList {
     /// Load available Python distributions from the compiled-in list only.
     /// for testing purposes.
     pub fn new_only_embedded() -> Result<Self, Error> {
-        let json_downloads: HashMap<String, JsonPythonDownload> =
-            serde_json::from_slice(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
-                Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_owned(), e)
-            })?;
+        let json_downloads = parse_builtin_downloads()?;
         let result = parse_json_downloads(json_downloads);
         Ok(Self { downloads: result })
     }
+}
+
+/// Decompress and parse the embedded Python download catalog.
+fn parse_builtin_downloads() -> Result<HashMap<String, JsonPythonDownload>, Error> {
+    let mut json = Vec::new();
+    ZlibDecoder::new(BUILTIN_PYTHON_DOWNLOADS_ZLIB).read_to_end(&mut json)?;
+    parse_downloads_json(&json, "EMBEDDED IN THE BINARY".to_owned())
 }
 
 /// Parse the downloads JSON.
