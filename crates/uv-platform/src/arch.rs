@@ -1,5 +1,6 @@
-use crate::Error;
+use crate::{Error, Os};
 use std::str::FromStr;
+use target_lexicon::Architecture;
 
 /// Architecture variants, e.g., with support for different instruction sets
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
@@ -23,42 +24,39 @@ pub struct Arch {
 
 impl Ord for Arch {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.cmp_with_fallback(
-            *other,
-            cfg!(windows).then_some(target_lexicon::Architecture::X86_64),
-        )
+        self.cmp_for_os(*other, Os::from_env(), Self::from_env())
     }
 }
 
 impl Arch {
-    /// Prefer the native architecture, then the given fallback architecture.
-    ///
-    /// Windows ARM64 can emulate both x86-64 and 32-bit x86. An explicit x86-64 fallback keeps
-    /// 64-bit Python ahead of 32-bit Python when a native distribution is unavailable; the
-    /// lexicographic ordering alone would put `i686` first.
-    pub(crate) fn cmp_with_fallback(
-        self,
-        other: Self,
-        fallback: Option<target_lexicon::Architecture>,
-    ) -> std::cmp::Ordering {
+    /// Prefer the native architecture, then compatible Windows architectures.
+    pub(crate) fn cmp_for_os(self, other: Self, os: Os, native: Self) -> std::cmp::Ordering {
         if self.family == other.family {
             return self.variant.cmp(&other.variant);
         }
 
-        let preferred = Self::from_env().family;
-        let priority = |family| -> u8 {
-            if family == preferred {
-                0
-            } else if Some(family) == fallback {
-                1
-            } else {
-                2
-            }
-        };
-
-        priority(self.family)
-            .cmp(&priority(other.family))
+        self.preference(os, native)
+            .cmp(&other.preference(os, native))
             .then_with(|| self.family.to_string().cmp(&other.family.to_string()))
+    }
+
+    fn preference(self, os: Os, native: Self) -> u8 {
+        if self.family == native.family {
+            return 0;
+        }
+
+        if !os.is_windows() {
+            return 3;
+        }
+
+        // Windows ARM64 can emulate both x86-64 and 32-bit x86, while x86-64 can run
+        // 32-bit x86. Prefer these compatible architectures over other families, with
+        // 64-bit Python ahead of 32-bit Python when both emulated builds are available.
+        match (native.family, self.family) {
+            (Architecture::Aarch64(_), Architecture::X86_64) => 1,
+            (Architecture::Aarch64(_) | Architecture::X86_64, Architecture::X86_32(_)) => 2,
+            _ => 3,
+        }
     }
 }
 
@@ -228,12 +226,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(windows)]
     use std::str::FromStr;
 
-    #[cfg(windows)]
-    use super::Arch;
     use super::test_support::{aarch64, run_with_arch, x86_64};
+    use super::{Arch, Os};
 
     #[test]
     fn test_arch_sorting_prefers_native() {
@@ -246,14 +242,23 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
-    fn test_windows_arch_sorting_fallback() {
+    fn test_arch_sorting_for_os() {
         let x86 = Arch::from_str("x86").expect("valid architecture");
-        let mut architectures = [x86, x86_64(), aarch64()];
+        let windows = Os::from_str("windows").expect("valid operating system");
+        let linux = Os::from_str("linux").expect("valid operating system");
 
-        run_with_arch(aarch64(), || architectures.sort());
-
-        assert_eq!(architectures, [aarch64(), x86_64(), x86]);
+        for (os, native, expected) in [
+            (windows, aarch64(), [aarch64(), x86_64(), x86]),
+            (windows, x86_64(), [x86_64(), x86, aarch64()]),
+            (windows, x86, [x86, aarch64(), x86_64()]),
+            (linux, aarch64(), [aarch64(), x86, x86_64()]),
+            (linux, x86_64(), [x86_64(), aarch64(), x86]),
+            (linux, x86, [x86, aarch64(), x86_64()]),
+        ] {
+            let mut architectures = [x86, x86_64(), aarch64()];
+            architectures.sort_by(|left, right| left.cmp_for_os(*right, os, native));
+            assert_eq!(architectures, expected, "{os} on {native}");
+        }
     }
 }
 

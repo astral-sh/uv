@@ -220,14 +220,7 @@ impl Ord for Platform {
             .to_string()
             .cmp(&other.os.to_string())
             // Then architecture
-            .then_with(|| {
-                // Windows on ARM can emulate both x86 architectures. Prefer x86_64
-                // over 32-bit x86 when a native distribution is unavailable.
-                self.arch.cmp_with_fallback(
-                    other.arch,
-                    self.os.is_windows().then_some(Architecture::X86_64),
-                )
-            })
+            .then_with(|| self.arch.cmp_for_os(other.arch, self.os, Arch::from_env()))
             // Finally compare libc
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
     }
