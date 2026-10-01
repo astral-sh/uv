@@ -127,7 +127,7 @@ fn nested_dependencies() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -280,7 +280,7 @@ fn json_output() -> Result<()> {
         .output()?
         .assert()
         .success();
-    assert!(assert.get_output().stderr.is_empty());
+    assert_eq!(assert.get_output().stderr, b"");
     let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     let package_names = report["resolution"]
         .as_object()
@@ -1454,7 +1454,7 @@ fn nested_platform_dependencies() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -1550,7 +1550,7 @@ fn frozen() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     // Update the project dependencies.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1837,7 +1837,7 @@ fn platform_dependencies() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -2016,7 +2016,7 @@ fn repeated_dependencies() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -2090,7 +2090,7 @@ fn repeated_version() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -2142,7 +2142,7 @@ fn dev_dependencies() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -2198,7 +2198,7 @@ fn dev_dependencies_inverted() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -2248,7 +2248,7 @@ fn optional_dependencies() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -2308,7 +2308,7 @@ fn optional_dependencies_inverted() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -2611,7 +2611,7 @@ fn package() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -2799,7 +2799,7 @@ fn cycle() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -3214,7 +3214,7 @@ fn workspace_dev() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -3729,7 +3729,7 @@ fn non_project() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -3764,7 +3764,7 @@ fn dependency_groups_only() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -4002,7 +4002,7 @@ fn non_project_member() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }
@@ -4476,7 +4476,7 @@ fn only_group() -> Result<()> {
 
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
-    assert!(!lock.is_empty());
+    assert_ne!(lock, "");
 
     Ok(())
 }

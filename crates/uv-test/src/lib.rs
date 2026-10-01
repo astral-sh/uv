@@ -526,7 +526,7 @@ impl TestContext {
                 self.filters.extend(
                     Self::path_patterns(executable.read_link().unwrap())
                         .into_iter()
-                        .map(|pattern| (format! {" -> {pattern}"}, String::new())),
+                        .map(|pattern| (format!(" -> {pattern}"), String::new())),
                 );
             }
             // Drop links that are byproducts of the test context too

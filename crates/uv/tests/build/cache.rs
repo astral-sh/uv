@@ -618,7 +618,10 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     Pruning cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
     ");
-    assert!(context.cache_files(CacheBucket::Files)?.is_empty());
+    assert_eq!(
+        context.cache_files(CacheBucket::Files)?,
+        Vec::<PathBuf>::new()
+    );
 
     Ok(())
 }

@@ -263,7 +263,7 @@ mod test {
         cloned.seek(SeekFrom::End(-7))?;
         assert_eq!(cloned.fill_buf()?, &contents[contents.len() - 7..]);
         cloned.consume(7);
-        assert!(cloned.fill_buf()?.is_empty());
+        assert_eq!(cloned.fill_buf()?, b"");
         assert_eq!(cloned.read(&mut output)?, 0);
         Ok(())
     }
