@@ -340,6 +340,7 @@ enum MapKind {
     Options,
     OptionsExcludeNewerPackage,
     Manifest,
+    Workspace,
     ManifestDependencyGroups,
     ManifestDependencyMetadata,
     ManifestGroupRequiresPython,
@@ -355,6 +356,7 @@ enum MapKind {
 enum SequenceKind {
     Packages,
     ManifestDependencyMetadata,
+    WorkspaceDependencyMetadata,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -468,6 +470,9 @@ impl<'de> DocumentMapAccess<'_, 'de> {
             (MapKind::Root, "[manifest]") => {
                 Some(("manifest", Pending::Map(MapKind::Manifest), "[manifest]"))
             }
+            (MapKind::Root, "[workspace]") => {
+                Some(("workspace", Pending::Map(MapKind::Workspace), "[workspace]"))
+            }
             (
                 MapKind::Root,
                 "[manifest.dependency-groups]"
@@ -481,6 +486,19 @@ impl<'de> DocumentMapAccess<'_, 'de> {
                     .deserialize(de::value::BorrowedStrDeserializer::new("manifest"))
                     .map(Some);
             }
+            (
+                MapKind::Root,
+                "[workspace.dependency-groups]"
+                | "[[workspace.dependency-metadata]]"
+                | "[workspace.group-requires-python]",
+            ) => {
+                // The workspace map consumes the first subtable when its parent is implicit.
+                self.track_key("workspace")?;
+                self.pending = Some(Pending::Map(MapKind::Workspace));
+                return seed
+                    .deserialize(de::value::BorrowedStrDeserializer::new("workspace"))
+                    .map(Some);
+            }
             (MapKind::Root, "[[package]]") => Some((
                 "package",
                 Pending::Sequence(SequenceKind::Packages),
@@ -491,20 +509,27 @@ impl<'de> DocumentMapAccess<'_, 'de> {
                 Pending::Map(MapKind::OptionsExcludeNewerPackage),
                 "[options.exclude-newer-package]",
             )),
-            (MapKind::Manifest, "[manifest.dependency-groups]") => Some((
+            (MapKind::Manifest, "[manifest.dependency-groups]")
+            | (MapKind::Workspace, "[workspace.dependency-groups]") => Some((
                 "dependency-groups",
                 Pending::Map(MapKind::ManifestDependencyGroups),
-                "[manifest.dependency-groups]",
+                header,
             )),
-            (MapKind::Manifest, "[manifest.group-requires-python]") => Some((
+            (MapKind::Manifest, "[manifest.group-requires-python]")
+            | (MapKind::Workspace, "[workspace.group-requires-python]") => Some((
                 "group-requires-python",
                 Pending::Map(MapKind::ManifestGroupRequiresPython),
-                "[manifest.group-requires-python]",
+                header,
             )),
             (MapKind::Manifest, "[[manifest.dependency-metadata]]") => Some((
                 "dependency-metadata",
                 Pending::Sequence(SequenceKind::ManifestDependencyMetadata),
                 "[[manifest.dependency-metadata]]",
+            )),
+            (MapKind::Workspace, "[[workspace.dependency-metadata]]") => Some((
+                "dependency-metadata",
+                Pending::Sequence(SequenceKind::WorkspaceDependencyMetadata),
+                "[[workspace.dependency-metadata]]",
             )),
             (MapKind::Package, "[package.optional-dependencies]") => Some((
                 "optional-dependencies",
@@ -635,6 +660,7 @@ impl<'de> SeqAccess<'de> for SectionSequenceAccess<'_, 'de> {
             let expected = match self.kind {
                 SequenceKind::Packages => "[[package]]",
                 SequenceKind::ManifestDependencyMetadata => "[[manifest.dependency-metadata]]",
+                SequenceKind::WorkspaceDependencyMetadata => "[[workspace.dependency-metadata]]",
             };
             if self.cursor.header()? != expected {
                 return Ok(None);
@@ -645,7 +671,8 @@ impl<'de> SeqAccess<'de> for SectionSequenceAccess<'_, 'de> {
         self.started = true;
         let kind = match self.kind {
             SequenceKind::Packages => MapKind::Package,
-            SequenceKind::ManifestDependencyMetadata => MapKind::ManifestDependencyMetadata,
+            SequenceKind::ManifestDependencyMetadata
+            | SequenceKind::WorkspaceDependencyMetadata => MapKind::ManifestDependencyMetadata,
         };
         seed.deserialize(SectionDeserializer {
             cursor: self.cursor,

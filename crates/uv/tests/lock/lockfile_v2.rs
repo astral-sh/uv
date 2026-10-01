@@ -243,6 +243,10 @@ fn lockfile_v2_metadata_names() -> Result<()> {
         requires-python = ">=3.12"
         provides-extras = ["feature"]
 
+        [[manifest.dependency-metadata]]
+        name = "leaf"
+        version = "1.0.0"
+
         [[package]]
         name = "project"
         version = "1.0.0"
@@ -260,12 +264,13 @@ fn lockfile_v2_metadata_names() -> Result<()> {
     assert_snapshot!(diff_snapshot(&original, &upgraded, 3), @r#"
     --- old
     +++ new
-    @@ -1,12 +1,12 @@
+    @@ -1,14 +1,14 @@
     -version = 1
     +version = 2
      requires-python = ">=3.12"
 
-     [[manifest.dependency-metadata]]
+    -[[manifest.dependency-metadata]]
+    +[[workspace.dependency-metadata]]
      name = "child"
      version = "1.0.0"
     -requires-dist = ["leaf>=1 ; extra == 'feature'"]
@@ -274,9 +279,12 @@ fn lockfile_v2_metadata_names() -> Result<()> {
     -provides-extras = ["feature"]
     +extras = ["feature"]
 
-     [[package]]
-     name = "project"
-    @@ -17,4 +17,4 @@
+    -[[manifest.dependency-metadata]]
+    +[[workspace.dependency-metadata]]
+     name = "leaf"
+     version = "1.0.0"
+
+    @@ -21,4 +21,4 @@
      feature = []
 
      [package.metadata]
@@ -286,6 +294,19 @@ fn lockfile_v2_metadata_names() -> Result<()> {
     assert_eq!(Lock::from_canonical_toml(&upgraded)?, expected);
     assert_eq!(toml::from_str::<Lock>(&upgraded)?, expected);
     assert_eq!(Lock::from_canonical_toml(&upgraded)?.to_toml()?, upgraded);
+
+    let legacy = upgraded.replace("[workspace", "[manifest");
+    assert_eq!(Lock::from_canonical_toml(&legacy)?, expected);
+    assert_eq!(toml::from_str::<Lock>(&legacy)?, expected);
+
+    // The two table names are aliases, so mixing them must not merge their metadata.
+    let duplicate = upgraded.replacen(
+        "[[workspace.dependency-metadata]]",
+        "[[manifest.dependency-metadata]]",
+        1,
+    );
+    assert!(Lock::from_canonical_toml(&duplicate).is_err());
+    assert!(toml::from_str::<Lock>(&duplicate).is_err());
     Ok(())
 }
 
@@ -1031,13 +1052,21 @@ fn lockfile_v2_group_requires_python() -> Result<()> {
      requires-python = ">=3.12"
      resolution-markers = [
          "python_full_version >= '3.14'",
-    @@ -15,16 +14,11 @@
+    @@ -9,22 +8,17 @@
+     [options]
+     exclude-newer = "2024-03-25T00:00:00Z"
+
+    -[manifest]
+    +[workspace]
+     members = [
+         "member",
      ]
 
-     [manifest.dependency-groups]
+    -[manifest.dependency-groups]
     -docs = [{ name = "member", marker = "python_full_version >= '3.12'", virtual = "member" }]
     -empty = []
     -inherited = [{ name = "member", marker = "python_full_version >= '3.12' and python_full_version < '3.14'", virtual = "member" }]
+    +[workspace.dependency-groups]
     +docs = { requires-python = ">=3.12", dependencies = [{ name = "member", marker = "python_full_version >= '3.12'", virtual = "member" }] }
     +empty = { requires-python = ">=3.13", dependencies = [] }
     +inherited = { requires-python = ">=3.12,<3.14", dependencies = [{ name = "member", marker = "python_full_version >= '3.12' and python_full_version < '3.14'", virtual = "member" }] }
@@ -1067,13 +1096,13 @@ fn lockfile_v2_group_requires_python() -> Result<()> {
     -docs = ">=3.12"
     -empty = ">=3.13"
     -inherited = ">=3.12,<3.14"
+    -
+    -[package.metadata]
     +[package.dependency-groups]
     +docs = { requires-python = ">=3.12", dependencies = ["leaf"] }
     +empty = { requires-python = ">=3.13", dependencies = [] }
     +inherited = { requires-python = ">=3.12,<3.14", dependencies = [{ name = "leaf", marker = "python_full_version < '3.14'" }] }
 
-    -[package.metadata]
-    -
     -[package.metadata.requires-dev]
     +[package.metadata.dependency-groups]
      docs = [{ name = "leaf", marker = "python_full_version >= '3.12'", virtual = "leaf" }]
@@ -1127,7 +1156,7 @@ fn lockfile_v2_group_requires_python() -> Result<()> {
 
 /// Script requirements use the same field name as package dependency declarations.
 #[test]
-fn lockfile_v2_manifest_dependencies() -> Result<()> {
+fn lockfile_v2_workspace_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("script.py").write_str(indoc! {r#"
         # /// script
@@ -1178,8 +1207,9 @@ fn lockfile_v2_manifest_dependencies() -> Result<()> {
      [options]
      exclude-newer = "2024-03-25T00:00:00Z"
 
-     [manifest]
+    -[manifest]
     -requirements = [{ name = "child", virtual = "child" }]
+    +[workspace]
     +dependencies = [{ name = "child", virtual = "child" }]
 
      [[package]]
@@ -1202,7 +1232,7 @@ fn lockfile_v2_manifest_dependencies() -> Result<()> {
     Ok(())
 }
 
-/// Shorthand declarations round-trip in package metadata and both forms of manifest groups,
+/// Shorthand declarations round-trip in package metadata and both forms of workspace groups,
 /// without dropping any qualifiers from other requirements.
 #[test]
 fn lockfile_v2_requirement_shorthand() -> Result<()> {
@@ -1251,10 +1281,10 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
     version = 2
     requires-python = ">=3.12"
 
-    [manifest]
+    [workspace]
     dependencies = ["plain"]
 
-    [manifest.dependency-groups]
+    [workspace.dependency-groups]
     dev = ["plain"]
     docs = { requires-python = ">=3.13", dependencies = ["plain"] }
 
@@ -1296,16 +1326,18 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
     +version = 2
      requires-python = ">=3.12"
 
-     [manifest]
+    -[manifest]
     -requirements = [{ name = "plain" }]
+    +[workspace]
     +dependencies = ["plain"]
 
-     [manifest.dependency-groups]
+    -[manifest.dependency-groups]
     -dev = [{ name = "plain" }]
     -docs = [{ name = "plain" }]
     -
     -[manifest.group-requires-python]
     -docs = ">=3.13"
+    +[workspace.dependency-groups]
     +dev = ["plain"]
     +docs = { requires-python = ">=3.13", dependencies = ["plain"] }
 
@@ -1384,10 +1416,11 @@ fn lockfile_v2_git_sources() -> Result<()> {
     +version = 2
      requires-python = ">=3.12"
 
-     [manifest]
+    -[manifest]
     -constraints = [{ name = "child", git = "https://example.com/repo?branch=main" }]
     -overrides = [{ name = "child", git = "https://example.com/repo?tag=v1" }]
     -build-constraints = [{ name = "child", git = "https://example.com/repo?rev=main", hashes = ["sha256:1234"] }]
+    +[workspace]
     +constraints = [{ name = "child", git = "https://example.com/repo", branch = "main" }]
     +overrides = [{ name = "child", git = "https://example.com/repo", tag = "v1" }]
     +build-constraints = [{ name = "child", hashes = ["sha256:1234"], git = "https://example.com/repo", rev = "main" }]
