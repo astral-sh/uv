@@ -4,8 +4,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
 
-use flate2::Compression;
-use flate2::write::ZlibEncoder;
+use zstd::stream::write::Encoder;
 
 use uv_static::EnvVars;
 
@@ -29,7 +28,7 @@ fn main() {
 
     let version_metadata_compressed = PathBuf::from_iter([
         env::var(EnvVars::OUT_DIR).unwrap(),
-        "download-metadata.json.zlib".into(),
+        "download-metadata.json.zst".into(),
     ]);
 
     println!(
@@ -52,10 +51,11 @@ fn main() {
 
     #[expect(clippy::disallowed_types)]
     let out_file = File::create(version_metadata_compressed)
-        .expect("failed to open download-metadata.json.zlib");
+        .expect("failed to open download-metadata.json.zst");
 
     // Compress the embedded catalog to reduce the binary size.
-    let mut encoder = ZlibEncoder::new(out_file, Compression::best());
+    let mut encoder =
+        Encoder::new(out_file, 19).expect("Failed to create download metadata encoder");
     encoder
         .write_all(
             serde_json::to_string(&filtered_data)
@@ -80,5 +80,5 @@ fn main() {
                 .set_accessed(meta.accessed().unwrap())
                 .set_modified(meta.modified().unwrap()),
         )
-        .expect("failed to write file times to download-metadata.json.zlib");
+        .expect("failed to write file times to download-metadata.json.zst");
 }

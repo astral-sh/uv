@@ -9,7 +9,6 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTimeError};
 use std::{env, io};
 
-use flate2::bufread::ZlibDecoder;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -24,6 +23,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
+use zstd::stream::read::Decoder;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
@@ -964,8 +964,8 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-const BUILTIN_PYTHON_DOWNLOADS_ZLIB: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata.json.zlib"));
+const BUILTIN_PYTHON_DOWNLOADS_ZSTD: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata.json.zst"));
 
 pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
@@ -1107,7 +1107,7 @@ impl ManagedPythonDownloadList {
 /// Decompress and parse the embedded Python download catalog.
 fn parse_builtin_downloads() -> Result<HashMap<String, JsonPythonDownload>, Error> {
     let mut json = Vec::new();
-    ZlibDecoder::new(BUILTIN_PYTHON_DOWNLOADS_ZLIB).read_to_end(&mut json)?;
+    Decoder::with_buffer(BUILTIN_PYTHON_DOWNLOADS_ZSTD)?.read_to_end(&mut json)?;
     parse_downloads_json(&json, "EMBEDDED IN THE BINARY".to_owned())
 }
 
