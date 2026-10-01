@@ -68,6 +68,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
 rayon = { workspace = true }
+zstd = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }
@@ -89,3 +90,4 @@ test-log = { workspace = true }
 uv-static = { workspace = true }
 
 serde_json = { workspace = true }
+zstd = { workspace = true }

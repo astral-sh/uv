@@ -7191,6 +7191,7 @@ dependencies = [
  "which",
  "windows",
  "windows-registry",
+ "zstd",
 ]
 
 [[package]]
