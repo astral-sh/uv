@@ -87,9 +87,7 @@ impl Hashed for Revision {
 
 /// A unique identifier for a revision of a source distribution.
 ///
-/// Note: for compatibility with the existing `sdists-v9` bucket, this is a newtype around a
-/// `String` rather than a newtype around `uv_fastid::Id`. In the future, we may want to bump
-/// to `sdists-v10` and switch to using `uv_fastid::Id` directly.
+/// The identifier is serialized as a string in the source-distribution cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct RevisionId(String);
 
