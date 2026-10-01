@@ -563,6 +563,7 @@ impl DependencyContext<'_> {
 
 /// Builds lockfile dependency edges with consistent marker simplification and merging.
 struct LockedDependencyBuilder<'a> {
+    version: u32,
     requires_python: &'a RequiresPython,
     environment: SimplifiedMarkerTree,
     activation_marker: UniversalMarker,
@@ -572,6 +573,7 @@ struct LockedDependencyBuilder<'a> {
 
 impl<'a> LockedDependencyBuilder<'a> {
     fn new(
+        version: u32,
         requires_python: &'a RequiresPython,
         environment: SimplifiedMarkerTree,
         activation_marker: UniversalMarker,
@@ -579,6 +581,7 @@ impl<'a> LockedDependencyBuilder<'a> {
         simplification_parent_marker: UniversalMarker,
     ) -> Self {
         Self {
+            version,
             requires_python,
             environment,
             activation_marker,
@@ -1502,6 +1505,7 @@ impl<'a> LockedDependencyBuilder<'a> {
             self.environment,
             self.simplification_parent_marker,
             marker,
+            self.version,
         );
         let dependency =
             Dependency::new(self.requires_python, package_id, extras, simplified_marker);
@@ -4150,6 +4154,7 @@ impl Lock {
                 expected.simplification_parent_marker(context, parent_marker);
             let mut generated = Vec::new();
             let builder = LockedDependencyBuilder::new(
+                self.version,
                 &self.requires_python,
                 expected.lock_marker,
                 activation_marker,
@@ -6770,6 +6775,7 @@ impl Package {
     ) -> Result<(), LockError> {
         let parent_marker = *resolution.graph[node_index].marker();
         let builder = LockedDependencyBuilder::new(
+            Lock::current_version(),
             requires_python,
             environment,
             parent_marker,
@@ -9481,9 +9487,9 @@ pub struct Dependency {
     index: PackageIndex,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
-    /// by assuming `requires-python` and the PEP 508 portion of the parent package's reachability
-    /// marker are satisfied. The parent's conflict predicates are retained for compatibility with
-    /// older lockfile readers. So if
+    /// by assuming `requires-python` and the parent package's reachability marker are satisfied.
+    /// Version 1 retains the parent's conflict predicates for compatibility with older readers;
+    /// version 2 inherits them from the traversal context. So if
     /// `requires-python = '>=3.8'`, then
     /// `python_version >= '3.8' and python_version < '3.12'`
     /// gets simplified to `python_version < '3.12'`.
@@ -9502,7 +9508,7 @@ pub struct Dependency {
     /// acceptable to do comparisons on the simplified form.
     simplified_marker: SimplifiedMarkerTree,
     /// The "complexified" marker is independent of `requires-python`, but remains contextual to
-    /// the PEP 508 reachability of its parent package. It can be evaluated while traversing
+    /// the reachability of its parent package. It can be evaluated while traversing
     /// dependencies from that package.
     complexified_marker: UniversalMarker,
 }
@@ -10584,17 +10590,22 @@ fn marker_is_unreachable(requires_python: &RequiresPython, marker: MarkerTree) -
     })
 }
 
-/// Simplify an edge marker using the PEP 508 conditions that must already hold to reach its parent
-/// node. Parent conflict predicates remain on the edge for compatibility with older lockfile
-/// readers that evaluate dependency markers independently during conflict discovery.
+/// Simplify an edge marker using conditions that must already hold to reach its parent node.
+/// Version 1 retains conflict predicates for readers that evaluate dependency markers independently
+/// during conflict discovery. Version 2 also inherits those predicates from the traversal context.
 fn simplify_dependency_marker(
     requires_python: &RequiresPython,
     environment: SimplifiedMarkerTree,
     parent: UniversalMarker,
     marker: UniversalMarker,
+    version: u32,
 ) -> SimplifiedMarkerTree {
-    let parent =
-        SimplifiedMarkerTree::new(requires_python, parent.pep508()).as_simplified_marker_tree();
+    let parent = if version >= 2 {
+        parent.combined()
+    } else {
+        parent.pep508()
+    };
+    let parent = SimplifiedMarkerTree::new(requires_python, parent).as_simplified_marker_tree();
     let marker =
         SimplifiedMarkerTree::new(requires_python, marker.combined()).as_simplified_marker_tree();
     let marker = marker.restrict(parent);
@@ -11022,7 +11033,7 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         let environment = SimplifiedMarkerTree::new(&requires_python, MarkerTree::TRUE);
 
         let simplified_marker =
-            simplify_dependency_marker(&requires_python, environment, parent, parent);
+            simplify_dependency_marker(&requires_python, environment, parent, parent, 1);
         assert_eq!(
             simplified_marker.try_to_string().as_deref(),
             Some("extra != 'extra-1-x-foo'")
@@ -11033,6 +11044,10 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
             marker.try_to_string().as_deref(),
             Some("python_full_version >= '3.12' and extra != 'extra-1-x-foo'")
         );
+
+        let inherited =
+            simplify_dependency_marker(&requires_python, environment, parent, parent, 2);
+        assert_eq!(inherited.try_to_string(), None);
     }
 
     #[test]
