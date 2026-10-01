@@ -1,7 +1,7 @@
-use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use uv_distribution_types::Hashed;
+use uv_fastid::Id;
 
 use uv_pypi_types::{HashDigest, HashDigests};
 
@@ -11,27 +11,11 @@ use uv_pypi_types::{HashDigest, HashDigests};
 /// (e.g.) the version number of the distribution itself. For example, a source distribution hosted
 /// at a URL or a local file path may have multiple revisions, each representing a unique state of
 /// the distribution, despite the reported version number remaining the same.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Revision {
     id: RevisionId,
     hashes: HashDigests,
-    #[serde(default)]
     size: Option<u64>,
-}
-
-impl Serialize for Revision {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        // Cache buckets are shared with older uv versions, whose readers can ignore unknown map
-        // entries but reject MessagePack arrays with additional fields.
-        let mut map = serializer.serialize_map(Some(3))?;
-        map.serialize_entry("id", &self.id)?;
-        map.serialize_entry("hashes", &self.hashes)?;
-        map.serialize_entry("size", &self.size)?;
-        map.end()
-    }
 }
 
 impl Revision {
@@ -87,16 +71,14 @@ impl Hashed for Revision {
 
 /// A unique identifier for a revision of a source distribution.
 ///
-/// Note: for compatibility with the existing `sdists-v9` bucket, this is a newtype around a
-/// `String` rather than a newtype around `uv_fastid::Id`. In the future, we may want to bump
-/// to `sdists-v10` and switch to using `uv_fastid::Id` directly.
+/// The identifier is serialized as a string in the source-distribution cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct RevisionId(String);
+pub(crate) struct RevisionId(Id);
 
 impl RevisionId {
-    /// Generate a new unique identifier for an archive.
+    /// Generate a new unique identifier for a source distribution revision.
     fn new() -> Self {
-        Self(uv_fastid::Id::secure().to_string())
+        Self(Id::secure())
     }
 
     pub(crate) fn as_str(&self) -> &str {
@@ -120,74 +102,41 @@ impl AsRef<Path> for RevisionId {
 mod tests {
     use super::*;
 
-    /// Regression test for <https://github.com/astral-sh/uv/issues/19298>.
-    #[test]
-    fn deserialize_legacy_nanoid_revision() {
-        #[derive(Serialize)]
-        struct LegacyRevision {
-            id: RevisionId,
-            hashes: HashDigests,
-        }
-
-        // A representative 21-character nanoid ID, drawn from the same alphabet
-        // used by both the old `nanoid` crate and `uv_fastid`.
-        let legacy = LegacyRevision {
-            id: RevisionId("HM0NxJml5hc7UjbfTWT1r".to_string()),
-            hashes: HashDigests::empty(),
-        };
-        let bytes = rmp_serde::to_vec(&legacy).expect("serialize legacy revision");
-        let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize legacy revision");
-        assert_eq!(parsed.id().as_str(), "HM0NxJml5hc7UjbfTWT1r");
-    }
-
     #[test]
     fn round_trip_current_revision() {
-        let original = Revision::new().with_hashes(HashDigests::from(
-            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-                .parse::<HashDigest>()
-                .expect("valid SHA-256 digest"),
-        ));
-        let bytes = rmp_serde::to_vec(&original).expect("serialize revision");
-        let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize revision");
-        assert_eq!(parsed.id().as_str(), original.id().as_str());
-        assert_eq!(parsed.hashes(), original.hashes());
+        for size in [None, Some(42)] {
+            let mut original = Revision::new().with_hashes(HashDigests::from(
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                    .parse::<HashDigest>()
+                    .expect("valid SHA-256 digest"),
+            ));
+            if let Some(size) = size {
+                original = original.with_size(size);
+            }
+            let bytes = rmp_serde::to_vec(&original).expect("serialize revision");
+            let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize revision");
+            assert_eq!(parsed.id().as_str(), original.id().as_str());
+            assert_eq!(parsed.hashes(), original.hashes());
+            assert_eq!(parsed.size(), original.size());
+        }
     }
 
     #[test]
-    fn deserialize_uv_0_12_revision() {
-        #[derive(Serialize)]
-        struct ReleasedRevision {
-            id: RevisionId,
+    fn serialize_revision_id_as_string() {
+        #[derive(Deserialize)]
+        struct SerializedRevision {
+            id: String,
             hashes: HashDigests,
             size: Option<u64>,
         }
 
-        let released = ReleasedRevision {
-            id: RevisionId("HM0NxJml5hc7UjbfTWT1r".to_string()),
-            hashes: HashDigests::empty(),
-            size: Some(42),
-        };
-        let bytes = rmp_serde::to_vec(&released).expect("serialize uv 0.12 revision");
-        let revision: Revision =
-            rmp_serde::from_slice(&bytes).expect("deserialize uv 0.12 revision");
-
-        assert_eq!(revision.size(), Some(42));
-    }
-
-    #[test]
-    fn serialize_revision_for_legacy_reader() {
-        #[derive(Deserialize)]
-        struct LegacyRevision {
-            id: RevisionId,
-            hashes: HashDigests,
-        }
-
         let revision = Revision::new().with_size(42);
         let bytes = rmp_serde::to_vec(&revision).expect("serialize revision");
-        let legacy: LegacyRevision =
-            rmp_serde::from_slice(&bytes).expect("deserialize revision with legacy reader");
+        let serialized: SerializedRevision =
+            rmp_serde::from_slice(&bytes).expect("deserialize revision with string ID");
 
-        assert_eq!(legacy.id.as_str(), revision.id().as_str());
-        assert_eq!(legacy.hashes, HashDigests::empty());
+        assert_eq!(serialized.id.as_str(), revision.id().as_str());
+        assert_eq!(serialized.hashes, HashDigests::empty());
+        assert_eq!(serialized.size, Some(42));
     }
 }

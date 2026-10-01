@@ -6003,6 +6003,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-resolver",
+ "uv-static",
  "uv-types",
  "uv-workspace",
 ]
@@ -6094,6 +6095,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
+ "uv-static",
  "uv-toml",
  "uv-version",
  "uv-warnings",
@@ -6238,7 +6240,9 @@ dependencies = [
  "astral_async_http_range_reader",
  "astral_async_zip",
  "async-trait",
+ "bitflags 2.13.1",
  "bytecheck",
+ "crc32fast",
  "fs-err",
  "futures",
  "h2",
@@ -6282,6 +6286,7 @@ dependencies = [
  "uv-distribution-types",
  "uv-errors",
  "uv-extract",
+ "uv-fastid",
  "uv-fs",
  "uv-git",
  "uv-metadata",
@@ -6302,6 +6307,7 @@ dependencies = [
  "webpki-root-certs",
  "wiremock",
  "x509-parser",
+ "zerocopy",
 ]
 
 [[package]]
@@ -6449,6 +6455,7 @@ dependencies = [
  "uv-python",
  "uv-requirements",
  "uv-resolver",
+ "uv-static",
  "uv-types",
  "uv-version",
  "uv-workspace",
@@ -6503,6 +6510,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-static",
  "uv-threads",
  "uv-types",
  "uv-workspace",
@@ -6611,7 +6619,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uv-distribution-filename",
- "uv-preview",
  "uv-pypi-types",
  "uv-static",
  "uv-threads",
@@ -7602,6 +7609,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-static",
  "uv-workspace",
 ]
 
@@ -7632,7 +7640,6 @@ dependencies = [
  "uv-errors",
  "uv-fs",
  "uv-platform-tags",
- "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-shell",

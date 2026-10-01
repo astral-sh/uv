@@ -37,7 +37,8 @@ use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{Digest, HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::{
-    EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
+    EnvVars, TarBackend, astral_mirror_base_url, astral_mirror_url_from_env,
+    custom_astral_mirror_url,
 };
 
 use crate::PythonVariant;
@@ -1224,6 +1225,7 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
+        let tar_backend = TarBackend::from_env();
         if urls.is_empty() {
             return Err(Error::NoPythonDownloadUrlFound);
         }
@@ -1235,6 +1237,7 @@ impl ManagedPythonDownload {
                 scratch_dir,
                 reinstall,
                 reporter,
+                tar_backend,
             )
         })
         .await
@@ -1249,6 +1252,7 @@ impl ManagedPythonDownload {
         scratch_dir: &Path,
         reinstall: bool,
         reporter: Option<&dyn Reporter>,
+        tar_backend: TarBackend,
     ) -> Result<DownloadResult, Error> {
         let path = installation_dir.join(self.key().to_string());
 
@@ -1341,6 +1345,7 @@ impl ManagedPythonDownload {
                 size,
                 reporter,
                 Direction::Extract,
+                tar_backend,
             )
             .await?
         } else {
@@ -1360,6 +1365,7 @@ impl ManagedPythonDownload {
                 size,
                 reporter,
                 Direction::Download,
+                tar_backend,
             )
             .await?
         };
@@ -1494,6 +1500,7 @@ impl ManagedPythonDownload {
         size: Option<u64>,
         reporter: Option<&dyn Reporter>,
         direction: Direction,
+        tar_backend: TarBackend,
     ) -> Result<TempDir, Error> {
         let mut hashers = self
             .sha256
@@ -1504,13 +1511,13 @@ impl ManagedPythonDownload {
         let target = if let Some(reporter) = reporter {
             let progress_key = reporter.on_request_start(direction, &self.key, size);
             let mut reader = ProgressReader::new(&mut hasher, progress_key, reporter);
-            let (target, _) = uv_extract::stream::archive(&mut reader, ext, target)
+            let (target, _) = uv_extract::stream::archive(&mut reader, ext, target, tar_backend)
                 .await
                 .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
             reporter.on_request_complete(direction, progress_key);
             target
         } else {
-            let (target, _) = uv_extract::stream::archive(&mut hasher, ext, target)
+            let (target, _) = uv_extract::stream::archive(&mut hasher, ext, target, tar_backend)
                 .await
                 .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
             target
@@ -2143,6 +2150,38 @@ mod tests {
             .collect();
 
         assert_eq!(downloads.len(), 0);
+    }
+
+    #[test]
+    #[cfg(target_arch = "aarch64")]
+    fn windows_aarch64_download_selection() {
+        let downloads =
+            ManagedPythonDownloadList::new_only_embedded().expect("valid embedded downloads");
+        let native_arch = Arch::from_str("aarch64").expect("valid architecture");
+        let x86_64_arch = Arch::from_str("x86_64").expect("valid architecture");
+        let mut request = PythonDownloadRequest::from_str("cpython-windows")
+            .expect("valid download request")
+            .with_libc(Libc::None);
+        request.arch = Some(ArchRequest::Environment(native_arch));
+
+        // The native preference also applies to versions released before Python 3.15.
+        for version in ["3.11", "3.12", "3.13", "3.14", "3.15"] {
+            let request = request
+                .clone()
+                .with_version(VersionRequest::from_str(version).expect("valid version"));
+            let download = downloads.find(&request).expect("native download available");
+            assert_eq!(*download.key.arch(), native_arch);
+
+            let request = request.with_arch(x86_64_arch);
+            let download = downloads.find(&request).expect("x86_64 download available");
+            assert_eq!(*download.key.arch(), x86_64_arch);
+        }
+
+        // Python 3.10 has no managed Windows ARM64 build.
+        let request =
+            request.with_version(VersionRequest::from_str("3.10").expect("valid version"));
+        let download = downloads.find(&request).expect("x86_64 fallback available");
+        assert_eq!(*download.key.arch(), x86_64_arch);
     }
 
     #[test]

@@ -3431,7 +3431,9 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
       cause: Failed to extract archive: demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz
-      cause: I/O operation failed during extraction
+      cause: Invalid tar file
+      cause: at byte 0: failed to read tar data
+      cause: failed to read tar data
       cause: Invalid gzip header
     ");
     assert!(
@@ -17430,7 +17432,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    assert!(context.cache_dir.child("flat-index-v5").is_dir());
+    assert!(context.cache_dir.child("flat-index-v6").is_dir());
 
     let lock = context.read("uv.lock");
 

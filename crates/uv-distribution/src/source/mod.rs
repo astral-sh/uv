@@ -2857,6 +2857,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             source,
             ext,
             self.build_context.cache(),
+            self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &[HashAlgorithm::Sha256],
                 hash_policy,
@@ -2889,6 +2890,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             source,
             ext,
             self.build_context.cache(),
+            self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &[],
                 hash_policy,
@@ -3504,7 +3506,7 @@ impl HttpRevisionPointer {
     pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::File::open(path.as_ref()) {
             Ok(file) => {
-                let data = DataWithCachePolicy::from_reader(file)?.data;
+                let data = DataWithCachePolicy::from_reader(file)?.into_data();
                 let revision = rmp_serde::from_slice::<Revision>(&data)?;
                 Ok(Some(Self { revision }))
             }
