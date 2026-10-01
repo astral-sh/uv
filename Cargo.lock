@@ -6238,9 +6238,7 @@ dependencies = [
  "astral_async_http_range_reader",
  "astral_async_zip",
  "async-trait",
- "bitflags 2.13.1",
  "bytecheck",
- "crc32fast",
  "fs-err",
  "futures",
  "h2",
@@ -6284,7 +6282,6 @@ dependencies = [
  "uv-distribution-types",
  "uv-errors",
  "uv-extract",
- "uv-fastid",
  "uv-fs",
  "uv-git",
  "uv-metadata",
@@ -6305,7 +6302,6 @@ dependencies = [
  "webpki-root-certs",
  "wiremock",
  "x509-parser",
- "zerocopy",
 ]
 
 [[package]]
