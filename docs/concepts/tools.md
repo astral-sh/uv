@@ -163,6 +163,60 @@ To reinstall a single package in a tool environment:
 $ uv tool upgrade black --reinstall-package click
 ```
 
+## Using a packaged lock
+
+With the `locked-tools` [preview feature](preview.md), `--locked` installs a tool's dependencies
+from the `pylock.toml` shipped in its wheel's `.dist-info` directory:
+
+```console
+$ uv tool install --preview-features locked-tools --locked example-tool
+$ uvx --preview-features locked-tools --locked example-tool
+$ uv tool upgrade --preview-features locked-tools --locked example-tool
+```
+
+uv selects a compatible wheel of the tool before reading its lock. Versions without a compatible
+wheel can be skipped, and a tool available only as a source distribution cannot be installed with
+`--locked`. Git sources are not supported for the tool itself. Once a wheel is selected, a missing
+or unusable lock is an error; uv does not try an older tool release to find a usable lock. Runtime
+dependency versions come from the lock unless explicitly overridden. Artifact hashes are required
+and checked against the lock. Selected locked artifacts must have a supported hash other than MD5.
+uv checks every supported non-MD5 hash for the selected artifact in the lock and its index entry.
+Hashes in artifact URLs are also checked, including MD5 hashes.
+
+Each locked dependency that is not excluded or replaced must use a wheel or source distribution
+listed by its configured package index for its locked name and version, with the filename recorded
+by the index. uv verifies this before accessing artifacts, including inactive entries. The
+configured index strategy determines which indexes can be used; a packaged lock cannot select an
+explicit index by itself. Cached index metadata can be used for this check, even after it expires.
+Local paths, VCS sources, and direct archives are not supported for retained locked dependencies.
+Offline installation requires cached index metadata; `--no-index` prevents this verification.
+
+If a dependency is built from a source distribution, its build requirements are resolved separately
+and are not pinned by the packaged lock. uv checks applicable lock, index, and explicitly supplied
+constraint and override hashes before running the build backend. A hash discovered later in another
+dependency's metadata is checked when encountered; a build backend may already have run.
+
+Installed tools remember `--locked`, so subsequent upgrades continue using packaged locks and
+require the preview feature. Use `--unlocked` to return to normal dependency resolution. Set
+`UV_TOOL_LOCKED=1` to enable locked tool operations by default. Locked runs use a cache environment
+based on the packaged lock instead of reusing an installed tool with potentially different
+dependencies.
+
+Overrides can replace locked packages; uv resolves the replacements and any new dependencies they
+need. Exclusions omit named packages. Since a standard lock does not provide an installation
+dependency graph, uv keeps every other selected locked package, even if it is no longer needed.
+Constraints must be compatible with retained locked packages. Dependency groups must be included in
+the packaged lock. Selecting extras for the tool is not supported with `--locked`.
+
+`--with`, scoped exclusions, and overrides or constraints with extra markers are not supported with
+`--locked`. Scoped overrides are supported for the tool and retained locked packages, but not for
+packages that are themselves replaced. A scoped override introduced by a replacement cannot replace
+another locked package. If an override or constraint uses hashes, overrides must include their
+package names.
+
+[`uv build`](projects/build.md#including-a-dependency-lock) can include these locks in wheels. Its
+exports do not include optional extras or dependency groups.
+
 ## Including additional dependencies
 
 Additional packages can be included during tool execution:
