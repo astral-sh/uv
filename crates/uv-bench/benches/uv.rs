@@ -2,6 +2,7 @@
 // https://github.com/rust-lang/rust/issues/64402
 extern crate uv_performance_memory_allocator;
 
+use std::cell::LazyCell;
 use std::env;
 use std::fmt::Write;
 use std::hint::black_box;
@@ -421,16 +422,17 @@ fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![Requirement::from(
         uv_pep508::Requirement::from_str("jupyter==1.0.0").unwrap(),
     )]);
-    let run = setup(manifest, false);
-    c.bench_function("resolve_warm_jupyter", |b| b.iter(&run));
+    // Initialize resolver fixtures only when Criterion selects this benchmark.
+    let run = LazyCell::new(|| setup(manifest, false));
+    c.bench_function("resolve_warm_jupyter", |b| b.iter(&*run));
 }
 
 fn resolve_warm_jupyter_universal(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![Requirement::from(
         uv_pep508::Requirement::from_str("jupyter==1.0.0").unwrap(),
     )]);
-    let run = setup(manifest, true);
-    c.bench_function("resolve_warm_jupyter_universal", |b| b.iter(&run));
+    let run = LazyCell::new(|| setup(manifest, true));
+    c.bench_function("resolve_warm_jupyter_universal", |b| b.iter(&*run));
 }
 
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
@@ -440,8 +442,8 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
             uv_pep508::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
         ),
     ]);
-    let run = setup(manifest, false);
-    c.bench_function("resolve_warm_airflow", |b| b.iter(&run));
+    let run = LazyCell::new(|| setup(manifest, false));
+    c.bench_function("resolve_warm_airflow", |b| b.iter(&*run));
 }
 
 // This takes >5m to run in CodSpeed.
