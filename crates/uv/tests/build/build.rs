@@ -6449,3 +6449,280 @@ fn build_packaged_lock_skipped_sdist() -> Result<()> {
     );
     Ok(())
 }
+
+/// A packaged lock must have consistent artifact identities and non-overlapping package entries.
+#[test]
+fn build_sdist_with_invalid_packaged_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("src/example/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    context
+        .build()
+        .args(["--offline", "--preview-features", "locked-tools", "--sdist"])
+        .assert()
+        .success();
+    write_uv_build_backend(&context)?;
+
+    context.python_command().arg("-c").arg(indoc! {r#"
+        import io, pathlib, tarfile
+        source = pathlib.Path("dist/example-1.0.0.tar.gz")
+        digest = "0" * 64
+        def package(version, marker, artifact):
+            return (f'\n[[packages]]\nname = "dependency"\nversion = "{version}"\n'
+                    f'marker = "{marker}"\nindex = "https://pypi.org/simple"\n{artifact}\n')
+        def wheel(filename):
+            return f'wheels = [{{ url = "https://files.pythonhosted.org/{filename}", hashes = {{ sha256 = "{digest}" }} }}]'
+        def sdist(filename):
+            return f'sdist = {{ url = "https://files.pythonhosted.org/{filename}", hashes = {{ sha256 = "{digest}" }} }}'
+        one = wheel("dependency-1.0.0-py3-none-any.whl")
+        cases = {
+            "missing-version": package("1.0.0", "sys_platform == 'win32'", one).replace('version = "1.0.0"\n', ''),
+            "wheel-name": package("1.0.0", "sys_platform == 'win32'", wheel("other-1.0.0-py3-none-any.whl")),
+            "wheel-version": package("1.0.0", "sys_platform == 'win32'", wheel("dependency-2.0.0-py3-none-any.whl")),
+            "sdist-name": package("1.0.0", "sys_platform == 'win32'", sdist("other-1.0.0.tar.gz")),
+            "sdist-version": package("1.0.0", "sys_platform == 'win32'", sdist("dependency-2.0.0.tar.gz")),
+            "overlap": package("1.0.0", "sys_platform == 'win32'", one) + package("2.0.0", "python_version >= '3.13'", wheel("dependency-2.0.0-py3-none-any.whl")),
+
+        }
+        for variant, packages in cases.items():
+            pathlib.Path(variant).mkdir()
+            with tarfile.open(source) as src, tarfile.open(f"{variant}/{source.name}", "w:gz") as dst:
+                for entry in src:
+                    data = src.extractfile(entry).read() if entry.isfile() else None
+                    if entry.name.endswith("/pylock.toml"):
+                        data = data.replace(b"packages = []", packages.encode())
+                    if data is not None:
+                        entry.size = len(data)
+                    dst.addfile(entry, io.BytesIO(data) if data is not None else None)
+    "#}).assert().success();
+
+    let mut errors = String::new();
+    for variant in [
+        "missing-version",
+        "wheel-name",
+        "wheel-version",
+        "sdist-name",
+        "sdist-version",
+        "overlap",
+    ] {
+        let source = format!("{variant}/example-1.0.0.tar.gz");
+        let output = build_with_uv_build(&context)
+            .env(EnvVars::UV_EXPORT_LOCK, "true")
+            .args([
+                "--offline",
+                "--preview-features",
+                "locked-tools",
+                "--no-build-isolation",
+                "--wheel",
+                &source,
+            ])
+            .output()?;
+        assert_eq!(output.status.code(), Some(2));
+        errors.push_str(&apply_filters(
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+            context.filters(),
+        ));
+    }
+    assert_snapshot!(errors, @"
+    error: Failed to build `[TEMP_DIR]/missing-version/example-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: The source distribution has an invalid `pylock.toml`
+      cause: Registry package `dependency` has no version
+    error: Failed to build `[TEMP_DIR]/wheel-name/example-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: The source distribution has an invalid `pylock.toml`
+      cause: Wheel filename `other-1.0.0-py3-none-any.whl` does not match package name `dependency`
+    error: Failed to build `[TEMP_DIR]/wheel-version/example-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: The source distribution has an invalid `pylock.toml`
+      cause: Wheel filename `dependency-2.0.0-py3-none-any.whl` does not match package version `1.0.0`
+    error: Failed to build `[TEMP_DIR]/sdist-name/example-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: The source distribution has an invalid `pylock.toml`
+      cause: Failed to parse source distribution filename `other-1.0.0.tar.gz`: Name doesn't start with package name dependency
+    error: Failed to build `[TEMP_DIR]/sdist-version/example-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: The source distribution has an invalid `pylock.toml`
+      cause: Source distribution filename `dependency-2.0.0.tar.gz` does not match package version `1.0.0`
+    error: Failed to build `[TEMP_DIR]/overlap/example-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: The source distribution has an invalid `pylock.toml`
+      cause: Package entries for `dependency` may be active in the same environment
+    ");
+    Ok(())
+}
+
+/// A lock with platform-specific versions remains usable when rebuilt from its source distribution.
+#[test]
+fn build_sdist_with_forked_packaged_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("src/example/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "dependency"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = ["sys_platform == 'win32'"]
+        wheels = [{ url = "https://files.pythonhosted.org/packages/dependency-1.0.0-py3-none-any.whl", hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }]
+
+        [[package]]
+        name = "dependency"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = ["sys_platform != 'win32'"]
+        wheels = [{ url = "https://files.pythonhosted.org/packages/dependency-2.0.0-py3-none-any.whl", hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }]
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "dependency", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
+            { name = "dependency", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+        ]
+        [package.metadata]
+        requires-dist = [{ name = "dependency" }]
+    "#})?;
+    context
+        .build()
+        .args(["--offline", "--preview-features", "locked-tools", "--sdist"])
+        .assert()
+        .success();
+    write_uv_build_backend(&context)?;
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "dist/example-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import tomllib, zipfile
+        with zipfile.ZipFile("dist/example-1.0.0-py3-none-any.whl") as wheel:
+            lock = tomllib.loads(wheel.read("example-1.0.0.dist-info/pylock.toml").decode())
+            print([(package["version"], package["marker"]) for package in lock["packages"]])
+    "#}), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [('1.0.0', "sys_platform == 'win32'"), ('2.0.0', "sys_platform != 'win32'")]
+    "#);
+    Ok(())
+}
+
+/// Reject corrupt wheel entries when adding a packaged lock.
+#[test]
+fn build_packaged_lock_wheel_crc() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = []
+        build-backend = "uv_build"
+        backend-path = ["."]
+    "#})?;
+    context.temp_dir.child("uv_build.py").write_str(indoc! {r#"
+        import base64, hashlib, pathlib, struct, zipfile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "locked_tool-1.0.0-py3-none-any.whl"
+            path = pathlib.Path(wheel_directory) / filename
+            dist_info = "locked_tool-1.0.0.dist-info"
+            files = {
+                "locked_tool/__init__.py": b"original content\n",
+                "locked_tool/large.bin": b"x" * (16 * 1024 * 1024 + 1),
+                f"{dist_info}/METADATA": b"Metadata-Version: 2.4\nName: locked-tool\nVersion: 1.0.0\nRequires-Python: >=3.12\n",
+                f"{dist_info}/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            }
+            record = "".join(
+                f"{name},sha256={base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b'=').decode()},{len(data)}\n"
+                for name, data in files.items()
+            ) + f"{dist_info}/RECORD,,\n"
+            files[f"{dist_info}/RECORD"] = record.encode()
+            target = pathlib.Path("corrupt").read_text()
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as wheel:
+                for name, data in files.items():
+                    wheel.writestr(name, data)
+                info = wheel.getinfo(target)
+            with path.open("r+b") as wheel:
+                wheel.seek(info.header_offset)
+                header = struct.unpack("<IHHHHHIIIHH", wheel.read(30))
+                wheel.seek(info.header_offset + 30 + header[-2] + header[-1])
+                first = wheel.read(1)
+                wheel.seek(-1, 1)
+                wheel.write(bytes([first[0] ^ 1]))
+            return filename
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    for entry in [
+        "locked_tool/__init__.py",
+        "locked_tool/large.bin",
+        "locked_tool-1.0.0.dist-info/RECORD",
+    ] {
+        context.temp_dir.child("corrupt").write_str(entry)?;
+        context
+            .build()
+            .args([
+                "--offline",
+                "--preview-features",
+                "locked-tools",
+                "--wheel",
+                "--force-pep517",
+                "--no-build-isolation",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(format!(
+                "Wheel entry has an invalid CRC: `{entry}`"
+            )));
+        context
+            .temp_dir
+            .child("dist/locked_tool-1.0.0-py3-none-any.whl")
+            .assert(predicate::path::missing());
+    }
+    Ok(())
+}
