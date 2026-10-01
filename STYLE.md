@@ -11,8 +11,9 @@ documentation_.
 1. Hyphenate compound words, e.g., use "platform-specific" not "platform specific".
 1. If a message ends with a single relevant value, precede it with a colon, e.g.,
    `This is the value: value`.
-1. Use backticks to escape commands, code expressions, package names, URL, and file paths, except if
-   it is a single value after a colon. User-facing summaries may omit backticks.
+1. Use backticks to escape commands, code expressions, package names, URL, and file paths, except
+   for a value that is after a colon at the end of a message. User-facing summaries may omit
+   backticks.
 1. Use less than and greater than symbols to wrap bare URLs, e.g., `<https://astral.sh>` (unless it
    is an example; then, use backticks).
 1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.

@@ -561,7 +561,7 @@ pub enum ErrorKind {
     ArchiveWrite(String),
 
     #[error(
-        "Network connectivity is disabled, but the requested data wasn't found in the cache for: {0}"
+        "Network connectivity is disabled, but the requested data wasn't found in the cache: {0}"
     )]
     Offline(String),
 }

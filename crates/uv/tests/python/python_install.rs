@@ -2688,7 +2688,7 @@ fn python_install_no_cache() {
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
       cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
-      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
     ");
 }
 

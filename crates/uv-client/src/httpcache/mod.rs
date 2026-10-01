@@ -341,8 +341,8 @@ impl ArchivedCachePolicy {
         // be used for the presented request, and..."
         if request.method() != http::Method::GET && request.method() != http::Method::HEAD {
             tracing::trace!(
-                "Method {:?} for request `{}` is not supported by this cache",
-                request.method(),
+                "Method {} for request `{}` is not supported by this cache",
+                request.method().as_str(),
                 request.url(),
             );
             return BeforeRequest::NoMatch;

@@ -551,7 +551,7 @@ impl RegistryClient {
             // ref https://github.com/servo/rust-url/issues/333
             .push("");
 
-        trace!("Fetching metadata for {package_name} from `{url}`");
+        trace!("Fetching metadata for `{package_name}` from `{url}`");
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
