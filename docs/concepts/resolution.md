@@ -981,10 +981,9 @@ dependency-metadata subtables. It uses `package.dependency-groups` instead of
 their `dependencies`, instead of in a separate `group-requires-python` table. This applies to both
 package groups and projectless workspace roots.
 
-Declared dependencies use `package.metadata.dependencies` and `workspace.dependencies`, replacing
-`package.metadata.requires-dist` and `manifest.requirements`. Static dependency metadata also uses
-`dependencies` instead of `requires-dist`. Both metadata sections record declared extras as `extras`
-instead of `provides-extras`. A metadata table containing only dependency-group subtables omits the
+Workspace dependencies use `workspace.dependencies` instead of `manifest.requirements`. Package
+metadata and static dependency metadata retain `requires-dist` and `provides-extras`, reflecting
+their Core Metadata fields. A metadata table containing only dependency-group subtables omits the
 empty parent header.
 
 Name-only dependency edges and declarations use strings, such as `"requests"`, instead of inline
