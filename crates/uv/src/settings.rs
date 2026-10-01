@@ -1435,6 +1435,7 @@ impl ToolAuditSettings {
             all,
             audit:
                 AuditCommonArgs {
+                    offline: _,
                     output_format,
                     ignore,
                     ignore_until_fixed,
@@ -3353,6 +3354,7 @@ impl AuditSettings {
             no_frozen,
             audit:
                 AuditCommonArgs {
+                    offline: _,
                     output_format,
                     ignore,
                     ignore_until_fixed,

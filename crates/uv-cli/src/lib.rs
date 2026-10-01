@@ -1283,6 +1283,8 @@ pub enum ProjectCommand {
     /// By default, all extras and dependency groups within the project are audited, regardless of
     /// `tool.uv.default-groups`. To omit all dependency groups, use `--no-default-groups`. To exclude
     /// individual extras or groups, use `--no-extra` or `--no-group`.
+    ///
+    /// Auditing requires network access and cannot be performed in offline mode.
     #[command(
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
@@ -5278,6 +5280,10 @@ pub struct CheckArgs {
 #[derive(Args)]
 #[group(skip)]
 pub struct AuditCommonArgs {
+    // Hide the unsupported global offline option.
+    #[arg(long, hide = true, overrides_with("no_offline"))]
+    pub offline: bool,
+
     /// Select the output format.
     #[arg(long, value_enum, default_value_t = AuditOutputFormat::default())]
     pub output_format: AuditOutputFormat,
@@ -5526,6 +5532,8 @@ pub enum ToolCommand {
     #[command(alias = "ls")]
     List(ToolListArgs),
     /// Audit installed tools and their dependencies.
+    ///
+    /// Auditing requires network access and cannot be performed in offline mode.
     Audit(ToolAuditArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
