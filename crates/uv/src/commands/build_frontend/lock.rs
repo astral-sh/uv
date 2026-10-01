@@ -12,18 +12,21 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::SourceDistFilename;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, MetadataHashPolicy, PYPI_URL, Requirement, RequiresPython,
-    SourceUrl,
+    BuildableSource, DirectorySourceUrl, MetadataHashPolicy, PYPI_URL, Requirement,
+    RequirementSource, RequiresPython, SourceUrl,
 };
 use uv_fs::is_same_file_allow_missing;
-use uv_lock::{Installable, Lock, PylockToml};
+use uv_lock::{Installable, Lock, Package, PylockToml};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{HashDigest, ResolutionMetadata};
 use uv_static::{EnvVars, parse_boolish_environment_variable};
 use uv_workspace::Workspace;
+use uv_workspace::dependency_groups::FlatDependencyGroups;
 use version_ranges::Ranges;
+
+use crate::settings::BuildLockSettings;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -279,6 +282,7 @@ pub(super) async fn export(
     source_tree: &Path,
     workspace: Option<&Workspace>,
     database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+    lock_settings: &BuildLockSettings,
     preview: Preview,
 ) -> Result<Option<ExportedLock>> {
     let environment_export = parse_boolish_environment_variable(EnvVars::UV_EXPORT_LOCK)?;
@@ -338,6 +342,20 @@ pub(super) async fn export(
     let contents = match fs_err::read_to_string(&path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if enabled.is_none()
+                && has_ineligible_runtime_source(
+                    source_tree,
+                    &pyproject_path,
+                    &pyproject_contents,
+                    &project,
+                    workspace,
+                    database,
+                    lock_settings,
+                )
+                .await
+            {
+                return Ok(None);
+            }
             bail!("Cannot export a lock: `uv.lock` was not found; run `uv lock` before building")
         }
         Err(error) => return Err(error.into()),
@@ -367,6 +385,20 @@ pub(super) async fn export(
         && (workspace_dependency.is_some()
             || !lock.has_only_pypi_and_workspace_sources(&all_packages))
     {
+        check_skipped_lock(
+            &lock,
+            package,
+            &project,
+            &raw,
+            &pyproject_contents,
+            &pyproject_path,
+            source_tree,
+            root,
+            workspace,
+            database,
+            lock_settings,
+        )
+        .await?;
         return Ok(None);
     }
     if let Some(dependency) = workspace_dependency {
@@ -543,6 +575,257 @@ pub(super) async fn export(
             project_metadata,
         },
     }))
+}
+
+/// Check whether a mandatory runtime dependency has a source that excludes automatic export.
+async fn has_ineligible_runtime_source(
+    source_tree: &Path,
+    pyproject_path: &Path,
+    pyproject_contents: &str,
+    project: &Project,
+    workspace: Option<&Workspace>,
+    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+    lock_settings: &BuildLockSettings,
+) -> bool {
+    let Some(workspace) = workspace.filter(|workspace| {
+        workspace
+            .packages()
+            .get(&project.name)
+            .is_some_and(|member| {
+                is_same_file_allow_missing(member.root(), source_tree).unwrap_or(false)
+            })
+    }) else {
+        return false;
+    };
+    if !workspace.constraints().is_empty()
+        || !workspace.overrides().is_empty()
+        || !workspace.exclude_dependencies().is_empty()
+        || !lock_settings
+            .has_dependency_modifiers(workspace.install_path())
+            .is_ok_and(|has_modifiers| !has_modifiers)
+    {
+        return false;
+    }
+    let Ok(settings) = lock_settings.resolve(workspace.install_path()) else {
+        return false;
+    };
+    let Ok(pyproject) =
+        uv_pypi_types::PyProjectToml::from_toml(pyproject_contents, pyproject_path.display())
+    else {
+        return false;
+    };
+    let Ok(Some(requirements)) = database.requires_dist(source_tree, &pyproject).await else {
+        return false;
+    };
+    requirements.requires_dist.iter().any(|requirement| {
+        if requirement.marker.is_false()
+            || requirement.name == project.name
+            || settings.sources.for_package(&requirement.name)
+        {
+            return false;
+        }
+        match &requirement.source {
+            RequirementSource::Registry {
+                index: Some(index),
+                conflict: None,
+                ..
+            } => !is_pypi_index_url(index.url.without_credentials().as_str()),
+            RequirementSource::Registry { .. } => false,
+            RequirementSource::Url { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => true,
+        }
+    })
+}
+
+/// Report a stale skipped lock when static project inputs establish a mismatch.
+async fn check_skipped_lock(
+    lock: &Lock,
+    package: &Package,
+    project: &Project,
+    raw: &toml::Value,
+    pyproject_contents: &str,
+    pyproject_path: &Path,
+    source_tree: &Path,
+    root: &Path,
+    workspace: Option<&Workspace>,
+    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+    lock_settings: &BuildLockSettings,
+) -> Result<()> {
+    if let (Some(expected), Some(actual)) = (&project.version, package.version())
+        && expected != actual
+    {
+        bail!(
+            "`uv.lock` does not match the version of `{}`; run `uv lock` before building",
+            project.name
+        );
+    }
+    let Ok(pyproject) =
+        uv_pypi_types::PyProjectToml::from_toml(pyproject_contents, pyproject_path.display())
+    else {
+        return Ok(());
+    };
+    let Ok(Some(requirements)) = database.requires_dist(source_tree, &pyproject).await else {
+        return Ok(());
+    };
+    if !package.has_metadata() {
+        // Scoped overrides can add dependencies even when the project declares none.
+        if requirements.requires_dist.is_empty()
+            && workspace.is_some_and(|workspace| workspace.overrides().is_empty())
+            && package.has_unconditional_dependencies()
+        {
+            bail!(
+                "`uv.lock` does not match the dependencies of `{}`; run `uv lock` before building",
+                project.name
+            );
+        }
+        return Ok(());
+    }
+    match lock.matches_package_requirements(
+        root,
+        package,
+        &requirements.requires_dist,
+        &requirements.provides_extra,
+    ) {
+        Ok(false) => bail!(
+            "`uv.lock` does not match the dependencies of `{}`; run `uv lock` before building",
+            project.name
+        ),
+        Ok(true) => {}
+        Err(_) => return Ok(()),
+    }
+
+    // An explicit index configuration rules out a locked direct registry dependency only when
+    // no source tree or dependency group could introduce another index.
+    let Some(workspace) = workspace else {
+        return Ok(());
+    };
+    if !workspace
+        .workspace_dependency_groups()
+        .is_ok_and(|groups| groups.is_empty())
+        || !workspace.sources().is_empty()
+        || !workspace.constraints().is_empty()
+        || !workspace.overrides().is_empty()
+        || raw.get("dependency-groups").is_some()
+        || !package.dependency_groups().is_empty()
+        || requirements.requires_dist.iter().any(|requirement| {
+            matches!(
+                requirement.source,
+                RequirementSource::Registry { index: Some(_), .. }
+            )
+        })
+    {
+        return Ok(());
+    }
+    let Ok(settings) = lock_settings.resolve(root) else {
+        return Ok(());
+    };
+    if settings.dependency_metadata.values().next().is_some() {
+        return Ok(());
+    }
+
+    // Every workspace member can contribute sources to a workspace resolution. Require static
+    // registry requirements and exclude members with their own sources or dependency groups.
+    if workspace.packages().len() > 1
+        && (lock.members().len() != workspace.packages().len()
+            || workspace
+                .packages()
+                .keys()
+                .any(|name| !lock.members().contains(name)))
+    {
+        return Ok(());
+    }
+    for (name, member) in workspace.packages() {
+        let member_pyproject = member.pyproject_toml();
+        if !FlatDependencyGroups::from_pyproject_toml(member.root(), member_pyproject)
+            .is_ok_and(|groups| groups.into_iter().next().is_none())
+            || member_pyproject
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+                .is_some_and(|sources| !sources.inner().is_empty())
+        {
+            return Ok(());
+        }
+        if name == &project.name {
+            continue;
+        }
+        let Ok(Some(member_package)) = lock.find_by_name(name) else {
+            return Ok(());
+        };
+        if !member_package.source_tree().is_some_and(|path| {
+            is_same_file_allow_missing(member.root(), &root.join(path)).unwrap_or(false)
+        }) {
+            return Ok(());
+        }
+        let Ok(pyproject) = uv_pypi_types::PyProjectToml::from_toml(
+            &member_pyproject.raw,
+            member.root().join("pyproject.toml").display(),
+        ) else {
+            return Ok(());
+        };
+        let Ok(Some(member_requirements)) = database.requires_dist(member.root(), &pyproject).await
+        else {
+            return Ok(());
+        };
+        if member_requirements.requires_dist.iter().any(|requirement| {
+            !matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            )
+        }) {
+            return Ok(());
+        }
+    }
+    if lock.packages().iter().any(|dependency| {
+        dependency.name() != &project.name
+            && !matches!(dependency.index(root), Ok(Some(_)))
+            && !workspace
+                .packages()
+                .get(dependency.name())
+                .is_some_and(|member| {
+                    dependency.source_tree().is_some_and(|path| {
+                        is_same_file_allow_missing(member.root(), &root.join(path)).unwrap_or(false)
+                    })
+                })
+    }) {
+        return Ok(());
+    }
+    let indexes = &settings.index_locations;
+    if indexes.is_none() || indexes.no_index() {
+        return Ok(());
+    }
+    for requirement in &requirements.requires_dist {
+        if !requirement.marker.is_true()
+            || !matches!(
+                requirement.source,
+                RequirementSource::Registry { index: None, .. }
+            )
+            || !package
+                .dependencies()
+                .iter()
+                .any(|dependency| dependency.package_name() == &requirement.name)
+        {
+            continue;
+        }
+        let Ok(Some(dependency)) = lock.find_by_name(&requirement.name) else {
+            continue;
+        };
+        let Ok(Some(index)) = dependency.index(root) else {
+            continue;
+        };
+        if !indexes.allowed_indexes().iter().any(|allowed| {
+            allowed.url().without_credentials().as_ref() == index.without_credentials().as_ref()
+        }) {
+            bail!(
+                "`uv.lock` references an index that is no longer configured; run `uv lock` before building"
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Reject URL-like values outside package indexes and distribution artifact URLs.

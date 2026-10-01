@@ -4362,6 +4362,24 @@ impl BuildLockSettings {
             &self.environment,
         ))
     }
+
+    /// Check whether filesystem settings can change the project dependencies.
+    pub(crate) fn has_dependency_modifiers(&self, root: &Path) -> Result<bool> {
+        Ok(self.filesystem(root)?.is_some_and(|options| {
+            options
+                .constraint_dependencies
+                .as_ref()
+                .is_some_and(|requirements| !requirements.is_empty())
+                || options
+                    .override_dependencies
+                    .as_ref()
+                    .is_some_and(|requirements| !requirements.is_empty())
+                || options
+                    .exclude_dependencies
+                    .as_ref()
+                    .is_some_and(|requirements| !requirements.is_empty())
+        }))
+    }
 }
 
 impl BuildSettings {

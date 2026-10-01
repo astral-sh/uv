@@ -842,12 +842,16 @@ async fn build_package(
         concurrency.downloads_semaphore.clone(),
     );
     let exported_lock = match &source.source {
-        Source::Directory(source_tree) => {
-            lock::export(source_tree, workspace.ok(), &database, preview)
-                .await
-                .map_err(Error::BuildLock)?
-                .map(Arc::new)
-        }
+        Source::Directory(source_tree) => lock::export(
+            source_tree,
+            workspace.ok(),
+            &database,
+            lock_settings,
+            preview,
+        )
+        .await
+        .map_err(Error::BuildLock)?
+        .map(Arc::new),
         Source::File(_) => None,
     };
 
