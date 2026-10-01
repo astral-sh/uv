@@ -104,8 +104,7 @@ impl WheelFilename {
     /// Returns `true` if the wheel is compatible with the given tags.
     pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
         // TODO(konsti): Check variant compatibility.
-        self.variant().is_none()
-            && compatible_tags.is_compatible(self.tags.compressed_tags())
+        self.variant().is_none() && compatible_tags.is_compatible(self.tags.compressed_tags())
     }
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
@@ -754,16 +753,16 @@ mod tests {
                 "The wheel filename `numpy-2.3.2-7-3py-none-any-null.whl` is invalid: Python tag must not start with a digit",
             ),
             Err(
-                "The wheel filename `numpy-2.3.2-py3-none-any-.whl` has an invalid variant label: must not be empty",
+                "The wheel filename `numpy-2.3.2-py3-none-any-.whl` has an invalid variant label: Variant label must not be empty",
             ),
             Err(
-                "The wheel filename `numpy-2.3.2-py3-none-any-cpu_!v3.whl` has an invalid variant label: must contain only lowercase ASCII letters, digits, underscores, and periods",
+                "The wheel filename `numpy-2.3.2-py3-none-any-cpu_!v3.whl` has an invalid variant label: Variant label must contain only lowercase ASCII letters, digits, underscores, and periods, not `!`",
             ),
             Err(
-                "The wheel filename `numpy-2.3.2-py3-none-any-CUDA.whl` has an invalid variant label: must contain only lowercase ASCII letters, digits, underscores, and periods",
+                "The wheel filename `numpy-2.3.2-py3-none-any-CUDA.whl` has an invalid variant label: Variant label must contain only lowercase ASCII letters, digits, underscores, and periods, not `C`",
             ),
             Err(
-                "The wheel filename `numpy-2.3.2-py3-none-any-cpu_É.whl` has an invalid variant label: must contain only lowercase ASCII letters, digits, underscores, and periods",
+                "The wheel filename `numpy-2.3.2-py3-none-any-cpu_É.whl` has an invalid variant label: Variant label must contain only lowercase ASCII letters, digits, underscores, and periods, not `É`",
             ),
         ]
         "#);

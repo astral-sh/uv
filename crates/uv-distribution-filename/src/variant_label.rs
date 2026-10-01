@@ -6,10 +6,12 @@ use uv_small_str::SmallString;
 /// An invalid wheel variant label.
 #[derive(Debug, thiserror::Error)]
 pub enum InvalidVariantLabel {
-    #[error("must not be empty")]
+    #[error("Variant label must not be empty")]
     Empty,
-    #[error("must contain only lowercase ASCII letters, digits, underscores, and periods")]
-    InvalidCharacters,
+    #[error(
+        "Variant label must contain only lowercase ASCII letters, digits, underscores, and periods, not `{0}`"
+    )]
+    InvalidCharacters(char),
 }
 
 /// A wheel variant label.
@@ -35,10 +37,10 @@ impl FromStr for VariantLabel {
         if label.is_empty() {
             return Err(InvalidVariantLabel::Empty);
         }
-        if !label.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_')
+        if let Some(wrong_char) = label.chars().find(|char| {
+            !char.is_ascii_lowercase() && !char.is_ascii_digit() && !matches!(char, '.' | '_')
         }) {
-            return Err(InvalidVariantLabel::InvalidCharacters);
+            return Err(InvalidVariantLabel::InvalidCharacters(wrong_char));
         }
 
         Ok(Self(SmallString::from(label)))

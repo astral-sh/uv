@@ -345,7 +345,10 @@ impl<'a> Planner<'a> {
             if let Some(filename) = dist.wheel_filename()
                 && filename.variant().is_some()
             {
-                bail!("Wheel variants are not supported yet: `{filename}`");
+                return Err(uv_distribution::Error::UnsupportedWheelVariant(Box::new(
+                    filename.clone(),
+                ))
+                .into());
             }
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
