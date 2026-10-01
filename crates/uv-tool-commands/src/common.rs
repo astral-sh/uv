@@ -15,7 +15,7 @@ use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecification, GitLfsSetting, InstallOptions, Override, TargetTriple,
+    ExtrasSpecification, GitLfsSetting, InstallOptions, Override, PackageOverride, TargetTriple,
 };
 use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::{
@@ -319,6 +319,7 @@ impl ToolLock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        scoped_overrides: &[PackageOverride<Requirement>],
         excludes: &[ExcludeDependency],
         build_constraints: &[NameRequirementSpecification],
         dependency_metadata: &DependencyMetadata,
@@ -327,7 +328,11 @@ impl ToolLock {
             std::iter::empty::<PackageName>(),
             requirements.iter().cloned(),
             constraints.iter().cloned(),
-            overrides.iter().cloned().map(Override::Requirement),
+            overrides
+                .iter()
+                .cloned()
+                .map(Override::Requirement)
+                .chain(scoped_overrides.iter().cloned().map(Override::Package)),
             excludes.iter().cloned(),
             build_constraints.iter().cloned(),
             std::iter::empty::<(GroupName, Vec<Requirement>)>(),
@@ -407,6 +412,7 @@ impl ToolLock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        scoped_overrides: &[PackageOverride<Requirement>],
         excludes: &[ExcludeDependency],
         build_constraints: &Constraints,
         refresh: &Refresh,
@@ -524,6 +530,7 @@ impl ToolLock {
             .iter()
             .cloned()
             .map(Override::Requirement)
+            .chain(scoped_overrides.iter().cloned().map(Override::Package))
             .collect::<Vec<_>>();
         let Self { root, lock } = self;
         let validated = ValidatedLock::validate(
@@ -749,8 +756,10 @@ pub(super) fn finalize_tool_install(
     force: bool,
     python: Option<PythonRequest>,
     requirements: Vec<Requirement>,
-    constraints: Vec<Requirement>,
+    constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<Requirement>,
+    override_specifications: Vec<NameRequirementSpecification>,
+    scoped_overrides: Vec<PackageOverride<Requirement>>,
     excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<NameRequirementSpecification>,
     lock: Option<&ToolLock>,
@@ -943,7 +952,7 @@ pub(super) fn finalize_tool_install(
     debug!("Adding receipt for tool `{name}`");
     let tool = Tool::new(
         requirements,
-        constraints.into_iter().map(Into::into).collect(),
+        constraints,
         overrides,
         excludes,
         build_constraints,
@@ -952,7 +961,11 @@ pub(super) fn finalize_tool_install(
         options.clone(),
     );
     ToolLock::write(&installed_tools.tool_dir(name), lock)?;
-    installed_tools.add_tool_receipt(name, tool)?;
+    installed_tools.add_tool_receipt(
+        name,
+        tool.with_override_specifications(override_specifications)
+            .with_scoped_overrides(scoped_overrides),
+    )?;
 
     warn_out_of_path(&executable_directory);
 
