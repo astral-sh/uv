@@ -126,12 +126,9 @@ package's `pyproject.toml`, `setup.py`, or `setup.cfg` file has changed.
 ## Cache safety
 
 It's safe to run multiple uv commands concurrently, even against the same virtual environment. uv's
-cache supports multiple concurrent readers and writers. uv applies a file-based lock to the target
-virtual environment when installing, to avoid concurrent modifications across processes.
-
-Interrupted or overlapping HTTP cache refreshes can invalidate individual cache entries. uv detects
-incomplete policy updates and downloads the response again instead of using the invalid entry. With
-`--offline`, an affected entry is unavailable until it can be refreshed online.
+cache is designed to be thread-safe and append-only, and thus robust to multiple concurrent readers
+and writers. uv applies a file-based lock to the target virtual environment when installing, to
+avoid concurrent modifications across processes.
 
 Note that it's _never_ safe to modify the cache directly (e.g., by removing a file or directory).
 
