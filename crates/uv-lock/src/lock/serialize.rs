@@ -324,14 +324,28 @@ fn write_manifest(
         }
         if !metadata.requires_dist.is_empty() {
             let value = serialize_value(&metadata.requires_dist)?;
-            writer.key_value("requires-dist", value)?;
+            writer.key_value(
+                if version >= 2 {
+                    "dependencies"
+                } else {
+                    "requires-dist"
+                },
+                value,
+            )?;
         }
         if let Some(requires_python) = metadata.requires_python.as_ref() {
             writer.key_value("requires-python", requires_python.to_string())?;
         }
         if !metadata.provides_extra.is_empty() {
             let value = serialize_value(&metadata.provides_extra)?;
-            writer.key_value("provides-extras", value)?;
+            writer.key_value(
+                if version >= 2 {
+                    "extras"
+                } else {
+                    "provides-extras"
+                },
+                value,
+            )?;
         }
     }
 
@@ -484,7 +498,11 @@ fn write_package(
             write_requirements(writer, field, &metadata.requires_dist, version)?;
         }
         if !metadata.provides_extra.is_empty() {
-            writer.key_start("provides-extras")?;
+            writer.key_start(if version >= 2 {
+                "extras"
+            } else {
+                "provides-extras"
+            })?;
             writer.array(&metadata.provides_extra, |writer, extra| {
                 writer.value(extra.as_ref())
             })?;
