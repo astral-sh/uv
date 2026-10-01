@@ -1871,7 +1871,7 @@ fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
         .match_indices("sha256:")
         .map(|(index, _)| index + "sha256:".len())
         .collect::<Vec<_>>();
-    assert_ne!(hash_indices, Vec::<usize>::new());
+    assert!(!hash_indices.is_empty());
     for index in hash_indices.into_iter().rev() {
         let replacement = if lock.as_bytes()[index] == b'0' {
             "1"
