@@ -962,6 +962,27 @@ The `revision` field of the lockfile is used to track backwards compatible chang
 For example, adding a new field to distributions. Changes to the revision will not cause older
 versions of uv to error.
 
+### Experimental lockfile v2
+
+Enable the `lockfile-v2` [preview feature](./preview.md) to write version 2 lockfiles:
+
+```console
+$ uv lock --preview-features lockfile-v2
+```
+
+This upgrades an existing version 1 lockfile, retaining its locked package versions. Version 1
+lockfiles remain readable when the feature is enabled. Reading a version 2 lockfile requires the
+feature, including when using `--frozen`.
+
+Version 2 uses `package.dependency-groups` instead of `package.dev-dependencies`, and
+`package.metadata.dependency-groups` instead of `package.metadata.requires-dev`.
+
+!!! warning
+
+    Lockfile v2 is highly experimental. Its format may change incompatibly in patch releases,
+    without the compatibility guarantees described above. A version 2 lockfile may need to be
+    regenerated after upgrading uv.
+
 ## Learn more
 
 For more details about the internals of the resolver, see the
