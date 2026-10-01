@@ -6265,12 +6265,8 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
         let global = match (wire.exclude_newer, wire.exclude_newer_span) {
             (Some(timestamp), None) => Some(ExcludeNewerValue::absolute(timestamp)),
-            // We're phasing out writing a timestamp when spans are used. uv writes a dummy
-            // timestamp for backwards compatibility that we can ignore on deserialization.
-            (Some(_), Some(span)) => Some(ExcludeNewerValue::relative(span)),
-            // A future version of uv will remove the timestamp entirely, so for forwards
-            // compatibility we ignore a missing value.
-            (None, Some(span)) => Some(ExcludeNewerValue::relative(span)),
+            // Version 1 includes a dummy timestamp for older readers; version 2 omits it.
+            (Some(_) | None, Some(span)) => Some(ExcludeNewerValue::relative(span)),
             (None, None) => None,
         };
         Self {
@@ -6296,45 +6292,86 @@ impl From<ExcludeNewer> for ExcludeNewerWire {
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(from = "ResolverManifestWire")]
 pub struct ResolverManifest {
     /// The workspace members included in the lockfile.
-    #[serde(default)]
     members: BTreeSet<PackageName>,
     /// Default dependency groups for a workspace root without a `[project]` table.
-    #[serde(default)]
     default_groups: Option<DefaultGroups>,
     /// The effective Python requirements of the root's dependency groups.
-    #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
     /// The requirements provided to the resolver, exclusive of the workspace members.
     ///
     /// These are requirements that are attached to the project, but not to any of its
     /// workspace members. For example, the requirements in a PEP 723 script would be included here.
-    #[serde(default)]
     requirements: BTreeSet<Requirement>,
     /// The dependency groups provided to the resolver, exclusive of the workspace members.
     ///
     /// These are dependency groups that are attached to the project, but not to any of its
     /// workspace members. For example, the dependency groups in a `pyproject.toml` without a
     /// `[project]` table would be included here.
-    #[serde(default)]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
     /// The constraints provided to the resolver.
-    #[serde(default)]
     constraints: BTreeSet<Requirement>,
     /// The overrides provided to the resolver.
-    #[serde(default)]
     overrides: BTreeSet<Override<Requirement>>,
     /// The excludes provided to the resolver.
-    #[serde(default)]
     excludes: BTreeSet<ExcludeDependency>,
     /// The build constraints provided to the resolver.
-    #[serde(default)]
     build_constraints: BTreeSet<NameRequirementSpecification>,
     /// The static metadata provided to the resolver.
+    dependency_metadata: BTreeSet<StaticMetadata>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct ResolverManifestWire {
+    #[serde(default)]
+    members: BTreeSet<PackageName>,
+    #[serde(default)]
+    default_groups: Option<DefaultGroups>,
+    #[serde(default)]
+    group_requires_python: BTreeMap<GroupName, GroupMetadata>,
+    #[serde(default)]
+    requirements: BTreeSet<Requirement>,
+    #[serde(default)]
+    dependency_groups: BTreeMap<GroupName, DependencyGroupWire<Requirement>>,
+    #[serde(default)]
+    constraints: BTreeSet<Requirement>,
+    #[serde(default)]
+    overrides: BTreeSet<Override<Requirement>>,
+    #[serde(default)]
+    excludes: BTreeSet<ExcludeDependency>,
+    #[serde(default)]
+    build_constraints: BTreeSet<NameRequirementSpecification>,
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
+}
+
+impl From<ResolverManifestWire> for ResolverManifest {
+    fn from(wire: ResolverManifestWire) -> Self {
+        let mut group_requires_python = wire.group_requires_python;
+        let dependency_groups = wire
+            .dependency_groups
+            .into_iter()
+            .map(|(name, group)| {
+                let dependencies = group.into_dependencies(&name, &mut group_requires_python);
+                (name, dependencies.into_iter().collect())
+            })
+            .collect();
+        Self {
+            members: wire.members,
+            default_groups: wire.default_groups,
+            group_requires_python,
+            requirements: wire.requirements,
+            dependency_groups,
+            constraints: wire.constraints,
+            overrides: wire.overrides,
+            excludes: wire.excludes,
+            build_constraints: wire.build_constraints,
+            dependency_metadata: wire.dependency_metadata,
+        }
+    }
 }
 
 /// Omit entries equivalent to the implicit `dev` default.
@@ -7434,9 +7471,43 @@ struct PackageWire {
     #[serde(default)]
     default_groups: Option<DefaultGroups>,
     #[serde(default, alias = "dev-dependencies")]
-    dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
+    dependency_groups: BTreeMap<GroupName, DependencyGroupWire<DependencyWire>>,
     #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
+}
+
+/// A dependency group, optionally carrying its Python requirement.
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum DependencyGroupWire<T> {
+    List(Vec<T>),
+    Table {
+        dependencies: Vec<T>,
+        #[serde(default, rename = "requires-python")]
+        requires_python: Option<VersionSpecifiers>,
+    },
+}
+
+impl<T> DependencyGroupWire<T> {
+    /// Extract dependencies and merge inline Python requirements with legacy sidecar metadata.
+    fn into_dependencies(
+        self,
+        name: &GroupName,
+        group_requires_python: &mut BTreeMap<GroupName, GroupMetadata>,
+    ) -> Vec<T> {
+        match self {
+            Self::List(dependencies) => dependencies,
+            Self::Table {
+                dependencies,
+                requires_python,
+            } => {
+                if requires_python.is_some() {
+                    group_requires_python.insert(name.clone(), GroupMetadata { requires_python });
+                }
+                dependencies
+            }
+        }
+    }
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
@@ -7548,11 +7619,21 @@ impl PackageWire {
                 .collect()
         };
 
+        let mut group_requires_python = self.group_requires_python;
+        let dependency_groups = self
+            .dependency_groups
+            .into_iter()
+            .map(|(group, deps)| {
+                let deps = deps.into_dependencies(&group, &mut group_requires_python);
+                Ok((group, unwire_deps(deps)?))
+            })
+            .collect::<Result<_, LockError>>()?;
+
         Ok(Package {
             id: self.id,
             metadata: self.metadata,
             default_groups: self.default_groups,
-            group_requires_python: self.group_requires_python,
+            group_requires_python,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
@@ -7567,11 +7648,7 @@ impl PackageWire {
                 .into_iter()
                 .map(|(extra, deps)| Ok((extra, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
-            dependency_groups: self
-                .dependency_groups
-                .into_iter()
-                .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
-                .collect::<Result<_, LockError>>()?,
+            dependency_groups,
         })
     }
 }
@@ -9310,15 +9387,40 @@ impl Display for Dependency {
 }
 
 /// A single dependency of a package in a lockfile.
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+struct DependencyWire(DependencyWireTable);
+
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct DependencyWire {
+struct DependencyWireTable {
     #[serde(flatten)]
     package_id: PackageIdForDependency,
-    #[serde(default)]
+    #[serde(default, rename = "extras", alias = "extra")]
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
     marker: SimplifiedMarkerTree,
+}
+
+impl<'de> serde::Deserialize<'de> for DependencyWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|name| {
+                Ok(Self(DependencyWireTable {
+                    package_id: PackageIdForDependency {
+                        name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
+                        version: None,
+                        source: None,
+                    },
+                    extra: BTreeSet::new(),
+                    marker: SimplifiedMarkerTree::default(),
+                }))
+            })
+            .map(|map| map.deserialize().map(Self))
+            .deserialize(deserializer)
+    }
 }
 
 impl DependencyWire {
@@ -9329,20 +9431,21 @@ impl DependencyWire {
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
+        let Self(dependency) = self;
         let (simplified_marker, complexified_marker) =
-            if self.marker.as_simplified_marker_tree().is_true() {
+            if dependency.marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
             } else {
-                let mut simplified_marker = self.marker;
+                let mut simplified_marker = dependency.marker;
                 simplified_marker.and(environment);
                 let complexified_marker =
                     UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
-            package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            package_id: dependency.package_id.unwire(unambiguous_package_ids)?,
             index: PackageIndex(0),
-            extra: self.extra,
+            extra: dependency.extra,
             simplified_marker,
             complexified_marker,
         })

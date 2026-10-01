@@ -8,6 +8,7 @@ use toml_writer::{TomlWrite, WriteTomlValue};
 use uv_distribution_types::{RequiresPython, SimplifiedMarkerTree};
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
+use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
 
@@ -108,8 +109,8 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
         writer.raw("]\n");
     }
 
-    write_options(writer, &lock.options)?;
-    write_manifest(writer, &lock.manifest)?;
+    write_options(writer, &lock.options, lock.version)?;
+    write_manifest(writer, &lock.manifest, lock.version)?;
 
     // Count the number of packages for each package name. When there's only one package for a
     // particular package name (the overwhelmingly common case), we can omit some data (like
@@ -135,7 +136,11 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     Ok(())
 }
 
-fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(), WriteError> {
+fn write_options(
+    writer: &mut LockWriter,
+    options: &ResolverOptions,
+    version: u32,
+) -> Result<(), WriteError> {
     let has_options = options.resolution_mode != ResolutionMode::default()
         || options.prerelease.global != PrereleaseMode::default()
         || !options.prerelease.package.is_empty()
@@ -163,9 +168,11 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     let exclude_newer = &options.exclude_newer;
     if let Some(global) = &exclude_newer.global {
         if let Some(span) = global.span() {
-            writer.key_start("exclude-newer")?;
-            writer.value(ExcludeNewerValue::PLACEHOLDER)?;
-            writer.raw(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.\n");
+            if version < 2 {
+                writer.key_start("exclude-newer")?;
+                writer.value(ExcludeNewerValue::PLACEHOLDER)?;
+                writer.raw(" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.\n");
+            }
             writer.key_value("exclude-newer-span", span.to_string())?;
         } else {
             writer.key_value("exclude-newer", global.to_string())?;
@@ -190,11 +197,13 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
                         writer.key_start(name.as_ref())?;
                         let mut first = true;
                         writer.start_inline_table();
-                        writer.inline_value(
-                            &mut first,
-                            "timestamp",
-                            ExcludeNewerValue::PLACEHOLDER,
-                        )?;
+                        if version < 2 {
+                            writer.inline_value(
+                                &mut first,
+                                "timestamp",
+                                ExcludeNewerValue::PLACEHOLDER,
+                            )?;
+                        }
                         writer.inline_value(&mut first, "span", span.to_string())?;
                         writer.finish_inline_table(first);
                         writer.raw("\n");
@@ -212,8 +221,21 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     Ok(())
 }
 
-fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Result<(), WriteError> {
-    let has_dependency_groups = !manifest.dependency_groups.is_empty();
+fn write_manifest(
+    writer: &mut LockWriter,
+    manifest: &ResolverManifest,
+    version: u32,
+) -> Result<(), WriteError> {
+    let groups = manifest
+        .dependency_groups
+        .keys()
+        .chain(
+            manifest
+                .group_requires_python
+                .keys()
+                .filter(|_| version >= 2),
+        )
+        .collect::<BTreeSet<_>>();
     let has_manifest = manifest.default_groups.is_some()
         || !manifest.members.is_empty()
         || !manifest.requirements.is_empty()
@@ -240,14 +262,31 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     write_serialized_non_empty_array(writer, "excludes", &manifest.excludes)?;
     write_serialized_non_empty_array(writer, "build-constraints", &manifest.build_constraints)?;
 
-    if has_dependency_groups {
+    if !groups.is_empty() {
         writer.table(&["manifest", "dependency-groups"])?;
-        for (group, requirements) in &manifest.dependency_groups {
-            write_serialized_array(writer, group.as_ref(), requirements)?;
+        for group in groups {
+            let empty = BTreeSet::new();
+            let requirements = manifest.dependency_groups.get(group).unwrap_or(&empty);
+            let requires_python = manifest
+                .group_requires_python
+                .get(group)
+                .and_then(|metadata| metadata.requires_python.as_ref())
+                .filter(|_| version >= 2);
+            if let Some(requires_python) = requires_python {
+                write_dependency_group_inline(
+                    writer,
+                    group.as_ref(),
+                    requires_python,
+                    requirements,
+                    |writer, requirement| writer.value(serialize_value(requirement)?),
+                )?;
+            } else {
+                write_serialized_array(writer, group.as_ref(), requirements)?;
+            }
         }
     }
 
-    if !manifest.group_requires_python.is_empty() {
+    if version < 2 && !manifest.group_requires_python.is_empty() {
         writer.table(&["manifest", "group-requires-python"])?;
         for (group, metadata) in &manifest.group_requires_python {
             if let Some(requires_python) = &metadata.requires_python {
@@ -309,6 +348,7 @@ fn write_package(
                 write_dependency_inline(
                     writer,
                     dependency,
+                    version,
                     simplified_environment,
                     dist_count_by_name,
                 )
@@ -338,6 +378,7 @@ fn write_package(
                 write_dependency_inline(
                     writer,
                     dependency,
+                    version,
                     simplified_environment,
                     dist_count_by_name,
                 )
@@ -345,31 +386,60 @@ fn write_package(
         }
     }
 
-    if !package.dependency_groups.is_empty() {
+    let groups = package
+        .dependency_groups
+        .keys()
+        .chain(
+            package
+                .group_requires_python
+                .keys()
+                .filter(|_| version >= 2),
+        )
+        .collect::<BTreeSet<_>>();
+    if !groups.is_empty() {
         let field = if version >= 2 {
             "dependency-groups"
         } else {
             "dev-dependencies"
         };
         writer.table(&["package", field])?;
-        for (group, dependencies) in &package.dependency_groups {
-            if dependencies.is_empty() {
-                writer.key_start(group.as_ref())?;
-                writer.raw("[]\n");
-                continue;
-            }
-            writer.key_multiline_array(group.as_ref(), dependencies, |writer, dependency| {
+        for group in groups {
+            let dependencies = package
+                .dependency_groups
+                .get(group)
+                .map_or(&[][..], Vec::as_slice);
+            let requires_python = package
+                .group_requires_python
+                .get(group)
+                .and_then(|metadata| metadata.requires_python.as_ref())
+                .filter(|_| version >= 2);
+            let write_dependency = |writer: &mut LockWriter, dependency: &Dependency| {
                 write_dependency_inline(
                     writer,
                     dependency,
+                    version,
                     simplified_environment,
                     dist_count_by_name,
                 )
-            })?;
+            };
+            if let Some(requires_python) = requires_python {
+                write_dependency_group_inline(
+                    writer,
+                    group.as_ref(),
+                    requires_python,
+                    dependencies,
+                    write_dependency,
+                )?;
+            } else if dependencies.is_empty() {
+                writer.key_start(group.as_ref())?;
+                writer.raw("[]\n");
+            } else {
+                writer.key_multiline_array(group.as_ref(), dependencies, write_dependency)?;
+            }
         }
     }
 
-    if !package.group_requires_python.is_empty() {
+    if version < 2 && !package.group_requires_python.is_empty() {
         writer.table(&["package", "group-requires-python"])?;
         for (group, metadata) in &package.group_requires_python {
             if let Some(requires_python) = &metadata.requires_python {
@@ -579,9 +649,24 @@ fn write_wheel_inline(writer: &mut LockWriter, wheel: &Wheel) -> Result<(), Writ
 fn write_dependency_inline(
     writer: &mut LockWriter,
     dependency: &Dependency,
+    version: u32,
     simplified_environment: MarkerTree,
     dist_count_by_name: &FxHashMap<PackageName, u64>,
 ) -> Result<(), WriteError> {
+    // Avoid restating the resolution's environment on every dependency edge.
+    let marker = dependency
+        .simplified_marker
+        .as_simplified_marker_tree()
+        .restrict(simplified_environment)
+        .try_to_string();
+    if version >= 2
+        && dist_count_by_name.get(&dependency.package_id.name) == Some(&1)
+        && dependency.extra.is_empty()
+        && marker.is_none()
+    {
+        return writer.value(dependency.package_id.name.as_ref());
+    }
+
     let mut first = true;
     writer.start_inline_table();
 
@@ -593,23 +678,44 @@ fn write_dependency_inline(
     )?;
 
     if !dependency.extra.is_empty() {
-        writer.inline_key_start(&mut first, "extra")?;
+        writer.inline_key_start(&mut first, if version >= 2 { "extras" } else { "extra" })?;
         writer.array(&dependency.extra, |writer, extra| {
             writer.value(extra.as_ref())
         })?;
     }
 
-    // Avoid restating the resolution's environment on every dependency edge.
-    if let Some(marker) = dependency
-        .simplified_marker
-        .as_simplified_marker_tree()
-        .restrict(simplified_environment)
-        .try_to_string()
-    {
+    if let Some(marker) = marker {
         writer.inline_value(&mut first, "marker", &marker)?;
     }
 
     writer.finish_inline_table(first);
+    Ok(())
+}
+
+/// Writes a dependency group carrying a Python requirement alongside its dependencies.
+fn write_dependency_group_inline<I, T, F>(
+    writer: &mut LockWriter,
+    group: &str,
+    requires_python: &VersionSpecifiers,
+    dependencies: I,
+    write_dependency: F,
+) -> Result<(), WriteError>
+where
+    I: IntoIterator<Item = T>,
+    F: FnMut(&mut LockWriter, T) -> Result<(), WriteError>,
+{
+    writer.key_start(group)?;
+    let mut first = true;
+    writer.start_inline_table();
+    writer.inline_value(
+        &mut first,
+        "requires-python",
+        serialize_value(requires_python)?,
+    )?;
+    writer.inline_key_start(&mut first, "dependencies")?;
+    writer.array(dependencies, write_dependency)?;
+    writer.finish_inline_table(first);
+    writer.raw("\n");
     Ok(())
 }
 
