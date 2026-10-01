@@ -15,7 +15,7 @@ use insta::allow_duplicates;
 #[cfg(feature = "test-pypi")]
 use insta::assert_snapshot;
 use serde_json::json;
-use sha2::{Digest, Sha256, Sha512};
+use sha2::{Digest, Sha256, Sha384, Sha512};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -2825,5 +2825,482 @@ async fn packaged_lock_checks_index_hash() -> Result<()> {
     ----- stderr -----
     error: The selected artifact for `idna==3.3` does not match the required hashes
     ");
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_override_wheel_before_reading_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    tool(
+        &context,
+        "1.0.0",
+        Some("lock-version = \"1.0\"\ncreated-by = \"test\"\npackages = []\n"),
+        None,
+    )?;
+    let (filename, wheel) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.5".parse()?,
+        &["unexpected==1.0".parse()?],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let context = context.with_filter((hash.clone(), "[WHEEL_HASH]"));
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/idna/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({"meta": {"api-version": "1.1"}, "name": "idna", "files": [{
+                    "filename": filename,
+                    "url": format!("{}/{filename}", server.uri()),
+                    "hashes": {"sha256": hash},
+                    "upload-time": "2023-01-01T00:00:00Z",
+                }]})
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+    context.temp_dir.child("overrides.txt").write_str(
+        "idna==3.5 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000\n",
+    )?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &format!("{}/simple", server.uri()), "--override", "overrides.txt", "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to download `idna==3.5`
+      cause: Hash mismatch for `idna==3.5`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+               sha256:[WHEEL_HASH]
+
+             Computed:
+               sha256:[WHEEL_HASH]
+    ");
+    let requests = server
+        .received_requests()
+        .await
+        .context("request recording disabled")?;
+    assert!(
+        !requests
+            .iter()
+            .any(|request| request.url.path() == "/simple/unexpected/")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_override_hash_before_building() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let marker = context.temp_dir.child("backend-executed");
+    let sdist =
+        generate_source_archive(&"idna".parse()?, &"3.5".parse()?, "", Some(marker.path()))?;
+    let hash = hex::encode(Sha256::digest(&sdist));
+    let hash512 = hex::encode(Sha512::digest(&sdist));
+    let context = context
+        .with_filter((hash.clone(), "[SDIST_HASH]"))
+        .with_filter((hash512.clone(), "[SDIST_SHA512]"));
+    let server = MockServer::start().await;
+    let index = format!("{}/simple", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/idna/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({"meta": {"api-version": "1.1"}, "name": "idna", "files": [{
+                    "filename": "idna-3.5.tar.gz",
+                    "url": format!("{}/idna-3.5.tar.gz", server.uri()),
+                    "hashes": {"sha256": hash},
+                    "upload-time": "2023-01-01T00:00:00Z",
+                }]})
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/idna-3.5.tar.gz"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(sdist.clone()))
+        .mount(&server)
+        .await;
+    tool(
+        &context,
+        "1.0.0",
+        Some("lock-version = \"1.0\"\ncreated-by = \"test\"\npackages = []\n"),
+        None,
+    )?;
+    context.temp_dir.child("overrides.txt").write_str(
+        "idna==3.5 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000\n",
+    )?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "--override", "overrides.txt", "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to download and build `idna==3.5`
+      cause: Hash mismatch for `idna==3.5`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+               sha256:[SDIST_HASH]
+
+             Computed:
+               sha256:[SDIST_HASH]
+    ");
+    assert!(!marker.path().exists());
+    let (target, platform) = if cfg!(windows) {
+        ("linux", "linux")
+    } else {
+        ("windows", "win32")
+    };
+    context.temp_dir.child("overrides.txt").write_str(&format!(
+        "idna==3.5 ; sys_platform == '{platform}' --hash=sha256:{}\n",
+        "0".repeat(64)
+    ))?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "--python-platform", target, "--override", "overrides.txt", "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to download and build `idna==3.5`
+      cause: Hash mismatch for `idna==3.5`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+               sha256:[SDIST_HASH]
+
+             Computed:
+               sha256:[SDIST_HASH]
+    ");
+    assert!(!marker.path().exists());
+    let archive = context.temp_dir.child("idna-3.5.tar.gz");
+    archive.write_binary(&sdist)?;
+    let archive_url = url::Url::from_file_path(archive.path())
+        .map_err(|()| anyhow::anyhow!("invalid archive path"))?;
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str(&format!("idna @ {archive_url}\n"))?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!("idna==3.5 --hash=sha256:{}\n", "0".repeat(64)))?;
+    let output = context
+        .tool_run()
+        .args([
+            "--locked",
+            "--isolated",
+            "--preview-features",
+            "locked-tools",
+            "--find-links",
+            "wheels",
+            "--index-url",
+            &index,
+            "--override",
+            "overrides.txt",
+            "--constraint",
+            "constraints.txt",
+            "locked-tool",
+        ])
+        .output()?;
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Hash mismatch"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!marker.path().exists());
+
+    context.temp_dir.child("overrides.txt").write_str(&format!(
+        "idna @ {archive_url}#sha256={hash}&sha512={}\n",
+        "0".repeat(128)
+    ))?;
+    let output = context
+        .tool_run()
+        .args([
+            "--locked",
+            "--isolated",
+            "--preview-features",
+            "locked-tools",
+            "--find-links",
+            "wheels",
+            "--index-url",
+            &index,
+            "--override",
+            "overrides.txt",
+            "locked-tool",
+        ])
+        .output()?;
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Hash mismatch"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!marker.path().exists());
+
+    let unnamed_url = format!("{}/unexpected.tar.gz", server.uri());
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str(&format!("{unnamed_url}#sha256={}\n", "0".repeat(64)))?;
+    let output = context
+        .tool_run()
+        .args([
+            "--locked",
+            "--isolated",
+            "--preview-features",
+            "locked-tools",
+            "--find-links",
+            "wheels",
+            "--index-url",
+            &index,
+            "--override",
+            "overrides.txt",
+            "locked-tool",
+        ])
+        .output()?;
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("An override with hashes must include its package name"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!marker.path().exists());
+
+    let bad_index = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/idna/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({"meta": {"api-version": "1.1"}, "name": "idna", "files": [{
+                    "filename": "idna-3.5.tar.gz",
+                    "url": format!("{}/idna-3.5.tar.gz", bad_index.uri()),
+                    "hashes": {"sha256": hash, "sha512": "0".repeat(128)},
+                    "upload-time": "2023-01-01T00:00:00Z",
+                }]})
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&bad_index)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/idna-3.5.tar.gz"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(sdist.clone()))
+        .mount(&bad_index)
+        .await;
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str(&format!("idna==3.5 --hash=sha256:{hash}\n"))?;
+    let bad_index_url = format!("{}/simple", bad_index.uri());
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &bad_index_url, "--override", "overrides.txt", "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to download and build `idna==3.5`
+      cause: Hash mismatch for `idna==3.5`
+
+             Expected:
+               sha256:[SDIST_HASH]
+               sha512:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+               sha256:[SDIST_HASH]
+
+             Computed:
+               sha256:[SDIST_HASH]
+               sha512:[SDIST_SHA512]
+    ");
+    assert!(!marker.path().exists());
+
+    Mock::given(method("GET"))
+        .and(path("/url-hash/idna/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            json!({"meta": {"api-version": "1.1"}, "name": "idna", "files": [{
+                "filename": "idna-3.5.tar.gz",
+                "url": format!("{}/idna-3.5.tar.gz#sha512={}", bad_index.uri(), "0".repeat(128)),
+                "hashes": {"sha256": hash},
+                "upload-time": "2023-01-01T00:00:00Z",
+            }]})
+            .to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&bad_index)
+        .await;
+    let fragment_index_url = format!("{}/url-hash", bad_index.uri());
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &fragment_index_url, "--override", "overrides.txt", "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to download and build `idna==3.5`
+      cause: Hash mismatch for `idna==3.5`
+
+             Expected:
+               sha256:[SDIST_HASH]
+               sha256:[SDIST_HASH]
+               sha512:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[SDIST_HASH]
+               sha512:[SDIST_SHA512]
+    ");
+    assert!(!marker.path().exists());
+
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str("idna==3.5\n")?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!(
+            "idna==3.5 --hash=sha256:{}\nidna==3.5 --hash=sha256:{hash}\n",
+            "0".repeat(64)
+        ))?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "--override", "overrides.txt", "--constraint", "constraints.txt", "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to download and build `idna==3.5`
+      cause: Hash mismatch for `idna==3.5`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+               sha256:[SDIST_HASH]
+               sha256:[SDIST_HASH]
+
+             Computed:
+               sha256:[SDIST_HASH]
+    ");
+    assert!(!marker.path().exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_checks_sdist_constraints_before_building() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let marker = context.temp_dir.child("backend-executed");
+    let sdist =
+        generate_source_archive(&"idna".parse()?, &"3.3".parse()?, "", Some(marker.path()))?;
+    let hash = hex::encode(Sha256::digest(&sdist));
+    let lock_hash = hex::encode(Sha512::digest(&sdist));
+    let constraint_hash = hex::encode(Sha384::digest(&sdist));
+    let context = context
+        .with_filter((hash.clone(), "[INDEX_HASH]"))
+        .with_filter((lock_hash.clone(), "[LOCK_HASH]"))
+        .with_filter((constraint_hash.clone(), "[CONSTRAINT_HASH]"));
+    let server = MockServer::start().await;
+    let filename = "idna-3.3.tar.gz";
+    let (index, url) = mount_locked_artifact(&server, "sdist", filename, &sdist, &hash, None).await;
+    let lock = locked_artifact(
+        &index,
+        &url,
+        filename,
+        &format!("sha512 = \"{lock_hash}\""),
+        "sdist",
+    );
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!("idna==3.3 --hash=sha384:{}\n", "0".repeat(96)))?;
+    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--isolated", "--preview-features", "locked-tools", "--find-links", "wheels", "--index-url", &index, "--constraint", "constraints.txt", "locked-tool"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Hash mismatch for `idna==3.3`
+
+    Expected:
+      sha512:[LOCK_HASH]
+      sha384:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+      sha256:[INDEX_HASH]
+
+    Computed:
+      sha256:[INDEX_HASH]
+      sha384:[CONSTRAINT_HASH]
+      sha512:[LOCK_HASH]
+    ");
+    assert!(!marker.path().exists());
+    let mut alternatives = String::new();
+    for value in 0..130 {
+        write!(&mut alternatives, " --hash=sha384:{value:096x}")?;
+    }
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!(
+            "idna==3.3{alternatives} --hash=sha384:{constraint_hash}\n"
+        ))?;
+    let requests_before = server
+        .received_requests()
+        .await
+        .context("request recording disabled")?
+        .iter()
+        .filter(|request| request.url.path() == "/sdist/artifact")
+        .count();
+    context
+        .tool_run()
+        .args([
+            "--locked",
+            "--isolated",
+            "--preview-features",
+            "locked-tools",
+            "--find-links",
+            "wheels",
+            "--index-url",
+            &index,
+            "--constraint",
+            "constraints.txt",
+            "locked-tool",
+        ])
+        .assert()
+        .success();
+    assert!(marker.path().exists());
+    let requests_after = server
+        .received_requests()
+        .await
+        .context("request recording disabled")?
+        .iter()
+        .filter(|request| request.url.path() == "/sdist/artifact")
+        .count();
+    assert_eq!(requests_after - requests_before, 1);
+    fs_err::remove_file(marker.path())?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!(
+            "idna==3.3 --hash=sha384:{constraint_hash} --hash=md5:{}\n",
+            "0".repeat(32)
+        ))?;
+    context
+        .tool_run()
+        .args([
+            "--locked",
+            "--isolated",
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--find-links",
+            "wheels",
+            "--index-url",
+            &index,
+            "--constraint",
+            "constraints.txt",
+            "locked-tool",
+        ])
+        .assert()
+        .success();
+    assert!(!marker.path().exists());
     Ok(())
 }
