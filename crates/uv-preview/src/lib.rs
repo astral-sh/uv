@@ -245,8 +245,6 @@ pub enum PreviewFeature {
     /// `uv pip install -r pylock.toml` or `uv pip sync pylock.toml`; enabling this feature silences
     /// the preview warning.
     Pylock,
-    /// Allows exporting a multi-use `pylock.toml`.
-    PylockMultiUse,
     /// The [`add-bounds`](../reference/settings.md#add-bounds) setting controls the default version
     /// bounds added by `uv add`. Instead of the default lower bound, dependencies can be
     /// constrained to a major or minor version range, or pinned to an exact version.
