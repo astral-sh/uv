@@ -198,7 +198,7 @@ fn lockfile_v2_conflict_discovery_respects_parent_reachability() -> Result<()> {
         ]
 
         [package.metadata]
-        extras = ["feature"]
+        provides-extras = ["feature"]
 
         [[package]]
         name = "q"
@@ -229,7 +229,7 @@ fn lockfile_v2_conflict_discovery_respects_parent_reachability() -> Result<()> {
     Ok(())
 }
 
-/// Static and package metadata use the same dependency and extra field names.
+/// Static and package metadata retain their Core Metadata field names.
 #[test]
 fn lockfile_v2_metadata_names() -> Result<()> {
     let input = indoc! {r#"
@@ -273,23 +273,14 @@ fn lockfile_v2_metadata_names() -> Result<()> {
     +[[workspace.dependency-metadata]]
      name = "child"
      version = "1.0.0"
-    -requires-dist = ["leaf>=1 ; extra == 'feature'"]
-    +dependencies = ["leaf>=1 ; extra == 'feature'"]
+     requires-dist = ["leaf>=1 ; extra == 'feature'"]
      requires-python = ">=3.12"
-    -provides-extras = ["feature"]
-    +extras = ["feature"]
+     provides-extras = ["feature"]
 
     -[[manifest.dependency-metadata]]
     +[[workspace.dependency-metadata]]
      name = "leaf"
      version = "1.0.0"
-
-    @@ -21,4 +21,4 @@
-     feature = []
-
-     [package.metadata]
-    -provides-extras = ["feature"]
-    +extras = ["feature"]
     "#);
     assert_eq!(Lock::from_canonical_toml(&upgraded)?, expected);
     assert_eq!(toml::from_str::<Lock>(&upgraded)?, expected);
@@ -863,7 +854,7 @@ fn lockfile_v2_dependencies() -> Result<()> {
          "sys_platform == 'win32'",
          "sys_platform != 'win32'",
      ]
-    @@ -14,16 +13,16 @@
+    @@ -14,11 +13,11 @@
      version = "1.0.0"
      source = { virtual = "base" }
 
@@ -874,16 +865,9 @@ fn lockfile_v2_dependencies() -> Result<()> {
      ]
 
      [package.metadata]
-    -requires-dist = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
-    -provides-extras = ["feature"]
-    +dependencies = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
-    +extras = ["feature"]
-
-     [[package]]
-     name = "conditional"
-     version = "1.0.0"
-     source = { virtual = "conditional" }
-    @@ -52,35 +51,35 @@
+     requires-dist = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
+     provides-extras = ["feature"]
+    @@ -52,25 +51,25 @@
      [[package]]
      name = "project"
      version = "0.1.0"
@@ -914,17 +898,13 @@ fn lockfile_v2_dependencies() -> Result<()> {
      ]
 
      [package.metadata]
-    -requires-dist = [
-    +dependencies = [
+     requires-dist = [
          { name = "base", extras = ["feature"], virtual = "base" },
-         { name = "conditional", marker = "sys_platform == 'win32'", virtual = "conditional" },
-         { name = "forked", marker = "sys_platform != 'win32'", virtual = "forked-v2" },
-         { name = "forked", marker = "sys_platform == 'win32'", virtual = "forked-v1" },
+    @@ -80,7 +79,7 @@
          { name = "plain", virtual = "plain" },
          { name = "plain", marker = "extra == 'feature'", virtual = "plain" },
      ]
-    -provides-extras = ["feature"]
-    +extras = ["feature"]
+     provides-extras = ["feature"]
 
     -[package.metadata.requires-dev]
     +[package.metadata.dependency-groups]
@@ -1263,7 +1243,7 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
         source = { virtual = "." }
 
         [package.metadata]
-        dependencies = [
+        requires-dist = [
             { name = "plain" },
             { name = "bounded", specifier = ">=1" },
             { name = "extra", extras = ["feature"] },
@@ -1294,7 +1274,7 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
     source = { virtual = "." }
 
     [package.metadata]
-    dependencies = [
+    requires-dist = [
         { name = "bounded", specifier = ">=1" },
         { name = "extra", extras = ["feature"] },
         { name = "group", groups = ["dev"] },
@@ -1328,13 +1308,13 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
 
     -[manifest]
     -requirements = [{ name = "plain" }]
-    +[workspace]
-    +dependencies = ["plain"]
-
+    -
     -[manifest.dependency-groups]
     -dev = [{ name = "plain" }]
     -docs = [{ name = "plain" }]
-    -
+    +[workspace]
+    +dependencies = ["plain"]
+
     -[manifest.group-requires-python]
     -docs = ">=3.13"
     +[workspace.dependency-groups]
@@ -1343,14 +1323,7 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
 
      [[package]]
      name = "project"
-    @@ -17,15 +14,15 @@
-     source = { virtual = "." }
-
-     [package.metadata]
-    -requires-dist = [
-    +dependencies = [
-         { name = "bounded", specifier = ">=1" },
-         { name = "extra", extras = ["feature"] },
+    @@ -23,9 +20,9 @@
          { name = "group", groups = ["dev"] },
          { name = "index", index = "https://example.com/simple" },
          { name = "marker", marker = "sys_platform == 'linux'" },
@@ -1449,11 +1422,10 @@ fn lockfile_v2_git_sources() -> Result<()> {
      ]
 
      [package.metadata]
-    -requires-dist = [
+     requires-dist = [
     -    { name = "archive", git = "https://example.com/repo?path=dist%2Farchive-1.0.0.tar.gz&rev=main&lfs=true" },
     -    { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork" },
     -    { name = "pinned", git = "https://example.com/repo?rev=0123456789012345678901234567890123456789#0123456789012345678901234567890123456789" },
-    +dependencies = [
     +    { name = "archive", git = "https://example.com/repo", rev = "main", path = "dist/archive-1.0.0.tar.gz", lfs = true },
     +    { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo", branch = "feature/work", subdirectory = "python", lfs = true },
     +    { name = "pinned", git = "https://example.com/repo", rev = "0123456789012345678901234567890123456789", commit = "0123456789012345678901234567890123456789" },
