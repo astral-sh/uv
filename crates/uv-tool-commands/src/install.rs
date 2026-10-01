@@ -393,8 +393,6 @@ pub async fn install(
     )
     .await?;
 
-    super::locked::check_supported_modifiers(locked, &spec)?;
-
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
@@ -458,21 +456,25 @@ pub async fn install(
         .collect::<Vec<_>>();
 
     // Resolve the overrides.
-    if locked {
-        super::locked::check_constraints(&spec.constraints)?;
-    }
-    // Name resolution returns named requirements first, followed by unnamed requirements.
-    let override_hashes = spec
-        .overrides
-        .iter()
-        .filter(|entry| matches!(entry.requirement, UnresolvedRequirement::Named(_)))
-        .chain(
-            spec.overrides
-                .iter()
-                .filter(|entry| matches!(entry.requirement, UnresolvedRequirement::Unnamed(_))),
-        )
-        .map(|entry| entry.hashes.clone())
-        .collect::<Vec<_>>();
+    let override_hashes = if locked {
+        super::locked::named_override_hashes(
+            &spec.overrides,
+            &spec.constraints,
+            &spec.override_dependencies,
+        )?
+    } else {
+        // Name resolution returns named requirements first, followed by unnamed requirements.
+        spec.overrides
+            .iter()
+            .filter(|entry| matches!(entry.requirement, UnresolvedRequirement::Named(_)))
+            .chain(
+                spec.overrides
+                    .iter()
+                    .filter(|entry| matches!(entry.requirement, UnresolvedRequirement::Unnamed(_))),
+            )
+            .map(|entry| entry.hashes.clone())
+            .collect()
+    };
     let resolved_overrides = resolve_names(
         spec.overrides,
         &interpreter,
