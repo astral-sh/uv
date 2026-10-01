@@ -10623,7 +10623,7 @@ fn conflict_item_unknown_field() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 10, column 17
                 |
              10 |               { name = "foo", extra = "extra1" },

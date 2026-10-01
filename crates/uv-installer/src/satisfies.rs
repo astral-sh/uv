@@ -433,9 +433,9 @@ impl RequirementSatisfaction {
         if let Ok(Some(wheel_tags)) = distribution.read_tags() {
             if !wheel_tags.is_compatible(tags) {
                 if let Some(hint) = generate_dist_compatibility_hint(wheel_tags, tags) {
-                    debug!("Platform tags mismatch for {distribution}: {hint}");
+                    debug!("Platform tags mismatch for `{distribution}`: {hint}");
                 } else {
-                    debug!("Platform tags mismatch for {distribution}");
+                    debug!("Platform tags mismatch for `{distribution}`");
                 }
                 return Self::Mismatch;
             }

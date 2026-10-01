@@ -1050,7 +1050,7 @@ pub(crate) async fn run(
         .as_ref()
         .map(|dir| {
             debug!(
-                "Creating ephemeral environment at: `{}`",
+                "Creating ephemeral environment at: {}",
                 dir.path().simplified_display()
             );
 
@@ -1169,7 +1169,7 @@ pub(crate) async fn run(
                     }
                     match create_symlink(&source, &target) {
                         Ok(()) => trace!(
-                            "Created link for {} -> {}",
+                            "Created link for `{}` -> `{}`",
                             target.user_display(),
                             source.user_display()
                         ),
@@ -1325,7 +1325,7 @@ pub(crate) async fn run(
     // TODO(zanieb): Throw a nicer error message if the command is not found
     let handle = process
         .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
+        .with_context(|| format!("Failed to spawn: {}", command.display_executable()))?;
 
     run_to_completion(handle).await
 }
@@ -2126,7 +2126,7 @@ fn copy_entrypoint(
         .open(target)?;
     file.write_all(contents.as_bytes())?;
 
-    trace!("Updated entrypoint at {}", target.user_display());
+    trace!("Updated entrypoint at `{}`", target.user_display());
 
     Ok(())
 }
@@ -2161,7 +2161,7 @@ fn copy_entrypoint(
         .open(target)?;
     launcher.write_to_file(&mut file, is_gui)?;
 
-    trace!("Updated entrypoint at {}", target.user_display());
+    trace!("Updated entrypoint at `{}`", target.user_display());
 
     Ok(())
 }

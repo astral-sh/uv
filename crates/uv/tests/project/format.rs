@@ -38,13 +38,13 @@ fn format_reuses_settings_workspace_discovery() -> Result<()> {
     1 file already formatted
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/member
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found project root: [TEMP_DIR]/
     ");
 
     Ok(())
@@ -354,7 +354,7 @@ fn format_fails_malformed_pyproject() -> Result<()> {
       key with no value, expected `=`
 
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 11
                |
              1 | malformed pyproject.toml

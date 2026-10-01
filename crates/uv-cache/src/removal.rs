@@ -112,7 +112,7 @@ impl Removal {
                 }
                 Err(PhysicalSpaceError::UnsupportedFilesystem) => {
                     debug!(
-                        "Fine-grained space accounting is unsupported for {}; falling back to coarse accounting",
+                        "Fine-grained space accounting is unsupported for `{}`; falling back to coarse accounting",
                         path.display()
                     );
                     self.fine_bytes = None;
@@ -120,7 +120,7 @@ impl Removal {
                 }
                 Err(PhysicalSpaceError::UnmeasurableFile(error)) => {
                     debug!(
-                        "Failed to measure physical space for {}: {error}",
+                        "Failed to measure physical space for `{}`: {error}",
                         path.display()
                     );
                     self.fine_bytes_incomplete = true;

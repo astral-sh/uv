@@ -2585,8 +2585,8 @@ fn python_install_cached() {
 
     // 3.12 isn't cached, so it can't be installed
     let context = context.with_filter((
-        "cpython-3.12.*.tar.gz",
-        "cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz",
+        r"https://[^`]+/cpython-3\.12[^`]+\.tar\.gz",
+        "[PYTHON_DOWNLOAD_URL]",
     ));
     uv_snapshot!(context.filters(), context
         .python_install()
@@ -2596,7 +2596,7 @@ fn python_install_cached() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
-      cause: An offline Python installation was requested, but cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in python-cache
+      cause: An offline Python installation was requested, but `cpython-3.12.[LATEST]-[PLATFORM]` (from `[PYTHON_DOWNLOAD_URL]`) is missing in `python-cache`
     ");
 }
 
@@ -2687,8 +2687,8 @@ fn python_install_no_cache() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
-      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
-      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
     ");
 }
 

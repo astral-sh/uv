@@ -49,7 +49,7 @@ fn missing_requirements_txt() {
         .arg("requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.txt`
+    error: File not found: requirements.txt
     "
     );
 }
@@ -549,7 +549,7 @@ fn uninstall_record_path_traversal() -> Result<()> {
         .arg("evilpkg"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: [..]/traversal_target.txt
+    warning: Invalid `RECORD` entry in `evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)` that escapes the Python environment, skipping: [..]/traversal_target.txt
     Uninstalled 1 package in [TIME]
      - evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)
     ");

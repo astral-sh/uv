@@ -404,11 +404,11 @@ impl BuildContext for BuildDispatch<'_> {
         let hasher = requirements.hasher();
 
         debug!(
-            "Installing in {} in {}",
+            "Installing `{}` in `{}`",
             resolution
                 .distributions()
                 .map(ToString::to_string)
-                .join(", "),
+                .join("`, `"),
             venv.root().display(),
         );
 

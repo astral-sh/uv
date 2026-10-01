@@ -25,7 +25,7 @@ fn prune_no_op() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -121,7 +121,7 @@ fn prune_stale_directory() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
@@ -189,7 +189,7 @@ fn prune_cached_env() {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing cached environment: [CACHE_DIR]/environments-v2/[ENTRY]
@@ -232,7 +232,7 @@ fn prune_stale_symlink() -> Result<()> {
     uv_snapshot!(filters, context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
@@ -260,7 +260,7 @@ async fn prune_force() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -277,7 +277,7 @@ async fn prune_force() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
@@ -435,10 +435,10 @@ fn prune_stale_revision() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
     DEBUG Skipping `pyproject.toml` in `[TEMP_DIR]/` (no `[tool]` section)
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v10/[ENTRY]
@@ -537,10 +537,10 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
     DEBUG Skipping `pyproject.toml` in `[TEMP_DIR]/` (no `[tool]` section)
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v10/[ENTRY]

@@ -1192,7 +1192,7 @@ fn tool_run_requirements_txt_arguments() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]

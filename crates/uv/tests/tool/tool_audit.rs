@@ -208,7 +208,7 @@ fn tool_audit_invalid_receipt() -> Result<()> {
         , @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Tool `simple-launcher` has an invalid receipt: Failed to read `uv-receipt.toml` at [TEMP_DIR]/tools/simple-launcher/uv-receipt.toml
+    error: Tool `simple-launcher` has an invalid receipt: Failed to read `uv-receipt.toml` at `[TEMP_DIR]/tools/simple-launcher/uv-receipt.toml`
     ");
 
     Ok(())

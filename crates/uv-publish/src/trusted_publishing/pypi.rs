@@ -45,7 +45,9 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
             scheme,
             self.registry.authority()
         ))?;
-        debug!("Requesting revocation of the trusted publishing upload token at {burn_token_url}");
+        debug!(
+            "Requesting revocation of the trusted publishing upload token at `{burn_token_url}`"
+        );
         self.client
             .post(Url::from(burn_token_url.clone()))
             .json(&BurnTokenRequest { token })
@@ -73,7 +75,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
             scheme,
             self.registry.authority()
         ))?;
-        debug!("Querying the trusted publishing audience from {audience_url}");
+        debug!("Querying the trusted publishing audience from `{audience_url}`");
         let response = self
             .client
             .get(Url::from(audience_url.clone()))
@@ -105,7 +107,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
             scheme,
             self.registry.authority()
         ))?;
-        debug!("Querying the trusted publishing upload token from {mint_token_url}");
+        debug!("Querying the trusted publishing upload token from `{mint_token_url}`");
         let mint_token_payload = MintTokenRequest {
             token: oidc_token.reveal().to_string(),
         };

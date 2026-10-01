@@ -980,7 +980,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                             }) = &url.parsed_url
                             {
                                 debug!(
-                                    "Marking explicit source tree for reinstall: `{}`",
+                                    "Marking explicit source tree for reinstall: {}",
                                     install_path.display()
                                 );
                                 args.settings.reinstall = args
@@ -995,7 +995,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                             &requirement.url.parsed_url
                         {
                             debug!(
-                                "Marking explicit source tree for reinstall: `{}`",
+                                "Marking explicit source tree for reinstall: {}",
                                 install_path.display()
                             );
                             args.settings.reinstall =
@@ -2555,7 +2555,7 @@ async fn run_project(
                             }) = &url.parsed_url
                             {
                                 debug!(
-                                    "Marking explicit source tree for reinstall: `{}`",
+                                    "Marking explicit source tree for reinstall: {}",
                                     install_path.display()
                                 );
                                 args.settings.reinstall = args
@@ -2570,7 +2570,7 @@ async fn run_project(
                             &requirement.url.parsed_url
                         {
                             debug!(
-                                "Marking explicit source tree for reinstall: `{}`",
+                                "Marking explicit source tree for reinstall: {}",
                                 install_path.display()
                             );
                             args.settings.reinstall =

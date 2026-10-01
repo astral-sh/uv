@@ -538,7 +538,7 @@ impl<'a> Planner<'a> {
                                 }
                             }
                             Err(err) => {
-                                debug!("Failed to get timestamp for wheel {wheel} ({err})");
+                                debug!("Failed to get timestamp for wheel `{wheel}` ({err})");
                             }
                         },
                         Ok(None) => {}
@@ -621,7 +621,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );
@@ -649,7 +649,7 @@ impl<'a> Planner<'a> {
                         }
 
                         warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                             sdist,
                             wheel.filename()
                         );
@@ -670,7 +670,7 @@ impl<'a> Planner<'a> {
                         }
 
                         warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                             sdist,
                             wheel.filename()
                         );
@@ -697,7 +697,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );
@@ -733,7 +733,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );

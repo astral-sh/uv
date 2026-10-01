@@ -2343,13 +2343,13 @@ fn sync_non_project_frozen() -> Result<()> {
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `foo`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/foo`
-    TRACE Processing workspace member: `bar`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/bar`
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: foo
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/foo
+    TRACE Processing workspace member: bar
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/bar
+    DEBUG Found project root: [TEMP_DIR]/
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
@@ -5256,7 +5256,7 @@ fn sync_default_groups_gibberish() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 14, column 26
                 |
              14 |         default-groups = "gibberish"
@@ -6648,16 +6648,16 @@ fn no_install_workspace() -> Result<()> {
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `child`
-    DEBUG Found project root: `[TEMP_DIR]/`
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `child`
-    DEBUG Ignoring missing workspace member: `[TEMP_DIR]/child`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: child
+    DEBUG Found project root: [TEMP_DIR]/
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: child
+    DEBUG Ignoring missing workspace member: [TEMP_DIR]/child
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Installed 4 packages in [TIME]
@@ -10325,7 +10325,7 @@ fn sync_invalid_environment() -> Result<()> {
         uv_snapshot!(context.filters(), context.sync(), @"
         exit_code: 0 (success)
         ----- stderr -----
-        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> does-not-exist
+        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: `.venv/[BIN]/[PYTHON]` -> `does-not-exist`
         Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
         Removed virtual environment at: .venv
         Creating virtual environment at: .venv
@@ -17364,7 +17364,7 @@ fn sync_fails_ambiguous_url() -> Result<()> {
          |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
       ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 10, column 15
                 |
              10 |         url = "https://user/name:password@domain/a/b/c"

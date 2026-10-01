@@ -269,7 +269,7 @@ fn missing_requirements_txt() {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.txt`
+    error: File not found: requirements.txt
     "
     );
 
@@ -543,7 +543,7 @@ fn missing_pyproject_toml() {
         .arg("pyproject.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `pyproject.toml`
+    error: File not found: pyproject.toml
     "
     );
 }
@@ -588,7 +588,7 @@ fn missing_find_links_from_requirements_file() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid URL in `requirements/requirements.txt` at position 0: `./missing`
+    error: Invalid URL in `requirements/requirements.txt` at position 0: ./missing
       cause: relative URL without a base
     "
     );
@@ -614,7 +614,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
         |     ^
       key with no value, expected `=`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: Invalid `pyproject.toml`
       cause: TOML parse error at line 1, column 5
                |
@@ -638,7 +638,7 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
         .arg("pyproject.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 1
                |
              1 | [project]
@@ -839,7 +839,7 @@ fn invalid_uv_toml_option_disallowed_automatic_discovery() -> Result<()> {
         .arg("iniconfig"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+    error: Failed to parse `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "
     );
 
@@ -860,7 +860,7 @@ fn invalid_uv_toml_option_disallowed_command_line() -> Result<()> {
         .arg("foo.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `foo.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+    error: Failed to parse `foo.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "
     );
 
@@ -1205,7 +1205,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Error while accessing remote requirements file: `http://[LOCALHOST]/requirements.txt`
+    error: Error while accessing remote requirements file: http://[LOCALHOST]/requirements.txt
     "
     );
 
@@ -1757,7 +1757,7 @@ fn reinstall_incomplete() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing `RECORD` file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at `[SITE_PACKAGES]/anyio-3.7.0.dist-info` due to missing `RECORD` file. Installation may result in an incomplete environment.
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
@@ -8556,7 +8556,7 @@ fn find_links_relative_to_working_directory() -> Result<()> {
         .arg("requirements/requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid URL in `requirements/requirements.txt` at position 11: `./links`
+    error: Invalid URL in `requirements/requirements.txt` at position 11: ./links
       cause: relative URL without a base
     "
     );
@@ -11614,7 +11614,7 @@ fn missing_top_level() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top_level.txt` file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at `[SITE_PACKAGES]/suds_community.egg-info` due to missing `top_level.txt` file. Installation may result in an incomplete environment.
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      ~ suds-community==0.8.5
@@ -12949,7 +12949,7 @@ fn invalid_group() -> Result<()> {
         .arg("--group").arg("./:foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: ./
+    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: ./
 
     For more information, try '--help'.
     ");
@@ -12959,7 +12959,7 @@ fn invalid_group() -> Result<()> {
         .arg("--group").arg("subdir/:foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: subdir/
+    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: subdir/
 
     For more information, try '--help'.
     ");
@@ -13936,7 +13936,7 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid artifact URL: `data:application/octet-stream,ignored`
+    error: Invalid artifact URL: data:application/octet-stream,ignored
     "
     );
 
@@ -13961,7 +13961,7 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid artifact URL: `data:application/octet-stream,ignored`
+    error: Invalid artifact URL: data:application/octet-stream,ignored
     "
     );
 
@@ -14832,7 +14832,7 @@ fn pep_751_rejects_mismatched_wheel_identity() -> Result<()> {
         .arg("pylock.toml"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The wheel filename "invalid.whl" is invalid: Must have a version
+    error: The wheel filename `invalid.whl` is invalid: Must have a version
     "#);
 
     Ok(())
@@ -15363,7 +15363,7 @@ requires_python = "==3.13.*"
         .arg("pylock.toml:test"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value 'pylock.toml:test' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: pylock.toml
+    error: invalid value 'pylock.toml:test' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: pylock.toml
 
     For more information, try '--help'.
     "
@@ -15814,7 +15814,7 @@ fn reject_wheel_entrypoint_paths() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
-      cause: The wheel is invalid: Script path must resolve to a file within the scripts directory: `[TEMP_DIR]/escaped-entrypoint`
+      cause: The wheel is invalid: Script path must resolve to a file within the scripts directory: [TEMP_DIR]/escaped-entrypoint
     "
     );
 
@@ -16210,7 +16210,7 @@ fn offline_refresh_conflict_verbose() {
         .env(EnvVars::RUST_BACKTRACE, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     error: the argument `--offline` cannot be used with `--refresh`
     ");
@@ -17448,7 +17448,7 @@ fn install_with_system_interpreter() {
     exit_code: 2 (failure)
     ----- stderr -----
     Using Python 3.12.[LATEST] environment at: managed/cpython-3.12.[LATEST]-[PLATFORM]
-    error: The interpreter at managed/cpython-3.12.[LATEST]-[PLATFORM] is externally managed, and indicates the following:
+    error: The interpreter at `managed/cpython-3.12.[LATEST]-[PLATFORM]` is externally managed, and indicates the following:
 
       This Python installation is managed by uv and should not be modified.
 
@@ -18083,7 +18083,7 @@ fn fail_on_bz2_wheel() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `futzed-bz2 @ http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
-      cause: Failed to read metadata: `http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
+      cause: Failed to read metadata: http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl
       cause: Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );
@@ -18102,7 +18102,7 @@ fn fail_on_lzma_wheel() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
-      cause: Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
+      cause: Failed to read metadata: http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl
       cause: Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );

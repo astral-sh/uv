@@ -923,14 +923,14 @@ fn python_source_files_for_installs<'a>(
     ];
     installs.iter().flat_map(move |install| {
         let dist_info = match installed_dist_info_path(&layout, install.path()).with_context(|| {
-            format!("Failed to locate installed distribution for bytecode compilation: `{install}`")
+            format!("Failed to locate installed distribution for bytecode compilation: {install}")
         }) {
             Ok(dist_info) => dist_info,
             Err(err) => return Box::new(std::iter::once(Err(err))) as PythonSourceFileIterator,
         };
         let Some(record_root) = dist_info.parent().map(|path| CWD.join(path)) else {
             return Box::new(std::iter::once(Err(anyhow!(
-                "Invalid installed distribution path: `{}`",
+                "Invalid installed distribution path: {}",
                 dist_info.user_display()
             ))));
         };
@@ -1126,7 +1126,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at `{}` due to missing `RECORD` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }
@@ -1134,7 +1134,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at `{}` due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }

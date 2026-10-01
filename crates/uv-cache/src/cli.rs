@@ -106,7 +106,7 @@ fn migrate_windows_cache(source: &Path, destination: &Path) -> Result<(), io::Er
         // Migrate the cache bucket.
         if source.exists() {
             debug!(
-                "Migrating cache bucket from {} to {}",
+                "Migrating cache bucket from `{}` to `{}`",
                 source.display(),
                 destination.display()
             );
@@ -125,7 +125,7 @@ fn migrate_windows_cache(source: &Path, destination: &Path) -> Result<(), io::Er
         // Migrate the cache file.
         if source.exists() {
             debug!(
-                "Migrating cache file from {} to {}",
+                "Migrating cache file from `{}` to `{}`",
                 source.display(),
                 destination.display()
             );

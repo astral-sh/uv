@@ -190,7 +190,7 @@ fn no_credentials() {
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
       cause: Failed to send POST request
-      cause: Missing credentials for https://test.pypi.org/legacy/
+      cause: Missing credentials for: https://test.pypi.org/legacy/
     "
     );
 }
@@ -234,9 +234,9 @@ fn dubious_filenames() {
         .arg(context.temp_dir.join("*")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/data.tar.gz`
-    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
-    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: [TEMP_DIR]/data.tar.gz
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: [TEMP_DIR]/not-a-wheel.whl
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: [TEMP_DIR]/not-sdist-1-2-3-asdf.zip
     error: No files found to publish
     "
     );
@@ -536,7 +536,7 @@ async fn read_index_credential_env_vars_for_check_url() {
     Uploading astral_test_private-0.1.0-py3-none-any.whl ([SIZE]KiB)
     error: Failed to publish `dist/astral_test_private-0.1.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
       cause: Failed to send POST request
-      cause: Missing credentials for http://[LOCALHOST]/upload
+      cause: Missing credentials for: http://[LOCALHOST]/upload
     "
     );
     // Test that it works with credentials
@@ -836,7 +836,7 @@ async fn trusted_publishing_burn_failure() {
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
+    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: http://[LOCALHOST]/_/oidc/burn-token
     "
     );
 
@@ -861,7 +861,7 @@ async fn trusted_publishing_burn_failure() {
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
+    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: http://[LOCALHOST]/_/oidc/burn-token
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
       cause: Server returned status code 400 Bad Request. Server says: Upload failed
     "
@@ -915,7 +915,7 @@ async fn trusted_publishing_burn_after_prepare_failure() {
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing a-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+    error: Failed to publish: a-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
@@ -940,7 +940,7 @@ async fn trusted_publishing_burn_after_prepare_failure() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Hashing z-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `z-1.0.0-py3-none-any.whl`
+    error: Failed to publish: z-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
@@ -1012,7 +1012,7 @@ async fn trusted_publishing_dry_run() {
     ----- stderr -----
     Checking 1 file against http://[LOCALHOST]/upload
     Checking a-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+    error: Failed to publish: a-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
@@ -1276,12 +1276,12 @@ fn dry_run_reports_all_errors() {
     ----- stderr -----
     Checking 2 files against https://test.pypi.org/legacy/
     Checking a-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+    error: Failed to publish: a-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
     Checking b-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `b-1.0.0-py3-none-any.whl`
+    error: Failed to publish: b-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
@@ -1327,8 +1327,8 @@ async fn publish_invalid_attestations() {
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
-      cause: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+    error: Failed to publish: [WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl
+      cause: Invalid PEP 740 attestation (not JSON): [TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation
       cause: EOF while parsing an object at line 1 column 1
     ");
 
@@ -1346,12 +1346,12 @@ async fn publish_invalid_attestations() {
     ----- stderr -----
     Checking 2 files against http://[LOCALHOST]/upload
     Checking basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
-      cause: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+    error: Failed to publish: [WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl
+      cause: Invalid PEP 740 attestation (not JSON): [TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation
       cause: EOF while parsing an object at line 1 column 1
     Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
-      cause: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/ok-1.0.0-py3-none-any.whl.publish.attestation`
+    error: Failed to publish: [WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl
+      cause: Invalid PEP 740 attestation (not JSON): [TEMP_DIR]/ok-1.0.0-py3-none-any.whl.publish.attestation
       cause: EOF while parsing an object at line 1 column 1
     Found issues with 2 files
     ");

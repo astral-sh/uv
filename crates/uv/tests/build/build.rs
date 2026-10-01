@@ -107,7 +107,7 @@ fn build_basic() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      cause: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
+      cause: `[TEMP_DIR]/` does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
     ");
 
     // Build to a specified path, even if builds are disabled for the project by name.

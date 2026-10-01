@@ -28,7 +28,7 @@ fn missing_requirements_txt() {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.txt`
+    error: File not found: requirements.txt
     ");
 
     requirements_txt.assert(predicates::path::missing());
@@ -1414,7 +1414,7 @@ fn install_unnamed_wheel_url_rejects_path_traversal() -> Result<()> {
         .arg("--strict"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: The wheel filename "pkg-1.0-py3-none-../../../target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    error: The wheel filename `pkg-1.0-py3-none-../../../target.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
     "#
     );
 
@@ -1435,7 +1435,7 @@ fn install_unnamed_wheel_url_rejects_stream_separator() -> Result<()> {
         .arg("--strict"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: The wheel filename "pkg-1.0-py3-none-target:stream.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    error: The wheel filename `pkg-1.0-py3-none-target:stream.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
     "#
     );
 
@@ -1514,7 +1514,7 @@ fn mismatched_name() -> Result<()> {
       cause: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
-      Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+      Caused by: The .dist-info directory `tomli-2.0.1` does not start with the normalized package name: foo
     "
     );
 
@@ -3967,7 +3967,7 @@ fn require_hashes_git() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
-      cause: Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      cause: Hash-checking is not supported for Git repositories: anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82
     "
     );
 
@@ -3994,7 +3994,7 @@ fn require_hashes_source_tree() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
-      cause: Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
+      cause: Hash-checking is not supported for local directories: black @ file://[WORKSPACE]/test/packages/black_editable
     "
     );
 

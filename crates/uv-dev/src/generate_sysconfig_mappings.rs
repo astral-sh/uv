@@ -60,16 +60,16 @@ pub(crate) async fn main(args: &Args) -> Result<()> {
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
                     bail!(
-                        "{filename} changed, please run `cargo dev generate-sysconfig-metadata`:\n{comparison}"
+                        "`{filename}` changed, please run `cargo dev generate-sysconfig-metadata`:\n{comparison}"
                     );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!("{filename} not found, please run `cargo dev generate-sysconfig-metadata`");
+                bail!("`{filename}` not found, please run `cargo dev generate-sysconfig-metadata`");
             }
             Err(err) => {
                 bail!(
-                    "{filename} changed, please run `cargo dev generate-sysconfig-metadata`:\n{err}"
+                    "`{filename}` changed, please run `cargo dev generate-sysconfig-metadata`:\n{err}"
                 );
             }
         },
@@ -88,7 +88,7 @@ pub(crate) async fn main(args: &Args) -> Result<()> {
             }
             Err(err) => {
                 bail!(
-                    "{filename} changed, please run `cargo dev generate-sysconfig-metadata`:\n{err}"
+                    "`{filename}` changed, please run `cargo dev generate-sysconfig-metadata`:\n{err}"
                 );
             }
         },

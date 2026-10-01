@@ -3979,7 +3979,7 @@ fn tool_install_requirements_txt_arguments() {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
@@ -5424,8 +5424,8 @@ async fn tool_install_default_credentials() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade executable-application
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
-      cause: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Missing credentials for: http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     // Attempt to upgrade.

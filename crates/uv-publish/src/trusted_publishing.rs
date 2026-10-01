@@ -28,9 +28,9 @@ pub enum TrustedPublishingError {
     /// publishing outside of something like GitHub Actions or GitLab CI.
     #[error("No OIDC token discovered: are you in a supported trusted publishing environment?")]
     NoToken,
-    #[error("Failed to fetch: `{0}`")]
+    #[error("Failed to fetch: {0}")]
     Reqwest(DisplaySafeUrl, #[source] reqwest::Error),
-    #[error("Failed to fetch: `{0}`")]
+    #[error("Failed to fetch: {0}")]
     ReqwestMiddleware(DisplaySafeUrl, #[source] reqwest_middleware::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),

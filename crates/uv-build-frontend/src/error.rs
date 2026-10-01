@@ -22,7 +22,7 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error(transparent)]
     Lowering(#[from] uv_distribution::MetadataError),
-    #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
+    #[error("`{}` does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
@@ -193,21 +193,21 @@ impl Display for MissingHeaderCause {
                 {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{}\" for `{}`",
+                        "This error likely indicates that you need to install a library that provides `{}` for `{}`",
                         header.cyan(),
                         format!("{package_name}@{package_version}").cyan(),
                     )
                 } else if let Some(version_id) = &self.version_id {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{}\" for `{}`",
+                        "This error likely indicates that you need to install a library that provides `{}` for `{}`",
                         header.cyan(),
                         version_id.cyan(),
                     )
                 } else {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{}\"",
+                        "This error likely indicates that you need to install a library that provides `{}`",
                         header.cyan(),
                     )
                 }
@@ -543,7 +543,7 @@ mod test {
         compilation terminated.
         error: command '/usr/bin/gcc' failed with exit code 1
 
-        hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz-1.11`
+        hint: This error likely indicates that you need to install a library that provides `graphviz/cgraph.h` for `pygraphviz-1.11`
         "#);
     }
 

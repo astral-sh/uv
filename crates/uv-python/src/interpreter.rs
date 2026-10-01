@@ -1229,7 +1229,7 @@ impl InterpreterInfo {
                     }
                     Err(err) => {
                         warn!(
-                            "Broken interpreter cache entry at {}, removing: {err}",
+                            "Broken interpreter cache entry at `{}`, removing: {err}",
                             cache_entry.path().user_display()
                         );
                         let _ = fs_err::remove_file(cache_entry.path());
@@ -1240,7 +1240,7 @@ impl InterpreterInfo {
 
         // Otherwise, run the Python script.
         trace!(
-            "Querying interpreter executable at {}",
+            "Querying interpreter executable at `{}`",
             executable.display()
         );
         let info = Self::query(executable, cache)?;

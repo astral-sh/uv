@@ -29,7 +29,7 @@ fn python_find_warning_chain() -> Result<()> {
     [PYTHON-3.12]
 
     ----- stderr -----
-    warning: Failed to parse: `pyproject.toml`
+    warning: Failed to parse: pyproject.toml
       cause: TOML parse error at line 2, column 8
                |
              2 | name = 42

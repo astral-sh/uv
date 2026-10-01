@@ -57,11 +57,11 @@ fn audit_reuses_settings_workspace_discovery() -> Result<()> {
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/member
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 0 packages
     ");
