@@ -4,7 +4,6 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-#[cfg(feature = "test-universal")]
 use indoc::formatdoc;
 use indoc::indoc;
 use insta::assert_snapshot;
@@ -1589,5 +1588,185 @@ fn lockfile_v2_environments() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
     assert_eq!(context.read("uv.lock"), upgraded);
+    Ok(())
+}
+
+/// Artifact URL bases preserve exact URLs and metadata through both readers and v1 serialization.
+#[test]
+fn lockfile_v2_artifact_bases() -> Result<()> {
+    let input = indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "child"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        sdist = { url = "https://files.example.com/packages/aa/child-1.0.0.tar.gz?download=/source", hash = "sha256:1234123412341234123412341234123412341234123412341234123412341234", size = 123, upload-time = "2024-01-01T00:00:00Z" }
+        wheels = [
+            { url = "https://files.example.com/packages/bb/child-1.0.0-py3-none-any.whl?download=/wheel", hash = "sha256:5678567856785678567856785678567856785678567856785678567856785678", size = 456 },
+            { url = "https://files.example.com/packages/cc/child%2D1.0.0%2Dpy2%2Dnone%2Dany.whl", hash = "sha256:abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd" },
+        ]
+
+        [[package]]
+        name = "local"
+        version = "1.0.0"
+        source = { registry = "./wheels" }
+        sdist = { path = "local-1.0.0.tar.gz", hash = "sha256:1234123412341234123412341234123412341234123412341234123412341234" }
+        wheels = [
+            { path = "local-1.0.0-py3-none-any.whl", hash = "sha256:5678567856785678567856785678567856785678567856785678567856785678" },
+        ]
+
+        [[package]]
+        name = "mixed"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        sdist = { url = "https://one.example.com/mixed-1.0.0.tar.gz", hash = "sha256:1234123412341234123412341234123412341234123412341234123412341234" }
+        wheels = [
+            { url = "https://two.example.com/mixed-1.0.0-py3-none-any.whl", hash = "sha256:5678567856785678567856785678567856785678567856785678567856785678" },
+        ]
+
+        [[package]]
+        name = "single"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        wheels = [
+            { url = "https://files.example.com/packages/single-1.0.0-py3-none-any.whl", hash = "sha256:5678567856785678567856785678567856785678567856785678567856785678" },
+        ]
+    "#};
+    let original = toml::from_str::<Lock>(input)?.to_toml()?;
+    let expected = toml::from_str::<Lock>(&input.replace("version = 1\n", "version = 2\n"))?;
+    let upgraded = expected.to_toml()?;
+    assert_snapshot!(diff_snapshot(&original, &upgraded, 3), @r#"
+    --- old
+    +++ new
+    @@ -1,14 +1,15 @@
+    -version = 1
+    +version = 2
+     requires-python = ">=3.12"
+
+     [[package]]
+     name = "child"
+     version = "1.0.0"
+     source = { registry = "https://example.com/simple" }
+    -sdist = { url = "https://files.example.com/packages/aa/child-1.0.0.tar.gz?download=/source", hash = "sha256:1234123412341234123412341234123412341234123412341234123412341234", size = 123, upload-time = "2024-01-01T00:00:00Z" }
+    +artifact-base = "https://files.example.com/packages/"
+    +sdist = { url = "aa/child-1.0.0.tar.gz?download=/source", hash = "sha256:1234123412341234123412341234123412341234123412341234123412341234", size = 123, upload-time = "2024-01-01T00:00:00Z" }
+     wheels = [
+    -    { url = "https://files.example.com/packages/bb/child-1.0.0-py3-none-any.whl?download=/wheel", hash = "sha256:5678567856785678567856785678567856785678567856785678567856785678", size = 456 },
+    -    { url = "https://files.example.com/packages/cc/child%2D1.0.0%2Dpy2%2Dnone%2Dany.whl", hash = "sha256:abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd" },
+    +    { url = "bb/child-1.0.0-py3-none-any.whl?download=/wheel", hash = "sha256:5678567856785678567856785678567856785678567856785678567856785678", size = 456 },
+    +    { url = "cc/child%2D1.0.0%2Dpy2%2Dnone%2Dany.whl", hash = "sha256:abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd" },
+     ]
+
+     [[package]]
+    "#);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?, expected);
+    assert_eq!(toml::from_str::<Lock>(&upgraded)?, expected);
+    assert_eq!(Lock::from_canonical_toml(&upgraded)?.to_toml()?, upgraded);
+    assert_eq!(
+        toml::from_str::<Lock>(&upgraded.replace("version = 2\n", "version = 1\n"))?.to_toml()?,
+        original
+    );
+
+    // An explicit base also permits absolute URLs, without changing their origin or spelling.
+    let mixed = upgraded.replace(
+        "sdist = { url = \"https://one.example.com/mixed",
+        "artifact-base = \"https://one.example.com/\"\nsdist = { url = \"mixed",
+    );
+    assert_eq!(Lock::from_canonical_toml(&mixed)?, expected);
+    assert_eq!(toml::from_str::<Lock>(&mixed)?, expected);
+    Ok(())
+}
+
+/// A base must denote an HTTP(S) directory, not a filename, local path, or opaque URL.
+#[test]
+fn lockfile_v2_invalid_artifact_bases() {
+    for base in [
+        "relative/",
+        "file:///wheels/",
+        "https://example.com/file",
+        "https://example.com/?query",
+        "https://example.com/#fragment",
+    ] {
+        let input = formatdoc! {r#"
+            version = 2
+            requires-python = ">=3.12"
+
+            [[package]]
+            name = "child"
+            version = "1.0.0"
+            source = {{ registry = "https://example.com/simple" }}
+            artifact-base = "{base}"
+        "#};
+        assert!(Lock::from_canonical_toml(&input).is_err(), "{base}");
+        assert!(toml::from_str::<Lock>(&input).is_err(), "{base}");
+    }
+}
+
+/// Frozen installation and revalidation consume expanded URLs, including without a warm cache.
+#[test]
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
+fn lockfile_v2_artifact_bases_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna==3.6"]
+    "#})?;
+    context
+        .lock()
+        .args(["--preview-features", "lockfile-v2"])
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    assert_snapshot!(lock, @r#"
+    version = 2
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "idna"
+    version = "3.6"
+    source = { registry = "https://pypi.org/simple" }
+    artifact-base = "https://files.pythonhosted.org/packages/"
+    sdist = { url = "bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+    wheels = [
+        { url = "c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "1.0.0"
+    source = { virtual = "." }
+    dependencies = [
+        "idna",
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "idna", specifier = "==3.6" }]
+    "#);
+    context
+        .lock()
+        .args(["--locked", "--preview-features", "lockfile-v2"])
+        .assert()
+        .success();
+    assert_eq!(context.read("uv.lock"), lock);
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-cache", "--preview-features", "lockfile-v2"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    ");
+    context.assert_command("import idna").success();
     Ok(())
 }

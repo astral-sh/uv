@@ -1001,6 +1001,10 @@ Git sources record the repository URL separately from `branch`, `tag`, or `rev`,
 `commit`, and any `subdirectory`, archive `path`, or `lfs` setting. These fields replace the query
 parameters and fragment used in version 1.
 
+Remote wheels and source distributions can share a per-package `artifact-base` URL. Their `url`
+fields are resolved relative to that directory; absolute URLs remain valid. The writer emits a base
+only when the shared prefix reduces the lockfile size. Local artifact paths are unchanged.
+
 Supported and required environments use `supported-environments` and `required-environments`. The
 `resolution-markers` field continues to describe the resolution forks.
 
