@@ -27,6 +27,10 @@ impl FrozenWorkspace {
         for directory in project_dir.ancestors() {
             let pyproject_path = directory.join("pyproject.toml");
             if pyproject_path.is_file() {
+                // Like manifest discovery, stop at the first manifest above the current project.
+                if manifest_root.is_some() {
+                    return Ok(None);
+                }
                 // An explicit workspace root is a discovery boundary, even without a lockfile.
                 // Let ordinary discovery report invalid manifests and missing workspace locks.
                 let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
@@ -36,7 +40,7 @@ impl FrozenWorkspace {
                 if pyproject.is_workspace_root() {
                     return Ok(None);
                 }
-                manifest_root.get_or_insert(directory);
+                manifest_root = Some(directory);
             }
             let path = directory.join("uv.lock");
             if path.is_file() {
@@ -50,12 +54,11 @@ impl FrozenWorkspace {
                     Err(error) => return Err(error),
                 };
                 if let Some(manifest_root) = manifest_root {
-                    let manifest_root = fs_err::canonicalize(manifest_root)
-                        .unwrap_or_else(|_| uv_fs::normalize_path(manifest_root).into_owned());
-                    if !workspace.lock.workspace_member_paths().any(|(_, path)| {
-                        let path = uv_fs::normalize_path(workspace.root.join(path)).into_owned();
-                        fs_err::canonicalize(&path).unwrap_or(path) == manifest_root
-                    }) {
+                    let manifest_root = normalize_member_path(manifest_root);
+                    if !workspace
+                        .member_paths()
+                        .any(|(_, path)| path == manifest_root)
+                    {
                         return Ok(None);
                     }
                 }
@@ -102,18 +105,20 @@ impl FrozenWorkspace {
 
     /// Select the nearest workspace member, falling back to the root project.
     pub(crate) fn current_project(&self, project_dir: &Path) -> Option<&PackageName> {
-        let project_dir = fs_err::canonicalize(project_dir)
-            .unwrap_or_else(|_| uv_fs::normalize_path(project_dir).into_owned());
-        self.lock
-            .workspace_member_paths()
-            .filter_map(|(name, path)| {
-                let path = uv_fs::normalize_path(self.root.join(path)).into_owned();
-                let path = fs_err::canonicalize(&path).unwrap_or(path);
-                project_dir.starts_with(&path).then_some((name, path))
-            })
+        let project_dir = normalize_member_path(project_dir);
+        self.member_paths()
+            .filter(|(_, path)| project_dir.starts_with(path))
             .max_by_key(|(_, path)| path.components().count())
             .map(|(name, _)| name)
             .or_else(|| self.lock.root().map(Package::name))
+    }
+
+    /// Return workspace members with absolute paths for discovery and project selection.
+    fn member_paths(&self) -> impl Iterator<Item = (&PackageName, PathBuf)> {
+        self.lock.workspace_member_paths().map(|(name, path)| {
+            let path = uv_fs::normalize_path(self.root.join(path));
+            (name, normalize_member_path(&path))
+        })
     }
 
     /// Resolve groups using the selected member's or non-project root's recorded defaults.
@@ -142,4 +147,9 @@ impl FrozenWorkspace {
         }
         Ok(())
     }
+}
+
+/// Resolve symlinks for member comparisons, allowing missing directories in frozen workspaces.
+fn normalize_member_path(path: &Path) -> PathBuf {
+    fs_err::canonicalize(path).unwrap_or_else(|_| uv_fs::normalize_path(path).into_owned())
 }

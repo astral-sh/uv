@@ -12552,3 +12552,74 @@ fn frozen_lockfile_workspace_root_without_lock() -> Result<()> {
 
     Ok(())
 }
+
+/// An intervening project prevents a nested member from using an ancestor's lockfile.
+#[test]
+fn frozen_lockfile_member_inside_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["nested/member"]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("nested/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "nested"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("nested/member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context).arg("--project").arg("nested/member"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // The intervening project remains a boundary when the workspace manifest is absent.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    uv_snapshot!(context.filters(), frozen_export(&context).arg("--project").arg("nested/member"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // With the boundary removed, the remaining member manifest belongs to the frozen workspace.
+    fs_err::remove_file(context.temp_dir.child("nested/pyproject.toml"))?;
+    uv_snapshot!(context.filters(), frozen_export(&context).arg("--project").arg("nested/member"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./nested/member
+    ");
+
+    Ok(())
+}

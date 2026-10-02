@@ -338,7 +338,7 @@ pub(crate) async fn export(
             } else if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
             } else if let ExportTarget::Script(script) = target
-                && !LockTarget::Script(script).lock_path().try_exists()?
+                && !LockTarget::Script(script).lock_path().is_file()
             {
                 // If we're locking a script, avoid creating a lockfile if it doesn't already exist.
                 LockMode::DryRun(interpreter.as_ref().unwrap())
@@ -393,10 +393,18 @@ pub(crate) async fn export(
                     project_name,
                 } => {
                     workspace.validate_packages(&entry.package)?;
-                    resolve_lockfile_groups(&groups, workspace, project_name.as_ref(), &entry.package).with_context(|| format!(
-                        "Batch export `{}` must specify `no-default-groups = true`, `only-group`, or `all-groups = true`",
-                        entry.output_file.display()
-                    ))?
+                    resolve_lockfile_groups(
+                        &groups,
+                        workspace,
+                        project_name.as_ref(),
+                        &entry.package,
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to resolve dependency groups for batch export `{}`",
+                            entry.output_file.display()
+                        )
+                    })?
                 }
                 ExportSource::Manifest(ExportTarget::Script(_)) => {
                     bail!("`--batch` does not support scripts")
