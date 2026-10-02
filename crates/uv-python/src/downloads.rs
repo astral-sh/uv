@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::{self, Display};
+use std::fmt::Display;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -35,6 +35,7 @@ use uv_client::{
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
+use uv_macros::DebugNoInline;
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{Digest, HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -51,7 +52,7 @@ use crate::managed::ManagedPythonInstallation;
 use crate::python_version::{BuildVersionError, python_build_version_from_env};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
-#[derive(Error)]
+#[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -140,145 +141,6 @@ pub enum Error {
     NoPythonDownloadUrlFound,
     #[error(transparent)]
     SystemTime(#[from] SystemTimeError),
-}
-
-impl fmt::Debug for Error {
-    // Keep the large formatter shared by references and boxed download errors.
-    #[inline(never)]
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(error) => formatter.debug_tuple("Io").field(error).finish(),
-            Self::ImplementationError(error) => formatter
-                .debug_tuple("ImplementationError")
-                .field(error)
-                .finish(),
-            Self::MissingExtension(url, error) => formatter
-                .debug_tuple("MissingExtension")
-                .field(url)
-                .field(error)
-                .finish(),
-            Self::InvalidPythonVersion(version) => formatter
-                .debug_tuple("InvalidPythonVersion")
-                .field(version)
-                .finish(),
-            Self::EmptyRequest => formatter.write_str("EmptyRequest"),
-            Self::TooManyParts(request) => formatter
-                .debug_tuple("TooManyParts")
-                .field(request)
-                .finish(),
-            Self::NetworkError(url, error) => formatter
-                .debug_tuple("NetworkError")
-                .field(url)
-                .field(error)
-                .finish(),
-            Self::NetworkErrorWithRetries {
-                err,
-                retries,
-                duration,
-            } => formatter
-                .debug_struct("NetworkErrorWithRetries")
-                .field("err", err)
-                .field("retries", retries)
-                .field("duration", duration)
-                .finish(),
-            Self::NetworkMiddlewareError(url, error) => formatter
-                .debug_tuple("NetworkMiddlewareError")
-                .field(url)
-                .field(error)
-                .finish(),
-            Self::ExtractError(archive, error) => formatter
-                .debug_tuple("ExtractError")
-                .field(archive)
-                .field(error)
-                .finish(),
-            Self::HashExhaustion(error) => formatter
-                .debug_tuple("HashExhaustion")
-                .field(error)
-                .finish(),
-            Self::HashMismatch {
-                installation,
-                expected,
-                actual,
-            } => formatter
-                .debug_struct("HashMismatch")
-                .field("installation", installation)
-                .field("expected", expected)
-                .field("actual", actual)
-                .finish(),
-            Self::InvalidUrl(error) => formatter.debug_tuple("InvalidUrl").field(error).finish(),
-            Self::InvalidUrlFormat(url) => formatter
-                .debug_tuple("InvalidUrlFormat")
-                .field(url)
-                .finish(),
-            Self::InvalidFileUrl(url) => {
-                formatter.debug_tuple("InvalidFileUrl").field(url).finish()
-            }
-            Self::DownloadDirError(error) => formatter
-                .debug_tuple("DownloadDirError")
-                .field(error)
-                .finish(),
-            Self::CopyError { to, err } => formatter
-                .debug_struct("CopyError")
-                .field("to", to)
-                .field("err", err)
-                .finish(),
-            Self::ReadError { dir, err } => formatter
-                .debug_struct("ReadError")
-                .field("dir", dir)
-                .field("err", err)
-                .finish(),
-            Self::InvalidRequestPlatform(error) => formatter
-                .debug_tuple("InvalidRequestPlatform")
-                .field(error)
-                .finish(),
-            Self::NoDownloadFound(request) => formatter
-                .debug_tuple("NoDownloadFound")
-                .field(request)
-                .finish(),
-            Self::Mirror(variable, mirror) => formatter
-                .debug_tuple("Mirror")
-                .field(variable)
-                .field(mirror)
-                .finish(),
-            Self::LibcDetection(error) => {
-                formatter.debug_tuple("LibcDetection").field(error).finish()
-            }
-            Self::InvalidPythonDownloadsJSON(url, error) => formatter
-                .debug_tuple("InvalidPythonDownloadsJSON")
-                .field(url)
-                .field(error)
-                .finish(),
-            Self::UnsupportedPythonDownloadsJSON(url) => formatter
-                .debug_tuple("UnsupportedPythonDownloadsJSON")
-                .field(url)
-                .finish(),
-            Self::FetchingPythonDownloadsJSONError(url, error) => formatter
-                .debug_tuple("FetchingPythonDownloadsJSONError")
-                .field(url)
-                .field(error)
-                .finish(),
-            Self::RemotePythonDownloadsJSONClient(error) => formatter
-                .debug_tuple("RemotePythonDownloadsJSONClient")
-                .field(error)
-                .finish(),
-            Self::ClientBuild(error) => formatter.debug_tuple("ClientBuild").field(error).finish(),
-            Self::OfflinePythonMissing {
-                file,
-                url,
-                python_builds_dir,
-            } => formatter
-                .debug_struct("OfflinePythonMissing")
-                .field("file", file)
-                .field("url", url)
-                .field("python_builds_dir", python_builds_dir)
-                .finish(),
-            Self::BuildVersion(error) => {
-                formatter.debug_tuple("BuildVersion").field(error).finish()
-            }
-            Self::NoPythonDownloadUrlFound => formatter.write_str("NoPythonDownloadUrlFound"),
-            Self::SystemTime(error) => formatter.debug_tuple("SystemTime").field(error).finish(),
-        }
-    }
 }
 
 impl RetriableError for Error {
