@@ -1,8 +1,10 @@
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use url::Url;
 
 use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::Scenario;
@@ -10788,6 +10790,286 @@ fn many_pairwise_conflicts_shared_extra() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// A transitive dependency cannot replace a workspace member's source in a conflict fork.
+#[test]
+fn lock_conflicting_workspace_member_transitive_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { path = "bar" }
+
+        [tool.uv.workspace]
+        members = ["foo"]
+
+        [tool.uv]
+        conflicts = [[{ package = "root" }, { package = "foo" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("other/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "2.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    let other_url = Url::from_file_path(context.temp_dir.child("other").path())
+        .map_err(|()| anyhow!("failed to convert dependency path to file URL"))?;
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo @ {other_url}"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--offline", "--preview-features", "package-conflicts",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `bar==1.0`
+      cause: Requirements contain conflicting URLs for package `foo` in all marker environments:
+             - file://[TEMP_DIR]/foo
+             - file://[TEMP_DIR]/other
+
+    hint: `bar` (v1.0) was included because `root` (v1.0) depends on `bar`
+    ");
+
+    Ok(())
+}
+
+/// A registry release cannot replace a workspace member in a conflict fork.
+#[test]
+fn lock_conflicting_workspace_member_transitive_registry() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "workspace-member-registry-identity"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.foo.versions."2.0"]
+        sdist = false
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { path = "bar" }
+
+        [tool.uv.workspace]
+        members = ["foo"]
+
+        [tool.uv]
+        conflicts = [[{ package = "root" }, { package = "foo" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo==2.0"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--preview-features", "package-conflicts"])
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (included: root; excluded: foo)
+      cause: Because only bar==1.0 is available and bar==1.0 depends on foo, we can conclude that all versions of bar cannot be used.
+             And because root depends on bar and your workspace requires root, we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: The package `bar` depends on the package `foo` but the name is shadowed by one of your workspace members. Consider changing the name of the workspace member.
+    ");
+
+    Ok(())
+}
+
+/// An unqualified transitive dependency uses the workspace member even when its root is excluded.
+#[test]
+fn lock_conflicting_workspace_member_transitive_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { path = "bar" }
+
+        [tool.uv.workspace]
+        members = ["foo"]
+
+        [tool.uv]
+        conflicts = [[{ package = "root" }, { package = "foo" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo>=1"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--offline", "--preview-features", "package-conflicts",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+    conflicts = [[
+        { package = "foo" },
+        { package = "root" },
+    ]]
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "foo",
+        "root",
+    ]
+
+    [[package]]
+    name = "bar"
+    version = "1.0"
+    source = { directory = "bar" }
+    dependencies = [
+        { name = "foo", marker = "extra == 'project-4-root'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "foo", specifier = ">=1" }]
+
+    [[package]]
+    name = "foo"
+    version = "1.0"
+    source = { virtual = "foo" }
+
+    [[package]]
+    name = "root"
+    version = "1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "bar", marker = "extra == 'project-4-root'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "bar", directory = "bar" }]
+    "#);
+
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo>=2"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--offline", "--preview-features", "package-conflicts",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (included: root; excluded: foo)
+      cause: Because only bar==1.0 is available and bar==1.0 depends on foo, we can conclude that all versions of bar cannot be used.
+             And because root depends on bar and your workspace requires root, we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: The package `bar` depends on the package `foo` but the name is shadowed by one of your workspace members. Consider changing the name of the workspace member.
+    ");
 
     Ok(())
 }
