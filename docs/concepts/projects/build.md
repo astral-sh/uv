@@ -11,7 +11,7 @@ pre-built artifacts that can be installed directly.
 !!! important
 
     When using `uv build`, uv acts as a [build frontend](https://peps.python.org/pep-0517/#terminology-and-goals)
-    and only determines the Python version to use and invokes the build backend. The details of
+    and determines the Python version to use and invokes the build backend. The details of
     the builds, such as the included files and the distribution filenames, are determined by the build
     backend, as defined in [`[build-system]`](./config.md#build-systems). Information about build
     configuration can be found in the respective tool's documentation.
@@ -38,6 +38,42 @@ that source distribution.
 You can limit `uv build` to building a source distribution with `uv build --sdist`, a binary
 distribution with `uv build --wheel`, or build both distributions from source with
 `uv build --sdist --wheel`.
+
+## Including a dependency lock
+
+!!! warning "Preview feature"
+
+    This feature is experimental and may change. Enable it with
+    `--preview-features locked-tools`.
+
+When a project uses `uv_build` and its dependencies use only PyPI sources, `uv build` includes a
+`pylock.toml` in its source distribution and wheel. A subsequent `uv build` can carry the lock from
+the source distribution into a wheel. The project itself is supplied by the wheel and is not listed
+in `pylock.toml`. Workspace members may use a shared lock, but cannot have dependencies on other
+workspace members. The lock does not include optional extras or dependency groups. Locks restricted
+to specific environments are not supported.
+
+Set `tool.uv.export-lock = true` to include a lock when using another build backend or package
+index, or set it to `false` to disable export. `UV_EXPORT_LOCK` overrides this setting. Export
+requires registry artifact URLs and hashes; Git and local dependencies are not supported. Automatic
+export checks the registry sources recorded in the lock without verifying artifact URLs against the
+index. It skips non-HTTPS artifact URLs, URLs containing credentials, query strings, or fragments,
+and URL-like values outside artifact and index URLs. The packaged lock covers the project's base
+runtime dependencies; it does not include the full workspace `uv.lock`. Source distributions can
+also contain `uv.lock` if the build backend includes it. Automatic export also checks optional
+dependencies and dependency groups for non-PyPI sources.
+
+uv checks the workspace lock without network access before packaging it. When export is expected,
+the build fails if the lock is missing, outdated, or cannot be verified. Run `uv lock` before
+building. Automatic export uses the lock to determine eligible sources, so a stale lock that refers
+to non-PyPI sources can cause export to be skipped. Set `tool.uv.export-lock = true` to require a
+lock. When rebuilding from a source distribution, uv checks the packaged lock and the distribution
+metadata before including the lock in the wheel. uv does not re-resolve the lock; if you edit it,
+ensure it contains the intended dependencies. A source distribution without an expected lock fails
+to build; set `UV_EXPORT_LOCK=false` to build it without exporting a lock.
+
+The export is performed by `uv build`. Other frontends, including `python -m build`, do not include
+the lock automatically.
 
 ## Build constraints
 

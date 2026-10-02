@@ -371,6 +371,7 @@ pub struct ToolUv {
     /// With the `locked-tools` preview feature, uv includes the lock by default for projects
     /// using `uv_build` when all dependencies come from PyPI. Set this to `true` to enable export
     /// for other build backends or indexes, or to `false` to disable export.
+    #[option(default = "None", value_type = "bool", example = "export-lock = true")]
     export_lock: Option<bool>,
 
     /// The sources to use when resolving dependencies.

@@ -9,7 +9,6 @@ pub struct EnvVars;
 impl EnvVars {
     /// Controls whether `uv build` includes the project lock in built distributions.
     #[attr_added_in("next release")]
-    #[attr_hidden]
     pub const UV_EXPORT_LOCK: &'static str = "UV_EXPORT_LOCK";
     /// The path to the binary that was used to invoke uv.
     ///
@@ -392,7 +391,6 @@ impl EnvVars {
 
     /// Use the package's bundled lock when installing, running, or upgrading tools.
     #[attr_added_in("next release")]
-    #[attr_hidden]
     pub const UV_TOOL_LOCKED: &'static str = "UV_TOOL_LOCKED";
 
     /// Equivalent to the `--frozen` command-line argument. If set, uv will run without
