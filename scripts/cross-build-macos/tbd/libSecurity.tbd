@@ -1,0 +1,20 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+install-name:    '/System/Library/Frameworks/Security.framework/Versions/A/Security'
+exports:
+  - targets:     [ x86_64-macos, arm64-macos ]
+    symbols:     [ _SecCertificateCopyData, _SecCertificateCreateWithData,
+                   _SecCertificateGetTypeID, _SecItemExport,
+                   _SecKeychainCopyDomainDefault, _SecKeychainFindGenericPassword,
+                   _SecKeychainItemFreeContent, _SecKeychainOpen,
+                   _SecPolicyCreateSSL, _SecTrustCopyAnchorCertificates,
+                   _SecTrustSettingsCopyCertificates, _SecTrustSettingsCopyTrustSettings,
+                   _kSecImportExportPassphrase, _kSecFormatPEMSequence,
+                   _SecItemImport, _SecIdentityGetTypeID,
+                   _SecIdentityCopyCertificate, _SecIdentityCopyPrivateKey,
+                   _SecTrustGetCertificateCount, _SecTrustGetCertificateAtIndex,
+                   _SecPolicyCreateBasicX509, _SecCopyErrorMessageString,
+                   _SecKeychainAddGenericPassword, _SecKeychainItemDelete,
+                   _SecKeychainItemModifyAttributesAndData ]
+...
