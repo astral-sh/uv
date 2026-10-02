@@ -50,7 +50,8 @@ use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    MarkerEnvironment, MarkerTree, Requirement as Pep508Requirement, Scheme, VerbatimUrl,
+    VerbatimUrlError, VersionOrUrl, split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
@@ -7544,7 +7545,7 @@ struct PackageMetadata {
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
-/// A declared requirement, accepting a bare package name or its full table representation.
+/// A declared requirement, accepting a registry PEP 508 string or its full table representation.
 #[derive(Clone, Debug)]
 struct RequirementWire(Requirement);
 
@@ -7554,14 +7555,25 @@ impl<'de> serde::Deserialize<'de> for RequirementWire {
         D: serde::Deserializer<'de>,
     {
         serde_untagged::UntaggedEnumVisitor::new()
-            .string(|name| {
+            .string(|requirement| {
+                let requirement = Pep508Requirement::<VerbatimUrl>::from_str(requirement)
+                    .map_err(serde::de::Error::custom)?;
+                let specifier = match requirement.version_or_url {
+                    None => VersionSpecifiers::empty(),
+                    Some(VersionOrUrl::VersionSpecifier(specifier)) => specifier,
+                    Some(VersionOrUrl::Url(_)) => {
+                        return Err(serde::de::Error::custom(
+                            "URL requirements must use a table in the lockfile",
+                        ));
+                    }
+                };
                 Ok(Self(Requirement {
-                    name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
-                    extras: Box::new([]),
+                    name: requirement.name,
+                    extras: requirement.extras,
                     groups: Box::new([]),
-                    marker: MarkerTree::TRUE,
+                    marker: requirement.marker,
                     source: RequirementSource::Registry {
-                        specifier: VersionSpecifiers::empty(),
+                        specifier,
                         index: None,
                         conflict: None,
                     },
@@ -7610,12 +7622,45 @@ struct RequirementTableWire {
 }
 
 /// A build constraint with the same Git fields as other declared requirements.
-#[derive(serde::Deserialize)]
 struct NameRequirementSpecificationWire {
-    #[serde(flatten)]
     requirement: RequirementWire,
-    #[serde(default)]
     hashes: Vec<String>,
+}
+
+impl<'de> serde::Deserialize<'de> for NameRequirementSpecificationWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Table {
+            #[serde(flatten)]
+            requirement: RequirementWire,
+            #[serde(default)]
+            hashes: Vec<String>,
+        }
+
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|requirement| {
+                Ok(Self {
+                    requirement: serde::Deserialize::deserialize(
+                        serde::de::value::StrDeserializer::new(requirement),
+                    )?,
+                    hashes: vec![],
+                })
+            })
+            .map(|map| {
+                let Table {
+                    requirement,
+                    hashes,
+                } = map.deserialize()?;
+                Ok(Self {
+                    requirement,
+                    hashes,
+                })
+            })
+            .deserialize(deserializer)
+    }
 }
 
 /// Read requirement arrays with either strings or tables for their entries.
