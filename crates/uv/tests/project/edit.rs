@@ -4766,7 +4766,7 @@ fn add_lower_bound_existing() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
-    assert_eq!(lock["revision"].as_integer(), Some(5));
+    assert_eq!(lock["revision"].as_integer(), Some(6));
 
     uv_snapshot!(context.filters(), context.add()
         .arg("--preview-features")

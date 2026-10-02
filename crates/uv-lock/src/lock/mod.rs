@@ -138,9 +138,6 @@ const DEFAULT_GROUPS_REVISION: u32 = 5;
 /// The first lockfile revision that records workspace member dependency group metadata.
 const MEMBER_GROUP_METADATA_REVISION: u32 = 5;
 
-/// The first lockfile revision that identifies same-named workspace members by source.
-const MEMBER_SOURCES_REVISION: u32 = 6;
-
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
@@ -2752,14 +2749,14 @@ impl Lock {
                 // A single-project lockfile can omit its root from the manifest's member list.
                 manifest.members.contains(&dist.id.name)
                     || (manifest.members.is_empty()
-                        && (revision >= MEMBER_SOURCES_REVISION || workspace_members.is_empty())
+                        && workspace_members.is_empty()
                         && dist.id.source.is_implicit_root())
             };
             if is_member
                 && workspace_members
                     .insert(dist.id.name.clone(), PackageIndex(index))
                     .is_some()
-                && revision >= MEMBER_SOURCES_REVISION
+                && manifest.member_sources.contains_key(&dist.id.name)
             {
                 return Err(LockErrorKind::DuplicateWorkspaceMember {
                     name: dist.id.name.clone(),
@@ -3281,9 +3278,9 @@ impl Lock {
 
     /// Return the workspace member with the given name.
     ///
-    /// Older lockfiles identify members by name only, so an ambiguous name returns `None`.
+    /// Without a recorded member source, an ambiguous name returns `None`.
     pub fn find_workspace_member(&self, name: &PackageName) -> Option<&Package> {
-        if (self.version(), self.revision()) < (VERSION, MEMBER_SOURCES_REVISION) {
+        if !self.manifest.member_sources.contains_key(name) {
             return self.find_by_name(name).ok().flatten();
         }
         self.workspace_members

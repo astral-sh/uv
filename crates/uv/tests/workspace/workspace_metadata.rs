@@ -257,13 +257,13 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     Ok(())
 }
 
-/// Lockfile metadata requires revision 6 or later.
+/// Lockfile metadata requires revision 5 or later.
 #[test]
 fn workspace_metadata_lockfile_requires_revision() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("uv.lock").write_str(indoc! {r#"
         version = 1
-        revision = 5
+        revision = 4
         requires-python = ">=3.12"
 
         [[package]]
@@ -277,8 +277,24 @@ fn workspace_metadata_lockfile_requires_revision() -> Result<()> {
     ]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Workspace metadata without a manifest requires a lockfile with revision 6 or later; run `uv lock --refresh` to update it
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
     ");
+
+    context.temp_dir.child("uv.lock").write_str(
+        &context
+            .read("uv.lock")
+            .replace("revision = 4", "revision = 5"),
+    )?;
+    context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
     Ok(())
 }
 
@@ -2514,6 +2530,25 @@ fn workspace_metadata_lockfile_non_editable_member_with_same_named_dependency() 
         }
         "#);
     });
+
+    // Older lockfiles remain readable without recorded sources for ambiguous member names.
+    let lock = context.read("uv.lock");
+    let legacy_lock = lock.replace("member-sources = { foo = { directory = \"foo\" } }\n", "");
+    assert_ne!(legacy_lock, lock);
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&legacy_lock.replace("revision = 6", "revision = 5"))?;
+    context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile,package-conflicts",
+        ])
+        .assert()
+        .success();
 
     Ok(())
 }
