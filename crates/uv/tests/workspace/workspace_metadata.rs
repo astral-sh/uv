@@ -2553,6 +2553,134 @@ fn workspace_metadata_lockfile_non_editable_member_with_same_named_dependency() 
     Ok(())
 }
 
+/// Member identity distinguishes editable and non-editable sources at the same path.
+#[test]
+fn workspace_metadata_lockfile_member_with_same_path_dependency() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { path = "bar" }
+        foo = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["foo"]
+
+        [tool.uv]
+        conflicts = [[{ package = "root" }, { package = "foo" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo"]
+
+        [tool.uv.sources]
+        foo = { path = "../foo", editable = false }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "package-conflicts"])
+        .assert()
+        .success();
+    let lock: toml::Value = toml::from_str(&context.read("uv.lock"))?;
+    context
+        .lock()
+        .args([
+            "--check",
+            "--offline",
+            "--preview-features",
+            "package-conflicts",
+        ])
+        .assert()
+        .success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile,package-conflicts",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.child("foo/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.child("bar/pyproject.toml"))?;
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile,package-conflicts",
+        ])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(lockfile_metadata, metadata);
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "member_sources": lock.get("manifest").and_then(|manifest| manifest.get("member-sources")),
+            "member": lockfile_metadata["members"][0],
+            "conflict": lockfile_metadata["conflicts"]["sets"][0]["items"][0],
+        }), @r#"
+        {
+          "conflict": {
+            "id": "foo==1.0@editable+[TEMP_DIR]/foo",
+            "kind": "Project",
+            "package": "foo"
+          },
+          "member": {
+            "id": "foo==1.0@editable+[TEMP_DIR]/foo",
+            "name": "foo",
+            "path": "[TEMP_DIR]/foo"
+          },
+          "member_sources": {
+            "foo": {
+              "editable": "foo"
+            }
+          }
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Test metadata for a workspace with multiple packages.
 #[test]
 fn workspace_metadata_multiple_members() -> Result<()> {
