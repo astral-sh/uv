@@ -325,6 +325,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
+        cache: &Cache,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -356,6 +357,7 @@ impl InstalledTools {
             uv_virtualenv::Seed::Disabled,
             false,
         )?;
+        venv.cache_virtualenv(false, cache)?;
 
         Ok(venv)
     }
