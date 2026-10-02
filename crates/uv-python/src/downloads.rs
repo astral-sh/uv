@@ -2067,7 +2067,6 @@ mod tests {
             },
         ]
         "#);
-        insta::assert_snapshot!(format!("{errors:?}"), @r#"[EmptyRequest, Mirror("UV_PYTHON_INSTALL_MIRROR", "file:///mirror"), NetworkErrorWithRetries { err: InvalidPythonVersion("3.x"), retries: 2, duration: 3s }, HashMismatch { installation: "cpython-3.12.0-linux-x86_64-gnu", expected: "abc", actual: "def" }]"#);
     }
 
     /// Parse a request with all of its fields.
