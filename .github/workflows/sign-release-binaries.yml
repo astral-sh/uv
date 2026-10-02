@@ -54,7 +54,7 @@ jobs:
 
       - name: "Plan signed release targets"
         id: targets
-        uses: astral-sh/github-actions/plan-release-signing@9d5e9e0c229c54998311df285ecb23e654989f67 # shared release signing actions
+        uses: astral-sh/github-actions/plan-release-signing@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
         with:
           archive-package: uv
           packages: >-
@@ -105,7 +105,7 @@ jobs:
           done < <(jq -r '.[]' <<< "$TARGETS")
 
       - name: "Prepare release signing inputs"
-        uses: astral-sh/github-actions/prepare-release-signing@9d5e9e0c229c54998311df285ecb23e654989f67 # shared release signing actions
+        uses: astral-sh/github-actions/prepare-release-signing@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
         with:
           targets: ${{ steps.targets.outputs.artifacts }}
           output-directory: prepared
@@ -157,7 +157,7 @@ jobs:
           merge-multiple: true
 
       - name: "Sign and notarize macOS executables"
-        uses: astral-sh/github-actions/sign-macos@9d5e9e0c229c54998311df285ecb23e654989f67 # shared release signing actions
+        uses: astral-sh/github-actions/sign-macos@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
@@ -203,7 +203,7 @@ jobs:
           merge-multiple: true
 
       - name: "Sign Windows executables"
-        uses: astral-sh/github-actions/sign-windows@9d5e9e0c229c54998311df285ecb23e654989f67 # shared release signing actions
+        uses: astral-sh/github-actions/sign-windows@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
@@ -263,7 +263,7 @@ jobs:
           merge-multiple: true
 
       - name: "Assemble signed release artifacts"
-        uses: astral-sh/github-actions/assemble-signed-release@9d5e9e0c229c54998311df285ecb23e654989f67 # shared release signing actions
+        uses: astral-sh/github-actions/assemble-signed-release@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
         with:
           targets: ${{ needs.prepare.outputs.artifacts }}
           # The complete release inputs retain the originals checked during preparation.
@@ -382,7 +382,7 @@ jobs:
           merge-multiple: true
 
       - name: "Verify signed release artifacts"
-        uses: astral-sh/github-actions/verify-release@9d5e9e0c229c54998311df285ecb23e654989f67 # shared release signing actions
+        uses: astral-sh/github-actions/verify-release@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
         with:
           target: ${{ toJSON(matrix.platform) }}
           signed-directory: signed/${{ matrix.platform.target }}
@@ -437,7 +437,7 @@ jobs:
           merge-multiple: true
 
       - name: "Verify signed release artifacts"
-        uses: astral-sh/github-actions/verify-release@9d5e9e0c229c54998311df285ecb23e654989f67 # shared release signing actions
+        uses: astral-sh/github-actions/verify-release@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
         with:
           target: ${{ toJSON(matrix.platform) }}
           signed-directory: signed/${{ matrix.platform.target }}
