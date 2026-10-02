@@ -2553,6 +2553,102 @@ fn workspace_metadata_lockfile_non_editable_member_with_same_named_dependency() 
     Ok(())
 }
 
+/// Frozen metadata retains locked member paths when workspace manifests move those members.
+#[test]
+fn workspace_metadata_lockfile_keeps_stale_member_path() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["foo"]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["members"], @r#"
+        [
+          {
+            "id": "foo==1.0@virtual+[TEMP_DIR]/foo",
+            "name": "foo",
+            "path": "[TEMP_DIR]/foo"
+          },
+          {
+            "id": "root==1.0@virtual+[TEMP_DIR]/",
+            "name": "root",
+            "path": "[TEMP_DIR]/"
+          }
+        ]
+        "#);
+    });
+
+    fs_err::rename(
+        context.temp_dir.child("foo"),
+        context.temp_dir.child("moved"),
+    )?;
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["moved"]
+    "#})?;
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let moved_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(moved_metadata, metadata);
+
+    fs_err::remove_file(&pyproject)?;
+    fs_err::remove_file(context.temp_dir.child("moved/pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(lockfile_metadata, metadata);
+
+    Ok(())
+}
+
 /// Member identity distinguishes editable and non-editable sources at the same path.
 #[test]
 fn workspace_metadata_lockfile_member_with_same_path_dependency() -> Result<()> {
