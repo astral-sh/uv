@@ -13,10 +13,11 @@ use uv_redacted::DisplaySafeUrl;
 
 use super::artifacts::ArtifactBase;
 use super::git::GitSourceWire;
+use super::markers::MarkerValue;
 use super::{
     Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
     PackageId, PackageIdLookup, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest,
-    ResolverOptions, Source, SourceDist, Wheel, WheelWireSource, simplified_universal_markers,
+    ResolverOptions, Source, SourceDist, Wheel, WheelWireSource, canonical_marker_trees,
 };
 
 /// Serializes a lockfile directly while preserving the canonical `uv.lock` layout.
@@ -43,10 +44,10 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     writer.key_value("requires-python", lock.requires_python.to_string())?;
 
     if !lock.fork_markers.is_empty() {
-        let markers = simplified_universal_markers(&lock.fork_markers, &lock.requires_python);
+        let markers = canonical_marker_trees(&lock.fork_markers, &lock.requires_python);
         if !markers.is_empty() {
             writer.key_multiline_array("resolution-markers", markers, |writer, marker| {
-                writer.value(&marker)
+                write_marker(writer, marker, lock.version)
             })?;
         }
     }
@@ -359,10 +360,10 @@ fn write_package(
     }
 
     if !package.fork_markers.is_empty() {
-        let markers = simplified_universal_markers(&package.fork_markers, requires_python);
+        let markers = canonical_marker_trees(&package.fork_markers, requires_python);
         if !markers.is_empty() {
             writer.key_multiline_array("resolution-markers", markers, |writer, marker| {
-                writer.value(&marker)
+                write_marker(writer, marker, version)
             })?;
         }
     }
@@ -745,14 +746,13 @@ fn write_dependency_inline(
     let marker = dependency
         .simplified_marker
         .as_simplified_marker_tree()
-        .restrict(simplified_environment)
-        .try_to_string();
+        .restrict(simplified_environment);
     if version >= 2
         && package_ids
             .unambiguous(&dependency.package_id.name, None, None)
             .is_some()
         && dependency.extra.is_empty()
-        && marker.is_none()
+        && marker.is_true()
     {
         return writer.value(dependency.package_id.name.as_ref());
     }
@@ -775,8 +775,9 @@ fn write_dependency_inline(
         })?;
     }
 
-    if let Some(marker) = marker {
-        writer.inline_value(&mut first, "marker", &marker)?;
+    if !marker.is_true() {
+        writer.inline_key_start(&mut first, "marker")?;
+        write_marker(writer, marker, version)?;
     }
 
     writer.finish_inline_table(first);
@@ -900,6 +901,20 @@ fn serialize_git_source(url: &str) -> Result<SerializedValue, WriteError> {
     let url =
         DisplaySafeUrl::parse(url).map_err(|err| toml_edit::ser::Error::Custom(err.to_string()))?;
     serialize_value(&GitSourceWire::from_url(url))
+}
+
+/// Uses explicit conflict conditions in v2 while retaining v1's encoded marker strings.
+fn write_marker(
+    writer: &mut LockWriter,
+    marker: MarkerTree,
+    version: u32,
+) -> Result<(), WriteError> {
+    let marker = MarkerValue::from_marker(marker, version)
+        .map_err(|err| toml_edit::ser::Error::Custom(err.to_string()))?;
+    match &marker {
+        MarkerValue::String(marker) => writer.value(marker),
+        MarkerValue::Any(_) | MarkerValue::Clause(_) => writer.value(serialize_value(&marker)?),
+    }
 }
 
 /// Writes a Serde-backed array, omitting the key when the array is empty.
