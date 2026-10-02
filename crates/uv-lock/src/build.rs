@@ -6,27 +6,38 @@ use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use url::Url;
 use uv_configuration::{
-    DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
+    DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions, NoSources,
 };
-use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::SourceDistFilename;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, MetadataHashPolicy, PYPI_URL, Requirement,
+    BuildableSource, DirectorySourceUrl, IndexLocations, MetadataHashPolicy, PYPI_URL, Requirement,
     RequirementSource, RequiresPython, SourceUrl,
 };
 use uv_fs::is_same_file_allow_missing;
-use uv_lock::{Installable, Lock, Package, PylockToml};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{HashDigest, ResolutionMetadata};
 use uv_static::{EnvVars, parse_boolish_environment_variable};
+use uv_types::BuildContext;
 use uv_workspace::Workspace;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use version_ranges::Ranges;
 
-use crate::settings::BuildLockSettings;
+use crate::{Installable, Lock, Package, PylockToml};
+
+/// Settings needed to check a build lock against a workspace.
+pub trait Settings {
+    fn resolve(&self, root: &Path) -> Result<ResolvedSettings>;
+    fn has_dependency_modifiers(&self, root: &Path) -> Result<bool>;
+}
+
+pub struct ResolvedSettings {
+    pub sources: NoSources,
+    pub index_locations: IndexLocations,
+    pub has_dependency_metadata: bool,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -44,8 +55,8 @@ struct Project {
     dynamic: Vec<String>,
 }
 
-pub(super) struct ExportedLock {
-    pub(super) pylock: String,
+pub struct ExportedLock {
+    pub pylock: String,
     metadata: LockMetadata,
 }
 
@@ -64,7 +75,7 @@ enum LockMetadata {
 }
 
 impl ExportedLock {
-    pub(super) fn project_metadata(&self) -> &ResolutionMetadata {
+    pub fn project_metadata(&self) -> &ResolutionMetadata {
         match &self.metadata {
             LockMetadata::Project {
                 project_metadata, ..
@@ -73,7 +84,7 @@ impl ExportedLock {
         }
     }
 
-    pub(super) fn matches_metadata(&self, metadata: ResolutionMetadata) -> Result<bool> {
+    pub fn matches_metadata(&self, metadata: ResolutionMetadata) -> Result<bool> {
         match &self.metadata {
             LockMetadata::Project {
                 root,
@@ -157,7 +168,7 @@ fn metadata_matches(
 }
 
 /// Read a lock from an extracted source distribution, checking its metadata before reuse.
-pub(super) fn from_sdist(
+pub fn from_sdist(
     source_tree: &Path,
     filename: Option<&SourceDistFilename>,
     preview: Preview,
@@ -278,11 +289,11 @@ fn has_only_pypi_sources(lock: &PylockToml) -> bool {
 }
 
 /// Export the runtime dependencies of the project supplied by the distribution.
-pub(super) async fn export(
+pub async fn export(
     source_tree: &Path,
     workspace: Option<&Workspace>,
-    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
-    lock_settings: &BuildLockSettings,
+    database: &DistributionDatabase<'_, impl BuildContext>,
+    lock_settings: &impl Settings,
     preview: Preview,
 ) -> Result<Option<ExportedLock>> {
     let environment_export = parse_boolish_environment_variable(EnvVars::UV_EXPORT_LOCK)?;
@@ -584,8 +595,8 @@ async fn has_ineligible_runtime_source(
     pyproject_contents: &str,
     project: &Project,
     workspace: Option<&Workspace>,
-    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
-    lock_settings: &BuildLockSettings,
+    database: &DistributionDatabase<'_, impl BuildContext>,
+    lock_settings: &impl Settings,
 ) -> bool {
     let Some(workspace) = workspace.filter(|workspace| {
         workspace
@@ -651,8 +662,8 @@ async fn check_skipped_lock(
     source_tree: &Path,
     root: &Path,
     workspace: Option<&Workspace>,
-    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
-    lock_settings: &BuildLockSettings,
+    database: &DistributionDatabase<'_, impl BuildContext>,
+    lock_settings: &impl Settings,
 ) -> Result<()> {
     if let (Some(expected), Some(actual)) = (&project.version, package.version())
         && expected != actual
@@ -722,7 +733,7 @@ async fn check_skipped_lock(
     let Ok(settings) = lock_settings.resolve(root) else {
         return Ok(());
     };
-    if settings.dependency_metadata.values().next().is_some() {
+    if settings.has_dependency_metadata {
         return Ok(());
     }
 

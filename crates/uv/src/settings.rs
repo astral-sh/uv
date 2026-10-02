@@ -4362,9 +4362,19 @@ impl BuildLockSettings {
             &self.environment,
         ))
     }
+}
 
-    /// Check whether filesystem settings can change the project dependencies.
-    pub(crate) fn has_dependency_modifiers(&self, root: &Path) -> Result<bool> {
+impl uv_lock::build::Settings for BuildLockSettings {
+    fn resolve(&self, root: &Path) -> Result<uv_lock::build::ResolvedSettings> {
+        let settings = BuildLockSettings::resolve(self, root)?;
+        Ok(uv_lock::build::ResolvedSettings {
+            sources: settings.sources,
+            index_locations: settings.index_locations,
+            has_dependency_metadata: settings.dependency_metadata.values().next().is_some(),
+        })
+    }
+
+    fn has_dependency_modifiers(&self, root: &Path) -> Result<bool> {
         Ok(self.filesystem(root)?.is_some_and(|options| {
             options
                 .constraint_dependencies

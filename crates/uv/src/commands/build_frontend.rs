@@ -1,5 +1,4 @@
 mod archive;
-mod lock;
 
 use std::borrow::Cow;
 use std::fmt::Write as _;
@@ -37,6 +36,7 @@ use uv_errors::{ErrorOptions, Hinted, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, is_same_file_allow_missing, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_lock::build as lock;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
