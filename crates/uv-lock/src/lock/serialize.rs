@@ -11,6 +11,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
 use uv_redacted::DisplaySafeUrl;
 
+use super::artifacts::ArtifactBase;
 use super::git::GitSourceWire;
 use super::{
     Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
@@ -382,14 +383,22 @@ fn write_package(
         )?;
     }
 
+    let artifact_base = (version >= 2)
+        .then(|| ArtifactBase::for_package(package))
+        .flatten();
+    if let Some(base) = &artifact_base {
+        writer.key_value("artifact-base", base.as_str())?;
+    }
     if let Some(source_dist) = &package.sdist {
         writer.key_start("sdist")?;
-        write_source_dist_inline(writer, source_dist)?;
+        write_source_dist_inline(writer, source_dist, artifact_base.as_ref())?;
         writer.raw("\n");
     }
 
     if !package.wheels.is_empty() {
-        writer.key_multiline_array("wheels", &package.wheels, write_wheel_inline)?;
+        writer.key_multiline_array("wheels", &package.wheels, |writer, wheel| {
+            write_wheel_inline(writer, wheel, artifact_base.as_ref())
+        })?;
     }
 
     if !package.optional_dependencies.is_empty() {
@@ -657,13 +666,19 @@ fn write_source_inline(
 fn write_source_dist_inline(
     writer: &mut LockWriter,
     source_dist: &SourceDist,
+    base: Option<&ArtifactBase>,
 ) -> Result<(), WriteError> {
     let mut first = true;
     writer.start_inline_table();
     match source_dist {
         SourceDist::Metadata { .. } => {}
         SourceDist::Url { url, .. } => {
-            writer.inline_value(&mut first, "url", url.as_ref())?;
+            writer.inline_value(
+                &mut first,
+                "url",
+                base.and_then(|base| base.relative(url))
+                    .unwrap_or(url.as_ref()),
+            )?;
         }
         SourceDist::Path { path, .. } => {
             writer.inline_value(&mut first, "path", PortablePath::from(path).to_string())?;
@@ -682,12 +697,21 @@ fn write_source_dist_inline(
     Ok(())
 }
 
-fn write_wheel_inline(writer: &mut LockWriter, wheel: &Wheel) -> Result<(), WriteError> {
+fn write_wheel_inline(
+    writer: &mut LockWriter,
+    wheel: &Wheel,
+    base: Option<&ArtifactBase>,
+) -> Result<(), WriteError> {
     let mut first = true;
     writer.start_inline_table();
     match &wheel.url {
         WheelWireSource::Url { url } => {
-            writer.inline_value(&mut first, "url", url.as_ref())?;
+            writer.inline_value(
+                &mut first,
+                "url",
+                base.and_then(|base| base.relative(url))
+                    .unwrap_or(url.as_ref()),
+            )?;
         }
         WheelWireSource::Path { path } => {
             writer.inline_value(&mut first, "path", PortablePath::from(path).to_string())?;

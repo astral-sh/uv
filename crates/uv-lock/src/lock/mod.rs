@@ -81,9 +81,11 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+use self::artifacts::ArtifactBase;
 use self::git::GitFieldsWire;
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
 
+mod artifacts;
 mod deserialize;
 pub(crate) mod export;
 mod git;
@@ -7477,6 +7479,7 @@ struct PackageWire {
     id: PackageId,
     #[serde(default)]
     metadata: PackageMetadata,
+    artifact_base: Option<ArtifactBase>,
     #[serde(default)]
     sdist: Option<SourceDist>,
     #[serde(default)]
@@ -7693,12 +7696,23 @@ impl PackageMetadata {
 
 impl PackageWire {
     fn unwire(
-        self,
+        mut self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
         package_ids: &PackageIdLookup<'_>,
     ) -> Result<Package, LockError> {
+        if let Some(base) = &self.artifact_base {
+            if let Some(SourceDist::Url { url, .. }) = &mut self.sdist {
+                base.expand(url).map_err(LockErrorKind::InvalidUrl)?;
+            }
+            for wheel in &mut self.wheels {
+                if let WheelWireSource::Url { url } = &mut wheel.url {
+                    base.expand(url).map_err(LockErrorKind::InvalidUrl)?;
+                }
+            }
+        }
+
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
             if let Some(version) = &self.id.version {
