@@ -252,7 +252,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
             recorder: manifest.recorder.clone(),
             project: manifest.project,
-            workspace_members: manifest.workspace_members,
+            workspace_members: manifest.workspace_members.into_keys().collect(),
             requirements: manifest.requirements,
             constraints: manifest
                 .constraints

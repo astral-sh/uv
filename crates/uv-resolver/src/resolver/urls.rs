@@ -109,25 +109,20 @@ impl Urls {
             }
         }
 
-        // Workspace member requirements precede other root requirements. Their sources identify
-        // the members even in forks that exclude their root requirements.
-        for requirement in &manifest.requirements {
-            if manifest.workspace_members.contains(&requirement.name)
-                && let RequirementSource::Directory { .. } = &requirement.source
-                && let Some(mut url) = requirement.source.to_verbatim_parsed_url()
-            {
-                // Retain the user's path spelling without changing the member's source identity.
-                if let Some(regular_url) = regular.get(&requirement.name).and_then(|urls| {
-                    urls.iter().find(|regular_url| {
-                        same_resource(&regular_url.parsed_url, &url.parsed_url, git)
-                    })
-                }) {
-                    url.verbatim = regular_url.verbatim.clone();
-                }
-                workspace_members
-                    .entry(requirement.name.clone())
-                    .or_insert(url);
+        // Workspace member sources apply even in forks that exclude their root requirements.
+        for (name, source) in &manifest.workspace_members {
+            let Some(mut url) = source.to_verbatim_parsed_url() else {
+                continue;
+            };
+            // Retain the user's path spelling without changing the member's source identity.
+            if let Some(regular_url) = regular.get(name).and_then(|urls| {
+                urls.iter().find(|regular_url| {
+                    same_resource(&regular_url.parsed_url, &url.parsed_url, git)
+                })
+            }) {
+                url.verbatim = regular_url.verbatim.clone();
             }
+            workspace_members.insert(name.clone(), url);
         }
 
         // Add all URLs from overrides. If there is an override URL, all other URLs from

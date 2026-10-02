@@ -1124,13 +1124,20 @@ async fn do_lock(
                     }),
             );
 
+            // Expand the available extras for each workspace member.
+            let member_requirements = ExtrasResolver::new(&hasher, state.index(), database)
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
+                .resolve(target.members_requirements())
+                .await
+                .map_err(|err| ProjectError::Operation(err.into()))?;
+            let workspace_members = member_requirements
+                .iter()
+                .map(|requirement| (requirement.name.clone(), requirement.source.clone()))
+                .collect();
+
             // Resolve the requirements.
             let (resolution, _) = pip::operations::resolve(
-                ExtrasResolver::new(&hasher, state.index(), database)
-                    .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                    .resolve(target.members_requirements())
-                    .await
-                    .map_err(|err| ProjectError::Operation(err.into()))?
+                member_requirements
                     .into_iter()
                     .chain(target.group_requirements())
                     .chain(requirements.iter().cloned())
@@ -1153,7 +1160,7 @@ async fn do_lock(
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
                 None,
-                packages.keys().cloned().collect(),
+                workspace_members,
                 &extras,
                 &groups,
                 preferences,
