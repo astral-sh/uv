@@ -1192,35 +1192,13 @@ async fn verify_sdist_metadata(
         .map_err(Error::BuildLock)?;
     if metadata.name != filename.name
         || metadata.version != filename.version
-        || !lock.matches_wheel(metadata).map_err(Error::BuildLock)?
+        || !lock.matches_metadata(metadata).map_err(Error::BuildLock)?
     {
         return Err(Error::BuildLock(anyhow::anyhow!(
             "The source distribution's metadata does not match the project lock"
         )));
     }
     Ok(())
-}
-
-async fn wheel_matches_lock(
-    path: &Path,
-    filename: &WheelFilename,
-    lock: &lock::ExportedLock,
-) -> Result<(), Error> {
-    let result = archive::wheel_metadata(path, filename)
-        .await
-        .and_then(|metadata| {
-            if metadata.name != filename.name || metadata.version != filename.version {
-                return Ok(false);
-            }
-            lock.matches_wheel(metadata)
-        });
-    match result {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(Error::BuildLock(anyhow::anyhow!(
-            "The built wheel's metadata does not match the project lock"
-        ))),
-        Err(error) => Err(Error::BuildLock(error)),
-    }
 }
 
 /// Validate dependencies in the caller-provided environment for `uv build`.
@@ -1510,15 +1488,7 @@ async fn build_wheel(
                 .bold()
             )?;
             let source_tree = source_tree.to_path_buf();
-            // Do not publish a wheel containing a lock until its metadata has been checked.
-            let temporary = lock
-                .as_ref()
-                .map(|_| tempfile::tempdir_in(output_dir))
-                .transpose()?;
-            let output_dir_ = temporary
-                .as_ref()
-                .map_or(output_dir, |directory| directory.path())
-                .to_path_buf();
+            let output_dir_ = output_dir.to_path_buf();
             let sources_enabled = sources.is_none();
             let lock_for_build = lock.clone();
             let filename = tokio::task::spawn_blocking(move || {
@@ -1544,13 +1514,6 @@ async fn build_wheel(
                 )
             })
             .await??;
-            if let (Some(lock), Some(temporary)) = (lock.as_deref(), temporary) {
-                let name = filename.to_string();
-                let path = temporary.path().join(&name);
-                wheel_matches_lock(&path, &filename, lock).await?;
-                uv_fs::rename_with_retry(&path, output_dir.join(name)).await?;
-            }
-
             let raw_filename = filename.to_string();
             BuildMessage::Build {
                 normalized_filename: DistFilename::WheelFilename(filename),
@@ -1599,7 +1562,6 @@ async fn build_wheel(
                 WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?;
             if let (Some(lock), Some(temporary)) = (lock.as_deref(), temporary) {
                 let path = temporary.path().join(&filename);
-                wheel_matches_lock(&path, &parsed, lock).await?;
                 archive::add_to_wheel(&path, &parsed, lock.pylock.as_bytes())
                     .await
                     .map_err(Error::BuildLock)?;

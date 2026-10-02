@@ -73,7 +73,7 @@ impl ExportedLock {
         }
     }
 
-    pub(super) fn matches_wheel(&self, metadata: ResolutionMetadata) -> Result<bool> {
+    pub(super) fn matches_metadata(&self, metadata: ResolutionMetadata) -> Result<bool> {
         match &self.metadata {
             LockMetadata::Project {
                 root,

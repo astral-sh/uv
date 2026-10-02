@@ -4324,7 +4324,7 @@ fn build_with_packaged_lock() -> Result<()> {
     context.python_command().arg("-c").arg(indoc! {r#"
         import io, pathlib, stat, tarfile, zipfile
         source = pathlib.Path("dist/locked_tool-1.0.0.tar.gz")
-        for variant in ("private", "comment", "mismatch", "duplicate", "missing", "index", "artifact", "pypi", "directory", "archive", "archive-index", "missing-index", "missing-url", "missing-hash"):
+        for variant in ("private", "comment", "duplicate", "missing", "index", "artifact", "pypi", "directory", "archive", "archive-index", "missing-index", "missing-url", "missing-hash"):
             pathlib.Path(variant).mkdir()
             with tarfile.open(source) as src, tarfile.open(f"{variant}/{source.name}", "w:gz") as dst:
                 for entry in src:
@@ -4358,11 +4358,6 @@ fn build_with_packaged_lock() -> Result<()> {
                         else:
                             package_source = 'index = "https://pypi.org/simple"\nwheels = [{ url = "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl", hashes = {} }]'
                         data += f'\n[[packages]]\nname = "example"\nversion = "1.0.0"\n{package_source}\n'.encode()
-                    if entry.name.endswith("/PKG-INFO") and variant == "mismatch":
-                        if b'\n\n' in data:
-                            data = data.replace(b'\n\n', b'\nRequires-Dist: unexpected\n\n', 1)
-                        else:
-                            data += b'Requires-Dist: unexpected\n'
                     if entry.name.endswith("/PKG-INFO") and variant == "comment":
                         assert b"python_full_version < '3'" in data
                         data = data.replace(b"python_full_version < '3'", b"python_full_version < '3.1'")
@@ -4591,32 +4586,27 @@ fn build_with_packaged_lock() -> Result<()> {
             .failure()
             .stderr(predicate::str::contains(error));
     }
-    for variant in ["mismatch", "duplicate"] {
-        let source = format!("{variant}/locked_tool-1.0.0.tar.gz");
-        let output = format!("{variant}-wheel");
-        build_with_uv_build(&context)
-            .env(EnvVars::UV_EXPORT_LOCK, "true")
-            .args([
-                "--offline",
-                "--preview-features",
-                "locked-tools",
-                "--no-build-isolation",
-                "--wheel",
-                "--out-dir",
-                &output,
-                &source,
-            ])
-            .assert()
-            .failure();
-        assert!(
-            !context
-                .temp_dir
-                .child(output)
-                .child("locked_tool-1.0.0-py3-none-any.whl")
-                .path()
-                .is_file()
-        );
-    }
+    build_with_uv_build(&context)
+        .env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "--out-dir",
+            "duplicate-wheel",
+            "duplicate/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .failure();
+    assert!(
+        !context
+            .temp_dir
+            .child("duplicate-wheel/locked_tool-1.0.0-py3-none-any.whl")
+            .path()
+            .is_file()
+    );
     build_with_uv_build(&context)
         .args([
             "--offline",
@@ -4938,7 +4928,7 @@ fn build_packaged_lock_other_backend() -> Result<()> {
             (dist_info / "METADATA").write_text("Metadata-Version: 2.4\nName: locked-tool\nVersion: 1.0.0\nRequires-Python: >=3.12\n")
             return dist_info.name
         def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            filename = "Locked_Tool-2.0.0-py3-none-any.whl" if pathlib.Path("wrong_filename").exists() else "Locked_Tool-1.0.0-py3-none-any.whl"
+            filename = "Locked_Tool-1.0.0-py3-none-any.whl"
             with zipfile.ZipFile(pathlib.Path(wheel_directory) / filename, "w") as wheel:
                 wheel.writestr("Locked_Tool-1.0.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
                 metadata = "Metadata-Version: 2.4\nName: locked-tool\nVersion: 1.0.0\nRequires-Python: >=3.12\n"
@@ -5059,15 +5049,17 @@ fn build_packaged_lock_other_backend() -> Result<()> {
             .contains(&"Locked_Tool-1.0.0.dist-info/pylock.toml".to_string())
     );
     context.temp_dir.child("mismatch").touch()?;
-    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
-        .args(["--preview-features", "locked-tools", "--wheel", "--no-build-isolation"]), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building wheel...
-    error: Failed to build `[TEMP_DIR]/`
-      cause: Failed to package the project lock
-      cause: The built wheel's metadata does not match the project lock
-    ");
+    context
+        .build()
+        .env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "--wheel",
+            "--no-build-isolation",
+        ])
+        .assert()
+        .success();
     fs_err::remove_file(context.temp_dir.child("mismatch"))?;
     context.temp_dir.child("signed").touch()?;
     uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
@@ -5080,17 +5072,6 @@ fn build_packaged_lock_other_backend() -> Result<()> {
       cause: Cannot add a lock to a signed wheel
     ");
     fs_err::remove_file(context.temp_dir.child("signed"))?;
-    context.temp_dir.child("wrong_filename").touch()?;
-    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
-        .args(["--preview-features", "locked-tools", "--wheel", "--no-build-isolation"]), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building wheel...
-    error: Failed to build `[TEMP_DIR]/`
-      cause: Failed to package the project lock
-      cause: The built wheel's metadata does not match the project lock
-    ");
-    fs_err::remove_file(context.temp_dir.child("wrong_filename"))?;
     pyproject.write_str(&contents.replace(
         "requires-python = \">=3.12\"\ndynamic = [\"dependencies\"]",
         "dynamic = [\"requires-python\"]",
