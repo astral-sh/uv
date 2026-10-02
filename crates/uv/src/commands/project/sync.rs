@@ -51,7 +51,7 @@ use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
+use crate::commands::project::lock::{LockCommand, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentUpdate, LinkErrorReporting, MalwareFindings, MissingLockfileSource, PlatformState,
@@ -161,7 +161,7 @@ pub(crate) async fn sync(
     let frozen_lock = if let Some(source) = frozen {
         Some(
             lock_target
-                .read_frozen(MissingLockfileSource::from(source))
+                .read_frozen(MissingLockfileSource::from(source), LockCommand::Sync)
                 .await
                 .map_err(|err| match (err, &target) {
                     (ProjectError::MissingLockfile(..), SyncTarget::Script(script)) => anyhow::anyhow!(
@@ -394,6 +394,7 @@ pub(crate) async fn sync(
     } else {
         Box::pin(
             LockOperation::new(
+                LockCommand::Sync,
                 mode,
                 &settings.resolver,
                 &client_builder,
