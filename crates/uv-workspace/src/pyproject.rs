@@ -1047,6 +1047,16 @@ pub(crate) struct ToolUvWorkspace {
         "#
     )]
     pub(crate) exclude: Option<Vec<SerdePattern>>,
+    /// Whether to source workspace members by default. Equivalent to setting
+    /// `member-name = { workspace = true }` for every member in `[tool.uv.sources]`.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            default-source-members = true
+        "#
+    )]
+    pub(crate) default_source_members: Option<bool>,
 }
 
 /// (De)serialize globs as strings.

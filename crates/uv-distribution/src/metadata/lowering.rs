@@ -58,7 +58,7 @@ impl LoweredRequirement {
         credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
-        let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
+        let (sources, mut origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), RequirementOrigin::Project)
         } else if let Some(source) = workspace.sources().get(&requirement.name) {
             (Some(source), RequirementOrigin::Workspace)
@@ -67,7 +67,7 @@ impl LoweredRequirement {
         };
 
         // If the source only applies to a given extra or dependency group, filter it out.
-        let sources = sources.map(|sources| {
+        let mut sources = sources.map(|sources| {
             sources
                 .iter()
                 .filter(|source| {
@@ -94,6 +94,22 @@ impl LoweredRequirement {
             // And it's not a recursive self-inclusion (extras that activate other extras), e.g.
             // `framework[machine_learning]` depends on `framework[cuda]`.
             if project_name.is_none_or(|project_name| *project_name != requirement.name) {
+                // If the workspace enables `default-source-members` and no source was declared,
+                // treat the dependency as `{ workspace = true }`.
+                if sources.is_none() && workspace.default_source_members() {
+                    sources = Some(
+                        std::iter::once(Source::Workspace {
+                            workspace: WorkspaceReference::Bool(true),
+                            editable: None,
+                            marker: MarkerTree::TRUE,
+                            extra: None,
+                            group: None,
+                        })
+                        .collect::<Sources>(),
+                    );
+                    origin = RequirementOrigin::Workspace;
+                }
+
                 // It must be declared as a workspace source.
                 let Some(sources) = sources.as_ref() else {
                     // No sources were declared for the workspace package.
