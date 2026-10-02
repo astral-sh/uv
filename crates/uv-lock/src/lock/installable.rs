@@ -134,6 +134,9 @@ pub trait Installable<'lock> {
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
         let resolve_root = |root_name: &PackageName| {
+            if let Some(package) = self.lock().find_workspace_member(root_name) {
+                return Ok(package);
+            }
             self.lock()
                 .find_by_name(root_name)
                 .map_err(|_| LockErrorKind::MultipleRootPackages {

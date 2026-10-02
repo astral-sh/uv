@@ -374,6 +374,9 @@ impl<'lock> LockTarget<'lock> {
         // Check if the discovered workspace members match the locked workspace members.
         if let Self::Workspace(workspace) = self {
             for package_name in workspace.packages().keys() {
+                if existing.find_workspace_member(package_name).is_some() {
+                    continue;
+                }
                 existing
                     .find_by_name(package_name)
                     .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone(), source))?

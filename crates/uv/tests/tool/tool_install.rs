@@ -5870,7 +5870,7 @@ fn tool_install_locks_are_preview() {
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
         version = 1
-        revision = 5
+        revision = 6
         requires-python = ">=3.12"
 
         [options]
@@ -5938,7 +5938,7 @@ fn tool_install_lock_supports_local_wheel() {
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
         version = 1
-        revision = 5
+        revision = 6
         requires-python = ">=3.12"
 
         [options]
@@ -6196,7 +6196,7 @@ fn tool_install_lock_resolution_inputs_constraints() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 5
+        revision = 6
         requires-python = ">=3.12"
 
         [options]

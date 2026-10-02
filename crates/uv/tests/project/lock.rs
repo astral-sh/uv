@@ -100,7 +100,7 @@ fn member_default_groups_in_lockfile() -> Result<()> {
     let contents = context.read("uv.lock");
     assert_snapshot!(contents, @r#"
     version = 1
-    revision = 5
+    revision = 6
     requires-python = ">=3.12"
 
     [options]
@@ -313,7 +313,7 @@ fn member_group_python_requirements_in_lockfile() -> Result<()> {
     let contents = context.read("uv.lock");
     assert_snapshot!(contents, @r#"
     version = 1
-    revision = 5
+    revision = 6
     requires-python = ">=3.12"
 
     [options]
@@ -455,7 +455,7 @@ fn non_project_group_python_requirements_in_lockfile() -> Result<()> {
     let contents = context.read("uv.lock");
     assert_snapshot!(contents, @r#"
     version = 1
-    revision = 5
+    revision = 6
     requires-python = ">=3.12"
 
     [options]
@@ -567,7 +567,7 @@ fn non_project_group_python_requirements_in_lockfile() -> Result<()> {
     ");
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 5
+    revision = 6
     requires-python = ">=3.12"
 
     [options]
@@ -656,7 +656,7 @@ fn non_project_default_groups_in_lockfile() -> Result<()> {
     ");
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 5
+    revision = 6
     requires-python = ">=3.12"
 
     [options]
@@ -797,7 +797,7 @@ fn non_project_default_groups_in_lockfile() -> Result<()> {
     ");
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 5
+    revision = 6
     requires-python = ">=3.12"
 
     [options]
@@ -887,7 +887,7 @@ fn metadata_free_group_python_requirements_in_lockfile() -> Result<()> {
     let contents = context.read("uv.lock");
     assert_snapshot!(contents, @r#"
     version = 1
-    revision = 5
+    revision = 6
     requires-python = ">=3.12"
 
     [options]
@@ -1321,7 +1321,7 @@ fn single_project_default_groups_in_lockfile() -> Result<()> {
     context.lock().arg("--offline").assert().success();
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 5
+    revision = 6
     requires-python = ">=3.12"
 
     [options]

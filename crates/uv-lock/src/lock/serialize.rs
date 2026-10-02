@@ -215,6 +215,7 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     let has_dependency_groups = !manifest.dependency_groups.is_empty();
     let has_manifest = manifest.default_groups.is_some()
         || !manifest.members.is_empty()
+        || !manifest.member_sources.is_empty()
         || !manifest.requirements.is_empty()
         || !manifest.constraints.is_empty()
         || !manifest.overrides.is_empty()
@@ -229,6 +230,17 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
         writer.key_multiline_array("members", &manifest.members, |writer, member| {
             writer.value(member.as_ref())
         })?;
+    }
+    if !manifest.member_sources.is_empty() {
+        writer.key_start("member-sources")?;
+        writer.start_inline_table();
+        let mut first = true;
+        for (name, source) in &manifest.member_sources {
+            writer.inline_key_start(&mut first, name.as_ref())?;
+            write_source_inline(writer, source)?;
+        }
+        writer.finish_inline_table(first);
+        writer.raw("\n");
     }
     if let Some(groups) = &manifest.default_groups {
         writer.key_value("default-groups", serialize_value(groups)?)?;

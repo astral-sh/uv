@@ -13,8 +13,8 @@ use uv_python::{Interpreter, LenientImplementationName, PythonEnvironment};
 use uv_workspace::Workspace;
 
 use crate::lock::{
-    Dependency, DirectSource, Package, PackageId, RegistrySource, Source, SourceDist,
-    SourceDistMetadata, Wheel, WheelWireSource,
+    Dependency, DirectSource, MEMBER_SOURCES_REVISION, Package, PackageId, RegistrySource, Source,
+    SourceDist, SourceDistMetadata, Wheel, WheelWireSource,
 };
 use crate::{Lock, LockError};
 
@@ -24,6 +24,10 @@ enum MetadataErrorKind {
     Serialize(#[from] serde_json::error::Error),
     #[error(transparent)]
     Lock(#[from] LockError),
+    #[error(
+        "Workspace metadata without a manifest requires a lockfile with revision 6 or later; run `uv lock --refresh` to update it"
+    )]
+    MissingMemberSources,
 }
 
 #[derive(Debug)]
@@ -1285,6 +1289,9 @@ impl Metadata {
     /// Relative package paths are resolved against `workspace_root`. Script lockfiles are treated
     /// as workspaces because they do not identify the original script.
     pub fn from_lockfile(workspace_root: &Path, lock: &Lock) -> Result<Self, MetadataError> {
+        if lock.revision() < MEMBER_SOURCES_REVISION {
+            return Err(MetadataErrorKind::MissingMemberSources.into());
+        }
         Ok(Self::from_lock_target(
             MetadataTarget::Lockfile(workspace_root),
             lock,
@@ -1305,6 +1312,7 @@ impl Metadata {
         let workspace_packages = lock.packages().iter().filter(|package| match target {
             MetadataTarget::Workspace(workspace) => {
                 workspace.packages().contains_key(package.name())
+                    && lock.is_workspace_member(package)
             }
             MetadataTarget::Lockfile(_) => lock.is_workspace_member(package),
             MetadataTarget::Script(_) => false,

@@ -1194,7 +1194,8 @@ async fn do_lock(
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
-            .relative_to(target.install_path())?;
+            .relative_to(target.install_path())?
+            .with_member_sources(target.members_requirements(), target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution(

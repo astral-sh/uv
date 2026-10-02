@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use async_zip::base::write::ZipFileWriter;
@@ -257,13 +257,13 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     Ok(())
 }
 
-/// Lockfile metadata requires revision 5 or later.
+/// Lockfile metadata requires revision 6 or later.
 #[test]
 fn workspace_metadata_lockfile_requires_revision() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("uv.lock").write_str(indoc! {r#"
         version = 1
-        revision = 4
+        revision = 5
         requires-python = ">=3.12"
 
         [[package]]
@@ -277,7 +277,7 @@ fn workspace_metadata_lockfile_requires_revision() -> Result<()> {
     ]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    error: Workspace metadata without a manifest requires a lockfile with revision 6 or later; run `uv lock --refresh` to update it
     ");
     Ok(())
 }
@@ -288,7 +288,7 @@ fn workspace_metadata_lockfile_sync() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("uv.lock").write_str(indoc! {r#"
         version = 1
-        revision = 5
+        revision = 6
         requires-python = ">=3.12"
 
         [[package]]
@@ -2339,9 +2339,188 @@ fn workspace_metadata_from_member() -> Result<()> {
     Ok(())
 }
 
+/// Non-editable members are distinct from same-named directory dependencies.
+#[test]
+fn workspace_metadata_lockfile_non_editable_member_with_same_named_dependency() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.9"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { path = "bar" }
+        foo = { workspace = true, editable = false }
+
+        [tool.uv.workspace]
+        members = ["foo"]
+
+        [tool.uv]
+        conflicts = [[{ package = "root" }, { package = "foo" }]]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("other/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "2.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    let other_url = Url::from_file_path(context.temp_dir.child("other").path())
+        .map_err(|()| anyhow!("failed to convert dependency path to file URL"))?;
+
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo @ {other_url}"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "package-conflicts"])
+        .assert()
+        .success();
+    let lock: toml::Value = toml::from_str(&context.read("uv.lock"))?;
+    insta::assert_json_snapshot!(
+        lock.get("manifest").and_then(|manifest| manifest.get("member-sources")),
+        @r#"
+    {
+      "foo": {
+        "directory": "foo"
+      }
+    }
+    "#);
+    context
+        .lock()
+        .args([
+            "--check",
+            "--offline",
+            "--preview-features",
+            "package-conflicts",
+        ])
+        .assert()
+        .success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile,package-conflicts",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile,package-conflicts",
+        ])
+        .assert()
+        .success();
+    let frozen_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(frozen_metadata, metadata);
+
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.child("foo/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.child("bar/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.child("other/pyproject.toml"))?;
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile,package-conflicts",
+        ])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(lockfile_metadata, metadata);
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "conflicts": lockfile_metadata["conflicts"],
+            "members": lockfile_metadata["members"],
+        }), @r#"
+        {
+          "conflicts": {
+            "sets": [
+              {
+                "items": [
+                  {
+                    "id": "foo==1.0@directory+[TEMP_DIR]/foo",
+                    "kind": "Project",
+                    "package": "foo"
+                  },
+                  {
+                    "id": "root==1.0@virtual+[TEMP_DIR]/",
+                    "kind": "Project",
+                    "package": "root"
+                  }
+                ]
+              }
+            ]
+          },
+          "members": [
+            {
+              "id": "foo==1.0@directory+[TEMP_DIR]/foo",
+              "name": "foo",
+              "path": "[TEMP_DIR]/foo"
+            },
+            {
+              "id": "root==1.0@virtual+[TEMP_DIR]/",
+              "name": "root",
+              "path": "[TEMP_DIR]/"
+            }
+          ]
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Test metadata for a workspace with multiple packages.
 #[test]
-fn workspace_metadata_multiple_members() {
+fn workspace_metadata_multiple_members() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // Initialize workspace root
@@ -2439,6 +2618,18 @@ fn workspace_metadata_multiple_members() {
     Resolved 3 packages in [TIME]
     "#
     );
+
+    context
+        .lock()
+        .current_dir(&workspace_root)
+        .assert()
+        .success();
+    let lock: toml::Value = toml::from_str(&context.read("pkg-a/uv.lock"))?;
+    insta::assert_json_snapshot!(
+        lock.get("manifest").and_then(|manifest| manifest.get("member-sources")),
+        @"null"
+    );
+    Ok(())
 }
 
 /// Test metadata for a single project (not a workspace).

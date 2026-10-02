@@ -129,13 +129,17 @@ pub enum LockParseError {
 /// - 3: Record package-specific `exclude-newer` values.
 /// - 4: Support omitting package declaration metadata and record empty extras and groups.
 /// - 5: Record default groups and dependency group metadata for workspace members and roots.
-const REVISION: u32 = 5;
+/// - 6: Record workspace member sources when a dependency has the same name.
+const REVISION: u32 = 6;
 
 /// The first lockfile revision that records default groups for workspace members and roots.
 const DEFAULT_GROUPS_REVISION: u32 = 5;
 
 /// The first lockfile revision that records workspace member dependency group metadata.
 const MEMBER_GROUP_METADATA_REVISION: u32 = 5;
+
+/// The first lockfile revision that identifies same-named workspace members by source.
+const MEMBER_SOURCES_REVISION: u32 = 6;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -2474,7 +2478,7 @@ impl Lock {
     /// Returns an error if an artifact does not advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
-        manifest: ResolverManifest,
+        mut manifest: ResolverManifest,
         root: &Path,
         supported_environments: Vec<MarkerTree>,
         index_locations: &IndexLocations,
@@ -2508,6 +2512,10 @@ impl Lock {
                 duplicates.insert(dist.name());
             }
         }
+        // A name identifies the member unless another distribution resolves under that same name.
+        manifest
+            .member_sources
+            .retain(|name, _| duplicates.contains(name));
 
         // Lock all base packages.
         for (node_index, dist) in resolution.base_dists() {
@@ -2730,13 +2738,42 @@ impl Lock {
                 .into());
             }
 
-            // A single-project lockfile can omit its root from the manifest's member list.
-            let is_member = manifest.members.contains(&dist.id.name)
-                || (manifest.members.is_empty()
-                    && workspace_members.is_empty()
-                    && dist.id.source.is_implicit_root());
-            if is_member {
-                workspace_members.insert(dist.id.name.clone(), PackageIndex(index));
+            let is_member = if let Some(source) = manifest.member_sources.get(&dist.id.name) {
+                dist.id.source.name() == source.name()
+                    && dist
+                        .id
+                        .source
+                        .as_source_tree()
+                        .zip(source.as_source_tree())
+                        .is_some_and(|(path, member_path)| {
+                            normalize_path(path) == normalize_path(member_path)
+                        })
+            } else {
+                // A single-project lockfile can omit its root from the manifest's member list.
+                manifest.members.contains(&dist.id.name)
+                    || (manifest.members.is_empty()
+                        && (revision >= MEMBER_SOURCES_REVISION || workspace_members.is_empty())
+                        && dist.id.source.is_implicit_root())
+            };
+            if is_member
+                && workspace_members
+                    .insert(dist.id.name.clone(), PackageIndex(index))
+                    .is_some()
+                && revision >= MEMBER_SOURCES_REVISION
+            {
+                return Err(LockErrorKind::DuplicateWorkspaceMember {
+                    name: dist.id.name.clone(),
+                }
+                .into());
+            }
+        }
+        for (name, source) in &manifest.member_sources {
+            if !workspace_members.contains_key(name) {
+                return Err(LockErrorKind::MissingWorkspaceMemberSource {
+                    name: name.clone(),
+                    member_source: source.clone(),
+                }
+                .into());
             }
         }
 
@@ -3240,6 +3277,18 @@ impl Lock {
             };
             Some((package.name(), path))
         })
+    }
+
+    /// Return the workspace member with the given name.
+    ///
+    /// Older lockfiles identify members by name only, so an ambiguous name returns `None`.
+    pub fn find_workspace_member(&self, name: &PackageName) -> Option<&Package> {
+        if (self.version(), self.revision()) < (VERSION, MEMBER_SOURCES_REVISION) {
+            return self.find_by_name(name).ok().flatten();
+        }
+        self.workspace_members
+            .get(name)
+            .map(|&index| self.package(index))
     }
 
     /// Returns `true` if the package is a workspace member.
@@ -4300,7 +4349,7 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            let source = self.find_by_name(name).ok().flatten();
+            let source = self.find_workspace_member(name);
 
             // Determine whether the member was required by any other member.
             let value = required_members.get(name);
@@ -4568,11 +4617,7 @@ impl Lock {
 
         // Add the workspace packages to the queue.
         for root_name in packages.keys() {
-            let root = self
-                .find_by_name(root_name)
-                .expect("found too many packages matching root");
-
-            let Some(root) = root else {
+            let Some(root) = self.find_workspace_member(root_name) else {
                 // The package is not in the lockfile, so it can't be satisfied.
                 return Ok(SatisfiesResult::MissingRoot(root_name.clone()));
             };
@@ -6299,6 +6344,9 @@ pub struct ResolverManifest {
     /// The workspace members included in the lockfile.
     #[serde(default)]
     members: BTreeSet<PackageName>,
+    /// Sources that distinguish workspace members from same-named dependencies.
+    #[serde(default)]
+    member_sources: BTreeMap<PackageName, Source>,
     /// Default dependency groups for a workspace root without a `[project]` table.
     #[serde(default)]
     default_groups: Option<DefaultGroups>,
@@ -6400,6 +6448,7 @@ impl ResolverManifest {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
         Self {
             members: members.into_iter().collect(),
+            member_sources: BTreeMap::new(),
             default_groups: None,
             group_requires_python: BTreeMap::new(),
             requirements: normalize_collection::<_, NormalizedRequirements>(
@@ -6427,10 +6476,43 @@ impl ResolverManifest {
         }
     }
 
+    /// Record workspace member sources, relative to the lockfile root.
+    ///
+    /// Only members with ambiguous names are retained when constructing the lockfile.
+    pub fn with_member_sources(
+        mut self,
+        members: impl IntoIterator<Item = Requirement>,
+        root: &Path,
+    ) -> Result<Self, io::Error> {
+        for member in members {
+            let RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                url,
+            } = member.source
+            else {
+                continue;
+            };
+            let path =
+                try_relative_to_if(&install_path, root, url.prefers_relative())?.into_boxed_path();
+            let source = if editable.unwrap_or(false) {
+                Source::Editable(path)
+            } else if r#virtual.unwrap_or(false) {
+                Source::Virtual(path)
+            } else {
+                Source::Directory(path)
+            };
+            self.member_sources.insert(member.name, source);
+        }
+        Ok(self)
+    }
+
     /// Convert the manifest to a relative form using the given workspace.
     pub fn relative_to(self, root: &Path) -> Result<Self, io::Error> {
         Ok(Self {
             members: self.members,
+            member_sources: self.member_sources,
             default_groups: self.default_groups,
             group_requires_python: self.group_requires_python,
             requirements: self
@@ -9828,6 +9910,15 @@ enum LockErrorKind {
     DuplicatePackage {
         /// The ID of the conflicting package.
         id: PackageId,
+    },
+    /// Multiple packages match a workspace member's recorded identity.
+    #[error("Found multiple packages matching workspace member `{name}`")]
+    DuplicateWorkspaceMember { name: PackageName },
+    /// The recorded workspace member source does not identify any local package.
+    #[error("Unable to find workspace member `{name}` with source `{member_source}`")]
+    MissingWorkspaceMemberSource {
+        name: PackageName,
+        member_source: Source,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers.
