@@ -1305,8 +1305,7 @@ impl Metadata {
         let workspace_packages = lock.packages().iter().filter(|package| match target {
             MetadataTarget::Workspace(workspace) => {
                 workspace.packages().contains_key(package.name())
-                    && (!lock.manifest.member_sources.contains_key(package.name())
-                        || lock.is_workspace_member(package))
+                    && lock.is_workspace_member(package)
             }
             MetadataTarget::Lockfile(_) => lock.is_workspace_member(package),
             MetadataTarget::Script(_) => false,
