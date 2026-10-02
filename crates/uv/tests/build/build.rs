@@ -4213,12 +4213,15 @@ fn build_with_packaged_lock() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["ignored>=1,<2; python_version < '3'"]
+
         [project.optional-dependencies]
         z = []
         a = []
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
+
         [tool.uv]
         resolution = "lowest"
     "#})?;
@@ -4696,9 +4699,11 @@ fn build_packaged_lock_unchecked_contents() -> Result<()> {
         name = "locked-tool"
         version = "1.0.0"
         requires-python = ">=3.12"
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
+
         [tool.uv.build-backend]
         source-include = ["uv.lock", "PYLOCK.TOML"]
     "#})?;
@@ -4830,9 +4835,11 @@ fn build_packaged_lock_configuration() -> Result<()> {
         [project]
         name = "locked-tool"
         version = "1.0.0"
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
+
         [tool.uv]
         export-lock = true
     "#})?;
@@ -4915,6 +4922,7 @@ fn build_packaged_lock_other_backend() -> Result<()> {
         name = "locked-tool"
         version = "1.0.0"
         requires-python = ">=3.12"
+
         [build-system]
         requires = []
         build-backend = "test_backend"
@@ -5132,6 +5140,7 @@ fn build_packaged_lock_pypi_sources() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["dependency"]
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -5320,10 +5329,12 @@ fn build_packaged_lock_extras() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["dependency"]
+
         [project.optional-dependencies]
         fast = ["helper"]
         slow = ["helper"]
         empty = []
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -5333,16 +5344,20 @@ fn build_packaged_lock_extras() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
         [[package]]
         name = "locked-tool"
         version = "1.0.0"
         source = { editable = "." }
         dependencies = [{ name = "dependency" }]
+
         [package.optional-dependencies]
         fast = [{ name = "helper" }]
         slow = [{ name = "helper" }]
+
         [package.metadata]
         requires-dist = [
             { name = "dependency" },
@@ -5350,19 +5365,23 @@ fn build_packaged_lock_extras() -> Result<()> {
             { name = "helper", marker = "extra == 'slow'" },
         ]
         provides-extras = ["empty", "fast", "slow"]
+
         [[package]]
         name = "dependency"
         version = "1.0.0"
         source = { registry = "https://pypi.org/simple" }
         wheels = [{ url = "https://files.pythonhosted.org/packages/dependency-1.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }]
+
         [package.optional-dependencies]
         feature = [{ name = "leaf" }]
+
         [[package]]
         name = "helper"
         version = "1.0.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [{ name = "dependency", extra = ["feature"] }]
         wheels = [{ url = "https://files.pythonhosted.org/packages/helper-1.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }]
+
         [[package]]
         name = "leaf"
         version = "1.0.0"
@@ -5396,6 +5415,7 @@ fn build_packaged_lock_extras() -> Result<()> {
         indoc! {r#"
         [tool.uv.sources]
         helper = { index = "private" }
+
         [[tool.uv.index]]
         name = "private"
         url = "https://private.example/simple"
@@ -5430,8 +5450,10 @@ fn build_packaged_lock_extras() -> Result<()> {
         indoc! {r#"
             [dependency-groups]
             dev = ["private"]
+
             [tool.uv.sources]
             private = { index = "private" }
+
             [[tool.uv.index]]
             name = "private"
             url = "https://private.example/simple"
@@ -5485,11 +5507,14 @@ fn build_packaged_lock_pypi_trailing_slash() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["dependency"]
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
+
         [tool.uv.sources]
         dependency = { index = "pypi-explicit" }
+
         [[tool.uv.index]]
         name = "pypi-explicit"
         url = "https://pypi.org/simple/"
@@ -5499,15 +5524,19 @@ fn build_packaged_lock_pypi_trailing_slash() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
         [[package]]
         name = "locked-tool"
         version = "1.0.0"
         source = { editable = "." }
         dependencies = [{ name = "dependency" }]
+
         [package.metadata]
         requires-dist = [{ name = "dependency", index = "https://pypi.org/simple/" }]
+
         [[package]]
         name = "dependency"
         version = "1.0.0"
@@ -5579,6 +5608,7 @@ fn build_packaged_lock_stale() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["requests"]
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -5586,6 +5616,7 @@ fn build_packaged_lock_stale() -> Result<()> {
     context.temp_dir.child("uv.lock").write_str(indoc! {r#"
         version = 1
         requires-python = ">=3.12"
+
         [[package]]
         name = "locked-tool"
         version = "1.0.0"
@@ -5637,6 +5668,7 @@ fn build_packaged_lock_stale() -> Result<()> {
     context.temp_dir.child("uv.lock").write_str(indoc! {r#"
         version = 1
         requires-python = ">=3.12"
+
         [[package]]
         name = "old-name"
         version = "1.0.0"
@@ -5696,6 +5728,7 @@ fn build_packaged_lock_workspace() -> Result<()> {
         name = "locked-tool"
         version = "1.0.0"
         requires-python = ">=3.12"
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -5709,9 +5742,11 @@ fn build_packaged_lock_workspace() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["local-dependency"]
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
+
         [tool.uv.sources]
         local-dependency = { path = "../../local-dependency" }
     "#})?;
@@ -5844,6 +5879,7 @@ fn build_packaged_lock_missing_ineligible_source() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["dependency"]
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -5853,6 +5889,7 @@ fn build_packaged_lock_missing_ineligible_source() -> Result<()> {
         name = "private"
         url = "https://private.example/simple"
         explicit = true
+
         [tool.uv.sources]
         dependency = { index = "private" }
     "#};
@@ -6011,6 +6048,7 @@ fn build_packaged_lock_skipped_stale() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["dependency"]
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -6020,6 +6058,7 @@ fn build_packaged_lock_skipped_stale() -> Result<()> {
         name = "private"
         url = "https://private.example/simple"
         explicit = true
+
         [tool.uv.sources]
         dependency = { index = "private" }
     "#};
@@ -6145,10 +6184,13 @@ fn build_packaged_lock_skipped_stale() -> Result<()> {
     workspace.child("pyproject.toml").write_str(indoc! {r#"
         [tool.uv.workspace]
         members = ["packages/*"]
+
         [dependency-groups]
         dev = ["other"]
+
         [tool.uv.sources]
         other = { index = "private" }
+
         [[tool.uv.index]]
         name = "private"
         url = "https://private.example/simple"
@@ -6265,6 +6307,7 @@ fn build_packaged_lock_skipped_empty_dependencies() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = []
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -6275,11 +6318,13 @@ fn build_packaged_lock_skipped_empty_dependencies() -> Result<()> {
         version = 1
         revision = 5
         requires-python = ">=3.12"
+
         [[package]]
         name = "locked-tool"
         version = "1.0.0"
         source = { editable = "." }
         dependencies = [{ name = "dependency" }]
+
         [[package]]
         name = "dependency"
         version = "1.0.0"
@@ -6336,9 +6381,11 @@ fn build_packaged_lock_skipped_sdist() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["dependency"]
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
+
         [tool.uv.build-backend]
         source-include = ["uv.lock"]
     "#})?;
@@ -6346,13 +6393,16 @@ fn build_packaged_lock_skipped_sdist() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+
         [[package]]
         name = "locked-tool"
         version = "1.0.0"
         source = { editable = "." }
         dependencies = [{ name = "dependency" }]
+
         [package.metadata]
         requires-dist = [{ name = "dependency" }]
+
         [[package]]
         name = "dependency"
         version = "1.0.0"
@@ -6444,6 +6494,7 @@ fn build_sdist_with_invalid_packaged_lock() -> Result<()> {
         name = "example"
         version = "1.0.0"
         requires-python = ">=3.12"
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -6559,6 +6610,7 @@ fn build_sdist_with_forked_packaged_lock() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.12"
         dependencies = ["dependency"]
+
         [build-system]
         requires = ["uv_build>=0.5.15,<2"]
         build-backend = "uv_build"
@@ -6571,6 +6623,7 @@ fn build_sdist_with_forked_packaged_lock() -> Result<()> {
             "sys_platform == 'win32'",
             "sys_platform != 'win32'",
         ]
+
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
@@ -6596,6 +6649,7 @@ fn build_sdist_with_forked_packaged_lock() -> Result<()> {
             { name = "dependency", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
             { name = "dependency", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
         ]
+
         [package.metadata]
         requires-dist = [{ name = "dependency" }]
     "#})?;
@@ -6641,6 +6695,7 @@ fn build_packaged_lock_wheel_crc() -> Result<()> {
         name = "locked-tool"
         version = "1.0.0"
         requires-python = ">=3.12"
+
         [build-system]
         requires = []
         build-backend = "uv_build"
