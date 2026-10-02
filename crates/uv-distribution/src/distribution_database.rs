@@ -25,9 +25,9 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
-    SourceDist, SourceUrl, parse_url_hashes,
+    ArchiveHashGroups, ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef,
+    HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
+    ResolutionRecorder, SourceDist, SourceUrl, parse_all_url_hashes, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -37,7 +37,9 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
-use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{
+    HashAlgorithm, HashDigest, HashDigests, Hashes, PyProjectToml, ResolutionMetadata,
+};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_threads::initialize_rayon_once;
@@ -611,6 +613,80 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        if let HashValidation::Independent { groups, url_hashes } = hashes.validation {
+            let mut groups = groups.map_or_else(Vec::new, |groups| groups.groups().to_vec());
+            groups.extend(
+                url_hashes
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .map(|hash| vec![hash]),
+            );
+            match dist {
+                BuiltDist::Registry(dist) => {
+                    let index_hashes = dist
+                        .best_wheel()
+                        .file
+                        .hashes
+                        .iter()
+                        .filter(|hash| hash.algorithm() != HashAlgorithm::Md5)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    groups.extend(index_hashes.into_iter().map(|hash| vec![hash]));
+                    let url = dist.best_wheel().file.url.to_url()?;
+                    groups.extend(
+                        parse_all_url_hashes(&url)?
+                            .into_iter()
+                            .map(|hash| vec![hash]),
+                    );
+                }
+                BuiltDist::DirectUrl(dist) => {
+                    groups.extend(
+                        parse_all_url_hashes(&dist.url)?
+                            .into_iter()
+                            .map(|hash| vec![hash]),
+                    );
+                }
+                BuiltDist::Path(dist) => {
+                    groups.extend(
+                        parse_all_url_hashes(&dist.url)?
+                            .into_iter()
+                            .map(|hash| vec![hash]),
+                    );
+                }
+                BuiltDist::GitPath(dist) => {
+                    let fragment = dist.url.fragment().map(Hashes::parse_url_fragment);
+                    if !groups.is_empty() || !matches!(fragment, None | Some(Ok(None))) {
+                        return Err(Error::HashesNotSupportedGit(dist.to_string()));
+                    }
+                }
+            }
+            let groups = ArchiveHashGroups::new(groups);
+            let policy = if groups.groups().is_empty() {
+                ArchiveHashPolicy::Generate
+            } else {
+                ArchiveHashPolicy::AllOfAny(&groups)
+            };
+            let wheel = self.get_wheel(dist, policy).await?;
+            if !wheel.satisfies(policy) {
+                return Err(Error::hash_mismatch(
+                    dist.to_string(),
+                    policy.digests(),
+                    wheel.hashes(),
+                ));
+            }
+            let metadata = if let Some(metadata) =
+                self.dependency_metadata(dist.name(), Some(dist.version()))
+            {
+                Metadata::from_dependency_metadata(metadata)
+            } else {
+                Metadata::from_metadata23(wheel.metadata()?)
+            };
+            return Ok(ArchiveMetadata {
+                metadata,
+                hashes: wheel.hashes,
+            });
+        }
         let hash_policy = match hashes.validation {
             HashValidation::None => {
                 let compute_hashes = match hashes.collection {
@@ -632,7 +708,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     ArchiveHashPolicy::None
                 }
             }
-            HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
+            HashValidation::Any(_)
+            | HashValidation::All(_)
+            | HashValidation::Independent { .. } => hashes.validation.into(),
         };
 
         // Fetch the entire wheel only when we need to compute a hash for resolution.
@@ -703,6 +781,68 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         source: &BuildableSource<'_>,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        if let HashValidation::Independent { groups, url_hashes } = hashes.validation {
+            match source {
+                BuildableSource::Dist(SourceDist::GitPath(dist)) => {
+                    let fragment = dist.url.fragment().map(Hashes::parse_url_fragment);
+                    if groups.is_some()
+                        || url_hashes.is_some()
+                        || !matches!(fragment, None | Some(Ok(None)))
+                    {
+                        return Err(Error::HashesNotSupportedGit(source.to_string()));
+                    }
+                }
+                BuildableSource::Url(SourceUrl::GitPath(url)) => {
+                    let fragment = url.url.fragment().map(Hashes::parse_url_fragment);
+                    if groups.is_some()
+                        || url_hashes.is_some()
+                        || !matches!(fragment, None | Some(Ok(None)))
+                    {
+                        return Err(Error::HashesNotSupportedGit(source.to_string()));
+                    }
+                }
+                BuildableSource::Dist(SourceDist::GitDirectory(dist)) => {
+                    let fragment = dist.url.fragment().map(Hashes::parse_url_fragment);
+                    if groups.is_some()
+                        || url_hashes.is_some()
+                        || !matches!(fragment, None | Some(Ok(None)))
+                    {
+                        return Err(Error::HashesNotSupportedGit(source.to_string()));
+                    }
+                }
+                BuildableSource::Url(SourceUrl::GitDirectory(url)) => {
+                    let fragment = url.url.fragment().map(Hashes::parse_url_fragment);
+                    if groups.is_some()
+                        || url_hashes.is_some()
+                        || !matches!(fragment, None | Some(Ok(None)))
+                    {
+                        return Err(Error::HashesNotSupportedGit(source.to_string()));
+                    }
+                }
+                BuildableSource::Dist(SourceDist::Directory(dist)) => {
+                    let fragment = dist.url.fragment().map(Hashes::parse_url_fragment);
+                    if groups.is_some()
+                        || url_hashes.is_some()
+                        || !matches!(fragment, None | Some(Ok(None)))
+                    {
+                        return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
+                    }
+                }
+                BuildableSource::Url(SourceUrl::Directory(url)) => {
+                    let fragment = url.url.fragment().map(Hashes::parse_url_fragment);
+                    if groups.is_some()
+                        || url_hashes.is_some()
+                        || !matches!(fragment, None | Some(Ok(None)))
+                    {
+                        return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
+                    }
+                }
+                BuildableSource::Dist(
+                    SourceDist::Registry(_) | SourceDist::DirectUrl(_) | SourceDist::Path(_),
+                )
+                | BuildableSource::Url(SourceUrl::Direct(_) | SourceUrl::Path(_)) => {}
+            }
+        }
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
             if let Some(metadata) = self.dependency_metadata(dist.name(), dist.version()) {
@@ -718,10 +858,75 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             parse_url_hashes(&dist.url)
         } else if let BuildableSource::Url(SourceUrl::Direct(url)) = source {
             parse_url_hashes(url.url)
+        } else if let (
+            HashValidation::Independent { .. },
+            BuildableSource::Dist(SourceDist::Path(dist)),
+        ) = (hashes.validation, source)
+        {
+            parse_url_hashes(&dist.url)
+        } else if let (
+            HashValidation::Independent { .. },
+            BuildableSource::Url(SourceUrl::Path(url)),
+        ) = (hashes.validation, source)
+        {
+            parse_url_hashes(url.url)
         } else {
             None
         };
 
+        let independent_groups = if let HashValidation::Independent { groups, url_hashes } =
+            hashes.validation
+        {
+            let mut groups = groups.map_or_else(Vec::new, |groups| groups.groups().to_vec());
+            groups.extend(
+                url_hashes
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .map(|hash| vec![hash]),
+            );
+            if let BuildableSource::Dist(SourceDist::Registry(dist)) = source {
+                let index_hashes = dist
+                    .file
+                    .hashes
+                    .iter()
+                    .filter(|hash| hash.algorithm() != HashAlgorithm::Md5)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                groups.extend(index_hashes.into_iter().map(|hash| vec![hash]));
+                let url = dist.file.url.to_url()?;
+                groups.extend(
+                    parse_all_url_hashes(&url)?
+                        .into_iter()
+                        .map(|hash| vec![hash]),
+                );
+            }
+            let source_url = match source {
+                BuildableSource::Dist(SourceDist::DirectUrl(dist)) => Some(&*dist.url),
+                BuildableSource::Dist(SourceDist::Path(dist)) => Some(&*dist.url),
+                BuildableSource::Url(SourceUrl::Direct(url)) => Some(url.url),
+                BuildableSource::Url(SourceUrl::Path(url)) => Some(url.url),
+                BuildableSource::Dist(
+                    SourceDist::Registry(_)
+                    | SourceDist::GitDirectory(_)
+                    | SourceDist::GitPath(_)
+                    | SourceDist::Directory(_),
+                )
+                | BuildableSource::Url(
+                    SourceUrl::GitDirectory(_) | SourceUrl::GitPath(_) | SourceUrl::Directory(_),
+                ) => None,
+            };
+            if let Some(url) = source_url {
+                groups.extend(
+                    parse_all_url_hashes(url)?
+                        .into_iter()
+                        .map(|hash| vec![hash]),
+                );
+            }
+            (!groups.is_empty()).then(|| ArchiveHashGroups::new(groups))
+        } else {
+            None
+        };
         let build_hash_policy = match hashes.validation {
             HashValidation::None => match hashes.collection {
                 HashCollection::None => ArchiveHashPolicy::None,
@@ -732,6 +937,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     None => ArchiveHashPolicy::Generate,
                 },
             },
+            HashValidation::Independent { .. } => independent_groups
+                .as_ref()
+                .map_or(ArchiveHashPolicy::None, ArchiveHashPolicy::AllOfAny),
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
         };
         let ArchiveMetadata { metadata, hashes } = self

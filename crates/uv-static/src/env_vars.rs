@@ -390,6 +390,11 @@ impl EnvVars {
     #[attr_added_in("0.4.25")]
     pub const UV_LOCKED: &'static str = "UV_LOCKED";
 
+    /// Use the package's bundled lock when installing, running, or upgrading tools.
+    #[attr_added_in("next release")]
+    #[attr_hidden]
+    pub const UV_TOOL_LOCKED: &'static str = "UV_TOOL_LOCKED";
+
     /// Equivalent to the `--frozen` command-line argument. If set, uv will run without
     /// updating the `uv.lock` file.
     #[attr_added_in("0.4.25")]

@@ -125,21 +125,40 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         } else {
                             None
                         };
-                    let requirements = trusted_requirements
-                        .as_deref()
-                        .unwrap_or_else(|| lookahead.requirements())
-                        .iter()
-                        .filter(|requirement| {
-                            !self.modifiers.is_excluded_for(
-                                lookahead.package(),
-                                lookahead.version(),
-                                &requirement.name,
-                            )
-                        });
-                    hasher = if trusted_requirements.is_some() {
-                        hasher.augment_with_requirements(requirements)?
+                    hasher = if hasher.has_independent_hashes() {
+                        let requirements = self
+                            .constraints
+                            .apply(self.modifiers.apply(
+                                DependencyModifierScope::Package(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                ),
+                                lookahead.requirements(),
+                            ))
+                            .filter(|requirement| {
+                                requirement
+                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
+                            })
+                            .map(|requirement| (*requirement).clone())
+                            .collect::<Vec<_>>();
+                        hasher.augment_with_metadata_requirements(requirements.iter())?
                     } else {
-                        hasher.augment_with_metadata_requirements(requirements)?
+                        let requirements = trusted_requirements
+                            .as_deref()
+                            .unwrap_or_else(|| lookahead.requirements())
+                            .iter()
+                            .filter(|requirement| {
+                                !self.modifiers.is_excluded_for(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                    &requirement.name,
+                                )
+                            });
+                        if trusted_requirements.is_some() {
+                            hasher.augment_with_requirements(requirements)?
+                        } else {
+                            hasher.augment_with_metadata_requirements(requirements)?
+                        }
                     };
                     for requirement in self.constraints.apply(self.modifiers.apply(
                         DependencyModifierScope::Package(lookahead.package(), lookahead.version()),
