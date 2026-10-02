@@ -58,7 +58,7 @@ jobs:
       - name: "Create artifact archive"
         run: |
           mkdir -p target/codspeed-bin
-          cp "$(command -v cargo-codspeed)" target/codspeed-bin/
+          cp "$(uv run --only-dev which cargo-codspeed)" target/codspeed-bin/
           tar -cvf benchmarks-walltime.tar target/codspeed target/codspeed-bin target/debug/uv .cache
 
       - name: "Upload benchmark artifacts"
