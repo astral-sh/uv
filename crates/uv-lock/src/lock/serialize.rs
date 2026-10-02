@@ -4,10 +4,11 @@ use std::fmt;
 use serde::Serialize;
 use toml_edit::Value;
 use toml_writer::{TomlWrite, WriteTomlValue};
+use uv_configuration::Override;
 use uv_distribution_types::{Requirement, RequirementSource, RequiresPython, SimplifiedMarkerTree};
 use uv_fs::PortablePath;
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, Requirement as Pep508Requirement, VerbatimUrl};
 use uv_pypi_types::ConflictKind;
 use uv_redacted::DisplaySafeUrl;
 
@@ -278,14 +279,51 @@ fn write_manifest(
     if !manifest.requirements.is_empty() {
         write_requirements(writer, field, &manifest.requirements, version)?;
     }
-    write_serialized_non_empty_array(writer, "constraints", &manifest.constraints, version)?;
-    write_serialized_non_empty_array(writer, "overrides", &manifest.overrides, version)?;
-    write_serialized_non_empty_array(writer, "excludes", &manifest.excludes, version)?;
-    write_serialized_non_empty_array(
+    write_non_empty_array(
+        writer,
+        "constraints",
+        &manifest.constraints,
+        |writer, requirement| write_requirement_inline(writer, requirement, version),
+    )?;
+    write_non_empty_array(writer, "overrides", &manifest.overrides, |writer, entry| {
+        if version < 2 {
+            return writer.value(serialize_value(entry)?);
+        }
+        match entry {
+            Override::Requirement(requirement) => {
+                write_requirement_inline(writer, requirement, version)
+            }
+            Override::Package(package) => {
+                let mut first = true;
+                writer.start_inline_table();
+                writer.inline_value(&mut first, "package", serialize_value(&package.package)?)?;
+                writer.inline_key_start(&mut first, "dependencies")?;
+                writer.array(&package.dependencies, |writer, requirement| {
+                    write_requirement_inline(writer, requirement, version)
+                })?;
+                writer.finish_inline_table(first);
+                Ok(())
+            }
+        }
+    })?;
+    write_non_empty_array(writer, "excludes", &manifest.excludes, |writer, exclude| {
+        writer.value(serialize_value(exclude)?)
+    })?;
+    write_non_empty_array(
         writer,
         "build-constraints",
         &manifest.build_constraints,
-        version,
+        |writer, constraint| {
+            if version >= 2 && constraint.hashes.is_empty() {
+                write_requirement_inline(writer, &constraint.requirement, version)
+            } else {
+                let mut value = serialize_value(constraint)?;
+                if version >= 2 {
+                    structure_git_sources(&mut value.0)?;
+                }
+                writer.value(value)
+            }
+        },
     )?;
 
     if !groups.is_empty() {
@@ -793,44 +831,29 @@ fn write_requirements(
     requirements: &BTreeSet<Requirement>,
     version: u32,
 ) -> Result<(), WriteError> {
-    writer.key_start(key)?;
-    let write_requirement = |writer: &mut LockWriter, requirement: &Requirement| {
+    write_array(writer, key, requirements, |writer, requirement| {
         write_requirement_inline(writer, requirement, version)
-    };
-    if requirements.len() <= 1 {
-        writer.array(requirements, write_requirement)?;
-        writer.raw("\n");
-    } else {
-        writer.multiline_array(requirements, write_requirement)?;
-    }
-    Ok(())
+    })
 }
 
-/// Writes unqualified requirements as names in v2, retaining tables for all other declarations.
+/// Writes registry requirements as PEP 508 strings in v2 when no uv-specific fields are needed.
 fn write_requirement_inline(
     writer: &mut LockWriter,
     requirement: &Requirement,
     version: u32,
 ) -> Result<(), WriteError> {
-    let name_only = match &requirement.source {
+    let pep508 = match &requirement.source {
         RequirementSource::Registry {
-            specifier,
-            index,
-            conflict,
-        } => specifier.is_empty() && index.is_none() && conflict.is_none(),
+            index, conflict, ..
+        } => index.is_none() && conflict.is_none(),
         RequirementSource::Url { .. }
         | RequirementSource::GitDirectory { .. }
         | RequirementSource::GitPath { .. }
         | RequirementSource::Path { .. }
         | RequirementSource::Directory { .. } => false,
     };
-    if version >= 2
-        && name_only
-        && requirement.extras.is_empty()
-        && requirement.groups.is_empty()
-        && requirement.marker.is_true()
-    {
-        writer.value(requirement.name.as_ref())
+    if version >= 2 && pep508 && requirement.groups.is_empty() {
+        writer.value(Pep508Requirement::<VerbatimUrl>::from(requirement.clone()).to_string())
     } else {
         let mut value = serialize_value(requirement)?;
         if version >= 2 {
@@ -878,37 +901,36 @@ fn serialize_git_source(url: &str) -> Result<SerializedValue, WriteError> {
     serialize_value(&GitSourceWire::from_url(url))
 }
 
-/// Writes a Serde-backed array, omitting the key when the array is empty.
-fn write_serialized_non_empty_array<T: Serialize>(
+/// Writes an array, omitting the key when the array is empty.
+fn write_non_empty_array<T, F>(
     writer: &mut LockWriter,
     key: &str,
     values: &BTreeSet<T>,
-    version: u32,
-) -> Result<(), WriteError> {
+    write_value: F,
+) -> Result<(), WriteError>
+where
+    F: FnMut(&mut LockWriter, &T) -> Result<(), WriteError>,
+{
     if values.is_empty() {
         return Ok(());
     }
-    write_serialized_array(writer, key, values, version)
+    write_array(writer, key, values, write_value)
 }
 
-/// Writes a Serde-backed array using the canonical layout for its cardinality.
+/// Writes an array using the canonical layout for its cardinality.
 ///
 /// Empty and single-element arrays stay on one line, while larger arrays place each element on
-/// its own line. Unlike [`write_serialized_non_empty_array`], this retains empty dependency groups.
-fn write_serialized_array<T: Serialize>(
+/// its own line. Unlike [`write_non_empty_array`], this retains empty dependency groups.
+fn write_array<T, F>(
     writer: &mut LockWriter,
     key: &str,
     values: &BTreeSet<T>,
-    version: u32,
-) -> Result<(), WriteError> {
+    write_value: F,
+) -> Result<(), WriteError>
+where
+    F: FnMut(&mut LockWriter, &T) -> Result<(), WriteError>,
+{
     writer.key_start(key)?;
-    let write_value = |writer: &mut LockWriter, value: &T| {
-        let mut value = serialize_value(value)?;
-        if version >= 2 {
-            structure_git_sources(&mut value.0)?;
-        }
-        writer.value(value)
-    };
     if values.len() <= 1 {
         writer.array(values, write_value)?;
         writer.raw("\n");
