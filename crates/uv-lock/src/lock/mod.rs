@@ -2501,7 +2501,7 @@ impl Lock {
             fork_markers_union(&resolution.fork_markers, &requires_python),
         );
 
-        // Determine the set of packages included at multiple versions.
+        // Determine the set of packages included with multiple distributions.
         let mut seen = FxHashSet::default();
         let mut duplicates = FxHashSet::default();
         for (_, dist) in resolution.base_dists() {
@@ -2735,16 +2735,16 @@ impl Lock {
                 .into());
             }
 
-            let is_member = if let Some(source) = manifest.member_sources.get(&dist.id.name) {
-                dist.id.source.name() == source.name()
-                    && dist
-                        .id
-                        .source
-                        .as_source_tree()
-                        .zip(source.as_source_tree())
-                        .is_some_and(|(path, member_path)| {
-                            normalize_path(path) == normalize_path(member_path)
-                        })
+            let member_source = manifest.member_sources.get(&dist.id.name);
+            let is_member = if let Some(source) = member_source {
+                match (&dist.id.source, source) {
+                    (Source::Directory(path), Source::Directory(member_path))
+                    | (Source::Editable(path), Source::Editable(member_path))
+                    | (Source::Virtual(path), Source::Virtual(member_path)) => {
+                        normalize_path(path.as_ref()) == normalize_path(member_path.as_ref())
+                    }
+                    _ => false,
+                }
             } else {
                 // A single-project lockfile can omit its root from the manifest's member list.
                 manifest.members.contains(&dist.id.name)
@@ -2752,12 +2752,11 @@ impl Lock {
                         && workspace_members.is_empty()
                         && dist.id.source.is_implicit_root())
             };
-            if is_member
-                && workspace_members
-                    .insert(dist.id.name.clone(), PackageIndex(index))
-                    .is_some()
-                && manifest.member_sources.contains_key(&dist.id.name)
-            {
+            if !is_member {
+                continue;
+            }
+            let previous = workspace_members.insert(dist.id.name.clone(), PackageIndex(index));
+            if member_source.is_some() && previous.is_some() {
                 return Err(LockErrorKind::DuplicateWorkspaceMember {
                     name: dist.id.name.clone(),
                 }
@@ -3278,14 +3277,15 @@ impl Lock {
 
     /// Return the workspace member with the given name.
     ///
-    /// Without a recorded member source, an ambiguous name returns `None`.
-    pub fn find_workspace_member(&self, name: &PackageName) -> Option<&Package> {
+    /// Without a recorded member source, an ambiguous name returns an error.
+    pub fn find_workspace_member(&self, name: &PackageName) -> Result<Option<&Package>, String> {
         if !self.manifest.member_sources.contains_key(name) {
-            return self.find_by_name(name).ok().flatten();
+            return self.find_by_name(name);
         }
-        self.workspace_members
+        Ok(self
+            .workspace_members
             .get(name)
-            .map(|&index| self.package(index))
+            .map(|&index| self.package(index)))
     }
 
     /// Returns `true` if the package is a workspace member.
@@ -4346,7 +4346,7 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            let source = self.find_workspace_member(name);
+            let source = self.find_workspace_member(name).ok().flatten();
 
             // Determine whether the member was required by any other member.
             let value = required_members.get(name);
@@ -4614,7 +4614,7 @@ impl Lock {
 
         // Add the workspace packages to the queue.
         for root_name in packages.keys() {
-            let Some(root) = self.find_workspace_member(root_name) else {
+            let Some(root) = self.find_workspace_member(root_name).ok().flatten() else {
                 // The package is not in the lockfile, so it can't be satisfied.
                 return Ok(SatisfiesResult::MissingRoot(root_name.clone()));
             };
