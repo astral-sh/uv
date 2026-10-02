@@ -472,11 +472,16 @@ fn write_hashed(
     let mut size: u64 = 0;
     let mut buffer = vec![0; ZIP_STREAM_BUFFER_SIZE];
     loop {
-        let read = match reader.read(&mut buffer) {
-            Ok(read) => read,
-            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
-            Err(err) => return Err(err),
-        };
+        // Fill each chunk so compression output does not depend on short reads.
+        let mut read = 0;
+        while read < buffer.len() {
+            match reader.read(&mut buffer[read..]) {
+                Ok(0) => break,
+                Ok(count) => read += count,
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
+                Err(err) => return Err(err),
+            }
+        }
         if read == 0 {
             // End of file
             break;
@@ -484,6 +489,9 @@ fn write_hashed(
         hasher.update(&buffer[..read]);
         writer.write_all(&buffer[..read])?;
         size += read as u64;
+        if read < buffer.len() {
+            break;
+        }
     }
     Ok(RecordEntry {
         path: path.to_string(),
