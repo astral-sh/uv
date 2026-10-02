@@ -1,5 +1,3 @@
-mod archive;
-
 use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -15,7 +13,7 @@ use tracing::{debug, instrument};
 
 use uv_auth::CredentialsCache;
 use uv_build_backend::check_direct_build;
-use uv_build_frontend::SourceBuild;
+use uv_build_frontend::{SourceBuild, archive};
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{
@@ -1075,7 +1073,9 @@ async fn build_package(
             if let (Some(lock), Some(DistFilename::SourceDistFilename(filename))) =
                 (&exported_lock, &source_dist)
             {
-                verify_sdist_metadata(source.path(), filename, lock).await?;
+                archive::verify_sdist_metadata(source.path(), filename, lock)
+                    .await
+                    .map_err(Error::BuildLock)?;
             }
             let wheel_build = build_wheel(
                 &extracted,
@@ -1180,25 +1180,6 @@ fn add_build_lock(message: &mut BuildMessage, lock: Option<&lock::ExportedLock>)
             ));
         }
     }
-}
-
-async fn verify_sdist_metadata(
-    path: &Path,
-    filename: &SourceDistFilename,
-    lock: &lock::ExportedLock,
-) -> Result<(), Error> {
-    let metadata = archive::sdist_metadata(path, filename)
-        .await
-        .map_err(Error::BuildLock)?;
-    if metadata.name != filename.name
-        || metadata.version != filename.version
-        || !lock.matches_metadata(metadata).map_err(Error::BuildLock)?
-    {
-        return Err(Error::BuildLock(anyhow::anyhow!(
-            "The source distribution's metadata does not match the project lock"
-        )));
-    }
-    Ok(())
 }
 
 /// Validate dependencies in the caller-provided environment for `uv build`.
@@ -1371,7 +1352,9 @@ async fn build_sdist(
                 .map_err(Error::InvalidBuiltSourceDistFilename)?;
             if let (Some(lock), Some(temporary)) = (lock.as_deref(), temporary) {
                 let path = temporary.path().join(&filename);
-                verify_sdist_metadata(&path, &parsed, lock).await?;
+                archive::verify_sdist_metadata(&path, &parsed, lock)
+                    .await
+                    .map_err(Error::BuildLock)?;
                 uv_fs::rename_with_retry(&path, output_dir.join(&filename)).await?;
             }
 
@@ -1422,7 +1405,9 @@ async fn build_sdist(
                 .map_err(Error::InvalidBuiltSourceDistFilename)?;
             if let (Some(lock), Some(temporary)) = (lock.as_deref(), temporary) {
                 let path = temporary.path().join(&filename);
-                verify_sdist_metadata(&path, &parsed, lock).await?;
+                archive::verify_sdist_metadata(&path, &parsed, lock)
+                    .await
+                    .map_err(Error::BuildLock)?;
                 archive::add_to_sdist(&path, &parsed, lock.pylock.as_bytes())
                     .await
                     .map_err(Error::BuildLock)?;

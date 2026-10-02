@@ -17,6 +17,7 @@ use uv_distribution_filename::{
     LegacySourceDistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_install_wheel::{RecordEntry, read_record};
+use uv_lock::build::ExportedLock;
 use uv_metadata::find_archive_dist_info;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -24,10 +25,22 @@ use uv_pypi_types::ResolutionMetadata;
 const WHOLE_FILE_ZIP_ENTRY_LIMIT: u64 = 16 * 1024 * 1024;
 const ZIP_STREAM_BUFFER_SIZE: usize = 128 * 1024;
 
-pub(super) async fn sdist_metadata(
+pub async fn verify_sdist_metadata(
     path: &Path,
     filename: &SourceDistFilename,
-) -> Result<ResolutionMetadata> {
+    lock: &ExportedLock,
+) -> Result<()> {
+    let metadata = sdist_metadata(path, filename).await?;
+    if metadata.name != filename.name
+        || metadata.version != filename.version
+        || !lock.matches_metadata(metadata)?
+    {
+        bail!("The source distribution's metadata does not match the project lock");
+    }
+    Ok(())
+}
+
+async fn sdist_metadata(path: &Path, filename: &SourceDistFilename) -> Result<ResolutionMetadata> {
     let input = fs_err::tokio::File::open(path).await?;
     let contents = match filename.extension {
         SourceDistExtension::TarGz
@@ -175,11 +188,7 @@ async fn sdist_zip_contents(
 }
 
 /// Add the source lock before using the distribution to build a wheel.
-pub(super) async fn add_to_sdist(
-    path: &Path,
-    filename: &SourceDistFilename,
-    lock: &[u8],
-) -> Result<()> {
+pub async fn add_to_sdist(path: &Path, filename: &SourceDistFilename, lock: &[u8]) -> Result<()> {
     let input = fs_err::tokio::File::open(path).await?;
     let mut archive = tokio_tar::Archive::new(GzipDecoder::new(BufReader::new(input)));
     let temporary = uv_fs::tempfile_in(
@@ -309,7 +318,7 @@ pub(super) async fn add_to_sdist(
 }
 
 /// Add a lock to the wheel and update its RECORD.
-pub(super) async fn add_to_wheel(path: &Path, filename: &WheelFilename, lock: &[u8]) -> Result<()> {
+pub async fn add_to_wheel(path: &Path, filename: &WheelFilename, lock: &[u8]) -> Result<()> {
     let input = fs_err::tokio::File::open(path).await?;
     let mut archive = ZipFileReader::new(BufReader::new(input).compat()).await?;
     let names = archive
