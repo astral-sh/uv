@@ -444,7 +444,7 @@ jobs:
   system-test-macos-aarch64:
     timeout-minutes: 10
     name: "python on macos aarch64"
-    runs-on: macos-14 # github-macos-14-aarch64-3
+    runs-on: macos-15 # github-macos-15-aarch64-3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -467,7 +467,7 @@ jobs:
   system-test-macos-aarch64-emulated:
     timeout-minutes: 10
     name: "x86-64 python on macos aarch64"
-    runs-on: macos-14 # github-macos-14-aarch64-3
+    runs-on: macos-15 # github-macos-15-aarch64-3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -761,7 +761,7 @@ jobs:
           - {
               os: "macos",
               target: "macos-aarch64",
-              runner: "macos-14",
+              runner: "macos-15",
               arch: "aarch64",
             }
     steps:
