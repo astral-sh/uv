@@ -3457,6 +3457,144 @@ fn init_app_build_backend_maturin() -> Result<()> {
     Ok(())
 }
 
+/// Run `uv init --app --package --build-backend meson` to create a packaged application project
+#[test]
+#[cfg(feature = "test-crates-io")]
+fn init_app_build_backend_meson() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let pyi_file = child.join("src").join("foo").join("_core.pyi");
+    let lib_core = child.join("src").join("_core.c");
+    let build_file = child.join("meson.build");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("meson"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `foo`
+    ");
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "meson.build" }]
+        no-build-isolation-package = ["foo"]
+
+        [build-system]
+        requires = ["meson-python>=0.20.0"]
+        build-backend = "mesonpy"
+
+        [dependency-groups]
+        dev = ["meson-python", "ninja"]
+        "#
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @"
+        from foo._core import hello_from_bin
+
+
+        def main() -> None:
+            print(hello_from_bin())
+        "
+        );
+    });
+
+    let pyi_contents = fs_err::read_to_string(pyi_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyi_contents, @"def hello_from_bin() -> str: ..."
+        );
+    });
+
+    let lib_core_contents = fs_err::read_to_string(lib_core)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lib_core_contents, @r#"
+            #include <Python.h>
+
+            static PyObject* hello_from_bin(PyObject *self)
+            {
+            	return PyUnicode_FromString("Hello from foo!");
+            }
+
+            static PyMethodDef methods[] = {
+            	{"hello_from_bin", (PyCFunction)hello_from_bin, METH_NOARGS, NULL},
+            	{NULL, NULL, 0, NULL},
+            };
+
+            static struct PyModuleDef module = {
+            	PyModuleDef_HEAD_INIT,
+            	"_core",
+            	NULL,
+            	-1,
+            	methods,
+            };
+
+            PyMODINIT_FUNC PyInit__core(void)
+            {
+            	return PyModule_Create(&module);
+            }
+        "#
+        );
+    });
+
+    let build_file_contents = fs_err::read_to_string(build_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            build_file_contents, @r#"
+            project('foo', 'c')
+
+            py = import('python').find_installation(pure: false)
+
+            py.extension_module(
+              '_core',
+              'src/_core.c',
+              install: true,
+              subdir: 'foo'
+            )
+
+            py.install_sources(
+              ['src/foo/__init__.py'],
+              subdir: 'foo'
+            )
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Run `uv init --app --package --build-backend scikit` to create a packaged application project
 #[test]
 fn init_app_build_backend_scikit() -> Result<()> {
@@ -3698,6 +3836,142 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Run `uv init --lib --build-backend meson` to create a packaged application project
+#[test]
+fn init_lib_build_backend_meson() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let pyi_file = child.join("src").join("foo").join("_core.pyi");
+    let lib_core = child.join("src").join("_core.c");
+    let build_file = child.join("meson.build");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib").arg("--build-backend").arg("meson"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `foo`
+    ");
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.{h,c,hpp,cpp}" }, { file = "meson.build" }]
+        no-build-isolation-package = ["foo"]
+
+        [build-system]
+        requires = ["meson-python>=0.20.0"]
+        build-backend = "mesonpy"
+
+        [dependency-groups]
+        dev = ["meson-python", "ninja"]
+        "#
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @"
+        from foo._core import hello_from_bin
+
+
+        def hello() -> str:
+            return hello_from_bin()
+        "
+        );
+    });
+
+    let pyi_contents = fs_err::read_to_string(pyi_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyi_contents, @"def hello_from_bin() -> str: ..."
+        );
+    });
+
+    let lib_core_contents = fs_err::read_to_string(lib_core)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lib_core_contents, @r#"
+            #include <Python.h>
+
+            static PyObject* hello_from_bin(PyObject *self)
+            {
+            	return PyUnicode_FromString("Hello from foo!");
+            }
+
+            static PyMethodDef methods[] = {
+            	{"hello_from_bin", (PyCFunction)hello_from_bin, METH_NOARGS, NULL},
+            	{NULL, NULL, 0, NULL},
+            };
+
+            static struct PyModuleDef module = {
+            	PyModuleDef_HEAD_INIT,
+            	"_core",
+            	NULL,
+            	-1,
+            	methods,
+            };
+
+            PyMODINIT_FUNC PyInit__core(void)
+            {
+            	return PyModule_Create(&module);
+            }
+        "#
+        );
+    });
+
+    let build_file_contents = fs_err::read_to_string(build_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            build_file_contents, @"
+            project('foo', 'c')
+
+            py = import('python').find_installation(pure: false)
+
+            py.extension_module(
+              '_core',
+              'src/_core.c',
+              install: true,
+              subdir: 'foo'
+            )
+
+            py.install_sources(
+              ['src/foo/__init__.py'],
+              subdir: 'foo'
+            )
+        "
+        );
+    });
+
+    // We do not test with uv run since it would otherwise require specific CXX build tooling
 
     Ok(())
 }
