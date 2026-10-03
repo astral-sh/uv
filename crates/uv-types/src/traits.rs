@@ -14,7 +14,7 @@ use uv_distribution_types::{
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
     PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_git::GitResolver;
+use uv_git::{GitLfs, GitResolver};
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
@@ -101,6 +101,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return the default Git LFS setting for Git sources without an explicit option.
+    fn git_lfs(&self) -> GitLfs;
 
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;

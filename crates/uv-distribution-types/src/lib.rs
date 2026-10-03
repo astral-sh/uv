@@ -63,6 +63,8 @@ use uv_pypi_types::{
 };
 use uv_redacted::DisplaySafeUrl;
 
+pub use uv_git_types::GitLfs;
+
 pub use crate::annotation::*;
 pub use crate::any::*;
 pub use crate::build_info::*;

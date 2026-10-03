@@ -17,6 +17,7 @@ use uv_distribution_types::{
     Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
     RequiresPython,
 };
+use uv_git::GitLfs;
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
@@ -416,6 +417,7 @@ impl<'lock> LockTarget<'lock> {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Constraints, uv_distribution::MetadataError> {
         let mut constraints = Vec::new();
         for constraint in self.build_constraints() {
@@ -428,6 +430,7 @@ impl<'lock> LockTarget<'lock> {
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_lfs,
                 )
                 .await?
                 .into_iter()
@@ -449,6 +452,7 @@ impl<'lock> LockTarget<'lock> {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
         match self {
             Self::Workspace(workspace) => {
@@ -471,6 +475,7 @@ impl<'lock> LockTarget<'lock> {
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_lfs,
                 )
                 .await?;
 
@@ -516,6 +521,7 @@ impl<'lock> LockTarget<'lock> {
                             sources_map,
                             indexes,
                             locations,
+                            git_lfs,
                             cache,
                             workspace_cache,
                             credentials_cache,

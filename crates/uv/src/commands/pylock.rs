@@ -9,6 +9,7 @@ use tracing::info_span;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{BuildOptions, HashCheckingMode, RequirementsInput, TargetTriple};
 use uv_distribution_types::Resolution;
+use uv_git::GitLfs;
 use uv_lock::PylockToml;
 use uv_normalize::{ExtraName, GroupName};
 use uv_python::{Interpreter, PythonVersion};
@@ -71,6 +72,7 @@ pub(crate) fn resolve_pylock_toml(
     extras: &[ExtraName],
     groups: &[GroupName],
     build_options: &BuildOptions,
+    git_lfs: GitLfs,
     hash_checking: Option<HashCheckingMode>,
 ) -> anyhow::Result<(Resolution, HashStrategy)> {
     if let Some(requires_python) = lock.requires_python.as_ref() {
@@ -93,6 +95,7 @@ pub(crate) fn resolve_pylock_toml(
         groups,
         &tags,
         build_options,
+        git_lfs,
     )?;
     let hasher = if let Some(hash_checking) = hash_checking {
         HashStrategy::from_resolution(&resolution, hash_checking)?

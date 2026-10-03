@@ -41,7 +41,7 @@ use uv_configuration::{
     DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
     RequirementsInput,
 };
-use uv_distribution_types::{Index, Requirement};
+use uv_distribution_types::{GitLfs, Index, Requirement};
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
@@ -425,6 +425,7 @@ impl RequirementsSpecification {
         overrides: &[RequirementsSource],
         excludes: &[RequirementsSource],
         groups: Option<&GroupsSpecification>,
+        git_lfs: GitLfs,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
@@ -690,6 +691,40 @@ impl RequirementsSpecification {
             spec.excludes.extend(source.excludes);
         }
 
+        spec.requirements = spec
+            .requirements
+            .into_iter()
+            .map(|requirement| requirement.with_git_lfs(git_lfs))
+            .collect();
+        spec.constraints = spec
+            .constraints
+            .into_iter()
+            .map(|mut requirement| {
+                requirement.requirement = requirement.requirement.with_git_lfs(git_lfs);
+                requirement
+            })
+            .collect();
+        spec.overrides = spec
+            .overrides
+            .into_iter()
+            .map(|requirement| requirement.with_git_lfs(git_lfs))
+            .collect();
+        for override_dependency in &mut spec.override_dependencies {
+            match override_dependency {
+                Override::Requirement(requirement) => {
+                    *requirement = requirement.clone().with_git_lfs(git_lfs);
+                }
+                Override::Package(package) => {
+                    package.dependencies = package
+                        .dependencies
+                        .iter()
+                        .cloned()
+                        .map(|requirement| requirement.with_git_lfs(git_lfs))
+                        .collect();
+                }
+            }
+        }
+
         Ok(spec)
     }
 
@@ -703,9 +738,10 @@ impl RequirementsSpecification {
     /// Read the requirements from a set of sources.
     pub async fn from_simple_sources(
         requirements: &[RequirementsSource],
+        git_lfs: GitLfs,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
+        Self::from_sources(requirements, &[], &[], &[], None, git_lfs, client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including

@@ -18,7 +18,6 @@ workspace = true
 [dependencies]
 uv-cache-key = { workspace = true }
 uv-redacted = { workspace = true }
-uv-static = { workspace = true }
 
 percent-encoding = { workspace = true }
 serde = { workspace = true }

@@ -24,6 +24,7 @@ use uv_distribution_types::{
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
 };
 use uv_fs::Simplified;
+use uv_git::GitLfs;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
@@ -101,6 +102,7 @@ pub(crate) async fn pip_install(
     cuda_driver_version: Option<Version>,
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
+    git_lfs: GitLfs,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
     reinstall: Reinstall,
@@ -168,6 +170,7 @@ pub(crate) async fn pip_install(
         excludes,
         extras,
         Some(groups),
+        git_lfs,
         &client_builder,
     )
     .await?;
@@ -202,7 +205,7 @@ pub(crate) async fn pip_install(
 
     // Read build constraints.
     let build_constraints = Constraints::from_specifications(
-        operations::read_constraints(build_constraints, &client_builder)
+        operations::read_constraints(build_constraints, git_lfs, &client_builder)
             .await?
             .into_iter()
             .chain(build_constraints_from_workspace.iter().cloned()),
@@ -509,6 +512,7 @@ pub(crate) async fn pip_install(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+        git_lfs,
     );
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
@@ -544,6 +548,7 @@ pub(crate) async fn pip_install(
             &extras,
             &groups,
             &build_options,
+            git_lfs,
             hash_checking,
         )?
     } else {
@@ -643,6 +648,7 @@ pub(crate) async fn pip_install(
         workspace_cache,
         concurrency.clone(),
         preview,
+        git_lfs,
     );
 
     // Sync the environment.
