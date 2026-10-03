@@ -2763,6 +2763,10 @@
     "ToolUvWorkspace": {
       "type": "object",
       "properties": {
+        "default-source-members": {
+          "description": "Whether to source workspace members by default. Equivalent to setting\n`member-name = { workspace = true }` for every member in `[tool.uv.sources]`.",
+          "type": ["boolean", "null"]
+        },
         "exclude": {
           "description": "Packages to exclude as workspace members. If a package matches both `members` and\n`exclude`, it will be excluded.\n\nSupports both globs and explicit paths.\n\nFor more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).",
           "type": ["array", "null"],
