@@ -60,6 +60,7 @@ pub(crate) async fn list(
     all_versions: bool,
     all_platforms: bool,
     all_arches: bool,
+    all_variants: bool,
     show_urls: bool,
     output_format: PythonListFormat,
     python_downloads_json_url: Option<String>,
@@ -86,6 +87,11 @@ pub(crate) async fn list(
             |request| request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)),
         )
     };
+
+    let show_debug = all_variants
+        || base_download_request
+            .as_ref()
+            .is_some_and(PythonDownloadRequest::allows_debug);
 
     let download_request = if let Some(base_download_request) = base_download_request {
         match kinds {
@@ -129,8 +135,7 @@ pub(crate) async fn list(
 
         let downloads = download_list
             .iter_matching(&download_request)
-            // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
-            .filter(|download| !download.key().variant().is_debug());
+            .filter(|download| show_debug || !download.key().variant().is_debug());
 
         for download in downloads {
             output.insert((
