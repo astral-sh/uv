@@ -1,0 +1,42 @@
+_licenses/              65+ SPDX license files with YAML metadata
+_data/
+  i18n/                Internationalization data (7 languages: en, fr, es, pt, zh, ko, ar)
+    <lang>/
+      ui.yml           Interface strings
+      rules.yml        License rule labels
+      licenses.yml     License summaries
+  fields.yml           License metadata field definitions
+  meta.yml             License rules taxonomy
+  rules.yml            Shared permission/condition/limitation rules
+
+_layouts/
+  default.html         Base template with header, footer, language selector
+  license.html         Individual license page template
+_includes/             Reusable HTML partials (breadcrumbs, footer, sidebar, tooltips)
+
+i18n/                  Translated prose pages (About, Community, No License, Non-Software)
+assets/
+  css/                 application.scss (compiled to CSS with dark mode support)
+  js/
+    app.js             Tooltip initialization, clipboard copy, GitHub API license suggestion
+    i18n.js            Language selection and fallback logic
+  img/                 Sprite sheet for home page triptych
+
+spec/                  RSpec test suite
+  *_spec.rb            License metadata validation, i18n consistency, HTML proofing
+  spec_helper.rb       Config loader, license/SPDX/approval list fetchers
+
+script/
+  bootstrap            Install bundler and gems
+  server               Run jekyll serve with incremental build
+  cibuild              Build site and run full test suite (specs + HTMLProofer + Rubocop)
+  check-approval       Print approved/potential licenses from OSI/FSF/OD
+  generate-docs        (Present but not examined)
+
+.github/workflows/
+  deploy.yml           Build with polyglot + deploy to GitHub Pages on gh-pages push
+  test.yml             Run tests on push and PR (⚠️ see note below)
+
+Rakefile               Task orchestration (build → rspec → HTMLProofer → rubocop)
+_config.yml            Jekyll config: collections, i18n langs, plugins, exclusions
+Gemfile                Ruby dependencies
