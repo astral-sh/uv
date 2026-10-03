@@ -1889,6 +1889,7 @@
             "frozen-lockfile",
             "minimum-libc-version",
             "build-dependency-check",
+            "native-bytecode",
             "build-lazy-imports"
           ]
         },
