@@ -41,9 +41,10 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
-    LinkErrorReporting, PythonRequirementSource, WorkspacePython, centralized_environment_root,
-    centralized_environments_enabled, is_centralized_environment_reference,
-    lock_project_environment, update_project_environment_link, validate_python_requirement,
+    LinkErrorReporting, ProjectEnvironmentTarget, PythonRequirementSource, WorkspacePython,
+    centralized_environment_root, centralized_environments_enabled,
+    is_centralized_environment_reference, lock_project_environment,
+    update_project_environment_link, validate_python_requirement,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -187,7 +188,12 @@ pub(crate) async fn venv(
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {
-        centralized_environment_root(workspace, &interpreter, upgradeable, cache)
+        centralized_environment_root(
+            ProjectEnvironmentTarget::from(workspace),
+            &interpreter,
+            upgradeable,
+            cache,
+        )
     } else {
         path.or_else(|| {
             project_environment.as_ref().map(|(_, selection)| {
