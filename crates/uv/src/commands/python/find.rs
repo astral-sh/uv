@@ -18,9 +18,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use crate::commands::{
     ExitStatus,
-    project::{
-        PythonRequirementSource, ScriptInterpreter, WorkspacePython, validate_python_requirement,
-    },
+    project::{ProjectPythonRequest, ScriptInterpreter},
 };
 use crate::printer::Printer;
 
@@ -77,11 +75,7 @@ pub(crate) async fn find(
 
     // Don't enable the requires-python settings on groups
     let groups = DependencyGroupsWithDefaults::none();
-    let WorkspacePython {
-        source,
-        python_request,
-        requirement,
-    } = WorkspacePython::from_request(
+    let project_python = ProjectPythonRequest::from_request(
         request.map(|request| PythonRequest::parse(&request)),
         project.as_ref().map(VirtualProject::workspace),
         &groups,
@@ -90,9 +84,12 @@ pub(crate) async fn find(
     )
     .await?;
 
-    let python_request = python_request.unwrap_or_default();
+    let python_request = project_python
+        .python_request
+        .as_ref()
+        .unwrap_or(&PythonRequest::Default);
     let python = PythonInstallation::find_existing(
-        &python_request,
+        python_request,
         environment_preference,
         python_preference,
         python_arch,
@@ -100,7 +97,7 @@ pub(crate) async fn find(
     )?;
     python
         .download_and_warn_if_outdated_prerelease(
-            &python_request,
+            python_request,
             client_builder,
             cache,
             python_downloads_json_url,
@@ -108,21 +105,8 @@ pub(crate) async fn find(
         .await?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
-    if let Some(requirement) = requirement {
-        match validate_python_requirement(
-            python.interpreter(),
-            &requirement.requires_python,
-            &source,
-            PythonRequirementSource::Workspace(
-                project.as_ref().map(VirtualProject::workspace),
-                &groups,
-            ),
-        ) {
-            Ok(()) => {}
-            Err(err) => {
-                warn_user!("{err}");
-            }
-        }
+    if let Err(err) = project_python.check(python.interpreter()) {
+        warn_user!("{err}");
     }
 
     if show_version {

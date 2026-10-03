@@ -3296,6 +3296,37 @@ fn check_no_install_project_env_var_conflicts() -> Result<()> {
 }
 
 #[test]
+fn check_isolated_incompatible_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = []
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check()
+        .arg("--preview-features").arg("check-command")
+        .arg("--isolated")
+        .arg("--python").arg("3.12"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn check_isolated() -> Result<()> {
     let server = PackseServer::new("extras/extra-does-not-exist-backtrack.toml");
     let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");

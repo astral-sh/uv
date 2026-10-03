@@ -52,7 +52,7 @@ use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, Summary
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
     MissingLockfileSource, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError,
-    ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, UniversalState,
     init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
@@ -156,7 +156,7 @@ pub(crate) async fn lock(
             LockTarget::Workspace(workspace) => {
                 // Don't enable any groups' requires-python for interpreter discovery
                 let groups = DependencyGroupsWithDefaults::none();
-                let workspace_python = WorkspacePython::from_request(
+                let project_python = ProjectPythonRequest::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(workspace),
                     &groups,
@@ -166,8 +166,7 @@ pub(crate) async fn lock(
                 .await?;
                 ProjectInterpreter::discover(
                     ProjectEnvironmentTarget::from(workspace),
-                    &groups,
-                    workspace_python,
+                    project_python,
                     &client_builder,
                     python_preference,
                     python_arch,
