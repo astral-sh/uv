@@ -1,0 +1,702 @@
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use thiserror::Error;
+use tracing::{Level, debug, enabled, warn};
+
+use uv_errors::{Hinted, Hints};
+
+use uv_cache::Cache;
+use uv_cli::PipInstallFormat;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
+    ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
+    Reinstall, Upgrade,
+};
+use uv_configuration::{KeyringProviderType, TargetTriple};
+use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution_types::{
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
+    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
+};
+use uv_fs::Simplified;
+use uv_install_wheel::LinkMode;
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_normalize::{DefaultExtras, DefaultGroups};
+use uv_pep440::Version;
+use uv_preview::{Preview, PreviewFeature};
+use uv_pypi_types::Conflicts;
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, Target,
+};
+use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
+use uv_resolver::{
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, Prerelease, PythonRequirement,
+    ResolutionMode, ResolverEnvironment,
+};
+use uv_settings::PythonInstallMirrors;
+use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
+use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::ExtraBuildDependencies;
+
+use crate::install_report::write_install_report;
+use crate::pylock::{read_pylock_toml, resolve_pylock_toml};
+use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, UvError};
+use uv_install_ops::editable::apply_editable_mode;
+use uv_install_ops::loggers::{DefaultInstallLogger, InstallLogger};
+use uv_install_ops::{Changelog, Modifications};
+use uv_install_ops::{report_interpreter, report_target_environment};
+use uv_python_context::PythonDownloadReporter;
+use uv_resolve_ops::loggers::DefaultResolveLogger;
+use uv_resolve_ops::{resolution_markers, resolution_tags};
+
+/// The interpreter is externally managed and cannot be modified.
+#[derive(Debug, Error)]
+#[error("{message}")]
+pub struct ExternallyManagedError {
+    message: String,
+    root: PathBuf,
+    system: bool,
+}
+
+impl Hinted for ExternallyManagedError {
+    fn hints(&self) -> Hints<'_> {
+        if self.system {
+            Hints::from("Virtual environments were not considered due to the `--system` flag")
+        } else {
+            Hints::from("Consider creating a virtual environment, e.g., with `uv venv`")
+        }
+    }
+}
+
+/// Install packages into the current environment.
+#[expect(clippy::fn_params_excessive_bools)]
+pub async fn pip_install(
+    requirements: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
+    constraints_from_workspace: Vec<Requirement>,
+    overrides_from_workspace: Vec<Override<Requirement>>,
+    excludes_from_workspace: Vec<ExcludeDependency>,
+    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    editable: Option<EditableMode>,
+    extras: &ExtrasSpecification,
+    groups: &GroupsSpecification,
+    resolution_mode: ResolutionMode,
+    prerelease: Prerelease,
+    dependency_mode: DependencyMode,
+    upgrade: Upgrade,
+    index_locations: IndexLocations,
+    index_strategy: IndexStrategy,
+    torch_backend: Option<TorchMode>,
+    cuda_driver_version: Option<Version>,
+    amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    dependency_metadata: DependencyMetadata,
+    keyring_provider: KeyringProviderType,
+    client_builder: &BaseClientBuilder<'_>,
+    reinstall: Reinstall,
+    link_mode: LinkMode,
+    compile: bool,
+    hash_checking: Option<HashCheckingMode>,
+    installer_metadata: bool,
+    config_settings: &ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
+    build_isolation: BuildIsolation,
+    extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
+    build_options: BuildOptions,
+    modifications: Modifications,
+    python_version: Option<PythonVersion>,
+    python_platform: Option<TargetTriple>,
+    python_downloads: PythonDownloads,
+    install_mirrors: PythonInstallMirrors,
+    strict: bool,
+    exclude_newer: ExcludeNewer,
+    sources: NoSources,
+    python: Option<String>,
+    system: bool,
+    break_system_packages: bool,
+    target: Option<Target>,
+    prefix: Option<Prefix>,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
+    concurrency: Concurrency,
+    cache: Cache,
+    workspace_cache: WorkspaceCache,
+    dry_run: DryRun,
+    output_format: PipInstallFormat,
+    printer: Printer,
+    preview: Preview,
+) -> anyhow::Result<ExitStatus> {
+    let start = std::time::Instant::now();
+
+    let client_builder = client_builder.clone().keyring(keyring_provider);
+
+    // Read all requirements from the provided sources.
+    let RequirementsSpecification {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        mut override_dependencies,
+        excludes,
+        pylock,
+        pylock_groups,
+        source_trees,
+        groups,
+        index_url,
+        extra_index_urls,
+        no_index,
+        require_hashes,
+        find_links,
+        no_binary,
+        no_build,
+        extras: _,
+    } = uv_resolve_ops::read_requirements(
+        requirements,
+        constraints,
+        overrides,
+        excludes,
+        extras,
+        Some(groups),
+        &client_builder,
+    )
+    .await?;
+
+    override_dependencies.extend(overrides_from_workspace);
+
+    let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
+
+    if pylock.is_some() {
+        if !preview.is_enabled(PreviewFeature::Pylock) {
+            warn_user!(
+                "The `--pylock` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::Pylock
+            );
+        }
+    }
+
+    let constraints: Vec<NameRequirementSpecification> = constraints
+        .iter()
+        .cloned()
+        .chain(
+            constraints_from_workspace
+                .into_iter()
+                .map(NameRequirementSpecification::from),
+        )
+        .collect();
+
+    let excludes: Vec<ExcludeDependency> = excludes
+        .into_iter()
+        .chain(excludes_from_workspace)
+        .collect();
+
+    // Read build constraints.
+    let build_constraints = Constraints::from_specifications(
+        uv_resolve_ops::read_constraints(build_constraints, &client_builder)
+            .await?
+            .into_iter()
+            .chain(build_constraints_from_workspace.iter().cloned()),
+    );
+
+    // Detect the current Python interpreter.
+    let environment = if target.is_some() || prefix.is_some() {
+        let python_request = python.as_deref().map(PythonRequest::parse);
+        let reporter = PythonDownloadReporter::single(printer);
+
+        let installation = PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::from_system_flag(system, false),
+            python_preference.with_system_flag(system),
+            python_arch,
+            python_downloads,
+            &client_builder,
+            &cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
+        )
+        .await?;
+        report_interpreter(&installation, true, printer)?;
+        PythonEnvironment::from_installation(installation)
+    } else {
+        let environment = PythonEnvironment::find(
+            &python
+                .as_deref()
+                .map(PythonRequest::parse)
+                .unwrap_or_default(),
+            EnvironmentPreference::from_system_flag(system, true),
+            PythonPreference::default().with_system_flag(system),
+            python_arch,
+            &cache,
+        )?;
+        report_target_environment(&environment, &cache, printer)?;
+        environment
+    };
+
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires =
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Apply any `--target` or `--prefix` directories.
+    let environment = if let Some(target) = target {
+        debug!(
+            "Using `--target` directory at `{}`",
+            target.root().user_display()
+        );
+        environment.with_target(target)?
+    } else if let Some(prefix) = prefix {
+        debug!(
+            "Using `--prefix` directory at `{}`",
+            prefix.root().user_display()
+        );
+        environment.with_prefix(prefix)?
+    } else {
+        environment
+    };
+
+    // If the environment is externally managed, abort.
+    if let Some(externally_managed) = environment.interpreter().is_externally_managed() {
+        if break_system_packages {
+            debug!("Ignoring externally managed environment due to `--break-system-packages`");
+        } else {
+            let managed_message = match externally_managed.into_error() {
+                Some(error) => format!(
+                    "The interpreter at `{}` is externally managed, and indicates the following:\n\n{}\n",
+                    environment.root().user_display().cyan(),
+                    textwrap::indent(&error, "  ").green(),
+                ),
+                None => format!(
+                    "The interpreter at `{}` is externally managed and cannot be modified.",
+                    environment.root().user_display().cyan()
+                ),
+            };
+
+            return Err(ExternallyManagedError {
+                message: managed_message,
+                root: environment.root().to_path_buf(),
+                system,
+            }
+            .into());
+        }
+    }
+
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
+
+    // Determine the markers and tags to use for the resolution.
+    let interpreter = environment.interpreter();
+    let marker_env = resolution_markers(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    );
+    let tags = resolution_tags(
+        python_version.as_ref(),
+        python_platform.as_ref(),
+        interpreter,
+    )?;
+
+    // With sufficient modifications, installation only needs installed distributions selected by
+    // the resolution. A `pylock.toml` resolution never consults the environment, while reinstalling
+    // every package excludes all installed distributions from candidate selection, including for
+    // transitive dependencies. Delay the environment scan in either case, then restrict it to the
+    // resolved package names.
+    let defer_site_packages = matches!(modifications, Modifications::Sufficient)
+        && (pylock.is_some() || matches!(&reinstall, Reinstall::All));
+
+    let site_packages = if defer_site_packages {
+        None
+    } else {
+        Some(SitePackages::from_environment(&environment)?)
+    };
+
+    // Check if the current environment satisfies the requirements.
+    // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
+    // it's an order of magnitude faster to validate the environment than to resolve the requirements.
+    if reinstall.is_none()
+        && upgrade.is_none()
+        && source_trees.is_empty()
+        && groups.is_empty()
+        && pylock.is_none()
+        && matches!(modifications, Modifications::Sufficient)
+        && let Some(site_packages) = &site_packages
+    {
+        match site_packages.satisfies_spec(
+            &requirements,
+            &constraints,
+            &overrides,
+            &override_dependencies,
+            &excludes,
+            &dependency_metadata,
+            dependency_mode,
+            InstallationStrategy::Permissive,
+            &marker_env,
+            &tags,
+            config_settings,
+            config_settings_package,
+            &extra_build_requires,
+            extra_build_variables,
+        )? {
+            // If the requirements are already satisfied, we're done.
+            SatisfiesResult::Fresh {
+                recursive_requirements,
+            } => {
+                if enabled!(Level::DEBUG) {
+                    for requirement in recursive_requirements
+                        .iter()
+                        .map(ToString::to_string)
+                        .sorted()
+                    {
+                        debug!("Requirement satisfied: {requirement}");
+                    }
+                }
+                DefaultInstallLogger.on_check(requirements.len(), start, printer, dry_run)?;
+
+                if strict && !dry_run.enabled() {
+                    uv_install_ops::diagnose_environment(
+                        recursive_requirements
+                            .iter()
+                            .map(|requirement| &requirement.name),
+                        &environment,
+                        &marker_env,
+                        &tags,
+                        &dependency_metadata,
+                        printer,
+                    )?;
+                }
+
+                write_install_report(&Changelog::default(), dry_run, output_format, printer)?;
+                return Ok(ExitStatus::Success);
+            }
+            SatisfiesResult::Unsatisfied(requirement) => {
+                debug!("At least one requirement is not satisfied: {requirement}");
+            }
+        }
+    }
+
+    // Determine the Python requirement, if the user requested a specific version.
+    let python_requirement = if let Some(python_version) = python_version.as_ref() {
+        PythonRequirement::from_python_version(interpreter, python_version)
+    } else {
+        PythonRequirement::from_interpreter(interpreter)
+    };
+
+    // Collect the set of required hashes.
+    let hasher = if let Some(hash_checking) = hash_checking {
+        HashStrategy::from_requirements(
+            requirements
+                .iter()
+                .chain(overrides.iter())
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            constraints
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            Some(&marker_env),
+            hash_checking,
+        )?
+    } else {
+        HashStrategy::default()
+    };
+
+    // Incorporate any index locations from the provided sources.
+    let index_locations = index_locations.combine(
+        extra_index_urls
+            .into_iter()
+            .map(Index::from_extra_index_url)
+            .chain(index_url.map(Index::from_index_url))
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        find_links
+            .into_iter()
+            .map(Index::from_find_links)
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        no_index,
+    );
+
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            TorchStrategy::from_mode(
+                mode,
+                python_platform
+                    .map(TargetTriple::platform)
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+                cuda_driver_version,
+                amd_gpu_architecture,
+            )
+        })
+        .transpose()?;
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
+        .index_strategy(index_strategy)
+        .torch_backend(torch_backend.clone())
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build()?;
+
+    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
+    let build_options = build_options.combine(no_binary, no_build);
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = FlatIndex::load(&client, &cache, &index_locations).await?;
+
+    // Determine whether to enable build isolation.
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => uv_types::BuildIsolation::Shared(&environment),
+        BuildIsolation::SharedPackage(ref packages) => {
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
+    };
+
+    // Verify supplied build hashes unless hash verification was explicitly disabled.
+    let build_hasher = if hash_checking.is_some() {
+        HashStrategy::from_constraints(
+            &build_constraints,
+            Some(&marker_env),
+            HashCheckingMode::Verify,
+        )?
+    } else {
+        HashStrategy::default()
+    };
+    // Initialize any shared state.
+    let state = SharedState::default();
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        &cache,
+        &build_constraints,
+        interpreter,
+        &index_locations,
+        &flat_index,
+        &dependency_metadata,
+        state.clone(),
+        index_strategy,
+        config_settings,
+        config_settings_package,
+        types_build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        link_mode,
+        &build_options,
+        &build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
+        preview,
+    );
+
+    let (resolution, hasher) = if let Some(pylock) = pylock {
+        let (install_path, lock) = read_pylock_toml(&pylock, &client_builder).await?;
+
+        // Convert the extras and groups specifications into a concrete form.
+        let extras = extras.with_defaults(DefaultExtras::default());
+        let extras = extras
+            .extra_names(lock.extras.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let groups =
+            pylock_groups.with_defaults(DefaultGroups::from_groups(lock.default_groups.clone()));
+        let groups = groups
+            .group_names(lock.dependency_groups.iter())
+            // PEP 751 allows synthetic default groups that aren't publicly selectable.
+            .chain(
+                lock.default_groups
+                    .iter()
+                    .filter(|group| groups.contains_because_default(group)),
+            )
+            .unique()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        resolve_pylock_toml(
+            lock,
+            &install_path,
+            interpreter,
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &extras,
+            &groups,
+            &build_options,
+            hash_checking,
+        )?
+    } else {
+        // When resolving, don't take any external preferences into account.
+        let preferences = Vec::default();
+
+        let options = OptionsBuilder::new()
+            .resolution_mode(resolution_mode)
+            .prerelease(prerelease)
+            .dependency_mode(dependency_mode)
+            .exclude_newer(exclude_newer.clone())
+            .index_strategy(index_strategy)
+            .torch_backend(torch_backend)
+            .build_options(build_options.clone())
+            .build();
+
+        // Resolve the requirements.
+        let (resolution, hasher) = match uv_resolve_ops::resolve(
+            requirements,
+            constraints,
+            overrides,
+            override_dependencies,
+            excludes,
+            source_trees,
+            project,
+            BTreeMap::default(),
+            extras,
+            &groups,
+            preferences,
+            site_packages.clone(),
+            &hasher,
+            &reinstall,
+            &upgrade,
+            Some(&tags),
+            ResolverEnvironment::specific(marker_env.clone()),
+            python_requirement,
+            interpreter.markers(),
+            Conflicts::empty(),
+            &client,
+            &flat_index,
+            state.index(),
+            &build_dispatch,
+            &concurrency,
+            options,
+            None,
+            Box::new(DefaultResolveLogger),
+            printer,
+        )
+        .await
+        {
+            Ok((graph, hasher)) => (Resolution::from(graph), hasher),
+            Err(err) => {
+                return Err(UvError::from(err).into());
+            }
+        };
+
+        (resolution, hasher)
+    };
+
+    // If necessary, convert editable distributions to non-editable.
+    let resolution = apply_editable_mode(resolution, editable);
+
+    let site_packages = match site_packages {
+        // Only resolved packages can be modified when using sufficient installation semantics.
+        None => SitePackages::from_environment_for_packages(
+            &environment,
+            resolution.distributions().map(Name::name),
+        )?,
+        Some(site_packages) => site_packages,
+    };
+
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        &cache,
+        &build_constraints,
+        interpreter,
+        &index_locations,
+        &flat_index,
+        &dependency_metadata,
+        state.clone(),
+        index_strategy,
+        config_settings,
+        config_settings_package,
+        types_build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        link_mode,
+        &build_options,
+        &build_hasher,
+        exclude_newer.clone(),
+        sources,
+        SourceTreeEditablePolicy::Project,
+        workspace_cache,
+        concurrency.clone(),
+        preview,
+    );
+
+    // Sync the environment.
+    let changelog = match uv_install_ops::install(
+        &resolution,
+        site_packages,
+        InstallationStrategy::Permissive,
+        modifications,
+        &reinstall,
+        &build_options,
+        link_mode,
+        compile.then_some(uv_install_ops::BytecodeCompilation::Installed),
+        &hasher,
+        &tags,
+        &client,
+        state.in_flight(),
+        &concurrency,
+        &build_dispatch,
+        &cache,
+        &environment,
+        Box::new(DefaultInstallLogger),
+        installer_metadata,
+        dry_run,
+        printer,
+        preview,
+    )
+    .await
+    {
+        Ok(changelog) => changelog,
+        Err(uv_install_ops::Error::OutdatedEnvironment(changelog)) => {
+            write_install_report(&changelog, dry_run, output_format, printer)?;
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => {
+            return Err(UvError::from(err).into());
+        }
+    };
+
+    // Notify the user of any resolution diagnostics.
+    uv_resolve_ops::diagnose_resolution(resolution.diagnostics(), printer)?;
+
+    // Notify the user of any environment diagnostics.
+    if strict && !dry_run.enabled() {
+        uv_install_ops::diagnose_environment(
+            resolution.distributions().map(Name::name),
+            &environment,
+            &marker_env,
+            &tags,
+            &dependency_metadata,
+            printer,
+        )?;
+    }
+
+    write_install_report(&changelog, dry_run, output_format, printer)?;
+    Ok(ExitStatus::Success)
+}

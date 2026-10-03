@@ -59,12 +59,17 @@ use uv_python::{
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
     AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage,
-    ForkStrategy, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
+    ForkStrategy, Prerelease, ResolutionMode,
 };
 use uv_settings::{
     Combine, EnvFlag, EnvironmentOptions, FilesystemOptions, IndexOptions, MalwareCheckSettings,
     Options, PipOptions, PreviewFeaturesOption, PreviewOption, PublishOptions,
     PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
+    resolve_prerelease,
+};
+pub(crate) use uv_settings::{
+    FrozenFlag, FrozenSource, LockCheck, LockedFlag, LockedSource, PythonListKinds,
+    ResolverInstallerSettings, ResolverSettings,
 };
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
@@ -72,10 +77,10 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, OverrideDependency};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
-use crate::commands::pip::operations::Modifications;
 use crate::commands::{
     InitKind, InitProjectKind, PythonUpgrade, PythonUpgradeSource, ToolRunCommand,
 };
+use uv_install_ops::Modifications;
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
@@ -596,117 +601,26 @@ impl InitSettings {
     }
 }
 
-/// The CLI flag that requested a lock check.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum LockedFlag {
-    Locked,
-    Check,
-}
-
-impl LockedFlag {
-    fn name(self) -> &'static str {
-        match self {
-            Self::Locked => "locked",
-            Self::Check => "check",
-        }
+/// Convert the source of a lockfile check to a flag for conflict reporting.
+fn lock_check_flag(lock_check: LockCheck) -> Flag {
+    match lock_check {
+        LockCheck::Enabled(LockedSource::Cli(flag)) => Flag::from_cli(flag.name()),
+        LockCheck::Enabled(LockedSource::Env) => Flag::Enabled {
+            source: FlagSource::Env(EnvVars::UV_LOCKED),
+            name: "locked",
+        },
+        LockCheck::Disabled => Flag::disabled(),
     }
 }
 
-impl std::fmt::Display for LockedFlag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "--{}", self.name())
-    }
-}
-
-/// The source of a lock check operation.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum LockedSource {
-    /// A lock check was requested on the CLI.
-    Cli(LockedFlag),
-    /// The `UV_LOCKED` environment variable was set.
-    Env,
-}
-
-impl std::fmt::Display for LockedSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Cli(flag) => flag.fmt(f),
-            Self::Env => write!(f, "UV_LOCKED=1"),
-        }
-    }
-}
-
-// Has lock check been enabled?
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum LockCheck {
-    /// Lockfile check is enabled.
-    Enabled(LockedSource),
-    /// Lockfile check is disabled.
-    Disabled,
-}
-
-impl From<LockCheck> for Flag {
-    fn from(lock_check: LockCheck) -> Self {
-        match lock_check {
-            LockCheck::Enabled(LockedSource::Cli(flag)) => Self::from_cli(flag.name()),
-            LockCheck::Enabled(LockedSource::Env) => Self::Enabled {
-                source: FlagSource::Env(EnvVars::UV_LOCKED),
-                name: "locked",
-            },
-            LockCheck::Disabled => Self::disabled(),
-        }
-    }
-}
-
-/// The CLI flag that requested frozen mode.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum FrozenFlag {
-    Frozen,
-    CheckExists,
-}
-
-impl FrozenFlag {
-    fn name(self) -> &'static str {
-        match self {
-            Self::Frozen => "frozen",
-            Self::CheckExists => "check-exists",
-        }
-    }
-}
-
-impl std::fmt::Display for FrozenFlag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "--{}", self.name())
-    }
-}
-
-/// The source of the frozen flag.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum FrozenSource {
-    /// Frozen mode was requested on the CLI.
-    Cli(FrozenFlag),
-    /// The `UV_FROZEN` environment variable was set.
-    Env,
-}
-
-impl std::fmt::Display for FrozenSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Cli(flag) => flag.fmt(f),
-            Self::Env => write!(f, "UV_FROZEN=1"),
-        }
-    }
-}
-
-impl From<FrozenSource> for Flag {
-    fn from(source: FrozenSource) -> Self {
-        match source {
-            FrozenSource::Cli(flag) => Self::from_cli(flag.name()),
-            FrozenSource::Env => Self::Enabled {
-                source: FlagSource::Env(EnvVars::UV_FROZEN),
-                name: "frozen",
-            },
-        }
+/// Convert the source of frozen mode to a flag for conflict reporting.
+fn frozen_source_flag(source: FrozenSource) -> Flag {
+    match source {
+        FrozenSource::Cli(flag) => Flag::from_cli(flag.name()),
+        FrozenSource::Env => Flag::Enabled {
+            source: FlagSource::Env(EnvVars::UV_FROZEN),
+            name: "frozen",
+        },
     }
 }
 
@@ -725,7 +639,10 @@ fn resolve_lock_flags(
             Ok((LockCheck::Disabled, frozen))
         }
         _ => {
-            check_conflicts(locked.into(), frozen.map_or(Flag::Disabled, Flag::from))?;
+            check_conflicts(
+                lock_check_flag(locked),
+                frozen.map_or(Flag::Disabled, frozen_source_flag),
+            )?;
             Ok((locked, frozen))
         }
     }
@@ -947,7 +864,7 @@ impl RunSettings {
             python: python.and_then(Maybe::into_option),
             python_platform,
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverInstallerSettings::resolve(
+            settings: resolve_resolver_installer_settings(
                 installer,
                 build,
                 filesystem,
@@ -1513,16 +1430,6 @@ impl ToolDirSettings {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub(crate) enum PythonListKinds {
-    #[default]
-    Default,
-    /// Only list version downloads.
-    Downloads,
-    /// Only list installed versions.
-    Installed,
-}
-
 /// The resolved settings to use for a `tool run` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct PythonListSettings {
@@ -2024,7 +1931,7 @@ impl SyncSettings {
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
         let settings =
-            ResolverInstallerSettings::resolve(installer, build, filesystem, &environment)?;
+            resolve_resolver_installer_settings(installer, build, filesystem, &environment)?;
 
         let check = flag(check, no_check, "check")?.unwrap_or_default();
         let dry_run = if check {
@@ -2228,7 +2135,7 @@ impl LockSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
+            settings: resolve_resolver_settings(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2258,7 +2165,7 @@ impl UpgradeSettings {
             .unwrap_or_default();
         let (packages, exclude, options) =
             upgrade_options(args, configured_indexes(filesystem.as_ref()))?;
-        let mut settings = ResolverSettings::combine(options, filesystem, &environment);
+        let mut settings = combine_resolver_settings(options, filesystem, &environment);
         settings.upgrade = if packages.is_empty() {
             Upgrade::default()
         } else {
@@ -2339,7 +2246,7 @@ impl MetadataSettings {
             active: Some(active).into(),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
+            settings: resolve_resolver_settings(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2538,7 +2445,7 @@ impl AddSettings {
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
-        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, Flag::from))?;
+        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, frozen_source_flag))?;
 
         let no_install_package_flag = if no_install_package.is_empty() {
             Flag::disabled()
@@ -2561,7 +2468,10 @@ impl AddSettings {
             no_install_package_flag,
             only_install_package_flag,
         ] {
-            check_conflicts(install_flag, frozen.map_or(Flag::Disabled, Flag::from))?;
+            check_conflicts(
+                install_flag,
+                frozen.map_or(Flag::Disabled, frozen_source_flag),
+            )?;
             check_conflicts(install_flag, no_sync)?;
         }
 
@@ -2619,7 +2529,7 @@ impl AddSettings {
             extras: extra.unwrap_or_default(),
             refresh,
             indexes,
-            settings: ResolverInstallerSettings::combine(options, filesystem, &environment),
+            settings: combine_resolver_installer_settings(options, filesystem, &environment),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -2705,7 +2615,7 @@ impl RemoveSettings {
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
-        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, Flag::from))?;
+        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, frozen_source_flag))?;
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
@@ -2720,7 +2630,7 @@ impl RemoveSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverInstallerSettings::resolve(
+            settings: resolve_resolver_installer_settings(
                 installer,
                 build,
                 filesystem,
@@ -2794,7 +2704,7 @@ impl VersionSettings {
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
-        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, Flag::from))?;
+        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, frozen_source_flag))?;
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
@@ -2811,7 +2721,7 @@ impl VersionSettings {
             package,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverInstallerSettings::resolve(
+            settings: resolve_resolver_installer_settings(
                 installer,
                 build,
                 filesystem,
@@ -2931,7 +2841,7 @@ impl TreeSettings {
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
-            resolver: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
+            resolver: resolve_resolver_settings(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -3114,7 +3024,7 @@ impl ExportSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
+            settings: resolve_resolver_settings(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -3271,7 +3181,7 @@ impl CheckSettings {
         );
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
         let settings =
-            ResolverInstallerSettings::resolve(installer, build, filesystem, &environment)?;
+            resolve_resolver_installer_settings(installer, build, filesystem, &environment)?;
         Ok(Self {
             ty_path: environment.ty_path,
             script,
@@ -3417,7 +3327,7 @@ impl AuditSettings {
             frozen,
             python_version,
             python_platform,
-            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
+            settings: resolve_resolver_settings(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -4418,7 +4328,7 @@ impl BuildSettings {
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
+            settings: resolve_resolver_settings(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -4533,80 +4443,6 @@ impl VenvSettings {
     }
 }
 
-/// The resolved settings to use for an invocation of the uv CLI when installing dependencies.
-///
-/// Combines the `[tool.uv]` persistent configuration with the command-line arguments
-/// ([`InstallerArgs`], represented as [`InstallerOptions`]).
-#[derive(Debug, Clone)]
-pub(crate) struct InstallerSettingsRef<'a> {
-    pub(crate) index_locations: &'a IndexLocations,
-    pub(crate) index_strategy: IndexStrategy,
-    pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) dependency_metadata: &'a DependencyMetadata,
-    pub(crate) config_setting: &'a ConfigSettings,
-    pub(crate) config_settings_package: &'a PackageConfigSettings,
-    pub(crate) build_isolation: &'a BuildIsolation,
-    pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
-    pub(crate) extra_build_variables: &'a ExtraBuildVariables,
-    pub(crate) exclude_newer: &'a ExcludeNewer,
-    pub(crate) link_mode: LinkMode,
-    pub(crate) compile_bytecode: bool,
-    pub(crate) reinstall: &'a Reinstall,
-    pub(crate) build_options: &'a BuildOptions,
-    pub(crate) sources: NoSources,
-}
-
-/// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
-///
-/// Combines the `[tool.uv]` persistent configuration with the command-line arguments
-/// ([`ResolverArgs`], represented as [`ResolverOptions`]).
-#[derive(Debug, Clone, Default)]
-pub(crate) struct ResolverSettings {
-    pub(crate) build_options: BuildOptions,
-    pub(crate) config_setting: ConfigSettings,
-    pub(crate) config_settings_package: PackageConfigSettings,
-    pub(crate) dependency_metadata: DependencyMetadata,
-    pub(crate) exclude_newer: ExcludeNewer,
-    pub(crate) fork_strategy: ForkStrategy,
-    pub(crate) index_locations: IndexLocations,
-    pub(crate) index_strategy: IndexStrategy,
-    pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) link_mode: LinkMode,
-    pub(crate) build_isolation: BuildIsolation,
-    pub(crate) extra_build_dependencies: ExtraBuildDependencies,
-    pub(crate) extra_build_variables: ExtraBuildVariables,
-    pub(crate) prerelease: Prerelease,
-    pub(crate) resolution: ResolutionMode,
-    pub(crate) sources: NoSources,
-    pub(crate) torch_backend: Option<TorchMode>,
-    pub(crate) cuda_driver_version: Option<Version>,
-    pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
-    pub(crate) upgrade: Upgrade,
-}
-
-#[allow(deprecated)]
-fn warn_if_deprecated_prerelease_mode(prerelease: PrereleaseMode) -> PrereleaseMode {
-    if matches!(prerelease, PrereleaseMode::IfNecessaryOrExplicit) {
-        warn_user_once!(
-            "The `if-necessary-or-explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary` instead."
-        );
-        PrereleaseMode::IfNecessary
-    } else {
-        prerelease
-    }
-}
-
-fn resolve_prerelease(global: PrereleaseMode, mut package: PrereleasePackage) -> Prerelease {
-    for mode in package.values_mut() {
-        *mode = warn_if_deprecated_prerelease_mode(*mode);
-    }
-
-    Prerelease {
-        global: warn_if_deprecated_prerelease_mode(global),
-        package,
-    }
-}
-
 /// Return the indexes from the effective filesystem configuration.
 fn configured_indexes(filesystem: Option<&FilesystemOptions>) -> &[Index] {
     filesystem
@@ -4614,148 +4450,89 @@ fn configured_indexes(filesystem: Option<&FilesystemOptions>) -> &[Index] {
         .unwrap_or_default()
 }
 
-impl ResolverSettings {
-    /// Resolve the [`ResolverSettings`] from the CLI, environment, and filesystem configuration.
-    fn resolve(
-        args: ResolverArgs,
-        build: BuildOptionsArgs,
-        filesystem: Option<FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Result<Self> {
-        let args = resolver_options(args, build, configured_indexes(filesystem.as_ref()))?;
+/// Resolve the [`ResolverSettings`] from the CLI, environment, and filesystem configuration.
+fn resolve_resolver_settings(
+    args: ResolverArgs,
+    build: BuildOptionsArgs,
+    filesystem: Option<FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> Result<ResolverSettings> {
+    let args = resolver_options(args, build, configured_indexes(filesystem.as_ref()))?;
 
-        Ok(Self::combine(args, filesystem, environment))
+    Ok(combine_resolver_settings(args, filesystem, environment))
+}
+
+/// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
+fn combine_resolver_settings(
+    mut args: ResolverOptions,
+    filesystem: Option<FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> ResolverSettings {
+    args.no_binary_package = args
+        .no_binary_package
+        .or(environment.no_binary_package.clone());
+    args.no_build_package = args
+        .no_build_package
+        .or(environment.no_build_package.clone());
+    args.no_sources_package = args
+        .no_sources_package
+        .or(environment.no_sources_package.clone());
+
+    // The problem is that for `upgrade`... we want to combine the two `Upgrade` structs,
+    // not the individual fields.
+    let options = args.combine(ResolverOptions::from(
+        filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
+            .unwrap_or_default(),
+    ));
+
+    ResolverSettings {
+        cuda_driver_version: environment.cuda_driver_version.clone(),
+        amd_gpu_architecture: environment.amd_gpu_architecture,
+        ..ResolverSettings::from(options)
     }
+}
 
-    /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
-    fn combine(
-        mut args: ResolverOptions,
-        filesystem: Option<FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
-        args.no_binary_package = args
-            .no_binary_package
-            .or(environment.no_binary_package.clone());
-        args.no_build_package = args
-            .no_build_package
-            .or(environment.no_build_package.clone());
-        args.no_sources_package = args
-            .no_sources_package
-            .or(environment.no_sources_package.clone());
+/// Resolve the [`ResolverInstallerSettings`] from CLI, environment, and filesystem options.
+fn resolve_resolver_installer_settings(
+    args: ResolverInstallerArgs,
+    build: BuildOptionsArgs,
+    filesystem: Option<FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> Result<ResolverInstallerSettings> {
+    let args = resolver_installer_options(args, build, configured_indexes(filesystem.as_ref()))?;
 
-        // The problem is that for `upgrade`... we want to combine the two `Upgrade` structs,
-        // not the individual fields.
-        let options = args.combine(ResolverOptions::from(
+    Ok(combine_resolver_installer_settings(
+        args,
+        filesystem,
+        environment,
+    ))
+}
+
+/// Reconcile the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
+fn combine_resolver_installer_settings(
+    args: ResolverInstallerOptions,
+    filesystem: Option<FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> ResolverInstallerSettings {
+    let options = resolver_installer_options_with_environment(args, environment).combine(
+        ResolverInstallerOptions::from(
             filesystem
                 .map(FilesystemOptions::into_options)
                 .map(|options| options.top_level)
                 .unwrap_or_default(),
-        ));
+        ),
+    );
 
-        Self {
+    let base = ResolverInstallerSettings::from(options);
+    ResolverInstallerSettings {
+        resolver: ResolverSettings {
             cuda_driver_version: environment.cuda_driver_version.clone(),
             amd_gpu_architecture: environment.amd_gpu_architecture,
-            ..Self::from(options)
-        }
-    }
-}
-
-impl From<ResolverOptions> for ResolverSettings {
-    fn from(value: ResolverOptions) -> Self {
-        Self {
-            index_locations: value.indexes.into(),
-            resolution: value.resolution.unwrap_or_default(),
-            prerelease: resolve_prerelease(
-                value.prerelease.unwrap_or_default(),
-                value.prerelease_package.unwrap_or_default(),
-            ),
-            fork_strategy: value.fork_strategy.unwrap_or_default(),
-            dependency_metadata: DependencyMetadata::from_entries(
-                value.dependency_metadata.into_iter().flatten(),
-            ),
-            index_strategy: value.index_strategy.unwrap_or_default(),
-            keyring_provider: value.keyring_provider.unwrap_or_default(),
-            config_setting: value.config_settings.unwrap_or_default(),
-            config_settings_package: value.config_settings_package.unwrap_or_default(),
-            build_isolation: value.build_isolation.unwrap_or_default(),
-            extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
-            extra_build_variables: value.extra_build_variables.unwrap_or_default(),
-            exclude_newer: ExcludeNewer::from_args(
-                value.exclude_newer,
-                value
-                    .exclude_newer_package
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(Into::into)
-                    .collect(),
-            ),
-            link_mode: value.link_mode.unwrap_or_default(),
-            torch_backend: value.torch_backend,
-            cuda_driver_version: None,
-            amd_gpu_architecture: None,
-            sources: NoSources::from_args(
-                value.no_sources,
-                value.no_sources_package.unwrap_or_default(),
-            ),
-            upgrade: value.upgrade.unwrap_or_default(),
-            build_options: BuildOptions::new(
-                NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
-                NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
-            ),
-        }
-    }
-}
-
-/// The resolved settings to use for an invocation of the uv CLI with both resolver and installer
-/// capabilities.
-///
-/// Represents the shared settings that are used across all uv commands outside the `pip` API.
-/// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
-#[derive(Debug, Clone, Default)]
-pub(crate) struct ResolverInstallerSettings {
-    pub(crate) resolver: ResolverSettings,
-    pub(crate) compile_bytecode: bool,
-    pub(crate) reinstall: Reinstall,
-}
-
-impl ResolverInstallerSettings {
-    /// Resolve the [`ResolverInstallerSettings`] from CLI, environment, and filesystem options.
-    fn resolve(
-        args: ResolverInstallerArgs,
-        build: BuildOptionsArgs,
-        filesystem: Option<FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Result<Self> {
-        let args =
-            resolver_installer_options(args, build, configured_indexes(filesystem.as_ref()))?;
-
-        Ok(Self::combine(args, filesystem, environment))
-    }
-
-    /// Reconcile the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
-    fn combine(
-        args: ResolverInstallerOptions,
-        filesystem: Option<FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
-        let options = resolver_installer_options_with_environment(args, environment).combine(
-            ResolverInstallerOptions::from(
-                filesystem
-                    .map(FilesystemOptions::into_options)
-                    .map(|options| options.top_level)
-                    .unwrap_or_default(),
-            ),
-        );
-
-        let base = Self::from(options);
-        Self {
-            resolver: ResolverSettings {
-                cuda_driver_version: environment.cuda_driver_version.clone(),
-                amd_gpu_architecture: environment.amd_gpu_architecture,
-                ..base.resolver
-            },
-            ..base
-        }
+            ..base.resolver
+        },
+        ..base
     }
 }
 
@@ -4773,60 +4550,6 @@ fn resolver_installer_options_with_environment(
         .no_sources_package
         .or(environment.no_sources_package.clone());
     options
-}
-
-impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
-    fn from(value: ResolverInstallerOptions) -> Self {
-        let index_locations = value.indexes.into();
-        Self {
-            resolver: ResolverSettings {
-                build_options: BuildOptions::new(
-                    NoBinary::from_args(
-                        value.no_binary,
-                        value.no_binary_package.unwrap_or_default(),
-                    ),
-                    NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
-                ),
-                config_setting: value.config_settings.unwrap_or_default(),
-                config_settings_package: value.config_settings_package.unwrap_or_default(),
-                dependency_metadata: DependencyMetadata::from_entries(
-                    value.dependency_metadata.into_iter().flatten(),
-                ),
-                exclude_newer: ExcludeNewer::from_args(
-                    value.exclude_newer,
-                    value
-                        .exclude_newer_package
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(Into::into)
-                        .collect(),
-                ),
-                fork_strategy: value.fork_strategy.unwrap_or_default(),
-                index_locations,
-                index_strategy: value.index_strategy.unwrap_or_default(),
-                keyring_provider: value.keyring_provider.unwrap_or_default(),
-                link_mode: value.link_mode.unwrap_or_default(),
-                build_isolation: value.build_isolation.unwrap_or_default(),
-                extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
-                extra_build_variables: value.extra_build_variables.unwrap_or_default(),
-                prerelease: resolve_prerelease(
-                    value.prerelease.unwrap_or_default(),
-                    value.prerelease_package.unwrap_or_default(),
-                ),
-                resolution: value.resolution.unwrap_or_default(),
-                sources: NoSources::from_args(
-                    value.no_sources,
-                    value.no_sources_package.unwrap_or_default(),
-                ),
-                torch_backend: value.torch_backend,
-                cuda_driver_version: None,
-                amd_gpu_architecture: None,
-                upgrade: value.upgrade.unwrap_or_default(),
-            },
-            compile_bytecode: value.compile_bytecode.unwrap_or_default(),
-            reinstall: value.reinstall.unwrap_or_default(),
-        }
-    }
 }
 
 /// The resolved settings to use for an invocation of the `pip` CLI.
@@ -5266,28 +4989,6 @@ impl PipSettings {
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
-        }
-    }
-}
-
-impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
-    fn from(settings: &'a ResolverInstallerSettings) -> Self {
-        Self {
-            index_locations: &settings.resolver.index_locations,
-            index_strategy: settings.resolver.index_strategy,
-            keyring_provider: settings.resolver.keyring_provider,
-            dependency_metadata: &settings.resolver.dependency_metadata,
-            config_setting: &settings.resolver.config_setting,
-            config_settings_package: &settings.resolver.config_settings_package,
-            build_isolation: &settings.resolver.build_isolation,
-            extra_build_dependencies: &settings.resolver.extra_build_dependencies,
-            extra_build_variables: &settings.resolver.extra_build_variables,
-            exclude_newer: &settings.resolver.exclude_newer,
-            link_mode: settings.resolver.link_mode,
-            compile_bytecode: settings.compile_bytecode,
-            reinstall: &settings.reinstall,
-            build_options: &settings.resolver.build_options,
-            sources: settings.resolver.sources.clone(),
         }
     }
 }

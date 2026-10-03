@@ -38,16 +38,16 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::ExitStatus;
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironmentTarget, ProjectPythonRequest,
     centralized_environment_root, centralized_environments_enabled,
     is_centralized_environment_reference, lock_project_environment,
     update_project_environment_link,
 };
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
+use uv_install_ops::loggers::{DefaultInstallLogger, InstallLogger};
+use uv_install_ops::{Changelog, report_interpreter};
+use uv_python_context::PythonDownloadReporter;
 
 #[derive(Error, Debug)]
 enum VenvError {

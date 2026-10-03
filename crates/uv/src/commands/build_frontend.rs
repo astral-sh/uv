@@ -50,11 +50,11 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
-use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
+use uv_python_context::PythonDownloadReporter;
+use uv_resolve_ops as operations;
 
 #[derive(Debug, Error)]
 pub(crate) enum Error {
@@ -631,7 +631,8 @@ async fn build_package(
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
             let groups = DependencyGroupsWithDefaults::none();
-            interpreter_request = find_requires_python(workspace, &groups)?
+            interpreter_request = find_requires_python(workspace, &groups)
+                .map_err(ProjectError::from)?
                 .as_ref()
                 .and_then(PythonRequest::from_requires_python);
         }

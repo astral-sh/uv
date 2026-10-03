@@ -60,7 +60,6 @@ use crate::settings::{
     PublishSettings, resolve_color,
 };
 
-pub(crate) mod child;
 pub mod commands;
 #[cfg(not(feature = "self-update"))]
 mod install_source;
@@ -350,11 +349,15 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     // If the target is a PEP 723 script, parse it.
     let (run_script, run_command) = if let Some(parsed_run_command) = parsed_run_command {
         let (script, run_command) = parsed_run_command
-            .resolve(
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            )
+            .resolve(&|| {
+                let settings = GlobalSettings::resolve(
+                    &cli.top_level.global_args,
+                    filesystem.as_ref(),
+                    &environment,
+                    None,
+                )?;
+                Ok(base_client_builder(&settings))
+            })
             .await?;
         (script, Some(run_command))
     } else {
@@ -1811,6 +1814,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &workspace_cache,
                 printer,
                 globals.preview,
+                commands::diagnostics::write_error_chain,
             ))
             .await
         }

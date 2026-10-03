@@ -1,0 +1,1653 @@
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use uv_environment_ops::malware::{MalwareCheckContext, maybe_check_malware};
+
+use anyhow::Result;
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
+use serde::Serialize;
+use tracing::warn;
+use uv_cache::Cache;
+use uv_cli::SyncFormat;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
+    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
+    InstallOptions, InstallTarget as InstallOptionTarget, TargetTriple, Upgrade,
+};
+use uv_dispatch::BuildDispatch;
+use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution_types::{
+    Dist, NameRequirementSpecification, Resolution, ResolvedDist, SourceDist,
+};
+use uv_fs::{PortablePathBuf, Simplified};
+use uv_installer::{InstallationStrategy, SitePackages};
+use uv_lock::{Installable, Lock, PythonReport};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_preview::{Preview, PreviewFeature};
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
+use uv_python::{
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
+    PythonRequest,
+};
+use uv_resolver::{FlatIndex, ForkStrategy, Prerelease, ResolutionMode};
+use uv_scripts::Pep723Script;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
+use uv_workspace::pyproject::Source;
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
+
+use crate::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::pip::operations::{Changelog, Modifications};
+use crate::pip::resolution_markers;
+use crate::pip::{operations, resolution_tags};
+use crate::project::discovery::DiscoveredProject;
+use crate::project::install_target::{InstallTarget, PackageSelection};
+use crate::project::lock::{LockMode, LockOperation, LockResult};
+use crate::project::lock_target::LockTarget;
+use crate::project::lockfile::FrozenWorkspace;
+use crate::project::{
+    EnvironmentUpdate, LinkErrorReporting, MissingLockfileSource, PlatformState,
+    ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ScriptEnvironment, UniversalState,
+    detect_conflicts, script_extra_build_requires, script_specification, update_environment,
+};
+use crate::{ExitStatus, UvError};
+use uv_command_support::Printer;
+use uv_install_ops::editable::apply_editable_mode;
+use uv_install_ops::report::{PackageChangesReport, SchemaReport};
+use uv_settings::{
+    FrozenSource, InstallerSettingsRef, LockCheck, LockedSource, ResolverInstallerSettings,
+    ResolverSettings,
+};
+
+/// Sync the project environment.
+pub async fn sync(
+    project_dir: &Path,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
+    dry_run: DryRun,
+    active: ActiveEnvironment,
+    all_packages: bool,
+    package: Vec<PackageName>,
+    extras: ExtrasSpecification,
+    groups: DependencyGroups,
+    editable: Option<EditableMode>,
+    install_options: InstallOptions,
+    modifications: Modifications,
+    python: Option<String>,
+    python_platform: Option<TargetTriple>,
+    install_mirrors: PythonInstallMirrors,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
+    python_downloads: PythonDownloads,
+    settings: ResolverInstallerSettings,
+    client_builder: BaseClientBuilder<'_>,
+    script: Option<Pep723Script>,
+    installer_metadata: bool,
+    concurrency: Concurrency,
+    config_discovery: ConfigDiscovery,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+    output_format: SyncFormat,
+    malware_settings: MalwareCheckSettings,
+) -> Result<ExitStatus> {
+    if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
+    // Identify the target.
+    let manifest_target;
+    let frozen_workspace;
+    let target = if let Some(script) = script {
+        manifest_target = SyncManifest::Script(script);
+        SyncTarget::Manifest(&manifest_target)
+    } else {
+        let options = DiscoveryOptions {
+            members: if frozen.is_some() {
+                MemberDiscovery::Existing
+            } else {
+                MemberDiscovery::All
+            },
+            ..DiscoveryOptions::default()
+        };
+        let selected_package = if let [name] = package.as_slice()
+            && frozen.is_none()
+        {
+            Some(name)
+        } else {
+            None
+        };
+        match DiscoveredProject::discover(
+            project_dir,
+            &options,
+            selected_package,
+            frozen,
+            preview,
+            cache,
+            workspace_cache,
+        )
+        .await?
+        {
+            DiscoveredProject::Manifest(project) => {
+                if frozen.is_none() {
+                    for name in &package {
+                        if !project.workspace().packages().contains_key(name) {
+                            return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
+                        }
+                    }
+                }
+                manifest_target = SyncManifest::Project(project);
+                SyncTarget::Manifest(&manifest_target)
+            }
+            DiscoveredProject::Lockfile(workspace) => {
+                workspace.validate_packages(&package)?;
+                frozen_workspace = workspace;
+                let project_name = frozen_workspace.current_project(project_dir).cloned();
+                SyncTarget::Lockfile {
+                    path: frozen_workspace.root().join("uv.lock"),
+                    workspace: &frozen_workspace,
+                    project_name,
+                }
+            }
+        }
+    };
+
+    // Read the frozen lock before selecting an environment, since the selected member's default
+    // groups can affect the Python requirement. Manifest-free targets were read during discovery.
+    let frozen_lock = if let Some(source) = frozen
+        && let SyncTarget::Manifest(manifest) = &target
+    {
+        Some(
+            LockTarget::from(*manifest)
+                .read_frozen(MissingLockfileSource::from(source))
+                .await
+                .map_err(|err| match (err, *manifest) {
+                    (ProjectError::MissingLockfile(..), SyncManifest::Script(script)) => anyhow::anyhow!(
+                        "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
+                        format!("uv lock --script {}", script.path.user_display()).green(),
+                    ),
+                    (err, _) => UvError::from(err).into(),
+                })?,
+        )
+    } else {
+        None
+    };
+
+    let locked_default_groups = match (&frozen_lock, package.as_slice()) {
+        (Some(lock), [name]) => lock.member_default_groups(name),
+        _ => None,
+    };
+    let use_locked_python = locked_default_groups.is_some();
+
+    // Determine the groups and extras to include.
+    let groups = match &target {
+        SyncTarget::Manifest(SyncManifest::Project(project)) => {
+            groups.with_defaults(match locked_default_groups {
+                Some(defaults) => defaults,
+                None => project.default_groups()?,
+            })
+        }
+        SyncTarget::Manifest(SyncManifest::Script(..)) => {
+            groups.with_defaults(DefaultGroups::default())
+        }
+        SyncTarget::Lockfile {
+            workspace,
+            project_name,
+            ..
+        } => {
+            let project = match package.as_slice() {
+                [name] => Some(name),
+                _ => project_name.as_ref(),
+            };
+            workspace.resolve_groups(&groups, project)?
+        }
+    };
+    let extras = extras.with_defaults(DefaultExtras::default());
+
+    // Reject invalid lockfile selections before creating an environment.
+    if let SyncTarget::Lockfile { workspace, .. } = &target {
+        let install_target =
+            identify_installation_target(&target, workspace.lock(), all_packages, &package);
+        install_target.validate_extras(&extras)?;
+        install_target.validate_groups(&groups)?;
+        detect_conflicts(&install_target, &extras, &groups)?;
+    }
+
+    // Discover or create the virtual environment.
+    let environment = match &target {
+        SyncTarget::Manifest(SyncManifest::Project(project)) => SyncEnvironment::Project(
+            ProjectEnvironment::get_or_init(
+                ProjectEnvironmentTarget::from(project.workspace()),
+                frozen_lock
+                    .as_ref()
+                    .filter(|_| use_locked_python)
+                    .map(|lock| {
+                        identify_installation_target(&target, lock, all_packages, &package)
+                    }),
+                &groups,
+                python.as_deref().map(PythonRequest::parse),
+                &install_mirrors,
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                false,
+                config_discovery,
+                active,
+                cache,
+                dry_run,
+                LinkErrorReporting::User,
+                printer,
+            )
+            .await?,
+        ),
+        SyncTarget::Lockfile { workspace, .. } => SyncEnvironment::Project(
+            ProjectEnvironment::get_or_init(
+                ProjectEnvironmentTarget::Lockfile {
+                    root: workspace.root(),
+                    lock: workspace.lock(),
+                },
+                Some(identify_installation_target(
+                    &target,
+                    workspace.lock(),
+                    all_packages,
+                    &package,
+                )),
+                &groups,
+                python.as_deref().map(PythonRequest::parse),
+                &install_mirrors,
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                false,
+                config_discovery,
+                active,
+                cache,
+                dry_run,
+                LinkErrorReporting::User,
+                printer,
+            )
+            .await?,
+        ),
+        SyncTarget::Manifest(SyncManifest::Script(script)) => SyncEnvironment::Script(
+            ScriptEnvironment::get_or_init(
+                script.into(),
+                python.as_deref().map(PythonRequest::parse),
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                &install_mirrors,
+                false,
+                config_discovery,
+                active,
+                cache,
+                dry_run,
+                printer,
+            )
+            .await?,
+        ),
+    };
+
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
+
+    let sync_report = SyncReport {
+        dry_run: dry_run.enabled(),
+        environment: EnvironmentReport::from(&environment),
+        action: SyncAction::from(&environment),
+        target: TargetName::from(&target),
+        changes: PackageChangesReport::default(),
+    };
+
+    // Show the intermediate results if relevant
+    if let Some(message) = sync_report.format(output_format) {
+        writeln!(printer.stderr(), "{message}")?;
+    }
+
+    // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
+    // we don't create a lockfile, so the resolve-and-install semantics are different.
+    if let SyncTarget::Manifest(SyncManifest::Script(script)) = &target
+        && frozen_lock.is_none()
+    {
+        let lockfile = LockTarget::from(script).lock_path();
+        if !lockfile.is_file() {
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                return Err(anyhow::anyhow!(
+                    "`uv sync {lock_check}` requires a script lockfile; run `{}` to lock the script",
+                    format!("uv lock --script {}", script.path.user_display()).green(),
+                ));
+            }
+
+            // Parse the requirements from the script.
+            let spec = script_specification(
+                script.into(),
+                &settings.resolver,
+                cache,
+                workspace_cache,
+                client_builder.credentials_cache(),
+            )
+            .await?
+            .unwrap_or_default();
+            let script_extra_build_requires = script_extra_build_requires(
+                script.into(),
+                &settings.resolver,
+                cache,
+                workspace_cache,
+                client_builder.credentials_cache(),
+            )
+            .await?
+            .into_inner();
+
+            // Parse the build constraints from the script.
+            let build_constraints = script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| {
+                    tool.uv
+                        .as_ref()
+                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                })
+                .map(|constraints| {
+                    Constraints::from_specifications(
+                        constraints
+                            .iter()
+                            .cloned()
+                            .map(NameRequirementSpecification::from),
+                    )
+                });
+
+            match update_environment(
+                environment.clone(),
+                spec,
+                modifications,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Project,
+                build_constraints.unwrap_or_default(),
+                script_extra_build_requires,
+                &settings,
+                &client_builder,
+                &PlatformState::default(),
+                Box::new(DefaultResolveLogger),
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                &concurrency,
+                cache,
+                workspace_cache,
+                dry_run,
+                printer,
+                preview,
+            )
+            .await
+            {
+                Ok(EnvironmentUpdate { changelog, .. }) => {
+                    write_sync_report(
+                        &target,
+                        &environment,
+                        &changelog,
+                        None,
+                        dry_run,
+                        output_format,
+                        printer,
+                    )?;
+                    return Ok(ExitStatus::Success);
+                }
+                Err(ProjectError::Operation(error)) => {
+                    if let operations::Error::OutdatedEnvironment(changelog) = &*error {
+                        write_sync_report(
+                            &target,
+                            &environment,
+                            changelog,
+                            None,
+                            dry_run,
+                            output_format,
+                            printer,
+                        )?;
+                    }
+                    return Err(UvError::from(*error).into());
+                }
+                Err(err) => return Err(UvError::from(err).into()),
+            }
+        }
+    }
+
+    // Initialize any shared state.
+    let state = UniversalState::default();
+
+    // Determine the lock mode.
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
+    } else if let LockCheck::Enabled(lock_check) = lock_check {
+        LockMode::Locked(environment.interpreter(), lock_check)
+    } else if dry_run.enabled() {
+        LockMode::DryRun(environment.interpreter())
+    } else {
+        LockMode::Write(environment.interpreter())
+    };
+
+    let (outcome, lock_report) = match &target {
+        SyncTarget::Lockfile {
+            path, workspace, ..
+        } => (
+            Outcome::Frozen(workspace.lock()),
+            LockReport {
+                path: path.as_path().into(),
+                action: LockAction::Use,
+                dry_run: dry_run.enabled(),
+            },
+        ),
+        SyncTarget::Manifest(manifest) => {
+            let lock_target = LockTarget::from(*manifest);
+            let first_party_exclusions = target.project().map_or_else(BTreeSet::new, |project| {
+                first_party_exclusions(project, all_packages, &package, &install_options)
+            });
+
+            let result = if let Some(lock) = frozen_lock {
+                Ok(LockResult::Unchanged(lock))
+            } else {
+                Box::pin(
+                    LockOperation::new(
+                        mode,
+                        &settings.resolver,
+                        &client_builder,
+                        &state,
+                        Box::new(DefaultResolveLogger),
+                        &concurrency,
+                        cache,
+                        workspace_cache,
+                        printer,
+                        preview,
+                    )
+                    .with_first_party_exclusions(first_party_exclusions)
+                    .execute(lock_target),
+                )
+                .await
+            };
+            let outcome = match result {
+                Ok(result) => Outcome::Success(result),
+                Err(ProjectError::Operation(err)) => return Err(UvError::from(*err).into()),
+                Err(err @ ProjectError::LockFormat(..)) => return Err(UvError::user(err).into()),
+                Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
+                    if dry_run.enabled() {
+                        // A dry run continues with the new resolution but exits unsuccessfully.
+                        Outcome::LockMismatch(prev, cur, lock_source)
+                    } else {
+                        return Err(UvError::user(ProjectError::LockMismatch(
+                            prev,
+                            cur,
+                            lock_source,
+                        ))
+                        .into());
+                    }
+                }
+                Err(err) => return Err(UvError::from(err).into()),
+            };
+            let report = LockReport::from((&lock_target, &mode, &outcome));
+            (outcome, report)
+        }
+    };
+
+    if let Some(message) = lock_report.format(output_format) {
+        writeln!(printer.stderr(), "{message}")?;
+    }
+
+    // Identify the installation target.
+    let sync_target = identify_installation_target(&target, outcome.lock(), all_packages, &package);
+
+    // TODO(lucab): improve warning content
+    // <https://github.com/astral-sh/uv/issues/7428>
+    if let SyncTarget::Manifest(SyncManifest::Project(project)) = &target {
+        let roots = sync_target.roots().collect::<FxHashSet<_>>();
+        for (name, member) in project.workspace().packages() {
+            let is_required_member = project.workspace().required_members().contains_key(name);
+            if roots.contains(name)
+                && member.pyproject_toml().has_scripts()
+                && !member.pyproject_toml().is_package(!is_required_member)
+            {
+                warn_user!(
+                    "Skipping installation of entry points (`project.scripts`) for package `{}` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`",
+                    name
+                );
+            }
+        }
+    }
+
+    let state = state.fork();
+
+    // Perform the sync operation.
+    let changelog = match do_sync(
+        sync_target,
+        &environment,
+        &extras,
+        &groups,
+        editable,
+        install_options,
+        modifications,
+        python_platform.as_ref(),
+        (&settings).into(),
+        &client_builder,
+        &state,
+        Box::new(DefaultInstallLogger),
+        installer_metadata,
+        &concurrency,
+        cache,
+        workspace_cache,
+        dry_run,
+        printer,
+        preview,
+        &malware_settings,
+    )
+    .await
+    {
+        Ok(changelog) => changelog,
+        Err(ProjectError::Operation(error)) => {
+            if let operations::Error::OutdatedEnvironment(changelog) = &*error {
+                write_sync_report(
+                    &target,
+                    &environment,
+                    changelog,
+                    Some(lock_report),
+                    dry_run,
+                    output_format,
+                    printer,
+                )?;
+            }
+            return Err(UvError::from(*error).into());
+        }
+        Err(err) => return Err(UvError::from(err).into()),
+    };
+
+    write_sync_report(
+        &target,
+        &environment,
+        &changelog,
+        Some(lock_report),
+        dry_run,
+        output_format,
+        printer,
+    )?;
+
+    match outcome {
+        Outcome::Success(..) | Outcome::Frozen(..) => Ok(ExitStatus::Success),
+        Outcome::LockMismatch(prev, cur, lock_source) => {
+            Err(UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into())
+        }
+    }
+}
+
+/// The outcome of a `lock` operation within a `sync` operation.
+#[derive(Debug)]
+#[expect(clippy::large_enum_variant)]
+enum Outcome<'a> {
+    /// The `lock` operation was successful.
+    Success(LockResult),
+    /// A frozen lockfile was discovered without a lock operation.
+    Frozen(&'a Lock),
+    /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
+}
+
+impl Outcome<'_> {
+    /// Return the [`Lock`] associated with this outcome.
+    fn lock(&self) -> &Lock {
+        match self {
+            Self::Success(lock) => match lock {
+                LockResult::Changed(_, lock) => lock,
+                LockResult::Unchanged(lock) => lock,
+            },
+            Self::Frozen(lock) => lock,
+            Self::LockMismatch(_prev, cur, _lock_source) => cur,
+        }
+    }
+}
+
+fn identify_installation_target<'a>(
+    target: &'a SyncTarget<'_>,
+    lock: &'a Lock,
+    all_packages: bool,
+    package: &'a [PackageName],
+) -> InstallTarget<'a> {
+    match target {
+        SyncTarget::Manifest(SyncManifest::Project(project)) => {
+            identify_project_installation_target(project, lock, all_packages, package)
+        }
+        SyncTarget::Lockfile {
+            workspace,
+            project_name,
+            ..
+        } => InstallTarget::Lockfile {
+            root: workspace.root(),
+            project_name: project_name.as_ref(),
+            selection: PackageSelection::from_args(all_packages, package, project_name.as_ref()),
+            lock,
+        },
+        SyncTarget::Manifest(SyncManifest::Script(script)) => {
+            InstallTarget::Script { script, lock }
+        }
+    }
+}
+
+/// Identify workspace members excluded from installation before a lockfile is available.
+pub fn first_party_exclusions(
+    project: &VirtualProject,
+    all_packages: bool,
+    package: &[PackageName],
+    install_options: &InstallOptions,
+) -> BTreeSet<PackageName> {
+    let workspace = project.workspace();
+    let members = workspace
+        .packages()
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let project_name = if all_packages {
+        project.project_name()
+    } else {
+        match package {
+            [] => project.project_name(),
+            [name] => Some(name),
+            _ => None,
+        }
+    };
+    members
+        .iter()
+        .filter(|name| {
+            !install_options.include_package(
+                InstallOptionTarget {
+                    name,
+                    is_local: true,
+                },
+                project_name,
+                &members,
+            )
+        })
+        .cloned()
+        .collect()
+}
+
+/// Select workspace members with the same semantics as `uv sync`.
+pub fn identify_project_installation_target<'a>(
+    project: &'a VirtualProject,
+    lock: &'a Lock,
+    all_packages: bool,
+    package: &'a [PackageName],
+) -> InstallTarget<'a> {
+    match project {
+        VirtualProject::Project(project) => {
+            if all_packages {
+                InstallTarget::Workspace {
+                    workspace: project.workspace(),
+                    project_name: Some(project.project_name()),
+                    lock,
+                }
+            } else {
+                match package {
+                    // By default, install the current project.
+                    [] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name: project.project_name(),
+                        lock,
+                    },
+                    [name] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name,
+                        lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace: project.workspace(),
+                        names,
+                        lock,
+                    },
+                }
+            }
+        }
+        VirtualProject::NonProject(workspace) => {
+            if all_packages {
+                InstallTarget::NonProjectWorkspace { workspace, lock }
+            } else {
+                match package {
+                    // By default, install the entire virtual workspace.
+                    [] => InstallTarget::NonProjectWorkspace { workspace, lock },
+                    [name] => InstallTarget::Project {
+                        workspace,
+                        name,
+                        lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace,
+                        names,
+                        lock,
+                    },
+                }
+            }
+        }
+    }
+}
+
+/// A sync reads an existing workspace lock or resolves a project or script manifest.
+#[derive(Debug, Clone)]
+enum SyncTarget<'a> {
+    Manifest(&'a SyncManifest),
+    Lockfile {
+        workspace: &'a FrozenWorkspace,
+        path: PathBuf,
+        project_name: Option<PackageName>,
+    },
+}
+
+#[derive(Debug, Clone)]
+#[expect(clippy::large_enum_variant)]
+enum SyncManifest {
+    /// Sync a project environment.
+    Project(VirtualProject),
+    /// Sync a PEP 723 script environment.
+    Script(Pep723Script),
+}
+
+impl<'a> From<&'a SyncManifest> for LockTarget<'a> {
+    fn from(manifest: &'a SyncManifest) -> Self {
+        match manifest {
+            SyncManifest::Project(project) => Self::Workspace(project.workspace()),
+            SyncManifest::Script(script) => Self::Script(script),
+        }
+    }
+}
+
+impl SyncTarget<'_> {
+    fn project(&self) -> Option<&VirtualProject> {
+        match self {
+            Self::Manifest(SyncManifest::Project(project)) => Some(project),
+            Self::Manifest(SyncManifest::Script(_)) | Self::Lockfile { .. } => None,
+        }
+    }
+
+    fn script(&self) -> Option<&Pep723Script> {
+        match self {
+            Self::Manifest(SyncManifest::Project(_)) | Self::Lockfile { .. } => None,
+            Self::Manifest(SyncManifest::Script(script)) => Some(script),
+        }
+    }
+
+    /// Report the selected member's path, or the workspace root if no member is selected.
+    fn project_report(&self) -> Option<ProjectReport> {
+        match self {
+            Self::Manifest(SyncManifest::Project(project)) => Some(ProjectReport::from(project)),
+            Self::Lockfile {
+                workspace,
+                project_name,
+                ..
+            } => {
+                let root = workspace.root();
+                let path = workspace
+                    .lock()
+                    .workspace_member_paths()
+                    .find(|(name, _)| Some(*name) == project_name.as_ref())
+                    .map_or_else(|| root.to_path_buf(), |(_, path)| root.join(path));
+                Some(ProjectReport {
+                    path: uv_fs::normalize_path(&path).as_ref().into(),
+                    workspace: WorkspaceReport { path: root.into() },
+                })
+            }
+            Self::Manifest(SyncManifest::Script(_)) => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum SyncEnvironment {
+    /// A Python environment for a project.
+    Project(ProjectEnvironment),
+    /// A Python environment for a script.
+    Script(ScriptEnvironment),
+}
+
+impl SyncEnvironment {
+    fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::Project(env) => env.dry_run_target(),
+            Self::Script(env) => env.dry_run_target(),
+        }
+    }
+}
+
+impl Deref for SyncEnvironment {
+    type Target = PythonEnvironment;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Project(environment) => environment,
+            Self::Script(environment) => environment,
+        }
+    }
+}
+
+/// Sync a lockfile with an environment.
+pub async fn do_sync<'a>(
+    target: InstallTarget<'_>,
+    venv: &PythonEnvironment,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    editable: Option<EditableMode>,
+    install_options: InstallOptions,
+    modifications: Modifications,
+    python_platform: Option<&TargetTriple>,
+    settings: InstallerSettingsRef<'_>,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    logger: Box<dyn InstallLogger>,
+    installer_metadata: bool,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    dry_run: DryRun,
+    printer: Printer,
+    preview: Preview,
+    malware_settings: impl Into<MalwareCheckContext<'a>>,
+) -> Result<Changelog, ProjectError> {
+    let malware_context = malware_settings.into();
+
+    // Extract the project settings.
+    let InstallerSettingsRef {
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        dependency_metadata,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        extra_build_dependencies,
+        extra_build_variables,
+        exclude_newer,
+        link_mode,
+        compile_bytecode,
+        reinstall,
+        build_options,
+        sources,
+    } = settings;
+
+    // Lower the extra build dependencies with source resolution.
+    let extra_build_requires = match &target {
+        InstallTarget::Workspace { workspace, .. }
+        | InstallTarget::Project { workspace, .. }
+        | InstallTarget::Projects { workspace, .. }
+        | InstallTarget::NonProjectWorkspace { workspace, .. } => {
+            LoweredExtraBuildDependencies::from_workspace(
+                extra_build_dependencies.clone(),
+                workspace,
+                index_locations,
+                &sources,
+                cache,
+                workspace_cache,
+                client_builder.credentials_cache(),
+            )
+            .await?
+        }
+        InstallTarget::Lockfile {
+            root,
+            project_name,
+            lock,
+            ..
+        } => {
+            let member = project_name.and_then(|name| {
+                lock.workspace_member_paths()
+                    .find_map(|(member, path)| (member == name).then(|| root.join(path)))
+            });
+            if let Some(member) = member.filter(|path| {
+                !extra_build_dependencies.is_empty() && path.join("pyproject.toml").is_file()
+            }) {
+                let workspace = Workspace::discover(
+                    &member,
+                    &DiscoveryOptions {
+                        members: MemberDiscovery::Existing,
+                        stop_discovery_at: Some(root.to_path_buf()),
+                    },
+                    cache,
+                    workspace_cache,
+                )
+                .await?;
+                LoweredExtraBuildDependencies::from_workspace(
+                    extra_build_dependencies.clone(),
+                    &workspace,
+                    index_locations,
+                    &sources,
+                    cache,
+                    workspace_cache,
+                    client_builder.credentials_cache(),
+                )
+                .await?
+            } else {
+                LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            }
+        }
+        InstallTarget::Script { script, .. } => {
+            // Try to get extra build dependencies from the script metadata
+            let resolver_settings = ResolverSettings {
+                build_options: build_options.clone(),
+                config_setting: config_setting.clone(),
+                config_settings_package: config_settings_package.clone(),
+                dependency_metadata: dependency_metadata.clone(),
+                exclude_newer: exclude_newer.clone(),
+                fork_strategy: ForkStrategy::default(),
+                index_locations: index_locations.clone(),
+                index_strategy,
+                keyring_provider,
+                link_mode,
+                build_isolation: build_isolation.clone(),
+                extra_build_dependencies: extra_build_dependencies.clone(),
+                extra_build_variables: extra_build_variables.clone(),
+                prerelease: Prerelease::default(),
+                resolution: ResolutionMode::default(),
+                sources: sources.clone(),
+                torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
+                upgrade: Upgrade::default(),
+            };
+            script_extra_build_requires(
+                (*script).into(),
+                &resolver_settings,
+                cache,
+                workspace_cache,
+                client_builder.credentials_cache(),
+            )
+            .await?
+        }
+    }
+    .into_inner();
+
+    let client_builder = client_builder.clone().keyring(keyring_provider);
+    // Save an authenticated builder for the malware check before moving the
+    // primary builder into the registry client below.
+    let malware_check_client_builder = client_builder.clone();
+
+    // Validate that the Python version is supported by the lockfile.
+    if !target
+        .lock()
+        .requires_python()
+        .contains(venv.interpreter().python_version())
+    {
+        return Err(ProjectError::LockedPythonIncompatibility(
+            venv.interpreter().python_version().clone(),
+            target.lock().requires_python().clone(),
+        ));
+    }
+
+    // Validate that the set of requested extras and development groups are compatible.
+    detect_conflicts(&target, extras, groups)?;
+
+    // Validate that the set of requested extras and development groups are defined in the lockfile.
+    target.validate_extras(extras)?;
+    target.validate_groups(groups)?;
+
+    // Determine the markers to use for resolution.
+    let marker_env = resolution_markers(None, python_platform, venv.interpreter());
+
+    // Validate that the platform is supported by the lockfile.
+    let environments = target.lock().supported_environments();
+    if !environments.is_empty() {
+        if !environments
+            .iter()
+            .any(|env| env.evaluate(&marker_env, &[]))
+        {
+            return Err(ProjectError::LockedPlatformIncompatibility(
+                // For error reporting, we use the "simplified"
+                // supported environments, because these correspond to
+                // what the end user actually wrote. The non-simplified
+                // environments, by contrast, are explicitly
+                // constrained by `requires-python`.
+                target
+                    .lock()
+                    .simplified_supported_environments()
+                    .into_iter()
+                    .filter_map(MarkerTree::contents)
+                    .map(|env| format!("`{env}`"))
+                    .join(", "),
+            ));
+        }
+    }
+
+    // Determine the tags to use for the resolution.
+    let tags = resolution_tags(None, python_platform, venv.interpreter())?;
+
+    // Read the lockfile.
+    let resolution = target.to_resolution(
+        &marker_env,
+        &tags,
+        extras,
+        groups,
+        build_options,
+        &install_options,
+    )?;
+
+    // Always skip virtual projects, which shouldn't be built or installed.
+    let resolution = apply_no_virtual_project(resolution);
+
+    // If necessary, convert editable to non-editable distributions.
+    let resolution = apply_editable_mode(resolution, editable);
+
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
+
+    // Extract the hashes from the lockfile.
+    let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+
+    // Populate credentials from the target.
+    store_credentials_from_target(target, &client_builder)?;
+
+    let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
+    let site_packages = SitePackages::from_environment(venv)?;
+    let installation_plan = operations::InstallationPlan::build(
+        &resolution,
+        site_packages,
+        InstallationStrategy::Strict,
+        reinstall,
+        build_options,
+        &hasher,
+        index_locations,
+        config_setting,
+        config_settings_package,
+        &extra_build_requires,
+        extra_build_variables,
+        cache,
+        venv,
+        &tags,
+    )?;
+
+    // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
+    // installation work to perform.
+    if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
+        maybe_check_malware(
+            &target,
+            &resolution,
+            &malware_check_client_builder,
+            concurrency,
+            cache,
+            preview,
+            &malware_context,
+        )
+        .await?;
+
+        return Ok(installation_plan.finish_noop(
+            &resolution,
+            modifications,
+            bytecode_compilation,
+            logger.as_ref(),
+            dry_run,
+            printer,
+        )?);
+    }
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
+        .index_strategy(index_strategy)
+        .markers(venv.interpreter().markers())
+        .platform(venv.interpreter().platform())
+        .build()?;
+
+    // Determine whether to enable build isolation.
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(venv),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            BuildIsolation::SharedPackage(venv, packages)
+        }
+    };
+
+    // Read the build constraints from the lockfile.
+    let build_constraints = target.build_constraints();
+
+    let build_hasher = HashStrategy::from_constraints(
+        &build_constraints,
+        Some(&venv.interpreter().to_resolver_marker_environment()),
+        uv_configuration::HashCheckingMode::Verify,
+    )?;
+    // Also verify artifacts in the full lockfile, including unselected extras and groups.
+    let build_hasher = target
+        .lock()
+        .hash_strategy(target.install_path(), &FxHashSet::default())?
+        .with_constraint_hashes(&build_hasher)?;
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &build_constraints,
+        venv.interpreter(),
+        index_locations,
+        &flat_index,
+        dependency_metadata,
+        state.clone().into_inner(),
+        index_strategy,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        link_mode,
+        build_options,
+        &build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
+        preview,
+    );
+
+    // Run a malware check against OSV before installing.
+    maybe_check_malware(
+        &target,
+        &resolution,
+        &malware_check_client_builder,
+        concurrency,
+        cache,
+        preview,
+        &malware_context,
+    )
+    .await?;
+
+    // Sync the environment.
+    let changelog = installation_plan
+        .execute(
+            &resolution,
+            modifications,
+            build_options,
+            link_mode,
+            bytecode_compilation,
+            &hasher,
+            &tags,
+            &client,
+            state.in_flight(),
+            concurrency,
+            &build_dispatch,
+            cache,
+            venv,
+            logger,
+            installer_metadata,
+            dry_run,
+            printer,
+            preview,
+        )
+        .await?;
+
+    Ok(changelog)
+}
+
+/// Filter out any virtual workspace members.
+fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
+    resolution.filter(|dist| {
+        let ResolvedDist::Installable { dist, .. } = dist else {
+            return true;
+        };
+
+        let Dist::Source(dist) = dist.as_ref() else {
+            return true;
+        };
+
+        let SourceDist::Directory(dist) = dist else {
+            return true;
+        };
+
+        !dist.r#virtual.unwrap_or(false)
+    })
+}
+
+/// Extract any credentials that are defined on the workspace dependencies themselves. While we
+/// don't store plaintext credentials in the `uv.lock`, we do respect credentials that are defined
+/// in the `pyproject.toml`.
+///
+/// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
+/// `project.dependencies`, and `project.optional-dependencies`.
+pub(super) fn store_credentials_from_target(
+    target: InstallTarget<'_>,
+    client_builder: &BaseClientBuilder,
+) -> Result<()> {
+    // Iterate over any indexes in the target.
+    for index in target.indexes() {
+        if let Some(credentials) = index.credentials()? {
+            if let Some(root_url) = index.root_url() {
+                client_builder.store_credentials(&root_url, credentials.clone());
+            }
+            client_builder.store_credentials(index.raw_url(), credentials);
+        }
+    }
+
+    // Iterate over any sources in the target.
+    for source in target.sources() {
+        match source {
+            Source::Git { git, .. } => {
+                uv_git::store_credentials_from_url(git)?;
+            }
+            Source::Url { url, .. } => {
+                client_builder.store_credentials_from_url(url)?;
+            }
+            _ => {}
+        }
+    }
+
+    // Iterate over any dependencies defined in the target.
+    for requirement in target.requirements() {
+        let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+            continue;
+        };
+        match &url.parsed_url {
+            ParsedUrl::GitDirectory(ParsedGitDirectoryUrl { url, .. })
+            | ParsedUrl::GitPath(ParsedGitPathUrl { url, .. }) => {
+                uv_git::store_credentials_from_url(url.url())?;
+            }
+            ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
+                client_builder.store_credentials_from_url(url)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct WorkspaceReport {
+    /// The workspace directory path.
+    path: PortablePathBuf,
+}
+
+impl From<&Workspace> for WorkspaceReport {
+    fn from(workspace: &Workspace) -> Self {
+        Self {
+            path: workspace.install_path().as_path().into(),
+        }
+    }
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct ProjectReport {
+    //
+    path: PortablePathBuf,
+    workspace: WorkspaceReport,
+}
+
+impl From<&VirtualProject> for ProjectReport {
+    fn from(project: &VirtualProject) -> Self {
+        Self {
+            path: project.root().into(),
+            workspace: WorkspaceReport::from(project.workspace()),
+        }
+    }
+}
+
+impl From<&SyncTarget<'_>> for TargetName {
+    fn from(target: &SyncTarget<'_>) -> Self {
+        match target {
+            SyncTarget::Manifest(SyncManifest::Project(_)) | SyncTarget::Lockfile { .. } => {
+                Self::Project
+            }
+            SyncTarget::Manifest(SyncManifest::Script(_)) => Self::Script,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct ScriptReport {
+    /// The path to the script.
+    path: PortablePathBuf,
+}
+
+impl From<&Pep723Script> for ScriptReport {
+    fn from(script: &Pep723Script) -> Self {
+        Self {
+            path: script.path.as_path().into(),
+        }
+    }
+}
+
+/// A report of the uv sync operation
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct Report {
+    /// The schema of this report.
+    schema: SchemaReport,
+    /// The target of the sync operation, either a project or a script.
+    target: TargetName,
+    /// The report for a [`TargetName::Project`], if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    project: Option<ProjectReport>,
+    /// The report for a [`TargetName::Script`], if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    script: Option<ScriptReport>,
+    /// The report for the sync operation.
+    sync: SyncReport,
+    /// The report for the lock operation.
+    lock: Option<LockReport>,
+    /// Whether this is a dry run.
+    dry_run: bool,
+}
+
+/// The kind of target
+#[derive(Debug, Serialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum TargetName {
+    Project,
+    Script,
+}
+
+impl std::fmt::Display for TargetName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Project => write!(f, "project"),
+            Self::Script => write!(f, "script"),
+        }
+    }
+}
+
+/// Represents the action taken during a sync.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum SyncAction {
+    /// The environment was checked and required no updates.
+    Check,
+    /// The environment was updated.
+    Update,
+    /// The environment was replaced.
+    Replace,
+    /// A new environment was created.
+    Create,
+}
+
+impl From<&SyncEnvironment> for SyncAction {
+    fn from(env: &SyncEnvironment) -> Self {
+        match &env {
+            SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => Self::Check,
+            SyncEnvironment::Project(ProjectEnvironment::Created(..)) => Self::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(..)) => Self::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(..)) => Self::Replace,
+            SyncEnvironment::Project(ProjectEnvironment::Replaced(..)) => Self::Update,
+            SyncEnvironment::Script(ScriptEnvironment::Existing(..)) => Self::Check,
+            SyncEnvironment::Script(ScriptEnvironment::Created(..)) => Self::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(..)) => Self::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(..)) => Self::Replace,
+            SyncEnvironment::Script(ScriptEnvironment::Replaced(..)) => Self::Update,
+        }
+    }
+}
+
+impl SyncAction {
+    fn message(&self, target: TargetName, dry_run: bool) -> Option<&'static str> {
+        let message = if dry_run {
+            match self {
+                Self::Check => "Would use",
+                Self::Update => "Would update",
+                Self::Replace => "Would replace",
+                Self::Create => "Would create",
+            }
+        } else {
+            // For projects, we omit some of these messages when we're not in dry-run mode
+            let is_project = matches!(target, TargetName::Project);
+            match self {
+                Self::Check | Self::Update | Self::Create if is_project => {
+                    return None;
+                }
+                Self::Check => "Using",
+                Self::Update => "Updating",
+                Self::Replace => "Replacing",
+                Self::Create => "Creating",
+            }
+        };
+        Some(message)
+    }
+}
+
+/// Represents the action taken during a lock.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum LockAction {
+    /// The lockfile was used without checking.
+    Use,
+    /// The lockfile was checked and required no updates.
+    Check,
+    /// The lockfile was updated.
+    Update,
+    /// A new lockfile was created.
+    Create,
+}
+
+impl LockAction {
+    fn message(&self, dry_run: bool) -> Option<&'static str> {
+        let message = if dry_run {
+            match self {
+                Self::Use => return None,
+                Self::Check => "Found up-to-date",
+                Self::Update => "Would update",
+                Self::Create => "Would create",
+            }
+        } else {
+            return None;
+        };
+        Some(message)
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct EnvironmentReport {
+    /// The path to the environment.
+    path: PortablePathBuf,
+    /// The Python interpreter for the environment.
+    python: PythonReport,
+}
+
+impl From<&PythonEnvironment> for EnvironmentReport {
+    fn from(env: &PythonEnvironment) -> Self {
+        Self {
+            python: PythonReport::from(env.interpreter()),
+            path: env.root().into(),
+        }
+    }
+}
+
+impl From<&SyncEnvironment> for EnvironmentReport {
+    fn from(env: &SyncEnvironment) -> Self {
+        let report = Self::from(&**env);
+        // Replace the path if necessary; we construct a temporary virtual environment during dry
+        // run invocations and want to report the path we _would_ use.
+        if let Some(path) = env.dry_run_target() {
+            report.with_path(path.into())
+        } else {
+            report
+        }
+    }
+}
+
+impl EnvironmentReport {
+    /// Set the path for this environment report.
+    #[must_use]
+    fn with_path(mut self, path: PortablePathBuf) -> Self {
+        if let Ok(python_path) = self.python.path().strip_prefix(self.path) {
+            let new_path = path.as_ref().to_path_buf().join(python_path);
+            self.python = self.python.with_path(new_path.as_path().into());
+        }
+        self.path = path;
+        self
+    }
+}
+
+/// The report for a sync operation.
+#[derive(Serialize, Debug)]
+struct SyncReport {
+    /// The environment.
+    environment: EnvironmentReport,
+    /// The action performed during the sync, e.g., what was done to the environment.
+    action: SyncAction,
+    /// The packages that changed during the sync.
+    #[serde(default)]
+    changes: PackageChangesReport,
+
+    // We store these fields so the report can format itself self-contained, but the outer
+    // [`Report`] is intended to include these in user-facing output
+    #[serde(skip)]
+    dry_run: bool,
+    #[serde(skip)]
+    target: TargetName,
+}
+
+impl SyncReport {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            // This is an intermediate report, when using JSON, it's only rendered at the end
+            SyncFormat::Json => None,
+            SyncFormat::Text => self.to_human_readable_string(),
+        }
+    }
+
+    fn to_human_readable_string(&self) -> Option<String> {
+        let Self {
+            environment,
+            action,
+            changes: _,
+            dry_run,
+            target,
+        } = self;
+
+        let action = action.message(*target, *dry_run)?;
+
+        let message = format!(
+            "{action} {target} environment at: {path}",
+            path = environment.path.user_display().cyan(),
+        );
+        if *dry_run {
+            return Some(message.dimmed().to_string());
+        }
+
+        Some(message)
+    }
+}
+
+/// The report for a lock operation.
+#[derive(Debug, Serialize)]
+struct LockReport {
+    /// The path to the lockfile
+    path: PortablePathBuf,
+    /// Whether the lockfile was preserved, created, or updated.
+    action: LockAction,
+
+    // We store this field so the report can format itself self-contained, but the outer
+    // [`Report`] is intended to include this in user-facing output
+    #[serde(skip)]
+    dry_run: bool,
+}
+
+impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome<'_>)> for LockReport {
+    fn from((target, mode, outcome): (&LockTarget, &LockMode, &Outcome<'_>)) -> Self {
+        Self {
+            path: target.lock_path().deref().into(),
+            action: match outcome {
+                Outcome::Success(result) => {
+                    match result {
+                        LockResult::Unchanged(..) => match mode {
+                            // When `--frozen` is used, we don't check the lockfile.
+                            LockMode::Frozen(_) => LockAction::Use,
+                            LockMode::DryRun(_) | LockMode::Locked(_, _) | LockMode::Write(_) => {
+                                LockAction::Check
+                            }
+                        },
+                        LockResult::Changed(None, ..) => LockAction::Create,
+                        LockResult::Changed(Some(_), ..) => LockAction::Update,
+                    }
+                }
+                Outcome::Frozen(_) => LockAction::Use,
+                // TODO(zanieb): We don't have a way to report the outcome of the lock yet
+                Outcome::LockMismatch(..) => LockAction::Check,
+            },
+            dry_run: matches!(mode, LockMode::DryRun(_)),
+        }
+    }
+}
+
+impl LockReport {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            SyncFormat::Json => None,
+            SyncFormat::Text => self.to_human_readable_string(),
+        }
+    }
+
+    fn to_human_readable_string(&self) -> Option<String> {
+        let Self {
+            path,
+            action,
+            dry_run,
+        } = self;
+
+        let action = action.message(*dry_run)?;
+
+        let message = format!(
+            "{action} lockfile at: {path}",
+            path = path.user_display().cyan(),
+        );
+        if *dry_run {
+            return Some(message.dimmed().to_string());
+        }
+
+        Some(message)
+    }
+}
+
+impl Report {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            SyncFormat::Json => serde_json::to_string_pretty(self).ok(),
+            SyncFormat::Text => None,
+        }
+    }
+}
+
+fn write_sync_report(
+    target: &SyncTarget<'_>,
+    environment: &SyncEnvironment,
+    changelog: &Changelog,
+    lock: Option<LockReport>,
+    dry_run: DryRun,
+    output_format: SyncFormat,
+    printer: Printer,
+) -> Result<()> {
+    let report = Report {
+        schema: SchemaReport::default(),
+        target: TargetName::from(target),
+        project: target.project_report(),
+        script: target.script().map(ScriptReport::from),
+        sync: SyncReport {
+            environment: EnvironmentReport::from(environment),
+            action: SyncAction::from(environment),
+            changes: PackageChangesReport::from_changelog(changelog),
+            dry_run: dry_run.enabled(),
+            target: TargetName::from(target),
+        },
+        lock,
+        dry_run: dry_run.enabled(),
+    };
+
+    if let Some(output) = report.format(output_format) {
+        writeln!(printer.stdout_important(), "{output}")?;
+    }
+
+    Ok(())
+}
