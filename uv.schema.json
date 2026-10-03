@@ -1886,6 +1886,7 @@
             "missing-exclude-newer-package-lock",
             "resolution-inputs",
             "batch-export",
+            "frozen-lockfile",
             "minimum-libc-version",
             "build-dependency-check",
             "build-lazy-imports"

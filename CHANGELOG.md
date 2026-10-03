@@ -3,6 +3,28 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.23
+
+Released on 2026-10-03.
+
+### Enhancements
+
+- Support frozen exports without workspace manifests ([#22007](https://github.com/astral-sh/uv/pull/22007))
+- Support frozen sync without workspace manifests ([#22018](https://github.com/astral-sh/uv/pull/22018))
+- Support frozen trees without workspace manifests ([#22016](https://github.com/astral-sh/uv/pull/22016))
+- Support workspace metadata without workspace manifests ([#22017](https://github.com/astral-sh/uv/pull/22017))
+
+### Bug fixes
+
+- Reject alternate sources for workspace members across forks ([#22153](https://github.com/astral-sh/uv/pull/22153))
+- Retain win_amd64 wheels for Windows ARM markers ([#22099](https://github.com/astral-sh/uv/pull/22099))
+
+### Other changes
+
+- Pin release signing actions to merged commit ([#22156](https://github.com/astral-sh/uv/pull/22156))
+- Sync latest Python releases ([#22164](https://github.com/astral-sh/uv/pull/22164))
+- Use shared release signing actions ([#21754](https://github.com/astral-sh/uv/pull/21754))
+
 ## 0.12.22
 
 Released on 2026-10-01.
