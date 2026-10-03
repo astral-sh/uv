@@ -14,7 +14,10 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_fs::{PortablePath, Simplified, normalize_path_under, persist_with_retry_sync, relative_to};
+use uv_fs::{
+    PortablePath, Simplified, copy_atomic_sync, normalize_path_under, persist_with_retry_sync,
+    relative_to,
+};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -487,8 +490,6 @@ fn move_folder_recorded(
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else {
-            validate_data_script_destination(&target, scripts)?;
-            rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
                 .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
@@ -496,6 +497,8 @@ fn move_folder_recorded(
                     relative: relative_to_site_packages.to_path_buf(),
                     absolute: src.to_path_buf(),
                 })?;
+            validate_data_script_destination(&target, scripts)?;
+            rename_or_copy.rename_or_copy(src, &target)?;
             entry.path = relative_to(&target, site_packages)?
                 .portable_display()
                 .to_string();
@@ -551,6 +554,16 @@ fn install_script(
         })?;
 
     let path = file.path();
+    let relative_to_site_packages = path
+        .strip_prefix(site_packages)
+        .expect("prefix must not change");
+    let entry = record
+        .iter_mut()
+        .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
+        .ok_or_else(|| Error::RecordFile {
+            relative: relative_to_site_packages.to_path_buf(),
+            absolute: path.clone(),
+        })?;
     let mut script = BufReader::new(File::open(&path)?);
 
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
@@ -660,7 +673,7 @@ fn install_script(
                     permissions.mode()
                 );
 
-                uv_fs::copy_atomic_sync(&path, &script_absolute)?;
+                copy_atomic_sync(&path, &script_absolute)?;
 
                 fs::set_permissions(
                     script_absolute,
@@ -681,8 +694,7 @@ fn install_script(
                 Err(err) => {
                     debug!("Failed to rename, falling back to copy: {err}");
                     uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
-                        fs_err::copy(&path, &script_absolute)?;
-                        Ok(())
+                        copy_atomic_sync(&path, &script_absolute)
                     })?;
                 }
             }
@@ -690,21 +702,6 @@ fn install_script(
 
         None
     };
-
-    // Find the existing entry in the `RECORD`.
-    let relative_to_site_packages = path
-        .strip_prefix(site_packages)
-        .expect("Prefix must no change");
-    let entry = record
-        .iter_mut()
-        .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
-        .ok_or_else(|| {
-            // It should not be possible to error at this point, but filesystems and such.
-            Error::RecordFile {
-                relative: relative_to_site_packages.to_path_buf(),
-                absolute: path.clone(),
-            }
-        })?;
 
     // Update the entry in the `RECORD`.
     entry.path = script_relative.portable_display().to_string();
@@ -1209,11 +1206,11 @@ impl RenameOrCopy {
                 Err(err) => {
                     *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
-                    fs_err::copy(from.as_ref(), to.as_ref())?;
+                    copy_atomic_sync(from.as_ref(), to.as_ref())?;
                 }
             },
             Self::Copy => {
-                fs_err::copy(from.as_ref(), to.as_ref())?;
+                copy_atomic_sync(from.as_ref(), to.as_ref())?;
             }
         }
         Ok(())
@@ -1228,12 +1225,36 @@ mod test {
 
     use anyhow::Result;
     use assert_fs::prelude::*;
+    #[cfg(unix)]
+    use fs_err::os::unix::fs::symlink;
     use indoc::{formatdoc, indoc};
 
+    #[cfg(unix)]
+    use super::RenameOrCopy;
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
         parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_or_copy_fallback_replaces_symlink() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let source = temp_dir.child("source");
+        source.write_str("new content")?;
+        let original = temp_dir.child("original");
+        original.write_str("original content")?;
+        let destination = temp_dir.child("destination");
+        symlink(original.path(), destination.path())?;
+
+        RenameOrCopy::Copy.rename_or_copy(source.path(), destination.path())?;
+
+        assert!(fs_err::symlink_metadata(destination.path())?.is_file());
+        destination.assert("new content");
+        original.assert("original content");
+        source.assert("new content");
+        Ok(())
+    }
 
     #[test]
     fn test_parse_email_message_file() {
