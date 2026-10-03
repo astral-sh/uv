@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf, absolute};
 use std::str::FromStr;
@@ -46,7 +46,7 @@ use uv_resolver_types::ResolverOutput;
 
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, is_wheel_unreachable};
-use crate::{Installable, LockError};
+use crate::{Installable, LockError, Package};
 
 /// Format an array so that each element is on its own line and has a trailing comma.
 fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value>>) -> Array {
@@ -66,6 +66,10 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 pub enum PylockTomlErrorKind {
     #[error("Multiple active package entries found for `{0}`")]
     DuplicateActivePackage(PackageName),
+    #[error("Package entries for `{0}` may be active in the same environment")]
+    OverlappingPackages(PackageName),
+    #[error("Registry package `{0}` has no version")]
+    RegistryVersionMissing(PackageName),
     #[error(
         "Archive `{}` has size {actual}, but the lockfile records {expected}",
         path.display()
@@ -143,6 +147,8 @@ pub enum PylockTomlErrorKind {
     WheelNameMismatch(WheelFilename, PackageName),
     #[error("Wheel filename `{0}` does not match package version `{1}`")]
     WheelVersionMismatch(WheelFilename, Version),
+    #[error("Source distribution filename `{0}` does not match package version `{1}`")]
+    SdistVersionMismatch(SourceDistFilename, Version),
     #[error("Failed to convert path to URL")]
     PathToUrl,
     #[error(
@@ -443,6 +449,34 @@ struct PylockTomlAttestationIdentity {
 }
 
 impl<'lock> PylockToml {
+    /// Collect packages from all selected dependency branches for source checks.
+    pub fn packages_for_source_check(
+        target: &impl Installable<'lock>,
+        extras: &ExtrasSpecificationWithDefaults,
+        dev: &DependencyGroupsWithDefaults,
+        install_options: &'lock InstallOptions,
+    ) -> Result<Vec<&'lock Package>, PylockTomlErrorKind> {
+        Ok(ExportableRequirements::all_packages(
+            target,
+            extras,
+            dev,
+            install_options,
+        )?)
+    }
+
+    /// Find a workspace dependency among the packages selected for export.
+    pub fn workspace_dependency(
+        target: &impl Installable<'lock>,
+        packages: &[&'lock Package],
+    ) -> Option<&'lock PackageName> {
+        packages
+            .iter()
+            .find(|package| {
+                target.lock().is_workspace_package(package) && package.id.source.is_local()
+            })
+            .map(|package| package.name())
+    }
+
     /// Construct a [`PylockToml`] from a [`ResolverOutput`].
     ///
     /// If `tags` is provided, only wheels compatible with the given tags will be included.
@@ -1063,6 +1097,13 @@ impl<'lock> PylockToml {
         })
     }
 
+    /// Returns `true` if any dependency cannot be installed as a registry distribution.
+    pub fn has_non_registry_sources(&self) -> bool {
+        self.packages
+            .iter()
+            .any(|package| package.index.is_none() || package.registry_artifact_urls().is_none())
+    }
+
     /// Returns `true` if any distribution file is missing the hashes required by PEP 751.
     pub fn has_missing_hashes(&self) -> bool {
         self.packages.iter().any(|package| {
@@ -1080,6 +1121,48 @@ impl<'lock> PylockToml {
                     .flatten()
                     .any(|wheel| wheel.hashes.is_empty())
         })
+    }
+
+    /// Validate registry artifact identities and package markers for every environment.
+    ///
+    /// Callers must first ensure that all packages have registry sources. Marker overlap checks
+    /// are conservative: complex disjoint expressions may not be recognized as such.
+    pub fn validate_registry_packages(&self) -> Result<(), PylockTomlErrorKind> {
+        let mut markers = HashMap::new();
+        for package in &self.packages {
+            if let Some(previous) = markers.get_mut(&package.name) {
+                if !package.marker.is_disjoint(*previous) {
+                    return Err(PylockTomlErrorKind::OverlappingPackages(
+                        package.name.clone(),
+                    ));
+                }
+                *previous = package.marker.or(*previous);
+            } else {
+                markers.insert(&package.name, package.marker);
+            }
+
+            let version = package
+                .version
+                .as_ref()
+                .ok_or_else(|| PylockTomlErrorKind::RegistryVersionMissing(package.name.clone()))?;
+            for wheel in package.wheels.iter().flatten() {
+                let filename = wheel.filename(&package.name)?;
+                validate_wheel_filename(&filename, &package.name, Some(version))?;
+            }
+            if let Some(sdist) = &package.sdist {
+                let filename = sdist.filename(&package.name)?;
+                let filename: &str = filename.as_ref().as_ref();
+                let extension = SourceDistExtension::from_path(filename)?;
+                let filename = SourceDistFilename::parse(filename, extension, &package.name)?;
+                if filename.version != *version {
+                    return Err(PylockTomlErrorKind::SdistVersionMismatch(
+                        filename,
+                        version.clone(),
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Download and hash all distribution files that are missing hashes, e.g., because the
@@ -1448,6 +1531,35 @@ impl<'lock> PylockToml {
 }
 
 impl PylockTomlPackage {
+    /// Return whether the package uses a non-registry source.
+    pub fn has_non_registry_source(&self) -> bool {
+        self.archive.is_some() || self.directory.is_some() || self.vcs.is_some()
+    }
+
+    /// Return every wheel and source distribution URL for a registry package.
+    ///
+    /// Return `None` for packages that use other source types, contain local paths, or have no
+    /// artifact URLs. The URLs still need to be checked against the registry's metadata.
+    pub fn registry_artifact_urls(&self) -> Option<Vec<&DisplaySafeUrl>> {
+        if self.has_non_registry_source() {
+            return None;
+        }
+
+        let urls = self
+            .sdist
+            .iter()
+            .map(|sdist| (&sdist.path, &sdist.url))
+            .chain(
+                self.wheels
+                    .iter()
+                    .flatten()
+                    .map(|wheel| (&wheel.path, &wheel.url)),
+            )
+            .map(|(path, url)| if path.is_some() { None } else { url.as_ref() })
+            .collect::<Option<Vec<_>>>()?;
+        if urls.is_empty() { None } else { Some(urls) }
+    }
+
     /// Convert the [`PylockTomlPackage`] to a TOML [`Table`].
     fn to_toml(&self) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();

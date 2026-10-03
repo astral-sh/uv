@@ -628,7 +628,7 @@ enum PersistRetryError {
 /// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
 /// errors.
 #[cfg(feature = "tokio")]
-async fn persist_with_retry(
+pub async fn persist_with_retry(
     from: NamedTempFile,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {

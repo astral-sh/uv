@@ -1,8 +1,8 @@
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
-    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, FilteredWriter, ListWriter,
+    PyProjectToml, error_on_venv, find_roots, write_directory_once, write_file_with_directories,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -37,6 +37,27 @@ pub fn build_source_dist(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
+    build_source_dist_with_files(
+        source_tree,
+        source_dist_directory,
+        uv_version,
+        show_warnings,
+        &[],
+    )
+}
+
+/// Build a source distribution with additional files from the frontend.
+///
+/// Paths are relative to the source distribution root. Source files with the same path as an
+/// additional file are skipped. Paths use `/` as the separator and must not overlap generated
+/// metadata or each other.
+pub fn build_source_dist_with_files(
+    source_tree: &Path,
+    source_dist_directory: &Path,
+    uv_version: &str,
+    show_warnings: bool,
+    files: &[(&str, &[u8])],
+) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -52,10 +73,10 @@ pub fn build_source_dist(
     let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
     if uv_preview::is_enabled(PreviewFeature::TarCodec) {
         let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
-        write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+        write_source_dist(source_tree, writer, uv_version, show_warnings, files)?;
     } else {
         let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
-        write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+        write_source_dist(source_tree, writer, uv_version, show_warnings, files)?;
     }
     temp_file
         .persist(&source_dist_path)
@@ -78,7 +99,7 @@ pub fn list_source_dist(
     };
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
-    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    write_source_dist(source_tree, writer, uv_version, show_warnings, &[])?;
     Ok((filename, files))
 }
 
@@ -207,9 +228,10 @@ fn source_dist_matcher(
 /// Shared implementation for building and listing a source distribution.
 fn write_source_dist(
     source_tree: &Path,
-    mut writer: impl DirectoryWriter,
+    writer: impl DirectoryWriter,
     uv_version: &str,
     show_warnings: bool,
+    files: &[(&str, &[u8])],
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Sdist) {
@@ -230,6 +252,11 @@ fn write_source_dist(
         "{}-{}",
         pyproject_toml.name().as_dist_info_name(),
         pyproject_toml.version()
+    );
+
+    let mut writer = FilteredWriter::new(
+        writer,
+        files.iter().map(|(path, _)| format!("{top_level}/{path}")),
     );
 
     let metadata = pyproject_toml.to_metadata(source_tree)?;
@@ -333,7 +360,6 @@ fn write_source_dist(
             debug!("Ignoring existing `pyproject.toml.orig`");
             continue;
         }
-
         error_on_venv(entry.file_name(), entry.path())?;
 
         if entry.file_type().is_dir() {
@@ -350,6 +376,22 @@ fn write_source_dist(
         )?;
     }
     debug!("Visited {files_visited} files for source dist build");
+
+    for (path, contents) in files {
+        let relative = Path::new(path);
+        if let Some(parent) = relative.parent() {
+            let mut directory = PathBuf::new();
+            for component in parent.components() {
+                directory.push(component);
+                write_directory_once(
+                    &mut writer,
+                    &mut written_directories,
+                    &Path::new(&top_level).join(&directory),
+                )?;
+            }
+        }
+        writer.write_bytes(&format!("{top_level}/{path}"), contents)?;
+    }
 
     writer.close(&top_level)?;
 

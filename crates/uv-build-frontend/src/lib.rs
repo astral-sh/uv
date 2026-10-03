@@ -2,6 +2,8 @@
 //!
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
+pub mod archive;
+
 mod error;
 mod pipreqs;
 
