@@ -220,7 +220,7 @@ impl Metadata23 {
     /// ```
     pub fn core_metadata_format(&self) -> String {
         fn write_str(writer: &mut String, key: &str, value: impl Display) {
-            let value = value.to_string();
+            let value = value.to_string().replace("\r\n", "\n").replace('\r', "\n");
             let mut lines = value.lines();
             if let Some(line) = lines.next() {
                 let _ = writeln!(writer, "{key}: {line}");
