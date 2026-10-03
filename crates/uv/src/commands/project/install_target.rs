@@ -50,11 +50,45 @@ pub(crate) enum InstallTarget<'lock> {
         workspace: &'lock Workspace,
         lock: &'lock Lock,
     },
+    /// A frozen lockfile without a workspace manifest.
+    Lockfile {
+        root: &'lock Path,
+        project_name: Option<&'lock PackageName>,
+        selection: PackageSelection<'lock>,
+        lock: &'lock Lock,
+    },
     /// A PEP 723 script.
     Script {
         script: &'lock Pep723Script,
         lock: &'lock Lock,
     },
+}
+
+/// The workspace packages selected by an installation target.
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum PackageSelection<'lock> {
+    Projects(&'lock [PackageName]),
+    Workspace,
+    NonProjectWorkspace,
+}
+
+impl<'lock> PackageSelection<'lock> {
+    /// Resolve package flags, defaulting to the current project or non-project workspace.
+    pub(crate) fn from_args(
+        all_packages: bool,
+        names: &'lock [PackageName],
+        project_name: Option<&'lock PackageName>,
+    ) -> Self {
+        if all_packages {
+            Self::Workspace
+        } else if !names.is_empty() {
+            Self::Projects(names)
+        } else if let Some(name) = project_name {
+            Self::Projects(std::slice::from_ref(name))
+        } else {
+            Self::NonProjectWorkspace
+        }
+    }
 }
 
 impl<'lock> Installable<'lock> for InstallTarget<'lock> {
@@ -64,6 +98,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             Self::Projects { workspace, .. } => workspace.install_path(),
             Self::Workspace { workspace, .. } => workspace.install_path(),
             Self::NonProjectWorkspace { workspace, .. } => workspace.install_path(),
+            Self::Lockfile { root, .. } => root,
             Self::Script { script, .. } => script.path.parent().unwrap(),
         }
     }
@@ -74,17 +109,18 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             Self::Projects { lock, .. } => lock,
             Self::Workspace { lock, .. } => lock,
             Self::NonProjectWorkspace { lock, .. } => lock,
+            Self::Lockfile { lock, .. } => lock,
             Self::Script { lock, .. } => lock,
         }
     }
 
     #[allow(refining_impl_trait)]
     fn roots(&self) -> Box<dyn Iterator<Item = &PackageName> + '_> {
-        match self {
-            Self::Project { name, .. } => Box::new(std::iter::once(*name)),
-            Self::Projects { names, .. } => Box::new(names.iter()),
-            Self::NonProjectWorkspace { lock, .. } => Box::new(lock.members().iter()),
-            Self::Workspace { lock, .. } => {
+        let lock = self.lock();
+        match self.package_selection() {
+            Some(PackageSelection::Projects(names)) => Box::new(names.iter()),
+            Some(PackageSelection::NonProjectWorkspace) => Box::new(lock.members().iter()),
+            Some(PackageSelection::Workspace) => {
                 // Identify the workspace members.
                 //
                 // The members are encoded directly in the lockfile, unless the workspace contains a
@@ -95,39 +131,39 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
                     Box::new(lock.members().iter())
                 }
             }
-            Self::Script { .. } => Box::new(std::iter::empty()),
+            None => Box::new(std::iter::empty()),
         }
     }
 
     fn group_root(&self, groups: &DependencyGroupsWithDefaults) -> Option<&PackageName> {
-        let Self::Project {
-            name,
-            lock,
-            workspace,
-        } = self
-        else {
-            return None;
-        };
-        let root = lock.root().filter(|root| root.name() != *name)?;
-        let root_member = workspace.packages().get(root.name())?;
-        let pyproject = root_member.pyproject_toml();
-        let declared_groups = pyproject
-            .dependency_groups
-            .as_ref()
-            .into_iter()
-            .flat_map(DependencyGroups::keys);
-        let legacy_dev = pyproject
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.dev_dependencies.as_ref())
-            .is_some()
-            .then_some(&*DEV_DEPENDENCIES);
+        let (name, workspace) = self.selected_project()?;
+        let root = self.lock().root().filter(|root| root.name() != name)?;
+        let includes_root_group = if let Some(workspace) = workspace {
+            let root_member = workspace.packages().get(root.name())?;
+            let pyproject = root_member.pyproject_toml();
+            let declared_groups = pyproject
+                .dependency_groups
+                .as_ref()
+                .into_iter()
+                .flat_map(DependencyGroups::keys);
+            let legacy_dev = pyproject
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.dev_dependencies.as_ref())
+                .is_some()
+                .then_some(&*DEV_DEPENDENCIES);
 
-        declared_groups
-            .chain(legacy_dev)
-            .any(|group| self.includes_group(Some(root.name()), group, groups))
-            .then_some(root.name())
+            declared_groups
+                .chain(legacy_dev)
+                .any(|group| self.includes_group(Some(root.name()), group, groups))
+        } else {
+            root.dependency_groups()
+                .keys()
+                .chain(root.resolved_dependency_groups().keys())
+                .any(|group| self.includes_group(Some(root.name()), group, groups))
+        };
+        includes_root_group.then_some(root.name())
     }
 
     fn includes_group(
@@ -140,14 +176,11 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             return false;
         }
 
-        let Self::Project {
-            workspace, name, ..
-        } = self
-        else {
+        let Some((name, workspace)) = self.selected_project() else {
             return true;
         };
 
-        if package == Some(*name) {
+        if package == Some(name) {
             return true;
         }
 
@@ -157,7 +190,18 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             return false;
         }
 
-        !workspace.packages().get(*name).is_some_and(|member| {
+        let Some(workspace) = workspace else {
+            return !self
+                .lock()
+                .find_by_name(name)
+                .ok()
+                .flatten()
+                .is_some_and(|member| {
+                    member.dependency_groups().contains_key(group)
+                        || member.resolved_dependency_groups().contains_key(group)
+                });
+        };
+        !workspace.packages().get(name).is_some_and(|member| {
             let pyproject = member.pyproject_toml();
             pyproject
                 .dependency_groups
@@ -190,12 +234,51 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
                 }
             }),
             Self::NonProjectWorkspace { .. } => None,
+            Self::Lockfile {
+                project_name,
+                selection,
+                ..
+            } => match selection {
+                PackageSelection::Projects([name]) => Some(name),
+                PackageSelection::Projects(_) => None,
+                PackageSelection::Workspace | PackageSelection::NonProjectWorkspace => {
+                    *project_name
+                }
+            },
             Self::Script { .. } => None,
         }
     }
 }
 
 impl<'lock> InstallTarget<'lock> {
+    /// Normalize project and lockfile selections before choosing installation roots.
+    fn package_selection(&self) -> Option<PackageSelection<'lock>> {
+        match self {
+            Self::Project { name, .. } => {
+                Some(PackageSelection::Projects(std::slice::from_ref(*name)))
+            }
+            Self::Projects { names, .. } => Some(PackageSelection::Projects(names)),
+            Self::Workspace { .. } => Some(PackageSelection::Workspace),
+            Self::NonProjectWorkspace { .. } => Some(PackageSelection::NonProjectWorkspace),
+            Self::Lockfile { selection, .. } => Some(*selection),
+            Self::Script { .. } => None,
+        }
+    }
+
+    /// Return the project subject to workspace-root group precedence and its workspace, if available.
+    fn selected_project(&self) -> Option<(&'lock PackageName, Option<&'lock Workspace>)> {
+        match self {
+            Self::Project {
+                name, workspace, ..
+            } => Some((name, Some(workspace))),
+            Self::Lockfile {
+                selection: PackageSelection::Projects([name]),
+                ..
+            } => Some((name, None)),
+            _ => None,
+        }
+    }
+
     /// Convert the target's locked packages to a [`Resolution`].
     pub(crate) fn to_resolution(
         self,
@@ -214,6 +297,7 @@ impl<'lock> InstallTarget<'lock> {
                 Self::Project { workspace, .. }
                 | Self::Projects { workspace, .. }
                 | Self::Workspace { workspace, .. } => !workspace.is_non_project(),
+                Self::Lockfile { lock, .. } => lock.root().is_some(),
                 Self::NonProjectWorkspace { .. } | Self::Script { .. } => false,
             };
         if use_concrete_roots
@@ -267,7 +351,7 @@ impl<'lock> InstallTarget<'lock> {
                     }),
                 ))
             }
-            Self::Script { script, .. } => Either::Right(
+            Self::Script { script, .. } => Either::Right(Either::Left(
                 script
                     .metadata
                     .tool
@@ -276,7 +360,8 @@ impl<'lock> InstallTarget<'lock> {
                     .and_then(|uv| uv.top_level.index.as_deref())
                     .into_iter()
                     .flatten(),
-            ),
+            )),
+            Self::Lockfile { .. } => Either::Right(Either::Right(std::iter::empty())),
         }
     }
 
@@ -301,9 +386,10 @@ impl<'lock> InstallTarget<'lock> {
                     }),
                 ))
             }
-            Self::Script { script, .. } => {
-                Either::Right(script.sources().values().flat_map(Sources::iter))
-            }
+            Self::Script { script, .. } => Either::Right(Either::Left(
+                script.sources().values().flat_map(Sources::iter),
+            )),
+            Self::Lockfile { .. } => Either::Right(Either::Right(std::iter::empty())),
         }
     }
 
@@ -389,14 +475,15 @@ impl<'lock> InstallTarget<'lock> {
                         })),
                 )
             }
-            Self::Script { script, .. } => Either::Right(
+            Self::Script { script, .. } => Either::Right(Either::Left(
                 script
                     .metadata
                     .dependencies
                     .iter()
                     .flatten()
                     .map(Cow::Borrowed),
-            ),
+            )),
+            Self::Lockfile { .. } => Either::Right(Either::Right(std::iter::empty())),
         }
     }
 
@@ -413,7 +500,8 @@ impl<'lock> InstallTarget<'lock> {
             Self::Project { lock, .. }
             | Self::Projects { lock, .. }
             | Self::Workspace { lock, .. }
-            | Self::NonProjectWorkspace { lock, .. } => {
+            | Self::NonProjectWorkspace { lock, .. }
+            | Self::Lockfile { lock, .. } => {
                 if !lock.supports_provides_extra() {
                     return Ok(());
                 }
@@ -472,6 +560,42 @@ impl<'lock> InstallTarget<'lock> {
         }
 
         match self {
+            Self::Lockfile {
+                lock, selection, ..
+            } => {
+                // Only a single selected project inherits groups from the workspace root.
+                let workspace_root = self
+                    .selected_project()
+                    .and_then(|_| lock.root())
+                    .map(Package::name);
+                let roots = self.roots().chain(workspace_root).collect::<FxHashSet<_>>();
+                let known_groups = lock
+                    .packages()
+                    .iter()
+                    .filter(|package| roots.contains(package.name()))
+                    .flat_map(|package| {
+                        package
+                            .dependency_groups()
+                            .keys()
+                            .chain(package.resolved_dependency_groups().keys())
+                    })
+                    .chain(lock.dependency_groups().keys())
+                    .collect::<FxHashSet<_>>();
+                for group in groups.explicit_names() {
+                    if !known_groups.contains(group) {
+                        return match selection {
+                            PackageSelection::Projects([_]) => {
+                                Err(ProjectError::MissingGroupProject(group.clone()))
+                            }
+                            PackageSelection::Projects(_)
+                            | PackageSelection::Workspace
+                            | PackageSelection::NonProjectWorkspace => {
+                                Err(ProjectError::MissingGroupProjects(group.clone()))
+                            }
+                        };
+                    }
+                }
+            }
             Self::Project {
                 lock, workspace, ..
             }
@@ -543,8 +667,9 @@ impl<'lock> InstallTarget<'lock> {
         extras: &ExtrasSpecification,
         groups: &DependencyGroupsWithDefaults,
     ) -> BTreeSet<&PackageName> {
-        match self {
-            Self::Project { lock, .. } | Self::Projects { lock, .. } => {
+        match self.package_selection() {
+            Some(PackageSelection::Projects(_)) => {
+                let lock = self.lock();
                 let roots = self.roots().collect::<FxHashSet<_>>();
 
                 // Collect the packages by name for efficient lookup.
@@ -647,11 +772,11 @@ impl<'lock> InstallTarget<'lock> {
 
                 required_members
             }
-            Self::Workspace { lock, .. } | Self::NonProjectWorkspace { lock, .. } => {
+            Some(PackageSelection::Workspace | PackageSelection::NonProjectWorkspace) => {
                 // Return all workspace members
-                lock.members().iter().collect()
+                self.lock().members().iter().collect()
             }
-            Self::Script { .. } => {
+            None => {
                 // Scripts don't have workspace members
                 BTreeSet::new()
             }

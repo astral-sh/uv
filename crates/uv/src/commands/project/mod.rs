@@ -73,6 +73,7 @@ use crate::settings::{
 pub(crate) mod add;
 pub(crate) mod audit;
 pub(crate) mod check;
+pub(super) mod discovery;
 mod edit;
 pub(crate) mod environment;
 pub(crate) mod export;
@@ -81,6 +82,7 @@ pub(crate) mod init;
 pub(crate) mod install_target;
 pub(crate) mod lock;
 pub(crate) mod lock_target;
+mod lockfile;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;

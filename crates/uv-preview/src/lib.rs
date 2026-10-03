@@ -345,6 +345,8 @@ pub enum PreviewFeature {
     ResolutionInputs,
     /// Allows using `uv export --batch`.
     BatchExport,
+    /// Allows using frozen project commands without a workspace manifest.
+    FrozenLockfile,
     /// Allows setting minimum libc versions for universal resolutions.
     MinimumLibcVersion,
     /// Checks build dependencies before nonisolated builds with `uv build`.

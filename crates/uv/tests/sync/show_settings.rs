@@ -3957,6 +3957,7 @@ fn preview_features() {
     +            MissingExcludeNewerPackageLock,
     +            ResolutionInputs,
     +            BatchExport,
+    +            FrozenLockfile,
     +            MinimumLibcVersion,
     +            BuildDependencyCheck,
     +            BuildLazyImports,
