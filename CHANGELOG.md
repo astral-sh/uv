@@ -7,23 +7,21 @@
 
 Released on 2026-10-03.
 
-### Enhancements
+### Python
 
-- Support frozen exports without workspace manifests ([#22007](https://github.com/astral-sh/uv/pull/22007))
-- Support frozen sync without workspace manifests ([#22018](https://github.com/astral-sh/uv/pull/22018))
-- Support frozen trees without workspace manifests ([#22016](https://github.com/astral-sh/uv/pull/22016))
-- Support workspace metadata without workspace manifests ([#22017](https://github.com/astral-sh/uv/pull/22017))
+- Add CPython 3.15.0rc3 ([#22164](https://github.com/astral-sh/uv/pull/22164))
+
+### Preview features
+
+- Sync from `uv.lock` without a workspace manifest using `uv sync --frozen` with `frozen-lockfile` ([#22018](https://github.com/astral-sh/uv/pull/22018))
+- Export from `uv.lock` without a workspace manifest using `uv export --frozen` with `frozen-lockfile` ([#22007](https://github.com/astral-sh/uv/pull/22007))
+- Inspect dependency trees from `uv.lock` without a workspace manifest using `uv tree --frozen` with `frozen-lockfile` ([#22016](https://github.com/astral-sh/uv/pull/22016))
+- Inspect workspace metadata and optionally sync its environment from `uv.lock` without a workspace manifest using `uv workspace metadata --frozen` with `frozen-lockfile` ([#22017](https://github.com/astral-sh/uv/pull/22017), [#22018](https://github.com/astral-sh/uv/pull/22018))
 
 ### Bug fixes
 
-- Reject alternate sources for workspace members across forks ([#22153](https://github.com/astral-sh/uv/pull/22153))
-- Retain win_amd64 wheels for Windows ARM markers ([#22099](https://github.com/astral-sh/uv/pull/22099))
-
-### Other changes
-
-- Pin release signing actions to merged commit ([#22156](https://github.com/astral-sh/uv/pull/22156))
-- Sync latest Python releases ([#22164](https://github.com/astral-sh/uv/pull/22164))
-- Use shared release signing actions ([#21754](https://github.com/astral-sh/uv/pull/21754))
+- Reject alternate sources for workspace members across conflicting dependency selections, avoiding lockfiles that cannot be installed ([#22153](https://github.com/astral-sh/uv/pull/22153))
+- Allow x86-64 Python interpreters running under emulation on Windows ARM64 to install compatible `win_amd64` wheels instead of building from source ([#22099](https://github.com/astral-sh/uv/pull/22099))
 
 ## 0.12.22
 
