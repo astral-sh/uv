@@ -207,7 +207,7 @@ pub(crate) async fn metadata(
             lock,
         },
     };
-    let mut export = metadata_for_target(install_target)?;
+    let mut export = metadata_for_target(install_target);
     let environment = if sync.is_some() {
         Some(match &source {
             MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
@@ -318,7 +318,7 @@ pub(crate) async fn metadata(
     print_metadata(&export, printer)
 }
 
-fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
+fn metadata_for_target(target: InstallTarget<'_>) -> Metadata {
     match target {
         InstallTarget::Project {
             workspace, lock, ..
@@ -330,10 +330,10 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
             workspace, lock, ..
         }
         | InstallTarget::NonProjectWorkspace { workspace, lock } => {
-            Ok(Metadata::from_lock(workspace, lock)?)
+            Metadata::from_lockfile(workspace.install_path(), lock)
         }
-        InstallTarget::Script { script, lock } => Ok(Metadata::from_script(&script.path, lock)?),
-        InstallTarget::Lockfile { root, lock, .. } => Ok(Metadata::from_lockfile(root, lock)?),
+        InstallTarget::Script { script, lock } => Metadata::from_script(&script.path, lock),
+        InstallTarget::Lockfile { root, lock, .. } => Metadata::from_lockfile(root, lock),
     }
 }
 

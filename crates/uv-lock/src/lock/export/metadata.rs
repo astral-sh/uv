@@ -10,7 +10,6 @@ use uv_pep440::Version;
 use uv_pep508::{MarkerTree, StringVersion};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, HashDigest, ModuleName};
 use uv_python::{Interpreter, LenientImplementationName, PythonEnvironment};
-use uv_workspace::Workspace;
 
 use crate::lock::{
     Dependency, DirectSource, Package, PackageId, RegistrySource, Source, SourceDist,
@@ -1271,27 +1270,16 @@ impl<'a> MetadataTarget<'a> {
 
 impl Metadata {
     /// Construct [`Metadata`] for a workspace from a uv lockfile.
-    pub fn from_lock(workspace: &Workspace, lock: &Lock) -> Result<Self, MetadataError> {
-        Self::from_lockfile(workspace.install_path(), lock)
-    }
-
-    /// Construct workspace metadata directly from a frozen lockfile.
     ///
     /// Relative package paths are resolved against `workspace_root`. Script lockfiles are treated
     /// as workspaces because they do not identify the original script.
-    pub fn from_lockfile(workspace_root: &Path, lock: &Lock) -> Result<Self, MetadataError> {
-        Ok(Self::from_lock_target(
-            MetadataTarget::Workspace(workspace_root),
-            lock,
-        ))
+    pub fn from_lockfile(workspace_root: &Path, lock: &Lock) -> Self {
+        Self::from_lock_target(MetadataTarget::Workspace(workspace_root), lock)
     }
 
     /// Construct [`Metadata`] for a script from a uv lockfile.
-    pub fn from_script(script_path: &Path, lock: &Lock) -> Result<Self, MetadataError> {
-        Ok(Self::from_lock_target(
-            MetadataTarget::Script(script_path),
-            lock,
-        ))
+    pub fn from_script(script_path: &Path, lock: &Lock) -> Self {
+        Self::from_lock_target(MetadataTarget::Script(script_path), lock)
     }
 
     fn from_lock_target(target: MetadataTarget<'_>, lock: &Lock) -> Self {
