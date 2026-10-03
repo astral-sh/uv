@@ -496,13 +496,24 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let mut temp_file = tempfile_in(
-        path.as_ref()
-            .parent()
-            .expect("Write path must have a parent"),
-    )?;
+    let path = path.as_ref();
+    let mut temp_file = tempfile_in(path.parent().expect("Write path must have a parent"))?;
     temp_file.write_all(data.as_ref())?;
-    persist_with_retry_sync(temp_file, path.as_ref())
+
+    #[cfg(target_os = "linux")]
+    let temp_file = match temp_file.persist_noclobber(path) {
+        // Publish new files without a separate existence check, retaining delayed allocation.
+        Ok(()) => return Ok(()),
+        Err(error) => {
+            // Reopen with truncation so ext4's `auto_da_alloc` starts writeback on close, before
+            // the replacing rename takes the directory lock. Also use this fallback when the
+            // filesystem does not support no-clobber persistence.
+            fs_err::write(&error.file, data)?;
+            error.file
+        }
+    };
+
+    persist_with_retry_sync(temp_file, path)
 }
 
 /// Copy `from` to `to` atomically using a temporary file and atomic rename.
