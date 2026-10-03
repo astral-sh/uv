@@ -2,16 +2,17 @@ use std::convert;
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::sync::oneshot;
 use tracing::{instrument, warn};
 
 use uv_cache::Cache;
-use uv_distribution_types::CachedDist;
+use uv_distribution_types::{CachedDist, Resolution};
 use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
 use uv_python::PythonEnvironment;
 use uv_threads::initialize_rayon_once;
+
+use crate::install_order::InstallOrder;
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
@@ -83,8 +84,16 @@ impl<'a> Installer<'a> {
     }
 
     /// Install a set of wheels into a Python virtual environment.
+    ///
+    /// Dependencies recorded in the resolution complete before their dependents. Packages in a
+    /// dependency cycle are installed in package-name order; independent groups run concurrently.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
-    pub async fn install(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
+    pub async fn install(
+        self,
+        wheels: Vec<CachedDist>,
+        resolution: &Resolution,
+    ) -> Result<Vec<CachedDist>> {
+        let order = InstallOrder::new(&wheels, resolution)?;
         let Self {
             venv,
             cache,
@@ -112,6 +121,7 @@ impl<'a> Installer<'a> {
         rayon::spawn(move || {
             let result = install(
                 wheels,
+                &order,
                 &layout,
                 installer_name.as_deref(),
                 link_mode,
@@ -131,8 +141,15 @@ impl<'a> Installer<'a> {
     }
 
     /// Install a set of wheels into a Python virtual environment synchronously.
+    ///
+    /// Uses the same dependency ordering as [`Self::install`].
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
-    pub fn install_blocking(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
+    pub fn install_blocking(
+        self,
+        wheels: Vec<CachedDist>,
+        resolution: &Resolution,
+    ) -> Result<Vec<CachedDist>> {
+        let order = InstallOrder::new(&wheels, resolution)?;
         if self.cache.is_some_and(Cache::is_temporary) {
             if self.link_mode.is_symlink() {
                 return Err(anyhow::anyhow!(
@@ -143,6 +160,7 @@ impl<'a> Installer<'a> {
 
         install(
             wheels,
+            &order,
             &self.venv.interpreter().layout(),
             self.name.as_deref(),
             self.link_mode,
@@ -158,6 +176,7 @@ impl<'a> Installer<'a> {
 #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
 fn install(
     wheels: Vec<CachedDist>,
+    order: &InstallOrder,
     layout: &Layout,
     installer_name: Option<&str>,
     link_mode: LinkMode,
@@ -169,7 +188,8 @@ fn install(
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
     let state = uv_install_wheel::InstallState::new(preview);
-    wheels.par_iter().try_for_each(|wheel| {
+    order.install(|index| {
+        let wheel = &wheels[index];
         uv_install_wheel::install_wheel(
             layout,
             relocatable,

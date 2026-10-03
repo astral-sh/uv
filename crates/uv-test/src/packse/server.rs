@@ -27,7 +27,7 @@ use crate::vendor::{VendorArtifact, vendor_artifacts};
 
 use super::scenario::{Scenario, WheelTag};
 use super::scenarios_dir;
-use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
+use super::wheel::{generate_sdist, generate_wheel_with_files, sha256_hex};
 
 const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
 
@@ -151,7 +151,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                 };
 
                 for tag in tags {
-                    let (filename, bytes) = generate_wheel(
+                    let (filename, bytes) = generate_wheel_with_files(
                         package_name,
                         version,
                         &meta.requires,
@@ -159,6 +159,11 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                         meta.requires_python.as_ref(),
                         tag,
                         &meta.entry_points,
+                        &meta
+                            .wheel_files
+                            .iter()
+                            .map(|(path, contents)| (path.as_str(), contents.as_str()))
+                            .collect::<Vec<_>>(),
                     );
                     let sha256 = sha256_hex(&bytes);
                     files.insert(filename.clone(), FileData::Bytes(bytes.into()));
@@ -407,6 +412,8 @@ fn extract_package_name(path: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use anyhow::Result;
     use reqwest::StatusCode;
     use reqwest::header::{ACCEPT_RANGES, CONTENT_RANGE, RANGE};
@@ -416,7 +423,7 @@ mod tests {
 
     use super::{
         PackseServer, Scenario, build_server_index, extract_package_name,
-        mount_mismatched_distribution,
+        mount_mismatched_distribution, sha256_hex,
     };
 
     #[test]
@@ -501,6 +508,67 @@ wheel = false
         assert_eq!(c["files"][0]["filename"], "c-1.0.0.tar.gz");
         assert_eq!(c["files"][0]["upload-time"], "2024-03-24T00:00:00Z");
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn serves_additional_wheel_files() -> Result<()> {
+        let scenario = toml::from_str::<Scenario>(
+            r#"
+name = "wheel-files"
+
+[root]
+
+[expected]
+satisfiable = true
+
+[packages.example.versions."1.0.0"]
+sdist = false
+entry_points = ["example-command"]
+wheel_files = { "shared.py" = "VALUE = 42\n" }
+"#,
+        )?;
+        let server = PackseServer::from_scenario(&scenario);
+        let filename = "example-1.0.0-py3-none-any.whl";
+        let bytes = reqwest::get(server.file_url(filename))
+            .await?
+            .bytes()
+            .await?;
+        assert!(
+            server
+                .files()
+                .any(|(name, hash)| name == filename && hash == sha256_hex(&bytes))
+        );
+
+        let archive = async_zip::base::read::mem::ZipFileReader::new(bytes.to_vec()).await?;
+        let mut files = BTreeMap::new();
+        for (index, entry) in archive.file().entries().iter().enumerate() {
+            let mut contents = String::new();
+            archive
+                .reader_with_entry(index)
+                .await?
+                .read_to_string_checked(&mut contents)
+                .await?;
+            files.insert(entry.filename().as_str()?, contents);
+        }
+        assert_eq!(files["shared.py"], "VALUE = 42\n");
+        assert_eq!(
+            files["example-1.0.0.dist-info/entry_points.txt"],
+            "[console_scripts]\nexample-command = example.cli:main\n"
+        );
+        assert_eq!(
+            files["example/cli.py"],
+            "def main():\n    print('Hello from example!')\n"
+        );
+        insta::assert_snapshot!(files["example-1.0.0.dist-info/RECORD"], @"
+        example/__init__.py,sha256=J-j-u0itpEFT6irdmWmixQqYMadNl1X91TxUmoiLHMI,22
+        example-1.0.0.dist-info/METADATA,sha256=JcSrBmNLC1CrJiFkCkaHvTyR1zEPqCa4T_-L2lDIXzU,75
+        example-1.0.0.dist-info/WHEEL,sha256=ujr00BDMtYYidJ71ulklWmNFpiGqy5NyjK1fX-JwFO4,78
+        example-1.0.0.dist-info/entry_points.txt,sha256=h_GzEY0wwQXQjFHHI7zgIvDrMWRBZOLE_rJEM47zNqI,53
+        example/cli.py,sha256=Hz6boa4Jj1xzVzokn-n90HxlfPFXeQrFOHHrUuA43OA,45
+        shared.py,sha256=Ccv1rhOmQ6mwI9oQNcYMUBhzHV2WM6htYbGbTj86p-s,11
+        example-1.0.0.dist-info/RECORD,,
+        ");
         Ok(())
     }
 
