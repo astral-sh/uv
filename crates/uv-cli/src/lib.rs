@@ -5245,6 +5245,10 @@ pub struct CheckArgs {
     /// By default, the exact version resolved in `uv.lock` will be used when `ty` is a project
     /// dependency or a dependency in the project's `dev` group. Otherwise, a constrained version
     /// range of ty will be used (e.g., `>=0.0,<0.1`).
+    ///
+    /// Standalone ty executables are downloaded directly from PyPI, independently of package-index
+    /// and find-links configuration. This does not require a Python installation. Wheels must
+    /// advertise a supported hash, which is verified before execution.
     #[arg(long, value_hint = ValueHint::Other)]
     pub ty_version: Option<String>,
 

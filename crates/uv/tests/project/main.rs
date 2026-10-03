@@ -3,7 +3,7 @@
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 use uv_test::pypi_proxy;
 
-#[cfg(all(feature = "test-python", feature = "test-r2"))]
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod check;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]

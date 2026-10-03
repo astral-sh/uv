@@ -5,6 +5,7 @@ pub use platform::{Arch, Os, Platform, PlatformError};
 pub use platform_tag::{ParsePlatformTagError, ParseReleaseArchError, PlatformTag, ReleaseArch};
 pub use tags::{
     BinaryFormat, IncompatibleTag, TagCompatibility, TagPriority, Tags, TagsError, TagsOptions,
+    compatible_tags,
 };
 
 mod abi_tag;

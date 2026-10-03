@@ -12,12 +12,14 @@ pub use crate::arch::{Arch, ArchVariant};
 pub use crate::host::{LinuxOsRelease, OsRelease, OsType};
 pub use crate::libc::{Libc, LibcDetectionError};
 pub use crate::os::Os;
+pub use crate::wheel::wheel_platform;
 
 mod arch;
 mod cpuinfo;
 mod host;
 mod libc;
 mod os;
+mod wheel;
 
 #[derive(Error, Debug)]
 pub enum Error {
