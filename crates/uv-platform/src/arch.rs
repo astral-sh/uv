@@ -13,6 +13,12 @@ pub enum ArchVariant {
     /// Targets 64-bit Intel/AMD CPUs with AVX-512 instructions (post-2017 Intel CPUs).
     /// Many post-2017 Intel CPUs do not support AVX-512.
     V4,
+    /// Targets IBM POWER9 processors.
+    Power9,
+    /// Targets IBM POWER10 processors.
+    Power10,
+    /// Targets IBM POWER11 processors.
+    Power11,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
@@ -24,6 +30,12 @@ pub struct Arch {
 impl Ord for Arch {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         if self.family == other.family {
+            // For ppc64le, higher-generation variants are more preferred, so reverse the
+            // comparison (Power11 > Power10 > Power9 > generic).
+            // For x86_64, V2 < V3 < V4 and the default order is correct.
+            if self.family == target_lexicon::Architecture::Powerpc64le {
+                return other.variant.cmp(&self.variant);
+            }
             return self.variant.cmp(&other.variant);
         }
 
@@ -68,6 +80,7 @@ impl PartialOrd for Arch {
         Some(self.cmp(other))
     }
 }
+
 impl Arch {
     pub fn new(family: target_lexicon::Architecture, variant: Option<ArchVariant>) -> Self {
         Self { family, variant }
@@ -81,10 +94,14 @@ impl Arch {
             }
         }
 
-        Self {
-            family: target_lexicon::HOST.architecture,
-            variant: None,
-        }
+        let family = target_lexicon::HOST.architecture;
+
+        #[cfg(all(target_arch = "powerpc64", target_endian = "little", target_os = "linux"))]
+        let variant = crate::cpuinfo::detect_power_variant();
+        #[cfg(not(all(target_arch = "powerpc64", target_endian = "little", target_os = "linux")))]
+        let variant = None;
+
+        Self { family, variant }
     }
 
     pub fn family(&self) -> target_lexicon::Architecture {
@@ -136,8 +153,11 @@ impl FromStr for Arch {
             .rsplit_once('_')
             .map(|(family, variant)| (parse_family(family), ArchVariant::from_str(variant)))
         {
-            // We only support variants for `x86_64` right now
-            if !matches!(family, target_lexicon::Architecture::X86_64) {
+            if !matches!(
+                family,
+                target_lexicon::Architecture::X86_64
+                    | target_lexicon::Architecture::Powerpc64le
+            ) {
                 return Err(Error::UnsupportedVariant(
                     variant.to_string(),
                     family.to_string(),
@@ -166,6 +186,9 @@ impl FromStr for ArchVariant {
             "v2" => Ok(Self::V2),
             "v3" => Ok(Self::V3),
             "v4" => Ok(Self::V4),
+            "power9" => Ok(Self::Power9),
+            "power10" => Ok(Self::Power10),
+            "power11" => Ok(Self::Power11),
             _ => Err(()),
         }
     }
@@ -177,6 +200,9 @@ impl std::fmt::Display for ArchVariant {
             Self::V2 => write!(f, "v2"),
             Self::V3 => write!(f, "v3"),
             Self::V4 => write!(f, "v4"),
+            Self::Power9 => write!(f, "power9"),
+            Self::Power10 => write!(f, "power10"),
+            Self::Power11 => write!(f, "power11"),
         }
     }
 }
@@ -281,5 +307,55 @@ pub(crate) mod test_support {
             target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
             None,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_support::*;
+
+    #[test]
+    fn test_ppc64le_power_variant_roundtrip() {
+        for (s, v) in [
+            ("power9", ArchVariant::Power9),
+            ("power10", ArchVariant::Power10),
+            ("power11", ArchVariant::Power11),
+        ] {
+            assert_eq!(v.to_string(), s);
+            assert_eq!(s.parse::<ArchVariant>().unwrap(), v);
+        }
+    }
+
+    #[test]
+    fn test_ppc64le_power_arch_parse() {
+        for (s, v) in [
+            ("powerpc64le_power9", ArchVariant::Power9),
+            ("powerpc64le_power10", ArchVariant::Power10),
+            ("powerpc64le_power11", ArchVariant::Power11),
+        ] {
+            let arch: Arch = s.parse().unwrap();
+            assert_eq!(arch.family, target_lexicon::Architecture::Powerpc64le);
+            assert_eq!(arch.variant, Some(v));
+            assert_eq!(arch.to_string(), s);
+        }
+    }
+
+    #[test]
+    fn test_ppc64le_power_variant_ordering() {
+        // Higher generation is preferred (sorts Less).
+        let generic = Arch::new(target_lexicon::Architecture::Powerpc64le, None);
+        let p9 = Arch::new(target_lexicon::Architecture::Powerpc64le, Some(ArchVariant::Power9));
+        let p10 = Arch::new(target_lexicon::Architecture::Powerpc64le, Some(ArchVariant::Power10));
+        let p11 = Arch::new(target_lexicon::Architecture::Powerpc64le, Some(ArchVariant::Power11));
+        assert!(p11 < p10);
+        assert!(p10 < p9);
+        assert!(p9 < generic);
+    }
+
+    #[test]
+    fn test_ppc64le_power_variant_rejected_on_wrong_arch() {
+        assert!("aarch64_power10".parse::<Arch>().is_err());
+        assert!("powerpc64le_power8".parse::<Arch>().is_err());
     }
 }

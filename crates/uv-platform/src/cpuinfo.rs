@@ -89,3 +89,31 @@ mod tests {
         assert!(!has_hardware_float_features(features));
     }
 }
+
+/// Detects the POWER CPU generation on ppc64le Linux via `AT_PLATFORM` from the ELF auxiliary
+/// vector. The kernel sets this to a string like `"power9"`, `"power10"`, or `"power11"`.
+#[cfg(all(target_arch = "powerpc64", target_endian = "little", target_os = "linux"))]
+pub(crate) fn detect_power_variant() -> Option<crate::arch::ArchVariant> {
+    use std::ffi::c_char;
+
+    let auxv = procfs::process::Process::myself()
+        .and_then(|p| p.auxv())
+        .ok()?;
+
+    // AT_PLATFORM = 15: pointer to a null-terminated platform string in the process address space.
+    let addr = *auxv.get(&15u64)? as *const c_char;
+    if addr.is_null() {
+        return None;
+    }
+
+    // SAFETY: AT_PLATFORM points to a valid null-terminated string for the lifetime of the process.
+    #[allow(unsafe_code)]
+    let platform = unsafe { std::ffi::CStr::from_ptr(addr) }.to_str().ok()?;
+
+    match platform {
+        "power9" => Some(crate::arch::ArchVariant::Power9),
+        "power10" => Some(crate::arch::ArchVariant::Power10),
+        "power11" => Some(crate::arch::ArchVariant::Power11),
+        _ => None,
+    }
+}
