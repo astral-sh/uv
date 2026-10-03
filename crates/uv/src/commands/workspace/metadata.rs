@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
-use uv_lock::Metadata;
+use uv_lock::{Lock, Metadata, Package};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
@@ -13,13 +13,15 @@ use uv_python::{
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::discovery::DiscoveredProject;
+use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectError, ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState,
@@ -30,6 +32,12 @@ use crate::printer::{Printer, Stdout};
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 use super::module_owners::collect_module_owners;
+
+/// The input used to obtain metadata and its locked resolution.
+enum MetadataSource<'a> {
+    Manifest(LockTarget<'a>),
+    Lockfile(&'a FrozenWorkspace),
+}
 
 /// Display metadata about the workspace.
 pub(crate) async fn metadata(
@@ -62,147 +70,43 @@ pub(crate) async fn metadata(
         );
     }
 
-    let virtual_project;
-    let target = if let Some(script) = script.as_ref() {
-        LockTarget::Script(script)
+    let project;
+    let source = if let Some(script) = script.as_ref() {
+        MetadataSource::Manifest(LockTarget::Script(script))
     } else {
-        virtual_project = VirtualProject::discover(
+        project = DiscoveredProject::discover(
             project_dir,
             &DiscoveryOptions::default(),
+            None,
+            frozen,
+            preview,
             cache,
             workspace_cache,
         )
         .await?;
-        LockTarget::Workspace(virtual_project.workspace())
+        match &project {
+            DiscoveredProject::Manifest(project) => {
+                MetadataSource::Manifest(LockTarget::Workspace(project.workspace()))
+            }
+            DiscoveredProject::Lockfile(workspace) => MetadataSource::Lockfile(workspace),
+        }
     };
 
     // Don't enable any groups' requires-python for interpreter discovery.
     let groups = DependencyGroupsWithDefaults::none();
-
-    // Determine the lock mode.
-    let interpreter;
-    let mode = if let Some(frozen_source) = frozen {
-        LockMode::Frozen(frozen_source.into())
-    } else {
-        interpreter = match target {
-            LockTarget::Script(script) => ScriptInterpreter::discover(
-                script.into(),
-                python.as_deref().map(PythonRequest::parse),
-                &client_builder,
-                python_preference,
-                python_arch,
-                python_downloads,
-                &install_mirrors,
-                false,
-                config_discovery,
-                active,
-                cache,
-                printer,
-            )
-            .await?
-            .into_interpreter(),
-            LockTarget::Workspace(workspace) => {
-                let workspace_python = WorkspacePython::from_request(
-                    python.as_deref().map(PythonRequest::parse),
-                    Some(workspace),
-                    &groups,
-                    project_dir,
-                    config_discovery,
-                )
-                .await?;
-                ProjectInterpreter::discover(
-                    ProjectEnvironmentTarget::from(workspace),
-                    &groups,
-                    workspace_python,
-                    &client_builder,
-                    python_preference,
-                    python_arch,
-                    python_downloads,
-                    &install_mirrors,
-                    if sync.is_some() {
-                        ProjectEnvironmentPolicy::Compatible
-                    } else {
-                        ProjectEnvironmentPolicy::Optional
-                    },
-                    active,
-                    cache,
-                    printer,
-                )
-                .await?
-                .into_interpreter()
-            }
-        };
-
-        if let LockCheck::Enabled(lock_check) = lock_check {
-            LockMode::Locked(&interpreter, lock_check)
-        } else if sync.is_none()
-            || (matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file())
-        {
-            LockMode::DryRun(&interpreter)
-        } else {
-            LockMode::Write(&interpreter)
-        }
-    };
-
-    // Initialize any shared state.
     let state = UniversalState::default();
 
-    // Perform the lock operation.
-    match Box::pin(
-        LockOperation::new(
-            mode,
-            &settings,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .with_refresh(&refresh)
-        .execute(target),
-    )
-    .await
-    {
-        Ok(lock) => {
-            let lock = lock.into_lock();
-            let install_target = match target {
-                LockTarget::Workspace(workspace) => InstallTarget::Workspace {
-                    workspace,
-                    project_name: None,
-                    lock: &lock,
-                },
-                LockTarget::Script(script) => InstallTarget::Script {
-                    script,
-                    lock: &lock,
-                },
-            };
-            let mut export = metadata_for_target(install_target)?;
-            let environment = if sync.is_some() {
-                Some(match target {
-                    LockTarget::Workspace(workspace) => ProjectEnvironment::get_or_init(
-                        workspace,
-                        None,
-                        &groups,
-                        python.as_deref().map(PythonRequest::parse),
-                        &install_mirrors,
-                        &client_builder,
-                        python_preference,
-                        python_arch,
-                        python_downloads,
-                        false,
-                        config_discovery,
-                        active,
-                        cache,
-                        DryRun::Disabled,
-                        LinkErrorReporting::User,
-                        printer,
-                    )
-                    .await?
-                    .into_environment()?,
-                    LockTarget::Script(script) => ScriptEnvironment::get_or_init(
+    let resolved_lock;
+    let lock: &Lock = match &source {
+        MetadataSource::Lockfile(workspace) => workspace.lock(),
+        MetadataSource::Manifest(target) => {
+            let target = *target;
+            let interpreter;
+            let mode = if let Some(frozen_source) = frozen {
+                LockMode::Frozen(frozen_source.into())
+            } else {
+                interpreter = match target {
+                    LockTarget::Script(script) => ScriptInterpreter::discover(
                         script.into(),
                         python.as_deref().map(PythonRequest::parse),
                         &client_builder,
@@ -214,58 +118,184 @@ pub(crate) async fn metadata(
                         config_discovery,
                         active,
                         cache,
-                        DryRun::Disabled,
                         printer,
                     )
                     .await?
-                    .into_environment()?,
-                })
-            } else {
-                match target {
-                    LockTarget::Workspace(workspace) => ProjectInterpreter::discover_existing(
-                        workspace.install_path(),
-                        active,
-                        cache,
-                    )?,
-                    LockTarget::Script(script) => {
-                        ScriptInterpreter::discover_existing(script.into(), active, cache)
+                    .into_interpreter(),
+                    LockTarget::Workspace(workspace) => {
+                        let workspace_python = WorkspacePython::from_request(
+                            python.as_deref().map(PythonRequest::parse),
+                            Some(workspace),
+                            &groups,
+                            project_dir,
+                            config_discovery,
+                        )
+                        .await?;
+                        ProjectInterpreter::discover(
+                            ProjectEnvironmentTarget::from(workspace),
+                            &groups,
+                            workspace_python,
+                            &client_builder,
+                            python_preference,
+                            python_arch,
+                            python_downloads,
+                            &install_mirrors,
+                            if sync.is_some() {
+                                ProjectEnvironmentPolicy::Compatible
+                            } else {
+                                ProjectEnvironmentPolicy::Optional
+                            },
+                            active,
+                            cache,
+                            printer,
+                        )
+                        .await?
+                        .into_interpreter()
                     }
+                };
+
+                if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(&interpreter, lock_check)
+                } else if sync.is_none()
+                    || (matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file())
+                {
+                    LockMode::DryRun(&interpreter)
+                } else {
+                    LockMode::Write(&interpreter)
                 }
             };
 
-            if let Some(environment) = environment {
-                let _lock = environment
-                    .lock()
-                    .await
-                    .inspect_err(|err| {
-                        tracing::warn!("Failed to acquire environment lock: {err}");
-                    })
-                    .ok();
-                let module_owners = collect_module_owners(
-                    install_target,
-                    &environment,
+            resolved_lock = match Box::pin(
+                LockOperation::new(
+                    mode,
                     &settings,
                     &client_builder,
                     &state,
+                    Box::new(DefaultResolveLogger),
                     &concurrency,
                     cache,
                     workspace_cache,
+                    printer,
                     preview,
-                    &malware_settings,
-                    sync,
                 )
-                .await
-                .context("Failed to collect module owners")?;
-                export = export
-                    .with_environment(&environment)
-                    .with_module_owners(module_owners);
-            }
-
-            print_metadata(&export, printer)
+                .with_refresh(&refresh)
+                .execute(target),
+            )
+            .await
+            {
+                Ok(lock) => lock.into_lock(),
+                Err(err @ ProjectError::LockMismatch(..)) => return Err(UvError::user(err).into()),
+                Err(err) => return Err(UvError::from(err).into()),
+            };
+            &resolved_lock
         }
-        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
-        Err(err) => Err(UvError::from(err).into()),
+    };
+
+    let install_target = match &source {
+        MetadataSource::Manifest(LockTarget::Workspace(workspace)) => InstallTarget::Workspace {
+            workspace,
+            project_name: None,
+            lock,
+        },
+        MetadataSource::Manifest(LockTarget::Script(script)) => {
+            InstallTarget::Script { script, lock }
+        }
+        MetadataSource::Lockfile(workspace) => InstallTarget::Lockfile {
+            root: workspace.root(),
+            project_name: lock.root().map(Package::name),
+            selection: PackageSelection::Workspace,
+            lock,
+        },
+    };
+    let mut export = metadata_for_target(install_target)?;
+    let environment = if sync.is_some() {
+        Some(match &source {
+            MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
+                ProjectEnvironment::get_or_init(
+                    workspace,
+                    None,
+                    &groups,
+                    python.as_deref().map(PythonRequest::parse),
+                    &install_mirrors,
+                    &client_builder,
+                    python_preference,
+                    python_arch,
+                    python_downloads,
+                    false,
+                    config_discovery,
+                    active,
+                    cache,
+                    DryRun::Disabled,
+                    LinkErrorReporting::User,
+                    printer,
+                )
+                .await?
+                .into_environment()?
+            }
+            MetadataSource::Manifest(LockTarget::Script(script)) => ScriptEnvironment::get_or_init(
+                (*script).into(),
+                python.as_deref().map(PythonRequest::parse),
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                &install_mirrors,
+                false,
+                config_discovery,
+                active,
+                cache,
+                DryRun::Disabled,
+                printer,
+            )
+            .await?
+            .into_environment()?,
+            MetadataSource::Lockfile(_) => {
+                anyhow::bail!("`--sync` is not supported without a workspace manifest")
+            }
+        })
+    } else {
+        match &source {
+            MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
+                ProjectInterpreter::discover_existing(workspace.install_path(), active, cache)?
+            }
+            MetadataSource::Manifest(LockTarget::Script(script)) => {
+                ScriptInterpreter::discover_existing((*script).into(), active, cache)
+            }
+            MetadataSource::Lockfile(workspace) => {
+                ProjectInterpreter::discover_existing(workspace.root(), active, cache)?
+            }
+        }
+    };
+
+    if let Some(environment) = environment {
+        let _lock = environment
+            .lock()
+            .await
+            .inspect_err(|err| {
+                tracing::warn!("Failed to acquire environment lock: {err}");
+            })
+            .ok();
+        let module_owners = collect_module_owners(
+            install_target,
+            &environment,
+            &settings,
+            &client_builder,
+            &state,
+            &concurrency,
+            cache,
+            workspace_cache,
+            preview,
+            &malware_settings,
+            sync,
+        )
+        .await
+        .context("Failed to collect module owners")?;
+        export = export
+            .with_environment(&environment)
+            .with_module_owners(module_owners);
     }
+
+    print_metadata(&export, printer)
 }
 
 fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
@@ -283,7 +313,7 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
             Ok(Metadata::from_lock(workspace, lock)?)
         }
         InstallTarget::Script { script, lock } => Ok(Metadata::from_script(&script.path, lock)?),
-        InstallTarget::Lockfile { .. } => anyhow::bail!("Lockfile-only metadata is not supported"),
+        InstallTarget::Lockfile { root, lock, .. } => Ok(Metadata::from_lockfile(root, lock)?),
     }
 }
 

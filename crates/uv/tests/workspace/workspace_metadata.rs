@@ -198,6 +198,7 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     context.init().arg("foo").assert().success();
 
     let workspace = context.temp_dir.child("foo");
+    context.lock().current_dir(&workspace).assert().success();
     let environment = workspace.child(".venv");
     environment.create_dir_all()?;
 
@@ -231,6 +232,173 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     }
     "#);
 
+    // Remove the manifest to check environment discovery from the lockfile alone.
+    fs_err::remove_file(workspace.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let broken: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::assert_json_snapshot!(broken.get("environment"), @"null");
+
+    let output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "missing-env")
+        .assert()
+        .success();
+    let missing: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::assert_json_snapshot!(missing.get("environment"), @"null");
+    assert!(!workspace.child("missing-env").exists());
+
+    Ok(())
+}
+
+/// Lockfile metadata requires revision 5 or later.
+#[test]
+fn workspace_metadata_lockfile_requires_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().args([
+        "--frozen", "--preview-features", "workspace-metadata", "--preview-features", "frozen-lockfile"
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+    Ok(())
+}
+
+/// Frozen metadata retains locked member paths when workspace manifests move those members.
+#[test]
+fn workspace_metadata_lockfile_keeps_stale_member_path() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["foo"]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["members"], @r#"
+        [
+          {
+            "id": "foo==1.0@virtual+[TEMP_DIR]/foo",
+            "name": "foo",
+            "path": "[TEMP_DIR]/foo"
+          },
+          {
+            "id": "root==1.0@virtual+[TEMP_DIR]/",
+            "name": "root",
+            "path": "[TEMP_DIR]/"
+          }
+        ]
+        "#);
+    });
+
+    fs_err::rename(
+        context.temp_dir.child("foo"),
+        context.temp_dir.child("moved"),
+    )?;
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["moved"]
+    "#})?;
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let moved_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(moved_metadata, metadata);
+
+    fs_err::remove_file(&pyproject)?;
+    fs_err::remove_file(context.temp_dir.child("moved/pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(lockfile_metadata, metadata);
+
+    Ok(())
+}
+
+/// Synchronizing workspace metadata requires a manifest.
+#[test]
+fn workspace_metadata_lockfile_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+    uv_snapshot!(context.filters(), context.workspace_metadata().args([
+        "--frozen", "--sync", "--preview-features", "workspace-metadata,frozen-lockfile"
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--sync` is not supported without a workspace manifest
+    ");
     Ok(())
 }
 
@@ -774,6 +942,12 @@ dependencies = [
 ]
 "#
     ))?;
+    context
+        .lock()
+        .current_dir(&project)
+        .arg("--offline")
+        .assert()
+        .success();
 
     let assert = context
         .workspace_metadata()
@@ -789,6 +963,34 @@ dependencies = [
         .find_map(|(id, node)| id.starts_with("metadata-parent==").then_some(node))
         .ok_or_else(|| anyhow::anyhow!("missing metadata-parent resolution node"))?;
 
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
+        [
+          {
+            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/project/../metadata_child-0.1.0-py3-none-any.whl",
+            "marker": "sys_platform == 'linux'"
+          }
+        ]
+        "#);
+    });
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(project.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .current_dir(&project)
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let resolution = lockfile_metadata["resolution"]
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("metadata resolution was not an object"))?;
+    let parent_node = resolution
+        .iter()
+        .find_map(|(id, node)| id.starts_with("metadata-parent==").then_some(node))
+        .ok_or_else(|| anyhow::anyhow!("missing metadata-parent resolution node"))?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
         [
@@ -849,6 +1051,32 @@ fn workspace_metadata_sync_centralized_environment() -> Result<()> {
         Some(target.as_path())
     );
 
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .arg("--preview-features")
+        .arg("workspace-metadata,centralized-project-envs")
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    assert_eq!(
+        lockfile_metadata["environment"]["root"]
+            .as_str()
+            .map(Path::new),
+        Some(target.as_path())
+    );
+    let mut filters = context.filters();
+    filters.push((
+        r#"(\[CACHE_DIR\]/environments-v2/)[^/" ]+"#,
+        "$1[ENVIRONMENT]",
+    ));
+    insta::with_settings!({ filters => filters }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"]["root"], @r#""[CACHE_DIR]/environments-v2/[ENVIRONMENT]""#);
+    });
+
     Ok(())
 }
 
@@ -907,6 +1135,25 @@ fn workspace_metadata_sync_active_environment() -> Result<()> {
         metadata["environment"]["root"].as_str().map(Path::new),
         Some(active.path())
     );
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--preview-features",
+            "frozen-lockfile",
+            "--active",
+        ])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv")
+        .env(EnvVars::VIRTUAL_ENV, active.path())
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"]["root"], @r#""[TEMP_DIR]/active""#);
+    });
 
     Ok(())
 }
@@ -1143,6 +1390,111 @@ dependencies = [
 
     context.pip_show().arg("missing-owner").assert().failure();
 
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"], @r#"
+        {
+          "python": {
+            "implementation": "cpython",
+            "path": "[VENV]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[VENV]/"
+        }
+        "#);
+        insta::assert_json_snapshot!(lockfile_metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+    context.pip_show().arg("missing-owner").assert().failure();
+
+    let override_env = context.temp_dir.child("override-env");
+    context.venv().arg(override_env.path()).assert().success();
+    let output = context
+        .workspace_metadata()
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "override-env")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["environment"], @r#"
+        {
+          "python": {
+            "implementation": "cpython",
+            "path": "[TEMP_DIR]/override-env/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[TEMP_DIR]/override-env"
+        }
+        "#);
+        insta::assert_json_snapshot!(metadata.get("module_owners"), @"null");
+    });
+
+    Ok(())
+}
+
+/// Module owners include dependencies selected by a non-project workspace's groups.
+#[test]
+fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .temp_dir
+        .child("installed_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        wheel.path(),
+        "installed-owner",
+        "installed_owner-0.1.0",
+        &[("installed_module.py", "")],
+    )?;
+    let wheel_url = Url::from_file_path(wheel.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        docs = ["installed-owner @ {wheel_url}"]
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    context.pip_install().arg(wheel.path()).assert().success();
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
     Ok(())
 }
 

@@ -11480,6 +11480,45 @@ fn frozen_lockfile_without_manifests() -> Result<()> {
     }
     "#);
 
+    // Workspace members come from the lockfile after their manifests are removed.
+    let output = context
+        .workspace_metadata()
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["members"], @r#"
+        [
+          {
+            "id": "dep==1.0.0@editable+[TEMP_DIR]/dep",
+            "name": "dep",
+            "path": "[TEMP_DIR]/dep"
+          },
+          {
+            "id": "member==1.0.0@virtual+[TEMP_DIR]/member",
+            "name": "member",
+            "path": "[TEMP_DIR]/member"
+          },
+          {
+            "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep",
+            "name": "member-dep",
+            "path": "[TEMP_DIR]/member-dep"
+          },
+          {
+            "id": "root==1.0.0@virtual+[TEMP_DIR]/",
+            "name": "root",
+            "path": "[TEMP_DIR]/"
+          },
+          {
+            "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep",
+            "name": "root-dep",
+            "path": "[TEMP_DIR]/root-dep"
+          }
+        ]
+        "#);
+    });
+
     Ok(())
 }
 
@@ -12684,6 +12723,92 @@ fn frozen_lockfile_non_project_workspace() -> Result<()> {
     -e ./member
     -e ./other
     ");
+
+    // Inspect the non-project workspace metadata.
+    uv_snapshot!(context.filters(), context.workspace_metadata()
+        .args(["--frozen", "--preview-features", "workspace-metadata"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "environment": {
+        "root": "[VENV]/",
+        "python": {
+          "path": "[VENV]/[BIN]/[PYTHON]",
+          "version": "3.12.[X]",
+          "implementation": "cpython"
+        }
+      },
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "members": [
+        {
+          "name": "member",
+          "path": "[TEMP_DIR]/member",
+          "id": "member==1.0.0@editable+[TEMP_DIR]/member"
+        },
+        {
+          "name": "other",
+          "path": "[TEMP_DIR]/other",
+          "id": "other==1.0.0@editable+[TEMP_DIR]/other"
+        }
+      ],
+      "resolution": {
+        "member==1.0.0@editable+[TEMP_DIR]/member": {
+          "name": "member",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/member"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "other==1.0.0@editable+[TEMP_DIR]/other": {
+          "name": "other",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/other"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": [],
+          "dependency_groups": [
+            {
+              "name": "root-only",
+              "id": "workspace+[TEMP_DIR]/:root-only"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/:root-only": {
+          "kind": {
+            "group": "root-only"
+          },
+          "path": "[TEMP_DIR]/",
+          "dependencies": [
+            {
+              "id": "member==1.0.0@editable+[TEMP_DIR]/member"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    "#);
 
     Ok(())
 }
