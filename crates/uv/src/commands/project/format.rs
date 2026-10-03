@@ -200,5 +200,5 @@ pub(crate) async fn format(
     command.args(extra_args.iter());
 
     let handle = command.spawn().context("Failed to spawn `ruff format`")?;
-    run_to_completion(handle).await
+    run_to_completion(handle, printer).await
 }
