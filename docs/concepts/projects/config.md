@@ -407,6 +407,11 @@ requires-dist = ["torch", "einops"]
     dependencies (when omitted, uv will assume the metadata applies to all versions of the package),
     but _required_ for direct URL dependencies (like Git dependencies).
 
+If your project uses dynamic metadata (e.g., version managed by `setuptools-scm` or read from a
+`requirements.txt`), see [Dynamic metadata](../../concepts/cache.md#dynamic-metadata) for
+instructions on configuring `tool.uv.cache-keys` to ensure uv rebuilds and reinstalls your project
+when the relevant files change.
+
 ### Disabling build isolation
 
 Installing packages without build isolation requires that the package's build dependencies are
