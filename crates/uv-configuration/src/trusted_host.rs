@@ -1,6 +1,8 @@
+use serde::de::{Error, MapAccess, Visitor, value::MapAccessDeserializer};
 use serde::{Deserialize, Deserializer};
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
+use std::fmt;
 use std::str::FromStr;
 use url::Url;
 
@@ -40,28 +42,48 @@ impl TrustedHost {
     }
 }
 
+struct TrustedHostVisitor;
+
+#[derive(Deserialize)]
+struct TrustedHostFields {
+    scheme: Option<String>,
+    host: String,
+    port: Option<u16>,
+}
+
+impl<'de> Visitor<'de> for TrustedHostVisitor {
+    type Value = TrustedHost;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a string or map")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        TrustedHost::from_str(value).map_err(E::custom)
+    }
+
+    fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+    where
+        M: MapAccess<'de>,
+    {
+        let fields = TrustedHostFields::deserialize(MapAccessDeserializer::new(map))?;
+        Ok(TrustedHost::Host {
+            scheme: fields.scheme,
+            host: fields.host,
+            port: fields.port,
+        })
+    }
+}
+
 impl<'de> Deserialize<'de> for TrustedHost {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        struct Inner {
-            scheme: Option<String>,
-            host: String,
-            port: Option<u16>,
-        }
-
-        serde_untagged::UntaggedEnumVisitor::new()
-            .string(|string| Self::from_str(string).map_err(serde::de::Error::custom))
-            .map(|map| {
-                map.deserialize::<Inner>().map(|inner| Self::Host {
-                    scheme: inner.scheme,
-                    host: inner.host,
-                    port: inner.port,
-                })
-            })
-            .deserialize(deserializer)
+        deserializer.deserialize_any(TrustedHostVisitor)
     }
 }
 

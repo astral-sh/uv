@@ -44,7 +44,6 @@ clap = { workspace = true }
 fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
-serde-untagged = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
