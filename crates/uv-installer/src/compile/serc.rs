@@ -5,10 +5,12 @@ use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, bail};
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rustc_hash::FxHashMap;
 use serc::{CompileOptions, OptimizationLevel, PythonVersion, SourceDecodeError};
 use siphasher::sip::SipHasher13;
 use tracing::debug;
@@ -122,8 +124,8 @@ impl SercCompiler {
 
     /// Compile a directory in parallel and count newly compiled files.
     pub(super) fn compile_tree(&self, dir: &Path) -> Result<usize, CompileError> {
-        initialize_rayon_once();
-        WalkDir::new(dir)
+        let mut files = Vec::new();
+        for entry in WalkDir::new(dir)
             .into_iter()
             .filter_entry(|entry| entry.file_name() != "__pycache__")
             .filter(|entry| {
@@ -132,47 +134,49 @@ impl SercCompiler {
                         && entry.path().extension().is_some_and(|ext| ext == "py")
                 })
             })
-            .par_bridge()
-            .map(|entry| {
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    Err(err)
-                        if err
-                            .io_error()
-                            .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
-                    {
-                        return Ok(0);
-                    }
-                    Err(err) => return Err(CompileError::Walkdir(err)),
-                };
-                self.compile(entry.path()).map(usize::from).map_err(|err| {
-                    CompileError::NativeCompile {
-                        source_file: entry.into_path(),
-                        err,
-                    }
-                })
-            })
-            .try_reduce(|| 0, |left, right| Ok(left + right))
+        {
+            match entry {
+                Ok(entry) => files.push(entry.into_path()),
+                Err(err)
+                    if err
+                        .io_error()
+                        .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) => {}
+                Err(err) => return Err(CompileError::Walkdir(err)),
+            }
+        }
+        self.compile_files(&files)
     }
 
     /// Compile installed files in parallel and count newly compiled files.
     pub(super) fn compile_files(&self, files: &[PathBuf]) -> Result<usize, CompileError> {
         initialize_rayon_once();
+        let cache_directories: FxHashMap<_, _> = files
+            .iter()
+            .filter_map(|path| path.parent())
+            .map(|parent| (parent, OnceLock::new()))
+            .collect();
         files
             .par_iter()
             .map(|source_file| {
-                self.compile(source_file).map(usize::from).map_err(|err| {
-                    CompileError::NativeCompile {
+                let cache_directory = source_file
+                    .parent()
+                    .and_then(|parent| cache_directories.get(parent));
+                self.compile(source_file, cache_directory)
+                    .map(usize::from)
+                    .map_err(|err| CompileError::NativeCompile {
                         source_file: source_file.clone(),
                         err,
-                    }
-                })
+                    })
             })
             .try_reduce(|| 0, |left, right| Ok(left + right))
     }
 
     /// Compile a source file, returning false for current bytecode or invalid Python source.
-    fn compile(&self, source_file: &Path) -> anyhow::Result<bool> {
+    fn compile(
+        &self,
+        source_file: &Path,
+        cache_directory: Option<&OnceLock<()>>,
+    ) -> anyhow::Result<bool> {
         let metadata = fs_err::metadata(source_file)?;
         let parent = source_file.parent().context("Source file has no parent")?;
         let filename = source_file
@@ -254,7 +258,14 @@ impl SercCompiler {
             ),
             InvalidationMode::Hash { checked } => module.to_hash_pyc(&source, checked),
         };
-        fs_err::create_dir_all(&cache_dir)?;
+        // Initialize lazily so invalid source and current bytecode do not require a writable
+        // directory. Concurrent first writes may race to create it; later writes reuse it.
+        if cache_directory.is_none_or(|directory| directory.get().is_none()) {
+            fs_err::create_dir_all(&cache_dir)?;
+            if let Some(directory) = cache_directory {
+                let _ = directory.set(());
+            }
+        }
         let mut file = tempfile_in(&cache_dir)?;
         // Match py_compile: inherit the source's read permissions and make the bytecode writable
         // by its owner. Creation applies the process umask.

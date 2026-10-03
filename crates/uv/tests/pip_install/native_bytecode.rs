@@ -272,6 +272,9 @@ fn native_bytecode_recompile() -> Result<()> {
     let package = context.site_packages().join("example");
     let bytecode = package.join("__pycache__/module.cpython-312.pyc");
     let compiled = fs_err::metadata(&bytecode)?.modified()?;
+    let invalid_package = package.join("invalid_only");
+    fs_err::create_dir(&invalid_package)?;
+    fs_err::write(invalid_package.join("invalid.py"), "def invalid syntax\n")?;
     // An empty SOURCE_DATE_EPOCH retains timestamp invalidation.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
@@ -284,6 +287,7 @@ fn native_bytecode_recompile() -> Result<()> {
     Bytecode compiled 0 files in [TIME]
     ");
     assert_eq!(fs_err::metadata(&bytecode)?.modified()?, compiled);
+    assert!(!invalid_package.join("__pycache__").exists());
 
     fs_err::write(
         package.join("module.py"),
