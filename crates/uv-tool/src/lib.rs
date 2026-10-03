@@ -325,6 +325,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
+        system_site_packages: bool,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -350,7 +351,7 @@ impl InstalledTools {
             &environment_path,
             interpreter,
             uv_virtualenv::Prompt::None,
-            false,
+            system_site_packages,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
             false,
             uv_virtualenv::Seed::Disabled,
