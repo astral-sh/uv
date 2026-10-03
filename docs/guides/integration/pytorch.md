@@ -527,4 +527,5 @@ $ # With an environment variable.
 $ UV_TORCH_BACKEND=cu130 uv pip install torch torchvision
 ```
 
-At present, `--torch-backend` is only available in the `uv pip` interface.
+At present, `--torch-backend` is available in the `uv pip` interface and in `uv tool run` and
+`uv tool install`, but not in the project interface (`uv lock`, `uv sync`, `uv run`, etc.).
