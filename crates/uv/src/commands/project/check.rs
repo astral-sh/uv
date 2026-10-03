@@ -512,7 +512,7 @@ pub(crate) async fn check(
             venv
         } else {
             ProjectEnvironment::get_or_init(
-                project.workspace(),
+                ProjectEnvironmentTarget::from(project.workspace()),
                 None,
                 &groups,
                 python.as_deref().map(PythonRequest::parse),

@@ -378,30 +378,6 @@ fn workspace_metadata_lockfile_keeps_stale_member_path() -> Result<()> {
     Ok(())
 }
 
-/// Synchronizing workspace metadata requires a manifest.
-#[test]
-fn workspace_metadata_lockfile_sync() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
-        version = 1
-        revision = 5
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "project"
-        version = "1.0.0"
-        source = { virtual = "." }
-    "#})?;
-    uv_snapshot!(context.filters(), context.workspace_metadata().args([
-        "--frozen", "--sync", "--preview-features", "workspace-metadata,frozen-lockfile"
-    ]), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: `--sync` is not supported without a workspace manifest
-    ");
-    Ok(())
-}
-
 #[test]
 fn workspace_metadata_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1297,6 +1273,61 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
         "#);
     });
 
+    // Remove the manifest and required distribution to exercise installation from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    context
+        .pip_uninstall()
+        .arg("metadata-required")
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg(extraneous.path())
+        .assert()
+        .success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "required_module": [
+            {
+              "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+    context.pip_show().arg("metadata-extra").assert().success();
+
+    // Exact synchronization also removes unrelated packages without a workspace manifest.
+    context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--exact",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.pip_freeze(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    metadata-required==0.1.0
+    ");
+
     Ok(())
 }
 
@@ -1450,7 +1481,9 @@ dependencies = [
 /// Module owners include dependencies selected by a non-project workspace's groups.
 #[test]
 fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
     let wheel = context
         .temp_dir
         .child("installed_owner-0.1.0-py3-none-any.whl");
@@ -1495,6 +1528,41 @@ fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
         }
         "#);
     });
+    // Synchronization creates the requested environment and installs workspace-group dependencies.
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "metadata-env")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["environment"], @r#"
+        {
+          "python": {
+            "implementation": "cpython",
+            "path": "[TEMP_DIR]/metadata-env/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[TEMP_DIR]/metadata-env"
+        }
+        "#);
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+
     Ok(())
 }
 

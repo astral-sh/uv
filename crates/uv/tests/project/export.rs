@@ -11948,6 +11948,15 @@ fn frozen_lockfile_metadata_free_default_groups() -> Result<()> {
     dep v1.0.0
     ");
 
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--offline", "--dry-run", "--no-install-workspace", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
     Ok(())
 }
 
@@ -12663,6 +12672,27 @@ fn frozen_lockfile_non_project_workspace() -> Result<()> {
     member v1.0.0
     ");
 
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--offline", "--dry-run", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + member @ file://[TEMP_DIR]/member
+     + other @ file://[TEMP_DIR]/other
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--offline", "--dry-run", "--package", "member", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + member @ file://[TEMP_DIR]/member
+    ");
+
     // A selected member has its own recorded defaults.
     uv_snapshot!(context.filters(), frozen_export(&context)
         .args(["--package", "member"]), @"
@@ -12851,6 +12881,17 @@ fn frozen_lockfile_root_default_groups() -> Result<()> {
     exit_code: 0 (success)
     ");
 
+    // Frozen sync applies the selected root group's Python requirement without a manifest.
+    uv_snapshot!(context.filters(), context.sync().args([
+        "--frozen", "--offline", "--dry-run", "--python", "3.12",
+        "--preview-features", "frozen-lockfile",
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `workspace:docs` in `uv.lock`).
+    ");
+
     // Revision 5 infers the dev default when it is omitted from the manifest.
     lockfile.write_str(indoc! {r#"
         version = 1
@@ -12879,6 +12920,17 @@ fn frozen_lockfile_root_default_groups() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     ./development
+    ");
+
+    // The inferred default also activates its Python requirement during frozen sync.
+    uv_snapshot!(context.filters(), context.sync().args([
+        "--frozen", "--offline", "--dry-run", "--python", "3.12",
+        "--preview-features", "frozen-lockfile",
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `workspace:dev` in `uv.lock`).
     ");
 
     Ok(())
