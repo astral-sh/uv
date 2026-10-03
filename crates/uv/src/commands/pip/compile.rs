@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
 use std::io::Write;
@@ -579,7 +579,7 @@ pub(crate) async fn pip_compile(
         excludes,
         source_trees,
         project,
-        BTreeSet::default(),
+        BTreeMap::default(),
         &extras,
         &groups,
         preferences,

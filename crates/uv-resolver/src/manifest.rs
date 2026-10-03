@@ -1,10 +1,10 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use either::Either;
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
-use uv_distribution_types::{Requirement, ResolutionRecorder};
+use uv_distribution_types::{Requirement, RequirementSource, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
@@ -36,8 +36,8 @@ pub struct Manifest {
     /// The name of the project.
     pub(super) project: Option<PackageName>,
 
-    /// Members of the project's workspace.
-    pub(super) workspace_members: BTreeSet<PackageName>,
+    /// Sources of the project's workspace members.
+    pub(super) workspace_members: BTreeMap<PackageName, RequirementSource>,
 
     /// The installed packages to exclude from consideration during resolution.
     ///
@@ -67,7 +67,7 @@ impl Manifest {
         modifiers: DependencyModifiers,
         preferences: Preferences,
         project: Option<PackageName>,
-        workspace_members: BTreeSet<PackageName>,
+        workspace_members: BTreeMap<PackageName, RequirementSource>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -94,7 +94,7 @@ impl Manifest {
             preferences: Preferences::default(),
             project: None,
             exclusions: Exclusions::default(),
-            workspace_members: BTreeSet::new(),
+            workspace_members: BTreeMap::new(),
             lookaheads: Vec::new(),
         }
     }
@@ -110,7 +110,7 @@ impl Manifest {
         // Package metadata defaults to forced-relative paths. Restore the user's path preference for
         // the current project and workspace members before merging requirement URLs.
         for lookahead in &mut lookaheads {
-            if self.workspace_members.contains(lookahead.package())
+            if self.workspace_members.contains_key(lookahead.package())
                 || self.project.as_ref() == Some(lookahead.package())
             {
                 for requirement in lookahead.requirements_mut() {

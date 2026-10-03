@@ -1,6 +1,6 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -23,7 +23,7 @@ use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
     ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
     NameRequirementSpecification, PackageConfigSettings, Requirement, RequirementScope,
-    ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
+    RequirementSource, ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
     UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
 use uv_distribution_types::{
@@ -110,7 +110,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     excludes: Vec<ExcludeDependency>,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
-    workspace_members: BTreeSet<PackageName>,
+    workspace_members: BTreeMap<PackageName, RequirementSource>,
     extras: &ExtrasSpecification,
     groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,

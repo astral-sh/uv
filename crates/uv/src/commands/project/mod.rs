@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -3019,7 +3019,7 @@ pub(crate) async fn resolve_environment(
         excludes,
         source_trees,
         project,
-        BTreeSet::default(),
+        BTreeMap::default(),
         &extras,
         &groups,
         preferences,
@@ -3417,7 +3417,7 @@ pub(crate) async fn update_environment(
         excludes,
         source_trees,
         project,
-        BTreeSet::default(),
+        BTreeMap::default(),
         &extras,
         &groups,
         preferences,

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use itertools::Itertools;
@@ -569,7 +569,7 @@ pub(crate) async fn pip_install(
             excludes,
             source_trees,
             project,
-            BTreeSet::default(),
+            BTreeMap::default(),
             extras,
             &groups,
             preferences,

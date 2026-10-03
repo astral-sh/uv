@@ -18,10 +18,11 @@ use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 /// These are the URLs used in the root package or by other URL dependencies (including path
 /// dependencies). They take precedence over requirements by version (except for the special case
 /// where we are in a fork that doesn't use any of the URL(s) used in other forks). Each fork may
-/// only use a single URL.
+/// only use a single URL. Workspace members retain their directory source across all forks, even
+/// when their root requirement is excluded by a conflict.
 ///
-/// This type contains all URLs without checking, the validation happens in
-/// [`crate::fork_urls::ForkUrls`].
+/// Workspace member sources are validated here. Other source conflicts are checked within each
+/// fork by [`crate::fork_urls::ForkUrls`].
 #[derive(Debug, Default)]
 pub(crate) struct Urls {
     recorder: Option<ResolutionRecorder>,
@@ -32,6 +33,8 @@ pub(crate) struct Urls {
     /// URLs from regular requirements or from constraints. There can be multiple URLs for the same
     /// package as long as they are in different forks.
     regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
+    /// Directory sources that identify workspace members across all resolution forks.
+    workspace_members: FxHashMap<PackageName, VerbatimParsedUrl>,
 }
 
 impl Urls {
@@ -43,6 +46,7 @@ impl Urls {
     ) -> Self {
         let mut regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
         let mut overrides = ForkMap::default();
+        let mut workspace_members = FxHashMap::default();
 
         // Merge requirement and constraint URLs in their original order. Then replay requirements
         // which aren't forced-relative (user-provided) to allow the URL spelling to take precedence.
@@ -105,6 +109,22 @@ impl Urls {
             }
         }
 
+        // Workspace member sources apply even in forks that exclude their root requirements.
+        for (name, source) in &manifest.workspace_members {
+            let Some(mut url) = source.to_verbatim_parsed_url() else {
+                continue;
+            };
+            // Retain the user's path spelling without changing the member's source identity.
+            if let Some(regular_url) = regular.get(name).and_then(|urls| {
+                urls.iter().find(|regular_url| {
+                    same_resource(&regular_url.parsed_url, &url.parsed_url, git)
+                })
+            }) {
+                url.verbatim = regular_url.verbatim.clone();
+            }
+            workspace_members.insert(name.clone(), url);
+        }
+
         // Add all URLs from overrides. If there is an override URL, all other URLs from
         // requirements and constraints are moot and will be removed.
         for requirement in manifest.overrides(env) {
@@ -123,16 +143,20 @@ impl Urls {
             recorder: manifest.recorder.clone(),
             overrides,
             regular,
+            workspace_members,
         }
     }
 
     /// Return an iterator over the allowed URLs for the given package.
     ///
-    /// If we have a URL override, apply it unconditionally for registry and URL requirements.
+    /// Workspace members always resolve to their directory source. Effective URL requirements,
+    /// after applying overrides, must refer to that source even in forks where the member is excluded.
+    ///
+    /// For other packages, apply a URL override unconditionally for registry and URL requirements.
     /// Otherwise, there are two case: for a URL requirement (`url` isn't `None`), check that the
     /// URL is allowed and return its canonical form.
     ///
-    /// For registry requirements, we return an empty iterator.
+    /// For other registry requirements, we return an empty iterator.
     pub(crate) fn get_url<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
@@ -143,7 +167,28 @@ impl Urls {
         if let Some(recorder) = &self.recorder {
             recorder.source_policy(name);
         }
-        if self.overrides.contains_key(name) {
+        if let Some(member_url) = self.workspace_members.get(name) {
+            let overrides = self.overrides.get(name, env);
+            for requirement_url in overrides
+                .iter()
+                .copied()
+                .chain(url.filter(|_| overrides.is_empty()))
+            {
+                if !same_resource(&member_url.parsed_url, &requirement_url.parsed_url, git) {
+                    let mut urls = vec![
+                        member_url.parsed_url.clone(),
+                        requirement_url.parsed_url.clone(),
+                    ];
+                    urls.sort();
+                    return Err(ResolveError::ConflictingUrls {
+                        package_name: name.clone(),
+                        urls,
+                        env: env.clone(),
+                    });
+                }
+            }
+            Ok(Either::Left(Either::Right(std::iter::once(member_url))))
+        } else if self.overrides.contains_key(name) {
             Ok(Either::Left(Either::Left(
                 self.overrides.get(name, env).into_iter(),
             )))
@@ -156,12 +201,14 @@ impl Urls {
         }
     }
 
-    /// Return `true` if the package has any URL (from overrides or regular requirements).
+    /// Return `true` if the package has a workspace member, override, or regular requirement URL.
     pub(crate) fn any_url(&self, name: &PackageName) -> bool {
         if let Some(recorder) = &self.recorder {
             recorder.source_policy(name);
         }
-        self.overrides.contains_key(name) || self.get_regular(name).is_some()
+        self.workspace_members.contains_key(name)
+            || self.overrides.contains_key(name)
+            || self.get_regular(name).is_some()
     }
 
     /// Return the allowed [`VerbatimUrl`]s for given package from regular requirements and

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -453,7 +453,7 @@ pub(crate) async fn pip_sync(
             excludes,
             source_trees,
             project,
-            BTreeSet::default(),
+            BTreeMap::default(),
             extras,
             &groups,
             preferences,
