@@ -137,6 +137,8 @@ mod tests {
         - <a id="lock-without-metadata" href="#lock-without-metadata"><code>lock-without-metadata</code></a>: Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
         - <a id="lockfile-format-check" href="#lockfile-format-check"><code>lockfile-format-check</code></a>: Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
         - <a id="lockfile-normalization" href="#lockfile-normalization"><code>lockfile-normalization</code></a>: Combines equivalent dependency declarations when writing lockfiles.
+        - <a id="lockfile-v2" href="#lockfile-v2"><code>lockfile-v2</code></a>: Writes version 2 lockfiles. Highly experimental: the format may change incompatibly in
+          patch releases.
         - <a id="malware-check" href="#malware-check"><code>malware-check</code></a>: Allows `uv sync` and other commands to check for malware using [OSV](https://osv.dev) before
           installing packages.
         - <a id="metadata-json" href="#metadata-json"><code>metadata-json</code></a>: Includes JSON metadata files in built wheels.

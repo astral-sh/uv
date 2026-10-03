@@ -41,8 +41,8 @@ use uv_distribution_types::{
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    Requirement, RequirementScope, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -81,10 +81,12 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+use self::git::GitFieldsWire;
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
 
 mod deserialize;
 pub(crate) mod export;
+mod git;
 mod inputs;
 mod installable;
 mod map;
@@ -94,19 +96,24 @@ mod tree;
 #[cfg(test)]
 mod windows_emulation_tests;
 
-/// The current version of the lockfile format.
+/// The stable version of the lockfile format.
 const VERSION: u32 = 1;
+
+/// The highly experimental version of the lockfile format.
+const EXPERIMENTAL_VERSION: u32 = 2;
 
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
     /// The lockfile uses an unsupported schema version.
-    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
+    #[error(
+        "unsupported lockfile schema version (v{version}, but versions up to v{supported} are supported)"
+    )]
     UnsupportedVersion { supported: u32, version: u32 },
 
     /// The lockfile cannot be parsed and uses an unsupported schema version.
     #[error(
-        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
+        "failed to parse lockfile using an unsupported schema version (v{version}, but versions up to v{supported} are supported)"
     )]
     UnparsableVersion {
         supported: u32,
@@ -557,6 +564,7 @@ impl DependencyContext<'_> {
 
 /// Builds lockfile dependency edges with consistent marker simplification and merging.
 struct LockedDependencyBuilder<'a> {
+    version: u32,
     requires_python: &'a RequiresPython,
     environment: SimplifiedMarkerTree,
     activation_marker: UniversalMarker,
@@ -566,6 +574,7 @@ struct LockedDependencyBuilder<'a> {
 
 impl<'a> LockedDependencyBuilder<'a> {
     fn new(
+        version: u32,
         requires_python: &'a RequiresPython,
         environment: SimplifiedMarkerTree,
         activation_marker: UniversalMarker,
@@ -573,6 +582,7 @@ impl<'a> LockedDependencyBuilder<'a> {
         simplification_parent_marker: UniversalMarker,
     ) -> Self {
         Self {
+            version,
             requires_python,
             environment,
             activation_marker,
@@ -1496,6 +1506,7 @@ impl<'a> LockedDependencyBuilder<'a> {
             self.environment,
             self.simplification_parent_marker,
             marker,
+            self.version,
         );
         let dependency =
             Dependency::new(self.requires_python, package_id, extras, simplified_marker);
@@ -2636,9 +2647,10 @@ impl Lock {
         // that canonical form rather than the raw resolver output.
         let fork_markers =
             canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
+        let version = Self::current_version();
         let lock = Self::new(
-            VERSION,
-            REVISION,
+            version,
+            if version == VERSION { REVISION } else { 0 },
             packages,
             requires_python,
             options,
@@ -2947,8 +2959,20 @@ impl Lock {
         (self.version(), self.revision()) >= (1, 1)
     }
 
+    /// Returns the schema version used for new lockfiles with the enabled preview features.
+    pub fn current_version() -> u32 {
+        if uv_preview::is_enabled(PreviewFeature::LockfileV2) {
+            warn_user_once!(
+                "The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases."
+            );
+            EXPERIMENTAL_VERSION
+        } else {
+            VERSION
+        }
+    }
+
     /// Returns the lockfile version.
-    fn version(&self) -> u32 {
+    pub fn version(&self) -> u32 {
         self.version
     }
 
@@ -3784,9 +3808,11 @@ impl Lock {
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
                         && lock.version() != VERSION
+                        && (lock.version() != EXPERIMENTAL_VERSION
+                            || Self::current_version() != EXPERIMENTAL_VERSION)
                     {
                         return Err(LockParseError::UnparsableVersion {
-                            supported: VERSION,
+                            supported: Self::current_version(),
                             version: lock.version(),
                             source,
                         });
@@ -3796,9 +3822,12 @@ impl Lock {
             },
         };
 
-        if lock.version() != VERSION {
+        if lock.version() != VERSION
+            && (lock.version() != EXPERIMENTAL_VERSION
+                || Self::current_version() != EXPERIMENTAL_VERSION)
+        {
             return Err(LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: Self::current_version(),
                 version: lock.version(),
             });
         }
@@ -4145,6 +4174,7 @@ impl Lock {
                 expected.simplification_parent_marker(context, parent_marker);
             let mut generated = Vec::new();
             let builder = LockedDependencyBuilder::new(
+                self.version,
                 &self.requires_python,
                 expected.lock_marker,
                 activation_marker,
@@ -6253,7 +6283,7 @@ impl From<PrereleaseWire> for Prerelease {
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerWire {
-    exclude_newer: Option<Timestamp>,
+    exclude_newer: Option<ExcludeNewerValue>,
     exclude_newer_span: Option<ExcludeNewerSpan>,
     #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
     exclude_newer_package: ExcludeNewerPackage,
@@ -6261,16 +6291,11 @@ struct ExcludeNewerWire {
 
 impl From<ExcludeNewerWire> for ExcludeNewer {
     fn from(wire: ExcludeNewerWire) -> Self {
-        let global = match (wire.exclude_newer, wire.exclude_newer_span) {
-            (Some(timestamp), None) => Some(ExcludeNewerValue::absolute(timestamp)),
-            // We're phasing out writing a timestamp when spans are used. uv writes a dummy
-            // timestamp for backwards compatibility that we can ignore on deserialization.
-            (Some(_), Some(span)) => Some(ExcludeNewerValue::relative(span)),
-            // A future version of uv will remove the timestamp entirely, so for forwards
-            // compatibility we ignore a missing value.
-            (None, Some(span)) => Some(ExcludeNewerValue::relative(span)),
-            (None, None) => None,
-        };
+        // Version 1 stores relative cutoffs in a separate field alongside a dummy timestamp.
+        let global = wire
+            .exclude_newer_span
+            .map(ExcludeNewerValue::relative)
+            .or(wire.exclude_newer);
         Self {
             global,
             package: wire.exclude_newer_package,
@@ -6280,59 +6305,128 @@ impl From<ExcludeNewerWire> for ExcludeNewer {
 
 impl From<ExcludeNewer> for ExcludeNewerWire {
     fn from(exclude_newer: ExcludeNewer) -> Self {
-        let (timestamp, span) = match exclude_newer.global {
-            Some(ExcludeNewerValue::Absolute(timestamp)) => (Some(timestamp), None),
-            Some(ExcludeNewerValue::Relative(span)) => (None, Some(span)),
-            None => (None, None),
-        };
         Self {
-            exclude_newer: timestamp,
-            exclude_newer_span: span,
+            exclude_newer: exclude_newer.global,
+            exclude_newer_span: None,
             exclude_newer_package: exclude_newer.package,
         }
     }
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(from = "ResolverManifestWire")]
 pub struct ResolverManifest {
     /// The workspace members included in the lockfile.
-    #[serde(default)]
     members: BTreeSet<PackageName>,
     /// Default dependency groups for a workspace root without a `[project]` table.
-    #[serde(default)]
     default_groups: Option<DefaultGroups>,
     /// The effective Python requirements of the root's dependency groups.
-    #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
     /// The requirements provided to the resolver, exclusive of the workspace members.
     ///
     /// These are requirements that are attached to the project, but not to any of its
     /// workspace members. For example, the requirements in a PEP 723 script would be included here.
-    #[serde(default)]
     requirements: BTreeSet<Requirement>,
     /// The dependency groups provided to the resolver, exclusive of the workspace members.
     ///
     /// These are dependency groups that are attached to the project, but not to any of its
     /// workspace members. For example, the dependency groups in a `pyproject.toml` without a
     /// `[project]` table would be included here.
-    #[serde(default)]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
     /// The constraints provided to the resolver.
-    #[serde(default)]
     constraints: BTreeSet<Requirement>,
     /// The overrides provided to the resolver.
-    #[serde(default)]
     overrides: BTreeSet<Override<Requirement>>,
     /// The excludes provided to the resolver.
-    #[serde(default)]
     excludes: BTreeSet<ExcludeDependency>,
     /// The build constraints provided to the resolver.
-    #[serde(default)]
     build_constraints: BTreeSet<NameRequirementSpecification>,
     /// The static metadata provided to the resolver.
+    dependency_metadata: BTreeSet<StaticMetadata>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct ResolverManifestWire {
+    #[serde(default)]
+    members: BTreeSet<PackageName>,
+    #[serde(default)]
+    default_groups: Option<DefaultGroups>,
+    #[serde(default)]
+    group_requires_python: BTreeMap<GroupName, GroupMetadata>,
+    #[serde(
+        default,
+        rename = "dependencies",
+        alias = "requirements",
+        deserialize_with = "deserialize_requirements"
+    )]
+    requirements: BTreeSet<Requirement>,
+    #[serde(default)]
+    dependency_groups: BTreeMap<GroupName, DependencyGroupWire<RequirementWire>>,
+    #[serde(default, deserialize_with = "deserialize_requirements")]
+    constraints: BTreeSet<Requirement>,
+    #[serde(default)]
+    overrides: Vec<Override<RequirementWire>>,
+    #[serde(default)]
+    excludes: BTreeSet<ExcludeDependency>,
+    #[serde(default)]
+    build_constraints: Vec<NameRequirementSpecificationWire>,
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
+}
+
+impl From<ResolverManifestWire> for ResolverManifest {
+    fn from(wire: ResolverManifestWire) -> Self {
+        let mut group_requires_python = wire.group_requires_python;
+        let dependency_groups = wire
+            .dependency_groups
+            .into_iter()
+            .map(|(name, group)| {
+                let dependencies = group.into_dependencies(&name, &mut group_requires_python);
+                (
+                    name,
+                    dependencies
+                        .into_iter()
+                        .map(|requirement| requirement.0)
+                        .collect(),
+                )
+            })
+            .collect();
+        Self {
+            members: wire.members,
+            default_groups: wire.default_groups,
+            group_requires_python,
+            requirements: wire.requirements,
+            dependency_groups,
+            constraints: wire.constraints,
+            overrides: wire
+                .overrides
+                .into_iter()
+                .map(|entry| match entry {
+                    Override::Requirement(requirement) => Override::Requirement(requirement.0),
+                    Override::Package(package) => Override::Package(PackageOverride {
+                        package: package.package,
+                        dependencies: package
+                            .dependencies
+                            .into_vec()
+                            .into_iter()
+                            .map(|requirement| requirement.0)
+                            .collect(),
+                    }),
+                })
+                .collect(),
+            excludes: wire.excludes,
+            build_constraints: wire
+                .build_constraints
+                .into_iter()
+                .map(|constraint| NameRequirementSpecification {
+                    requirement: constraint.requirement.0,
+                    hashes: constraint.hashes,
+                })
+                .collect(),
+            dependency_metadata: wire.dependency_metadata,
+        }
+    }
 }
 
 /// Omit entries equivalent to the implicit `dev` default.
@@ -6496,16 +6590,20 @@ struct LockWire {
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
     fork_markers: Vec<SimplifiedMarkerTree>,
-    #[serde(rename = "supported-markers", default)]
+    #[serde(
+        rename = "supported-environments",
+        alias = "supported-markers",
+        default
+    )]
     supported_environments: Vec<SimplifiedMarkerTree>,
-    #[serde(rename = "required-markers", default)]
+    #[serde(rename = "required-environments", alias = "required-markers", default)]
     required_environments: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptionsWire,
-    #[serde(default)]
+    #[serde(rename = "workspace", alias = "manifest", default)]
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
@@ -6515,22 +6613,12 @@ impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Self, LockError> {
-        // Count the number of sources for each package name. When
-        // there's only one source for a particular package name (the
-        // overwhelmingly common case), we can omit some data (like source and
-        // version) on dependency edges since it is strictly redundant.
-        let mut unambiguous_package_ids: FxHashMap<PackageName, PackageId> = FxHashMap::default();
-        let mut ambiguous = FxHashSet::default();
-        for dist in &wire.packages {
-            if ambiguous.contains(&dist.id.name) {
-                continue;
-            }
-            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
-                ambiguous.insert(id.name);
-                continue;
-            }
-            unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
-        }
+        let ids = wire
+            .packages
+            .iter()
+            .map(|package| package.id.clone())
+            .collect::<Vec<_>>();
+        let package_ids = PackageIdLookup::new(wire.version, ids.iter());
 
         let fork_markers = wire
             .fork_markers
@@ -6549,14 +6637,7 @@ impl TryFrom<LockWire> for Lock {
         let packages = wire
             .packages
             .into_iter()
-            .map(|dist| {
-                dist.unwire(
-                    &wire.requires_python,
-                    environment,
-                    default,
-                    &unambiguous_package_ids,
-                )
-            })
+            .map(|dist| dist.unwire(&wire.requires_python, environment, default, &package_ids))
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
@@ -6568,10 +6649,7 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
-        let mut options_wire = wire.options;
-        if options_wire.exclude_newer.exclude_newer_span.is_some() {
-            options_wire.exclude_newer.exclude_newer = None;
-        }
+        let options_wire = wire.options;
         let options = ResolverOptions {
             resolution_mode: options_wire.resolution_mode,
             prerelease: options_wire.prerelease.into(),
@@ -6688,6 +6766,7 @@ impl Package {
     ) -> Result<(), LockError> {
         let parent_marker = *resolution.graph[node_index].marker();
         let builder = LockedDependencyBuilder::new(
+            Lock::current_version(),
             requires_python,
             environment,
             parent_marker,
@@ -7431,21 +7510,168 @@ struct PackageWire {
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
     #[serde(default)]
     default_groups: Option<DefaultGroups>,
-    #[serde(default, rename = "dev-dependencies", alias = "dependency-groups")]
-    dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
+    #[serde(default, alias = "dev-dependencies")]
+    dependency_groups: BTreeMap<GroupName, DependencyGroupWire<DependencyWire>>,
     #[serde(default)]
     group_requires_python: BTreeMap<GroupName, GroupMetadata>,
+}
+
+/// A dependency group, optionally carrying its Python requirement.
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum DependencyGroupWire<T> {
+    List(Vec<T>),
+    Table {
+        dependencies: Vec<T>,
+        #[serde(default, rename = "requires-python")]
+        requires_python: Option<VersionSpecifiers>,
+    },
+}
+
+impl<T> DependencyGroupWire<T> {
+    /// Extract dependencies and merge inline Python requirements with legacy sidecar metadata.
+    fn into_dependencies(
+        self,
+        name: &GroupName,
+        group_requires_python: &mut BTreeMap<GroupName, GroupMetadata>,
+    ) -> Vec<T> {
+        match self {
+            Self::List(dependencies) => dependencies,
+            Self::Table {
+                dependencies,
+                requires_python,
+            } => {
+                if requires_python.is_some() {
+                    group_requires_python.insert(name.clone(), GroupMetadata { requires_python });
+                }
+                dependencies
+            }
+        }
+    }
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PackageMetadata {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_requirements")]
     requires_dist: BTreeSet<Requirement>,
     #[serde(default, rename = "provides-extras")]
     provides_extra: Box<[ExtraName]>,
-    #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
+    #[serde(
+        default,
+        alias = "requires-dev",
+        deserialize_with = "deserialize_requirement_groups"
+    )]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+}
+
+/// A declared requirement, accepting a bare package name or its full table representation.
+#[derive(Clone, Debug)]
+struct RequirementWire(Requirement);
+
+impl<'de> serde::Deserialize<'de> for RequirementWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|name| {
+                Ok(Self(Requirement {
+                    name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
+                    extras: Box::new([]),
+                    groups: Box::new([]),
+                    marker: MarkerTree::TRUE,
+                    source: RequirementSource::Registry {
+                        specifier: VersionSpecifiers::empty(),
+                        index: None,
+                        conflict: None,
+                    },
+                    scope: RequirementScope::Global,
+                    origin: None,
+                }))
+            })
+            .map(|map| {
+                let RequirementTableWire {
+                    mut requirement,
+                    git_fields,
+                } = map.deserialize()?;
+                let url = match &requirement.source {
+                    RequirementSource::GitDirectory {
+                        git, subdirectory, ..
+                    } => Some(locked_git_url(git, subdirectory.as_deref(), None)),
+                    RequirementSource::GitPath {
+                        git, install_path, ..
+                    } => Some(locked_git_url(git, None, Some(install_path))),
+                    RequirementSource::Registry { .. }
+                    | RequirementSource::Url { .. }
+                    | RequirementSource::Path { .. }
+                    | RequirementSource::Directory { .. } => None,
+                };
+                if let Some(url) = url {
+                    let url = git_fields
+                        .apply_to_url(url)
+                        .map_err(serde::de::Error::custom)?;
+                    requirement.source = serde::Deserialize::deserialize(
+                        serde::de::value::MapDeserializer::new(iter::once(("git", url.as_str()))),
+                    )?;
+                }
+                Ok(Self(requirement))
+            })
+            .deserialize(deserializer)
+    }
+}
+
+/// Read ordinary source fields before collecting the additional structured Git fields.
+#[derive(serde::Deserialize)]
+struct RequirementTableWire {
+    #[serde(flatten)]
+    requirement: Requirement,
+    #[serde(flatten)]
+    git_fields: GitFieldsWire,
+}
+
+/// A build constraint with the same Git fields as other declared requirements.
+#[derive(serde::Deserialize)]
+struct NameRequirementSpecificationWire {
+    #[serde(flatten)]
+    requirement: RequirementWire,
+    #[serde(default)]
+    hashes: Vec<String>,
+}
+
+/// Read requirement arrays with either strings or tables for their entries.
+fn deserialize_requirements<'de, D>(deserializer: D) -> Result<BTreeSet<Requirement>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let requirements: Vec<RequirementWire> = serde::Deserialize::deserialize(deserializer)?;
+    Ok(requirements
+        .into_iter()
+        .map(|requirement| requirement.0)
+        .collect())
+}
+
+/// Read the declared requirements in each dependency group.
+fn deserialize_requirement_groups<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<GroupName, BTreeSet<Requirement>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let groups: BTreeMap<GroupName, Vec<RequirementWire>> =
+        serde::Deserialize::deserialize(deserializer)?;
+    Ok(groups
+        .into_iter()
+        .map(|(name, requirements)| {
+            (
+                name,
+                requirements
+                    .into_iter()
+                    .map(|requirement| requirement.0)
+                    .collect(),
+            )
+        })
+        .collect())
 }
 
 impl PackageMetadata {
@@ -7492,7 +7718,7 @@ impl PackageWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        package_ids: &PackageIdLookup<'_>,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -7535,22 +7761,25 @@ impl PackageWire {
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| {
-                    dep.unwire(
-                        requires_python,
-                        environment,
-                        default,
-                        unambiguous_package_ids,
-                    )
-                })
+                .map(|dep| dep.unwire(requires_python, environment, default, package_ids))
                 .collect()
         };
+
+        let mut group_requires_python = self.group_requires_python;
+        let dependency_groups = self
+            .dependency_groups
+            .into_iter()
+            .map(|(group, deps)| {
+                let deps = deps.into_dependencies(&group, &mut group_requires_python);
+                Ok((group, unwire_deps(deps)?))
+            })
+            .collect::<Result<_, LockError>>()?;
 
         Ok(Package {
             id: self.id,
             metadata: self.metadata,
             default_groups: self.default_groups,
-            group_requires_python: self.group_requires_python,
+            group_requires_python,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
@@ -7565,11 +7794,7 @@ impl PackageWire {
                 .into_iter()
                 .map(|(extra, deps)| Ok((extra, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
-            dependency_groups: self
-                .dependency_groups
-                .into_iter()
-                .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
-                .collect::<Result<_, LockError>>()?,
+            dependency_groups,
         })
     }
 }
@@ -7608,6 +7833,45 @@ impl PackageId {
     }
 }
 
+/// Resolve dependency identities using the fields supported by the lockfile version.
+struct PackageIdLookup<'lock> {
+    version: u32,
+    by_name: FxHashMap<&'lock PackageName, Vec<&'lock PackageId>>,
+}
+
+impl<'lock> PackageIdLookup<'lock> {
+    /// Index package identities without copying their source data.
+    fn new(version: u32, packages: impl IntoIterator<Item = &'lock PackageId>) -> Self {
+        let mut by_name: FxHashMap<_, Vec<_>> = FxHashMap::default();
+        for package in packages {
+            by_name.entry(&package.name).or_default().push(package);
+        }
+        Self { version, by_name }
+    }
+
+    /// Return the sole matching identity, allowing partial identities in v2.
+    fn unambiguous(
+        &self,
+        name: &PackageName,
+        version: Option<&Version>,
+        source: Option<&Source>,
+    ) -> Option<&'lock PackageId> {
+        let packages = self.by_name.get(name)?;
+        if self.version < 2 {
+            return match packages.as_slice() {
+                [package] => Some(*package),
+                _ => None,
+            };
+        }
+        let mut matches = packages.iter().copied().filter(|package| {
+            version.is_none_or(|version| package.version.as_ref() == Some(version))
+                && source.is_none_or(|source| &package.source == source)
+        });
+        let package = matches.next()?;
+        matches.next().is_none().then_some(package)
+    }
+}
+
 impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if let Some(version) = &self.version {
@@ -7627,11 +7891,9 @@ struct PackageIdForDependency {
 }
 
 impl PackageIdForDependency {
-    fn unwire(
-        self,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
-    ) -> Result<PackageId, LockError> {
-        let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
+    fn unwire(self, package_ids: &PackageIdLookup<'_>) -> Result<PackageId, LockError> {
+        let unambiguous_package_id =
+            package_ids.unambiguous(&self.name, self.version.as_ref(), self.source.as_ref());
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -8127,8 +8389,16 @@ impl Source {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+struct SourceWire {
+    #[serde(flatten)]
+    source: SourceKindWire,
+    #[serde(flatten)]
+    git_fields: GitFieldsWire,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
 #[serde(untagged, rename_all = "kebab-case")]
-enum SourceWire {
+enum SourceKindWire {
     Registry {
         registry: RegistrySourceWire,
     },
@@ -8157,9 +8427,9 @@ impl TryFrom<SourceWire> for Source {
     type Error = LockError;
 
     fn try_from(wire: SourceWire) -> Result<Self, LockError> {
-        use self::SourceWire::{Direct, Directory, Editable, Git, Path, Registry, Virtual};
+        use self::SourceKindWire::{Direct, Directory, Editable, Git, Path, Registry, Virtual};
 
-        match wire {
+        match wire.source {
             Registry { registry } => Ok(Self::Registry(registry.into())),
             Git { git } => {
                 let url = DisplaySafeUrl::parse(&git)
@@ -8169,6 +8439,10 @@ impl TryFrom<SourceWire> for Source {
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
+                let url = wire
+                    .git_fields
+                    .apply_to_url(url)
+                    .map_err(LockErrorKind::InvalidGitSourceFields)?;
                 let git_source = GitSource::from_url(&url).map_err(|err| match err {
                     GitSourceError::InvalidSha => {
                         LockErrorKind::InvalidGitSourceUrl(SourceParseError::InvalidSha {
@@ -9199,9 +9473,9 @@ pub struct Dependency {
     index: PackageIndex,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
-    /// by assuming `requires-python` and the PEP 508 portion of the parent package's reachability
-    /// marker are satisfied. The parent's conflict predicates are retained for compatibility with
-    /// older lockfile readers. So if
+    /// by assuming `requires-python` and the parent package's reachability marker are satisfied.
+    /// Version 1 retains the parent's conflict predicates for compatibility with older readers;
+    /// version 2 inherits them from the traversal context. So if
     /// `requires-python = '>=3.8'`, then
     /// `python_version >= '3.8' and python_version < '3.12'`
     /// gets simplified to `python_version < '3.12'`.
@@ -9220,7 +9494,7 @@ pub struct Dependency {
     /// acceptable to do comparisons on the simplified form.
     simplified_marker: SimplifiedMarkerTree,
     /// The "complexified" marker is independent of `requires-python`, but remains contextual to
-    /// the PEP 508 reachability of its parent package. It can be evaluated while traversing
+    /// the reachability of its parent package. It can be evaluated while traversing
     /// dependencies from that package.
     complexified_marker: UniversalMarker,
 }
@@ -9308,15 +9582,40 @@ impl Display for Dependency {
 }
 
 /// A single dependency of a package in a lockfile.
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+struct DependencyWire(DependencyWireTable);
+
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct DependencyWire {
+struct DependencyWireTable {
     #[serde(flatten)]
     package_id: PackageIdForDependency,
-    #[serde(default)]
+    #[serde(default, rename = "extras", alias = "extra")]
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
     marker: SimplifiedMarkerTree,
+}
+
+impl<'de> serde::Deserialize<'de> for DependencyWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|name| {
+                Ok(Self(DependencyWireTable {
+                    package_id: PackageIdForDependency {
+                        name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
+                        version: None,
+                        source: None,
+                    },
+                    extra: BTreeSet::new(),
+                    marker: SimplifiedMarkerTree::default(),
+                }))
+            })
+            .map(|map| map.deserialize().map(Self))
+            .deserialize(deserializer)
+    }
 }
 
 impl DependencyWire {
@@ -9325,22 +9624,23 @@ impl DependencyWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        package_ids: &PackageIdLookup<'_>,
     ) -> Result<Dependency, LockError> {
+        let Self(dependency) = self;
         let (simplified_marker, complexified_marker) =
-            if self.marker.as_simplified_marker_tree().is_true() {
+            if dependency.marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
             } else {
-                let mut simplified_marker = self.marker;
+                let mut simplified_marker = dependency.marker;
                 simplified_marker.and(environment);
                 let complexified_marker =
                     UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
-            package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            package_id: dependency.package_id.unwire(package_ids)?,
             index: PackageIndex(0),
-            extra: self.extra,
+            extra: dependency.extra,
             simplified_marker,
             complexified_marker,
         })
@@ -9911,6 +10211,9 @@ enum LockErrorKind {
         #[source]
         SourceParseError,
     ),
+    /// The structured Git source fields are ambiguous.
+    #[error("Invalid Git source: {0}")]
+    InvalidGitSourceFields(&'static str),
     #[error("Failed to parse timestamp")]
     InvalidTimestamp(
         /// The underlying error that occurred. This includes the
@@ -10273,17 +10576,22 @@ fn marker_is_unreachable(requires_python: &RequiresPython, marker: MarkerTree) -
     })
 }
 
-/// Simplify an edge marker using the PEP 508 conditions that must already hold to reach its parent
-/// node. Parent conflict predicates remain on the edge for compatibility with older lockfile
-/// readers that evaluate dependency markers independently during conflict discovery.
+/// Simplify an edge marker using conditions that must already hold to reach its parent node.
+/// Version 1 retains conflict predicates for readers that evaluate dependency markers independently
+/// during conflict discovery. Version 2 also inherits those predicates from the traversal context.
 fn simplify_dependency_marker(
     requires_python: &RequiresPython,
     environment: SimplifiedMarkerTree,
     parent: UniversalMarker,
     marker: UniversalMarker,
+    version: u32,
 ) -> SimplifiedMarkerTree {
-    let parent =
-        SimplifiedMarkerTree::new(requires_python, parent.pep508()).as_simplified_marker_tree();
+    let parent = if version >= 2 {
+        parent.combined()
+    } else {
+        parent.pep508()
+    };
+    let parent = SimplifiedMarkerTree::new(requires_python, parent).as_simplified_marker_tree();
     let marker =
         SimplifiedMarkerTree::new(requires_python, marker.combined()).as_simplified_marker_tree();
     let marker = marker.restrict(parent);
@@ -10717,7 +11025,7 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         let environment = SimplifiedMarkerTree::new(&requires_python, MarkerTree::TRUE);
 
         let simplified_marker =
-            simplify_dependency_marker(&requires_python, environment, parent, parent);
+            simplify_dependency_marker(&requires_python, environment, parent, parent, 1);
         assert_eq!(
             simplified_marker.try_to_string().as_deref(),
             Some("extra != 'extra-1-x-foo'")
@@ -10728,6 +11036,10 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
             marker.try_to_string().as_deref(),
             Some("python_full_version >= '3.12' and extra != 'extra-1-x-foo'")
         );
+
+        let inherited =
+            simplify_dependency_marker(&requires_python, environment, parent, parent, 2);
+        assert_eq!(inherited.try_to_string(), None);
     }
 
     #[test]
