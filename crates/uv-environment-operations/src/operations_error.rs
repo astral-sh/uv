@@ -1,8 +1,8 @@
 use owo_colors::OwoColorize;
 use uv_command_support::{UvError, dist_hints};
 use uv_distribution_types::{DerivationChain, Name};
-use uv_install_ops::Changelog;
-use uv_resolve_ops::ExtrasWithoutSourceError;
+use uv_install_operations::Changelog;
+use uv_resolve_operations::ExtrasWithoutSourceError;
 use uv_resolver::{NoSolutionError, NoSolutionHeader, ResolveError};
 
 /// An operation failure shared by environment resolution and installation.
@@ -156,35 +156,35 @@ impl uv_errors::Hinted for OperationsError {
     }
 }
 
-impl From<uv_resolve_ops::Error> for OperationsError {
-    fn from(error: uv_resolve_ops::Error) -> Self {
+impl From<uv_resolve_operations::Error> for OperationsError {
+    fn from(error: uv_resolve_operations::Error) -> Self {
         match error {
-            uv_resolve_ops::Error::NoSolution { header, source } => {
+            uv_resolve_operations::Error::NoSolution { header, source } => {
                 Self::NoSolution { header, source }
             }
-            uv_resolve_ops::Error::Resolve(error) => Self::Resolve(error),
-            uv_resolve_ops::Error::Hash(error) => Self::Hash(error),
-            uv_resolve_ops::Error::Io(error) => Self::Io(error),
-            uv_resolve_ops::Error::Fmt(error) => Self::Fmt(error),
-            uv_resolve_ops::Error::Requirements(error) => Self::Requirements(error),
-            uv_resolve_ops::Error::RequirementsWithContext { context, source } => {
+            uv_resolve_operations::Error::Resolve(error) => Self::Resolve(error),
+            uv_resolve_operations::Error::Hash(error) => Self::Hash(error),
+            uv_resolve_operations::Error::Io(error) => Self::Io(error),
+            uv_resolve_operations::Error::Fmt(error) => Self::Fmt(error),
+            uv_resolve_operations::Error::Requirements(error) => Self::Requirements(error),
+            uv_resolve_operations::Error::RequirementsWithContext { context, source } => {
                 Self::RequirementsWithContext { context, source }
             }
-            uv_resolve_ops::Error::Anyhow(error) => Self::Anyhow(error),
+            uv_resolve_operations::Error::Anyhow(error) => Self::Anyhow(error),
         }
     }
 }
 
-impl From<uv_install_ops::Error> for OperationsError {
-    fn from(error: uv_install_ops::Error) -> Self {
+impl From<uv_install_operations::Error> for OperationsError {
+    fn from(error: uv_install_operations::Error) -> Self {
         match error {
-            uv_install_ops::Error::Prepare(error) => Self::Prepare(error),
-            uv_install_ops::Error::Uninstall(error) => Self::Uninstall(error),
-            uv_install_ops::Error::Hash(error) => Self::Hash(error),
-            uv_install_ops::Error::Io(error) => Self::Io(error),
-            uv_install_ops::Error::Fmt(error) => Self::Fmt(error),
-            uv_install_ops::Error::Anyhow(error) => Self::Anyhow(error),
-            uv_install_ops::Error::OutdatedEnvironment(changelog) => {
+            uv_install_operations::Error::Prepare(error) => Self::Prepare(error),
+            uv_install_operations::Error::Uninstall(error) => Self::Uninstall(error),
+            uv_install_operations::Error::Hash(error) => Self::Hash(error),
+            uv_install_operations::Error::Io(error) => Self::Io(error),
+            uv_install_operations::Error::Fmt(error) => Self::Fmt(error),
+            uv_install_operations::Error::Anyhow(error) => Self::Anyhow(error),
+            uv_install_operations::Error::OutdatedEnvironment(changelog) => {
                 Self::OutdatedEnvironment(changelog)
             }
         }

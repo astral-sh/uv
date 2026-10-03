@@ -20,7 +20,7 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, elapsed};
-use uv_install_ops::report_target_environment;
+use uv_install_operations::report_target_environment;
 
 /// Uninstall packages from the current environment.
 pub async fn pip_uninstall(

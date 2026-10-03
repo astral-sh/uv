@@ -31,12 +31,12 @@ uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
-uv-environment-ops = { workspace = true }
+uv-environment-operations = { workspace = true }
 uv-errors = { workspace = true }
 uv-extract = { workspace = true }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true }
-uv-install-ops = { workspace = true }
+uv-install-operations = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
@@ -56,7 +56,7 @@ uv-python-context = { workspace = true }
 uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-requirements-txt = { workspace = true }
-uv-resolve-ops = { workspace = true }
+uv-resolve-operations = { workspace = true }
 uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true }

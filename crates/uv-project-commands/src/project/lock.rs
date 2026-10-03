@@ -1,6 +1,6 @@
 #![expect(clippy::single_match_else)]
 
-use uv_environment_ops::ValidatedLock;
+use uv_environment_operations::ValidatedLock;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -54,7 +54,7 @@ use crate::project::{
 use crate::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::{ExitStatus, ScriptPath, UvError, pip};
 use uv_command_support::Printer;
-use uv_resolve_ops::locked_requirements::{LockedRequirements, read_lock_requirements};
+use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_requirements};
 use uv_settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
 /// The result of running a lock operation.

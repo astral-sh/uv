@@ -18,7 +18,9 @@ use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
-use uv_audit_ops::{AuditResults, artifact_uri, audit_lock, json, sarif, warn_unmatched_ignores};
+use uv_audit_operations::{
+    AuditResults, artifact_uri, audit_lock, json, sarif, warn_unmatched_ignores,
+};
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
 use uv_settings::ResolverInstallerSettings;

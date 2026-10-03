@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use uv_environment_ops::malware::{MalwareCheckContext, maybe_check_malware};
+use uv_environment_operations::malware::{MalwareCheckContext, maybe_check_malware};
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -58,8 +58,8 @@ use crate::project::{
 };
 use crate::{ExitStatus, UvError};
 use uv_command_support::Printer;
-use uv_install_ops::editable::apply_editable_mode;
-use uv_install_ops::report::{PackageChangesReport, SchemaReport};
+use uv_install_operations::editable::apply_editable_mode;
+use uv_install_operations::report::{PackageChangesReport, SchemaReport};
 use uv_settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockedSource, ResolverInstallerSettings,
     ResolverSettings,

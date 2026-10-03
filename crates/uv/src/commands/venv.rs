@@ -45,8 +45,8 @@ use crate::commands::project::{
     update_project_environment_link,
 };
 use crate::printer::Printer;
-use uv_install_ops::loggers::{DefaultInstallLogger, InstallLogger};
-use uv_install_ops::{Changelog, report_interpreter};
+use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
+use uv_install_operations::{Changelog, report_interpreter};
 use uv_python_context::PythonDownloadReporter;
 
 #[derive(Error, Debug)]

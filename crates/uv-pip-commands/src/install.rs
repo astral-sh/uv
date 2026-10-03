@@ -50,13 +50,13 @@ use crate::install_report::write_install_report;
 use crate::pylock::{read_pylock_toml, resolve_pylock_toml};
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, UvError};
-use uv_install_ops::editable::apply_editable_mode;
-use uv_install_ops::loggers::{DefaultInstallLogger, InstallLogger};
-use uv_install_ops::{Changelog, Modifications};
-use uv_install_ops::{report_interpreter, report_target_environment};
+use uv_install_operations::editable::apply_editable_mode;
+use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
+use uv_install_operations::{Changelog, Modifications};
+use uv_install_operations::{report_interpreter, report_target_environment};
 use uv_python_context::PythonDownloadReporter;
-use uv_resolve_ops::loggers::DefaultResolveLogger;
-use uv_resolve_ops::{resolution_markers, resolution_tags};
+use uv_resolve_operations::loggers::DefaultResolveLogger;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// The interpreter is externally managed and cannot be modified.
 #[derive(Debug, Error)]
@@ -162,7 +162,7 @@ pub async fn pip_install(
         no_binary,
         no_build,
         extras: _,
-    } = uv_resolve_ops::read_requirements(
+    } = uv_resolve_operations::read_requirements(
         requirements,
         constraints,
         overrides,
@@ -203,7 +203,7 @@ pub async fn pip_install(
 
     // Read build constraints.
     let build_constraints = Constraints::from_specifications(
-        uv_resolve_ops::read_constraints(build_constraints, &client_builder)
+        uv_resolve_operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
             .chain(build_constraints_from_workspace.iter().cloned()),
@@ -371,7 +371,7 @@ pub async fn pip_install(
                 DefaultInstallLogger.on_check(requirements.len(), start, printer, dry_run)?;
 
                 if strict && !dry_run.enabled() {
-                    uv_install_ops::diagnose_environment(
+                    uv_install_operations::diagnose_environment(
                         recursive_requirements
                             .iter()
                             .map(|requirement| &requirement.name),
@@ -562,7 +562,7 @@ pub async fn pip_install(
             .build();
 
         // Resolve the requirements.
-        let (resolution, hasher) = match uv_resolve_ops::resolve(
+        let (resolution, hasher) = match uv_resolve_operations::resolve(
             requirements,
             constraints,
             overrides,
@@ -647,7 +647,7 @@ pub async fn pip_install(
     );
 
     // Sync the environment.
-    let changelog = match uv_install_ops::install(
+    let changelog = match uv_install_operations::install(
         &resolution,
         site_packages,
         InstallationStrategy::Permissive,
@@ -655,7 +655,7 @@ pub async fn pip_install(
         &reinstall,
         &build_options,
         link_mode,
-        compile.then_some(uv_install_ops::BytecodeCompilation::Installed),
+        compile.then_some(uv_install_operations::BytecodeCompilation::Installed),
         &hasher,
         &tags,
         &client,
@@ -673,7 +673,7 @@ pub async fn pip_install(
     .await
     {
         Ok(changelog) => changelog,
-        Err(uv_install_ops::Error::OutdatedEnvironment(changelog)) => {
+        Err(uv_install_operations::Error::OutdatedEnvironment(changelog)) => {
             write_install_report(&changelog, dry_run, output_format, printer)?;
             return Ok(ExitStatus::Failure);
         }
@@ -683,11 +683,11 @@ pub async fn pip_install(
     };
 
     // Notify the user of any resolution diagnostics.
-    uv_resolve_ops::diagnose_resolution(resolution.diagnostics(), printer)?;
+    uv_resolve_operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
-        uv_install_ops::diagnose_environment(
+        uv_install_operations::diagnose_environment(
             resolution.distributions().map(Name::name),
             &environment,
             &marker_env,

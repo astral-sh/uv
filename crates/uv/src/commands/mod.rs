@@ -97,7 +97,7 @@ mod error_tests {
             (ErrorKind::NotFound, true),
             (ErrorKind::PermissionDenied, false),
         ] {
-            let error = uv_resolve_ops::Error::Requirements(uv_requirements::Error::Io(
+            let error = uv_resolve_operations::Error::Requirements(uv_requirements::Error::Io(
                 Error::new(kind, "requirements failure"),
             ));
             let error = UvError::from(
@@ -113,14 +113,18 @@ mod error_tests {
             allow_duplicates! {
                 assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
             }
-            assert!(error.downcast_ref::<uv_resolve_ops::Error>().is_some());
+            assert!(
+                error
+                    .downcast_ref::<uv_resolve_operations::Error>()
+                    .is_some()
+            );
         }
         Ok(())
     }
 
     #[test]
     fn resolution_context_leaves_other_errors_unchanged() -> anyhow::Result<()> {
-        let error = uv_resolve_ops::Error::Io(Error::new(
+        let error = uv_resolve_operations::Error::Io(Error::new(
             ErrorKind::PermissionDenied,
             "cache write failed",
         ));
@@ -129,7 +133,11 @@ mod error_tests {
             bail!("operation classification changed with context");
         };
         assert_snapshot!(format!("{error:#}"), @"cache write failed");
-        assert!(error.downcast_ref::<uv_resolve_ops::Error>().is_some());
+        assert!(
+            error
+                .downcast_ref::<uv_resolve_operations::Error>()
+                .is_some()
+        );
         Ok(())
     }
 

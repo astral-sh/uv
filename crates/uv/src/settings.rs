@@ -80,7 +80,7 @@ use uv_workspace::pyproject_mut::AddBoundsKind;
 use crate::commands::{
     InitKind, InitProjectKind, PythonUpgrade, PythonUpgradeSource, ToolRunCommand,
 };
-use uv_install_ops::Modifications;
+use uv_install_operations::Modifications;
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";

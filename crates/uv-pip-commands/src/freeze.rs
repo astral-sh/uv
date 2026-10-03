@@ -17,7 +17,7 @@ use uv_python::{PythonArchitecture, PythonPreference};
 
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
-use uv_install_ops::report_target_environment;
+use uv_install_operations::report_target_environment;
 
 /// Enumerate the installed packages in the current environment.
 pub fn pip_freeze(

@@ -1,5 +1,5 @@
 [package]
-name = "uv-audit-ops"
+name = "uv-audit-operations"
 version = "0.0.90"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }

@@ -29,9 +29,9 @@ use uv_resolver::{ExcludeNewer, Prerelease};
 
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
-use uv_install_ops::report_target_environment;
-use uv_resolve_ops::latest::LatestClient;
-use uv_resolve_ops::reporters::LatestVersionReporter;
+use uv_install_operations::report_target_environment;
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::reporters::LatestVersionReporter;
 
 /// Display the installed packages in the current environment as a dependency tree.
 #[expect(clippy::fn_params_excessive_bools)]

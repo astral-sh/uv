@@ -31,15 +31,15 @@ use uv_workspace::WorkspaceCache;
 use crate::common::{ToolLock, remove_entrypoints, tool_environment_spec};
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, conjunction};
-use uv_environment_ops::{
+use uv_environment_operations::{
     EnvironmentResolution, EnvironmentUpdate, PlatformState, resolve_environment, sync_environment,
     update_environment,
 };
-use uv_install_ops::Modifications;
-use uv_install_ops::loggers::{DefaultInstallLogger, UpgradeInstallLogger};
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::{DefaultInstallLogger, UpgradeInstallLogger};
 use uv_python_context::PythonDownloadReporter;
-use uv_resolve_ops::loggers::SummaryResolveLogger;
-use uv_resolve_ops::resolution_tags;
+use uv_resolve_operations::loggers::SummaryResolveLogger;
+use uv_resolve_operations::resolution_tags;
 use uv_settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.

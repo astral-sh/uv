@@ -50,7 +50,7 @@ use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
-use uv_resolve_ops::{resolution_markers, resolution_tags};
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// An error raised when a tool package provides no executables.
 #[derive(Debug, Error)]
@@ -111,7 +111,7 @@ impl Hinted for NoExecutablesError {
     }
 }
 use uv_command_support::Printer;
-use uv_environment_ops::{
+use uv_environment_operations::{
     EnvironmentSpecification, OperationsError, PlatformState, PreferenceLocation, ProjectError,
     PythonRequestSource, ValidatedLock,
 };

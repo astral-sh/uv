@@ -1,1 +1,1 @@
-pub use uv_environment_ops::install_target::*;
+pub use uv_environment_operations::install_target::*;

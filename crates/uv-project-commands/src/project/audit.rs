@@ -32,7 +32,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use uv_audit_ops::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
+use uv_audit_operations::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
 
 pub async fn audit(
     project_dir: &Path,

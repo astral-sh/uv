@@ -17,7 +17,7 @@ workspace = true
 
 [dependencies]
 uv-audit = { workspace = true }
-uv-audit-ops = { workspace = true }
+uv-audit-operations = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
@@ -30,11 +30,11 @@ uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
-uv-environment-ops = { workspace = true }
+uv-environment-operations = { workspace = true }
 uv-errors = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
-uv-install-ops = { workspace = true }
+uv-install-operations = { workspace = true }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
 uv-normalize = { workspace = true }
@@ -46,7 +46,7 @@ uv-python = { workspace = true }
 uv-python-context = { workspace = true }
 uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
-uv-resolve-ops = { workspace = true }
+uv-resolve-operations = { workspace = true }
 uv-resolver = { workspace = true }
 uv-settings = { workspace = true }
 uv-shell = { workspace = true }

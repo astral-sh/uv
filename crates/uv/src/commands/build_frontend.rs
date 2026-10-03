@@ -54,7 +54,7 @@ use crate::commands::project::{ProjectError, find_requires_python};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 use uv_python_context::PythonDownloadReporter;
-use uv_resolve_ops as operations;
+use uv_resolve_operations as operations;
 
 #[derive(Debug, Error)]
 pub(crate) enum Error {

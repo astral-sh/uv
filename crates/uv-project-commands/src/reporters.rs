@@ -5,7 +5,7 @@ use uv_command_support::{
 };
 use uv_pep440::Version;
 pub(crate) use uv_python_context::PythonDownloadReporter;
-pub(crate) use uv_resolve_ops::reporters::{LatestVersionReporter, ResolverReporter};
+pub(crate) use uv_resolve_operations::reporters::{LatestVersionReporter, ResolverReporter};
 
 pub(crate) struct BinaryDownloadReporter {
     reporter: ProgressReporter,

@@ -224,11 +224,12 @@ The `uv` crate owns CLI parsing, settings resolution, process-global initializat
 dispatch. Command implementations live in `uv-pip-commands`, `uv-project-commands`,
 `uv-tool-commands`, and `uv-python-commands`.
 
-Command crates should not depend on one another. Shared workflows belong in `uv-environment-ops`,
-`uv-resolve-ops`, `uv-install-ops`, or `uv-audit-ops`. Python discovery and compatibility checks
-live in `uv-python-context`; output and process utilities live in `uv-command-support`. Keep these
-shared layers independent of command implementations and CLI dispatch, and keep the Python context
-and command support crates free of resolver and installer dependencies.
+Command crates should not depend on one another. Shared workflows belong in
+`uv-environment-operations`, `uv-resolve-operations`, `uv-install-operations`, or
+`uv-audit-operations`. Python discovery and compatibility checks live in `uv-python-context`; output
+and process utilities live in `uv-command-support`. Keep these shared layers independent of command
+implementations and CLI dispatch, and keep the Python context and command support crates free of
+resolver and installer dependencies.
 
 When iterating on a command family, check its crate to compile fewer crates than the full CLI:
 

@@ -43,16 +43,16 @@ use crate::{Target, ToolRequest};
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
 use uv_command_support::UvError;
-use uv_environment_ops::{
+use uv_environment_operations::{
     EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
     resolve_environment, resolve_names, sync_environment, update_environment,
 };
-use uv_install_ops::Modifications;
-use uv_install_ops::loggers::DefaultInstallLogger;
-use uv_resolve_ops as operations;
-use uv_resolve_ops::latest::LatestClient;
-use uv_resolve_ops::loggers::{DefaultResolveLogger, SummaryResolveLogger};
-use uv_resolve_ops::{resolution_markers, resolution_tags};
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_resolve_operations as operations;
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.

@@ -1,4 +1,4 @@
-pub use uv_environment_ops::*;
+pub use uv_environment_operations::*;
 
 pub mod add;
 pub mod audit;

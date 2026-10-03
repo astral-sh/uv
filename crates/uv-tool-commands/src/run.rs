@@ -4,7 +4,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 use uv_distribution_types::RequirementScope;
-use uv_environment_ops::environment::CachedEnvironment;
+use uv_environment_operations::environment::CachedEnvironment;
 
 use anyhow::{Context, bail};
 use console::Term;
@@ -52,13 +52,15 @@ use crate::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::{Target, ToolRequest};
 use uv_command_support::Printer;
 use uv_command_support::{UvError, read_env_files};
-use uv_environment_ops::{EnvironmentSpecification, PlatformState, ProjectError, resolve_names};
-use uv_install_ops::loggers::{DefaultInstallLogger, SummaryInstallLogger};
+use uv_environment_operations::{
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
+};
+use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_context::PythonDownloadReporter;
-use uv_resolve_ops as operations;
-use uv_resolve_ops::latest::LatestClient;
-use uv_resolve_ops::loggers::{DefaultResolveLogger, SummaryResolveLogger};
-use uv_resolve_ops::{resolution_markers, resolution_tags};
+use uv_resolve_operations as operations;
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::ResolverInstallerSettings;
 use uv_settings::ResolverSettings;
 

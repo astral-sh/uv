@@ -5842,12 +5842,12 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
- "uv-environment-ops",
+ "uv-environment-operations",
  "uv-errors",
  "uv-extract",
  "uv-flags",
  "uv-fs",
- "uv-install-ops",
+ "uv-install-operations",
  "uv-install-wheel",
  "uv-installer",
  "uv-lock",
@@ -5868,7 +5868,7 @@ dependencies = [
  "uv-redacted",
  "uv-requirements",
  "uv-requirements-txt",
- "uv-resolve-ops",
+ "uv-resolve-operations",
  "uv-resolver",
  "uv-scripts",
  "uv-settings",
@@ -5923,7 +5923,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv-audit-ops"
+name = "uv-audit-operations"
 version = "0.0.90"
 dependencies = [
  "anyhow",
@@ -6623,7 +6623,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv-environment-ops"
+name = "uv-environment-operations"
 version = "0.0.90"
 dependencies = [
  "anyhow",
@@ -6650,7 +6650,7 @@ dependencies = [
  "uv-errors",
  "uv-fs",
  "uv-git",
- "uv-install-ops",
+ "uv-install-operations",
  "uv-installer",
  "uv-lock",
  "uv-normalize",
@@ -6663,7 +6663,7 @@ dependencies = [
  "uv-python-context",
  "uv-redacted",
  "uv-requirements",
- "uv-resolve-ops",
+ "uv-resolve-operations",
  "uv-resolver",
  "uv-scripts",
  "uv-settings",
@@ -6831,7 +6831,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv-install-ops"
+name = "uv-install-operations"
 version = "0.0.90"
 dependencies = [
  "anyhow",
@@ -7178,7 +7178,7 @@ dependencies = [
  "uv-errors",
  "uv-fs",
  "uv-git",
- "uv-install-ops",
+ "uv-install-operations",
  "uv-install-wheel",
  "uv-installer",
  "uv-lock",
@@ -7190,7 +7190,7 @@ dependencies = [
  "uv-python",
  "uv-python-context",
  "uv-requirements",
- "uv-resolve-ops",
+ "uv-resolve-operations",
  "uv-resolver",
  "uv-settings",
  "uv-static",
@@ -7278,7 +7278,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-audit",
- "uv-audit-ops",
+ "uv-audit-operations",
  "uv-auth",
  "uv-bin-install",
  "uv-cache",
@@ -7291,12 +7291,12 @@ dependencies = [
  "uv-dispatch",
  "uv-distribution",
  "uv-distribution-types",
- "uv-environment-ops",
+ "uv-environment-operations",
  "uv-errors",
  "uv-fs",
  "uv-git",
  "uv-git-types",
- "uv-install-ops",
+ "uv-install-operations",
  "uv-install-wheel",
  "uv-installer",
  "uv-lock",
@@ -7309,7 +7309,7 @@ dependencies = [
  "uv-python-context",
  "uv-redacted",
  "uv-requirements",
- "uv-resolve-ops",
+ "uv-resolve-operations",
  "uv-resolver",
  "uv-scripts",
  "uv-settings",
@@ -7611,7 +7611,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv-resolve-ops"
+name = "uv-resolve-operations"
 version = "0.0.90"
 dependencies = [
  "anyhow",
@@ -7940,7 +7940,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uv-audit",
- "uv-audit-ops",
+ "uv-audit-operations",
  "uv-cache",
  "uv-cache-info",
  "uv-cache-key",
@@ -7953,11 +7953,11 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
- "uv-environment-ops",
+ "uv-environment-operations",
  "uv-errors",
  "uv-fs",
  "uv-git",
- "uv-install-ops",
+ "uv-install-operations",
  "uv-installer",
  "uv-lock",
  "uv-normalize",
@@ -7969,7 +7969,7 @@ dependencies = [
  "uv-python-context",
  "uv-redacted",
  "uv-requirements",
- "uv-resolve-ops",
+ "uv-resolve-operations",
  "uv-resolver",
  "uv-settings",
  "uv-shell",

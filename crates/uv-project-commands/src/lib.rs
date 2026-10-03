@@ -8,17 +8,17 @@ pub use uv_command_support::{
 };
 
 mod pip {
-    pub(crate) use uv_resolve_ops::{latest, resolution_markers, resolution_tags};
+    pub(crate) use uv_resolve_operations::{latest, resolution_markers, resolution_tags};
     pub(crate) mod operations {
-        pub(crate) use uv_environment_ops::OperationsError as Error;
-        pub(crate) use uv_install_ops::{
+        pub(crate) use uv_environment_operations::OperationsError as Error;
+        pub(crate) use uv_install_operations::{
             BytecodeCompilation, Changelog, InstallationPlan, Modifications,
         };
-        pub(crate) use uv_resolve_ops::{diagnose_resolution, resolve};
+        pub(crate) use uv_resolve_operations::{diagnose_resolution, resolve};
     }
     pub(crate) mod loggers {
-        pub(crate) use uv_install_ops::loggers::*;
-        pub(crate) use uv_resolve_ops::loggers::*;
+        pub(crate) use uv_install_operations::loggers::*;
+        pub(crate) use uv_resolve_operations::loggers::*;
     }
 }
 mod reporters;

@@ -57,11 +57,11 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, OutputWriter, UvError};
 use uv_python_context::PythonDownloadReporter;
-use uv_resolve_ops::locked_requirements::{
+use uv_resolve_operations::locked_requirements::{
     LockedRequirements, read_pylock_toml_requirements, read_requirements_txt,
 };
-use uv_resolve_ops::loggers::DefaultResolveLogger;
-use uv_resolve_ops::{resolution_markers, resolution_tags};
+use uv_resolve_operations::loggers::DefaultResolveLogger;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -260,7 +260,7 @@ pub async fn pip_compile(
 
     // Read build constraints.
     let build_constraints = Constraints::from_specifications(
-        uv_resolve_ops::read_constraints(build_constraints, &client_builder)
+        uv_resolve_operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
             .chain(build_constraints_from_workspace),
@@ -571,7 +571,7 @@ pub async fn pip_compile(
         .build();
 
     // Resolve the requirements.
-    let mut resolution = match uv_resolve_ops::resolve(
+    let mut resolution = match uv_resolve_operations::resolve(
         requirements,
         constraints,
         overrides,
@@ -806,7 +806,7 @@ pub async fn pip_compile(
     writer.commit().await?;
 
     // Notify the user of any resolution diagnostics.
-    uv_resolve_ops::diagnose_resolution(resolution.diagnostics(), printer)?;
+    uv_resolve_operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     Ok(ExitStatus::Success)
 }

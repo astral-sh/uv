@@ -4,8 +4,8 @@ use serde::Serialize;
 use uv_cli::PipInstallFormat;
 use uv_command_support::Printer;
 use uv_configuration::DryRun;
-use uv_install_ops::Changelog;
-use uv_install_ops::report::{PackageChangesReport, SchemaReport};
+use uv_install_operations::Changelog;
+use uv_install_operations::report::{PackageChangesReport, SchemaReport};
 
 /// Write the package changes as JSON when requested.
 pub(crate) fn write_install_report(

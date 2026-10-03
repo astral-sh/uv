@@ -1,1 +1,1 @@
-pub use uv_environment_ops::environment::*;
+pub use uv_environment_operations::environment::*;

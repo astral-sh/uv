@@ -7,9 +7,9 @@ use crate::{
     resolve_environment, sync_environment,
 };
 use uv_command_support::Printer;
-use uv_install_ops::Modifications;
-use uv_install_ops::loggers::InstallLogger;
-use uv_resolve_ops::loggers::ResolveLogger;
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::InstallLogger;
+use uv_resolve_operations::loggers::ResolveLogger;
 use uv_settings::ResolverInstallerSettings;
 
 use uv_cache::{Cache, CacheBucket};

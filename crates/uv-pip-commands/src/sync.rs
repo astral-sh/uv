@@ -47,12 +47,12 @@ use crate::install_report::write_install_report;
 use crate::pylock::{read_pylock_toml, resolve_pylock_toml};
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, UvError};
-use uv_install_ops::loggers::DefaultInstallLogger;
-use uv_install_ops::{Changelog, Modifications};
-use uv_install_ops::{report_interpreter, report_target_environment};
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_install_operations::{Changelog, Modifications};
+use uv_install_operations::{report_interpreter, report_target_environment};
 use uv_python_context::PythonDownloadReporter;
-use uv_resolve_ops::loggers::DefaultResolveLogger;
-use uv_resolve_ops::{resolution_markers, resolution_tags};
+use uv_resolve_operations::loggers::DefaultResolveLogger;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// Install a set of locked requirements into the current Python environment.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -134,7 +134,7 @@ pub async fn pip_sync(
         no_binary,
         no_build,
         extras: _,
-    } = uv_resolve_ops::read_requirements(
+    } = uv_resolve_operations::read_requirements(
         requirements,
         constraints,
         overrides,
@@ -158,7 +158,7 @@ pub async fn pip_sync(
 
     // Read build constraints.
     let build_constraints = Constraints::from_specifications(
-        uv_resolve_ops::read_constraints(build_constraints, &client_builder).await?,
+        uv_resolve_operations::read_constraints(build_constraints, &client_builder).await?,
     );
 
     // Validate that the requirements are non-empty.
@@ -446,7 +446,7 @@ pub async fn pip_sync(
             .build_options(build_options.clone())
             .build();
 
-        let (resolution, hasher) = match uv_resolve_ops::resolve(
+        let (resolution, hasher) = match uv_resolve_operations::resolve(
             requirements,
             constraints,
             overrides,
@@ -519,7 +519,7 @@ pub async fn pip_sync(
     );
 
     // Sync the environment.
-    let changelog = match uv_install_ops::install(
+    let changelog = match uv_install_operations::install(
         &resolution,
         site_packages,
         InstallationStrategy::Permissive,
@@ -527,7 +527,7 @@ pub async fn pip_sync(
         &reinstall,
         &build_options,
         link_mode,
-        compile.then_some(uv_install_ops::BytecodeCompilation::All),
+        compile.then_some(uv_install_operations::BytecodeCompilation::All),
         &hasher,
         &tags,
         &client,
@@ -545,7 +545,7 @@ pub async fn pip_sync(
     .await
     {
         Ok(changelog) => changelog,
-        Err(uv_install_ops::Error::OutdatedEnvironment(changelog)) => {
+        Err(uv_install_operations::Error::OutdatedEnvironment(changelog)) => {
             write_install_report(&changelog, dry_run, output_format, printer)?;
             return Ok(ExitStatus::Failure);
         }
@@ -555,11 +555,11 @@ pub async fn pip_sync(
     };
 
     // Notify the user of any resolution diagnostics.
-    uv_resolve_ops::diagnose_resolution(resolution.diagnostics(), printer)?;
+    uv_resolve_operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
-        uv_install_ops::diagnose_environment(
+        uv_install_operations::diagnose_environment(
             resolution.distributions().map(Name::name),
             &environment,
             &marker_env,

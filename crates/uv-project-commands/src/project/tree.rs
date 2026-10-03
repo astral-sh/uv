@@ -183,7 +183,7 @@ pub async fn tree(
                 } else {
                     root
                 };
-                let project_python = uv_environment_ops::from_lockfile(
+                let project_python = uv_environment_operations::from_lockfile(
                     python.as_deref().map(PythonRequest::parse),
                     InstallTarget::Lockfile {
                         root,

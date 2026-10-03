@@ -15,8 +15,8 @@ use uv_python::{
 
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, elapsed};
-use uv_install_ops::report_target_environment;
-use uv_resolve_ops::{resolution_markers, resolution_tags};
+use uv_install_operations::report_target_environment;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// Check for incompatibilities in installed packages.
 pub fn pip_check(

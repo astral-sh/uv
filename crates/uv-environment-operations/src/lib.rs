@@ -61,20 +61,20 @@ use crate::install_target::{InstallTarget, PackageSelection};
 use crate::locked_requirements::{LockedRequirements, read_lock_requirements};
 use uv_command_support::Printer;
 use uv_command_support::{UvError, capitalize, conjunction};
-use uv_install_ops::loggers::InstallLogger;
-use uv_install_ops::{Changelog, Modifications};
+use uv_install_operations::loggers::InstallLogger;
+use uv_install_operations::{Changelog, Modifications};
 use uv_python_context::PythonDownloadReporter;
 use uv_python_context::{CompatibleProjectPython, format_requires_python_sources};
 pub use uv_python_context::{ProjectPythonRequest, PythonRequestSource, find_requires_python};
-use uv_resolve_ops::loggers::ResolveLogger;
-use uv_resolve_ops::reporters::ResolverReporter;
+use uv_resolve_operations::loggers::ResolveLogger;
+use uv_resolve_operations::reporters::ResolverReporter;
 use uv_settings::{
     FrozenSource, InstallerSettingsRef, LockedSource, ResolverInstallerSettings, ResolverSettings,
 };
 
 pub mod environment;
 pub mod install_target;
-pub use uv_resolve_ops::locked_requirements;
+pub use uv_resolve_operations::locked_requirements;
 pub mod malware;
 mod operations_error;
 mod python;
@@ -361,14 +361,14 @@ impl From<uv_distribution::LoweringError> for ProjectError {
     }
 }
 
-impl From<uv_resolve_ops::Error> for ProjectError {
-    fn from(error: uv_resolve_ops::Error) -> Self {
+impl From<uv_resolve_operations::Error> for ProjectError {
+    fn from(error: uv_resolve_operations::Error) -> Self {
         Self::from(OperationsError::from(error))
     }
 }
 
-impl From<uv_install_ops::Error> for ProjectError {
-    fn from(error: uv_install_ops::Error) -> Self {
+impl From<uv_install_operations::Error> for ProjectError {
+    fn from(error: uv_install_operations::Error) -> Self {
         Self::from(OperationsError::from(error))
     }
 }
@@ -1961,9 +1961,9 @@ pub async fn resolve_environment(
     // Determine the tags and marker environment to use for resolution.
     let (tags, resolver_environment) = match resolution_scope {
         EnvironmentResolution::Specific => {
-            let tags = uv_resolve_ops::resolution_tags(None, python_platform, interpreter)?;
+            let tags = uv_resolve_operations::resolution_tags(None, python_platform, interpreter)?;
             let marker_environment =
-                uv_resolve_ops::resolution_markers(None, python_platform, interpreter);
+                uv_resolve_operations::resolution_markers(None, python_platform, interpreter);
             (
                 Some(tags),
                 ResolverEnvironment::specific(marker_environment),
@@ -2109,7 +2109,7 @@ pub async fn resolve_environment(
     );
 
     // Resolve the requirements.
-    Ok(uv_resolve_ops::resolve(
+    Ok(uv_resolve_operations::resolve(
         requirements,
         constraints,
         overrides,
@@ -2250,7 +2250,7 @@ pub async fn sync_environment(
     );
 
     // Sync the environment.
-    uv_install_ops::install(
+    uv_install_operations::install(
         resolution,
         site_packages,
         InstallationStrategy::Permissive,
@@ -2258,7 +2258,7 @@ pub async fn sync_environment(
         reinstall,
         build_options,
         link_mode,
-        compile_bytecode.then_some(uv_install_ops::BytecodeCompilation::All),
+        compile_bytecode.then_some(uv_install_operations::BytecodeCompilation::All),
         &hasher,
         tags,
         &client,
@@ -2276,7 +2276,7 @@ pub async fn sync_environment(
     .await?;
 
     // Notify the user of any resolution diagnostics.
-    uv_resolve_ops::diagnose_resolution(resolution.diagnostics(), printer)?;
+    uv_resolve_operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     Ok(venv)
 }
@@ -2365,8 +2365,8 @@ pub async fn update_environment(
 
     // Determine markers and tags to use for resolution.
     let interpreter = venv.interpreter();
-    let marker_env = uv_resolve_ops::resolution_markers(None, python_platform, interpreter);
-    let tags = uv_resolve_ops::resolution_tags(None, python_platform, interpreter)?;
+    let marker_env = uv_resolve_operations::resolution_markers(None, python_platform, interpreter);
+    let tags = uv_resolve_operations::resolution_tags(None, python_platform, interpreter)?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -2507,7 +2507,7 @@ pub async fn update_environment(
     );
 
     // Resolve the requirements.
-    let (resolution, hasher) = match uv_resolve_ops::resolve(
+    let (resolution, hasher) = match uv_resolve_operations::resolve(
         requirements,
         constraints,
         overrides,
@@ -2544,7 +2544,7 @@ pub async fn update_environment(
         Err(err) => return Err(err.into()),
     };
     // Sync the environment.
-    let changelog = uv_install_ops::install(
+    let changelog = uv_install_operations::install(
         &resolution,
         site_packages,
         InstallationStrategy::Permissive,
@@ -2552,7 +2552,7 @@ pub async fn update_environment(
         reinstall,
         build_options,
         *link_mode,
-        (*compile_bytecode).then_some(uv_install_ops::BytecodeCompilation::All),
+        (*compile_bytecode).then_some(uv_install_operations::BytecodeCompilation::All),
         &hasher,
         &tags,
         &client,
@@ -2570,7 +2570,7 @@ pub async fn update_environment(
     .await?;
 
     // Notify the user of any resolution diagnostics.
-    uv_resolve_ops::diagnose_resolution(resolution.diagnostics(), printer)?;
+    uv_resolve_operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     Ok(EnvironmentUpdate {
         environment: venv,

@@ -21,8 +21,8 @@ use uv_warnings::warn_user;
 
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
-use uv_resolve_ops::latest::LatestClient;
-use uv_resolve_ops::reporters::LatestVersionReporter;
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::reporters::LatestVersionReporter;
 use uv_settings::ResolverInstallerSettings;
 
 /// List installed tools.
