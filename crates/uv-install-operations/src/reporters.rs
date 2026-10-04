@@ -32,7 +32,7 @@ impl From<Printer> for PrepareReporter {
 
 impl PrepareReporter {
     #[must_use]
-    pub fn with_length(self, length: u64) -> Self {
+    pub(super) fn with_length(self, length: u64) -> Self {
         self.reporter.root.set_length(length);
         self
     }
@@ -97,7 +97,7 @@ impl From<Printer> for InstallReporter {
 
 impl InstallReporter {
     #[must_use]
-    pub fn with_length(self, length: u64) -> Self {
+    pub(super) fn with_length(self, length: u64) -> Self {
         self.progress.set_length(length);
         self
     }

@@ -20,7 +20,7 @@ struct ReportBody {
 }
 
 impl Report {
-    pub fn from_findings(
+    pub(super) fn from_findings(
         n_packages: usize,
         vulnerabilities: &[&uv_audit::Vulnerability],
         statuses: &[&uv_audit::ProjectStatus],

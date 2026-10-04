@@ -85,7 +85,7 @@ pub use validated_lock::ValidatedLock;
 
 /// Vulnerability identifiers grouped by dependency.
 #[derive(Debug)]
-pub struct MalwareFindings(pub Vec<(Dependency, Vec<VulnerabilityID>)>);
+pub struct MalwareFindings(Vec<(Dependency, Vec<VulnerabilityID>)>);
 
 impl std::fmt::Display for MalwareFindings {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -621,7 +621,7 @@ impl<'a> From<&'a Workspace> for ProjectEnvironmentTarget<'a> {
 
 impl<'a> ProjectEnvironmentTarget<'a> {
     /// Return the directory where the environment is installed.
-    pub fn install_path(self) -> &'a Path {
+    fn install_path(self) -> &'a Path {
         match self {
             Self::Workspace(workspace) => workspace.install_path(),
             Self::Lockfile { root, .. } => root,
@@ -629,7 +629,7 @@ impl<'a> ProjectEnvironmentTarget<'a> {
     }
 
     /// Return the project associated with this environment, if any.
-    pub fn project_name(self) -> Option<&'a PackageName> {
+    fn project_name(self) -> Option<&'a PackageName> {
         match self {
             Self::Workspace(workspace) => workspace
                 .pyproject_toml()
@@ -641,7 +641,7 @@ impl<'a> ProjectEnvironmentTarget<'a> {
     }
 
     /// Return the discovered workspace, if this target has one.
-    pub fn workspace(self) -> Option<&'a Workspace> {
+    fn workspace(self) -> Option<&'a Workspace> {
         match self {
             Self::Workspace(workspace) => Some(workspace),
             Self::Lockfile { .. } => None,
@@ -1528,9 +1528,9 @@ pub enum PreferenceLocation<'lock> {
 #[derive(Debug, Clone)]
 pub struct EnvironmentSpecification<'lock> {
     /// The requirements to include in the environment.
-    pub requirements: RequirementsSpecification,
+    requirements: RequirementsSpecification,
     /// The preferences to respect when resolving.
-    pub preferences: Option<PreferenceLocation<'lock>>,
+    preferences: Option<PreferenceLocation<'lock>>,
 }
 
 impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {

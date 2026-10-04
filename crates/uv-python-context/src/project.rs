@@ -388,7 +388,7 @@ pub enum PythonRequirementSource {
 /// Returns an error if the [`Interpreter`] does not satisfy `requires_python`.
 ///
 /// The requirement source determines which conflicting declarations are included in the diagnostic.
-pub fn validate_python_requirement(
+pub(super) fn validate_python_requirement(
     interpreter: &Interpreter,
     requires_python: &RequiresPython,
     source: &PythonRequestSource,

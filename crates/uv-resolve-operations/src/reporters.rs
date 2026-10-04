@@ -16,7 +16,7 @@ pub struct ResolverReporter {
 
 impl ResolverReporter {
     #[must_use]
-    pub fn with_length(self, length: u64) -> Self {
+    pub(super) fn with_length(self, length: u64) -> Self {
         self.reporter.root.set_length(length);
         self
     }

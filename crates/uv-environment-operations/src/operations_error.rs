@@ -15,7 +15,7 @@ pub enum OperationsError {
 impl OperationsError {
     /// Add the default heading when this operation is the final command error.
     #[must_use]
-    pub fn with_default_resolution_context(self) -> Self {
+    fn with_default_resolution_context(self) -> Self {
         match self {
             Self::Resolve(error) => Self::Resolve(error.with_default_resolution_context()),
             error @ Self::Install(_) => error,
@@ -48,7 +48,7 @@ impl OperationsError {
     }
 
     /// Return whether this operation failure is an expected user-facing failure.
-    pub fn is_user_failure(&self) -> bool {
+    fn is_user_failure(&self) -> bool {
         match self {
             Self::Resolve(error) => error.is_user_failure(),
             Self::Install(error) => error.is_user_failure(),

@@ -24,7 +24,7 @@ pub struct Report {
 }
 
 impl Report {
-    pub fn from_findings(
+    pub(super) fn from_findings(
         vulnerabilities: &[&Vulnerability],
         statuses: &[&ProjectStatus],
         artifact_uri: &str,

@@ -22,13 +22,14 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::Workspace;
 
+use crate::project::validate_python_requirement;
 use crate::{
     PythonContextError, PythonDownloadReporter, PythonRequestSource, PythonRequirementSource,
-    find_requires_python, validate_python_requirement,
+    find_requires_python,
 };
 
 /// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
-pub fn validate_script_requires_python(
+fn validate_script_requires_python(
     interpreter: &Interpreter,
     requires_python: &RequiresPython,
     source: &PythonRequestSource,

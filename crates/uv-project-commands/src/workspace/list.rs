@@ -116,7 +116,7 @@ pub enum ScriptDiscoveryError {
 /// Respects ignore files and excludes repository internals, virtual environments, and the uv cache
 /// from traversal. Script-specific errors are returned individually so callers can decide whether
 /// invalid candidates should fail discovery.
-pub fn find_scripts(
+pub(crate) fn find_scripts(
     workspace_root: &Path,
     cache: &Cache,
 ) -> impl Iterator<Item = Result<PathBuf, ScriptDiscoveryError>> {

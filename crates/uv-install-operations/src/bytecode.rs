@@ -15,7 +15,7 @@ use uv_python::PythonEnvironment;
 /// initial run of any subsequent executions.
 ///
 /// See the `--compile` option on `pip sync` and `pip install`.
-pub async fn compile_bytecode(
+pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
     concurrency: &Concurrency,
     cache: &Cache,
@@ -51,7 +51,7 @@ pub async fn compile_bytecode(
 }
 
 /// Compile the given Python source files to bytecode.
-pub async fn compile_bytecode_files(
+pub(super) async fn compile_bytecode_files(
     files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
     venv: &PythonEnvironment,
     concurrency: &Concurrency,

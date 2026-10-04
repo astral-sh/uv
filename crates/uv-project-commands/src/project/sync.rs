@@ -647,7 +647,7 @@ fn identify_installation_target<'a>(
 }
 
 /// Identify workspace members excluded from installation before a lockfile is available.
-pub fn first_party_exclusions(
+pub(super) fn first_party_exclusions(
     project: &VirtualProject,
     all_packages: bool,
     package: &[PackageName],
@@ -685,7 +685,7 @@ pub fn first_party_exclusions(
 }
 
 /// Select workspace members with the same semantics as `uv sync`.
-pub fn identify_project_installation_target<'a>(
+pub(super) fn identify_project_installation_target<'a>(
     project: &'a VirtualProject,
     lock: &'a Lock,
     all_packages: bool,
@@ -841,7 +841,7 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-pub async fn do_sync<'a>(
+pub(crate) async fn do_sync<'a>(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,

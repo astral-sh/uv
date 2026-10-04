@@ -661,7 +661,7 @@ impl<'lock> InstallTarget<'lock> {
     /// Returns the names of all packages in the workspace that will be installed.
     ///
     /// Note this only includes workspace members.
-    pub fn packages(
+    pub(super) fn packages(
         &self,
         extras: &ExtrasSpecification,
         groups: &DependencyGroupsWithDefaults,

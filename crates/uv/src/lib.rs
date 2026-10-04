@@ -68,7 +68,7 @@ pub(crate) mod printer;
 pub(crate) mod settings;
 
 /// Construct the shared HTTP client builder from the resolved global settings.
-pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
+fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
         globals.network_settings.system_certs,

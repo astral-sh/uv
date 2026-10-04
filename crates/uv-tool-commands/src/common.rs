@@ -141,7 +141,7 @@ pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec
 }
 
 /// Remove any entrypoints attached to the [`Tool`].
-pub fn remove_entrypoints(tool: &Tool) {
+pub(super) fn remove_entrypoints(tool: &Tool) {
     remove_entrypoint_paths(
         tool.entrypoints()
             .iter()
@@ -164,17 +164,17 @@ fn remove_entrypoint_paths<'a>(entrypoints: impl IntoIterator<Item = &'a Path>) 
 
 /// The resolved Python request for a tool invocation.
 #[derive(Debug, Clone)]
-pub struct ToolPython {
+pub(super) struct ToolPython {
     /// The source of the Python request.
     source: PythonRequestSource,
     /// The selected Python request, computed by considering an explicit request, a global
     /// version file, and static `requires-python` metadata from the source requirement.
-    pub python_request: Option<PythonRequest>,
+    pub(super) python_request: Option<PythonRequest>,
 }
 
 impl ToolPython {
     /// Determine the [`ToolPython`] request for a tool invocation.
-    pub async fn from_request(
+    pub(super) async fn from_request(
         python_request: Option<PythonRequest>,
         requirement: Option<&UnresolvedRequirement>,
         config_discovery: ConfigDiscovery,
@@ -243,7 +243,7 @@ impl ToolPython {
     }
 
     /// Returns `true` if the selected request was explicitly provided by the user.
-    pub fn is_explicit(&self) -> bool {
+    pub(super) fn is_explicit(&self) -> bool {
         matches!(self.source, PythonRequestSource::UserRequest)
     }
 }
@@ -279,13 +279,13 @@ async fn infer_requires_python_from_requirement(
 }
 
 /// A universal lock for a tool environment.
-pub struct ToolLock {
+pub(super) struct ToolLock {
     root: PathBuf,
     lock: Lock,
 }
 
 /// A tool lock validated against the current resolution inputs.
-pub struct ValidatedToolLock {
+pub(super) struct ValidatedToolLock {
     lock: ToolLock,
     satisfied: bool,
     usable: bool,
@@ -293,24 +293,24 @@ pub struct ValidatedToolLock {
 
 impl ValidatedToolLock {
     /// Return whether the existing lock satisfies the current resolution inputs.
-    pub fn is_satisfied(&self) -> bool {
+    pub(super) fn is_satisfied(&self) -> bool {
         self.satisfied
     }
 
     /// Return the lock as a resolver preference if its versions remain usable.
-    pub fn preference(&self) -> Option<&ToolLock> {
+    pub(super) fn preference(&self) -> Option<&ToolLock> {
         self.usable.then_some(&self.lock)
     }
 
     /// Return the validated lock.
-    pub fn into_lock(self) -> ToolLock {
+    pub(super) fn into_lock(self) -> ToolLock {
         self.lock
     }
 }
 
 impl ToolLock {
     /// Build the lock manifest for a tool environment.
-    pub fn manifest(
+    pub(super) fn manifest(
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
@@ -331,7 +331,7 @@ impl ToolLock {
     }
 
     /// Build the lock for a tool environment.
-    pub fn from_resolution(
+    pub(super) fn from_resolution(
         root: &Path,
         resolution: &ResolverOutput,
         manifest: &ResolverManifest,
@@ -353,7 +353,7 @@ impl ToolLock {
     }
 
     /// Read the lock for a tool, if one has been generated.
-    pub fn read(directory: &Path) -> Option<Self> {
+    pub(super) fn read(directory: &Path) -> Option<Self> {
         let path = directory.join("uv.lock");
         match fs_err::read_to_string(&path) {
             Ok(contents) => match Lock::from_toml(&contents) {
@@ -381,7 +381,7 @@ impl ToolLock {
     }
 
     /// Write or remove the lock for a tool.
-    pub fn write(directory: &Path, lock: Option<&Self>) -> anyhow::Result<()> {
+    pub(super) fn write(directory: &Path, lock: Option<&Self>) -> anyhow::Result<()> {
         let path = directory.join("uv.lock");
         if let Some(lock) = lock {
             uv_fs::write_atomic_sync(&path, lock.lock.to_toml()?)?;
@@ -397,7 +397,7 @@ impl ToolLock {
 
     /// Validate the lock against the current resolution inputs.
     #[expect(clippy::too_many_arguments)]
-    pub async fn validate(
+    pub(super) async fn validate(
         self,
         requirements: &[Requirement],
         constraints: &[Requirement],
@@ -565,7 +565,7 @@ impl ToolLock {
     }
 
     /// Project the universal lock into a specific environment.
-    pub fn to_resolution(
+    pub(super) fn to_resolution(
         &self,
         project_name: Option<&PackageName>,
         interpreter: &Interpreter,
@@ -614,7 +614,7 @@ impl ToolLock {
 
 /// Build an environment specification for a tool, preferring versions from its existing lock when
 /// available, then falling back to the installed environment.
-pub fn tool_environment_spec<'lock>(
+pub(super) fn tool_environment_spec<'lock>(
     requirements: RequirementsSpecification,
     lock: Option<&'lock ToolLock>,
     site_packages: Option<&SitePackages>,
@@ -639,7 +639,7 @@ pub fn tool_environment_spec<'lock>(
 }
 /// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
 /// discover an alternate [`Interpreter`] that satisfies the `requires-python` constraint.
-pub async fn refine_interpreter(
+pub(super) async fn refine_interpreter(
     interpreter: &Interpreter,
     python_request: Option<&PythonRequest>,
     err: &OperationsError,
@@ -735,7 +735,7 @@ pub async fn refine_interpreter(
 /// Installs tool executables for a given package, handling any conflicts.
 ///
 /// Adds a receipt for the tool.
-pub fn finalize_tool_install(
+pub(super) fn finalize_tool_install(
     environment: &PythonEnvironment,
     name: &PackageName,
     entrypoints: &[PackageName],

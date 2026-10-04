@@ -69,14 +69,14 @@ pub enum LockResult {
 }
 
 impl LockResult {
-    pub fn lock(&self) -> &Lock {
+    pub(super) fn lock(&self) -> &Lock {
         match self {
             Self::Unchanged(lock) => lock,
             Self::Changed(_, lock) => lock,
         }
     }
 
-    pub fn into_lock(self) -> Lock {
+    pub(crate) fn into_lock(self) -> Lock {
         match self {
             Self::Unchanged(lock) => lock,
             Self::Changed(_, lock) => lock,
@@ -290,7 +290,7 @@ pub enum LockMode<'env> {
 }
 
 /// A lock operation.
-pub struct LockOperation<'env> {
+pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
     first_party_exclusions: BTreeSet<PackageName>,
@@ -309,7 +309,7 @@ pub struct LockOperation<'env> {
 
 impl<'env> LockOperation<'env> {
     /// Initialize a [`LockOperation`].
-    pub fn new(
+    pub(crate) fn new(
         mode: LockMode<'env>,
         settings: &'env ResolverSettings,
         client_builder: &'env BaseClientBuilder<'env>,
@@ -341,21 +341,24 @@ impl<'env> LockOperation<'env> {
 
     /// Set the external constraints for the [`LockOperation`].
     #[must_use]
-    pub fn with_constraints(mut self, constraints: Vec<NameRequirementSpecification>) -> Self {
+    pub(super) fn with_constraints(
+        mut self,
+        constraints: Vec<NameRequirementSpecification>,
+    ) -> Self {
         self.constraints = constraints;
         self
     }
 
     /// Exclude workspace packages that will not be installed from the first-party build exemption.
     #[must_use]
-    pub fn with_first_party_exclusions(mut self, exclusions: BTreeSet<PackageName>) -> Self {
+    pub(super) fn with_first_party_exclusions(mut self, exclusions: BTreeSet<PackageName>) -> Self {
         self.first_party_exclusions = exclusions;
         self
     }
 
     /// Set the refresh strategy for the [`LockOperation`].
     #[must_use]
-    pub fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
+    pub(crate) fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
         self.refresh = Some(refresh);
         self
     }
@@ -368,7 +371,7 @@ impl<'env> LockOperation<'env> {
     }
 
     /// Perform a [`LockOperation`].
-    pub async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
+    pub(crate) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
         if !matches!(&self.mode, LockMode::Frozen(_)) {
             target.validate_upgrade_groups(&self.settings.upgrade)?;
         }

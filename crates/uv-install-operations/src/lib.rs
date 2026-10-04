@@ -33,6 +33,7 @@ use uv_python::PythonEnvironment;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::bytecode::{compile_bytecode, compile_bytecode_files};
 use crate::loggers::InstallLogger;
 use crate::reporters::{InstallReporter, PrepareReporter};
 
@@ -45,10 +46,8 @@ pub mod reporters;
 
 pub use error::Error;
 
-pub use bytecode::{compile_bytecode, compile_bytecode_files};
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub(crate) enum ChangeEventKind {
+enum ChangeEventKind {
     /// The package was removed from the environment.
     Removed,
     /// The package was added to the environment.
@@ -58,9 +57,9 @@ pub(crate) enum ChangeEventKind {
 }
 
 #[derive(Debug)]
-pub(crate) struct ChangeEvent<'a> {
-    pub(crate) dist: &'a ChangedDist,
-    pub(crate) kind: ChangeEventKind,
+struct ChangeEvent<'a> {
+    dist: &'a ChangedDist,
+    kind: ChangeEventKind,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -80,7 +79,7 @@ pub enum Modifications {
 
 /// A distribution which was or would be modified
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ChangedDist {
+enum ChangedDist {
     Local(LocalDist),
     Remote(Arc<Dist>),
 }
@@ -96,7 +95,7 @@ impl Name for ChangedDist {
 
 /// The [`Version`] or [`VerbatimUrl`] for a changed dist.
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub enum ShortSpecifier<'a> {
+enum ShortSpecifier<'a> {
     Version(&'a Version),
     Url(&'a VerbatimUrl),
 }
@@ -112,7 +111,7 @@ impl std::fmt::Display for ShortSpecifier<'_> {
 
 /// The [`InstalledVersion`] or [`VerbatimUrl`] for a changed dist.
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub enum LongSpecifier<'a> {
+enum LongSpecifier<'a> {
     InstalledVersion(InstalledVersion<'a>),
     Url(&'a VerbatimUrl),
 }
@@ -127,7 +126,7 @@ impl std::fmt::Display for LongSpecifier<'_> {
 }
 
 impl ChangedDist {
-    pub fn short_specifier(&self) -> ShortSpecifier<'_> {
+    fn short_specifier(&self) -> ShortSpecifier<'_> {
         match self {
             Self::Local(dist) => ShortSpecifier::Version(dist.installed_version().version()),
             Self::Remote(dist) => match dist.version_or_url() {
@@ -137,7 +136,7 @@ impl ChangedDist {
         }
     }
 
-    pub fn long_specifier(&self) -> LongSpecifier<'_> {
+    fn long_specifier(&self) -> LongSpecifier<'_> {
         match self {
             Self::Local(dist) => LongSpecifier::InstalledVersion(dist.installed_version()),
             Self::Remote(dist) => match dist.version_or_url() {
@@ -149,7 +148,7 @@ impl ChangedDist {
         }
     }
 
-    pub fn version(&self) -> Option<&Version> {
+    fn version(&self) -> Option<&Version> {
         match self {
             Self::Local(dist) => Some(dist.installed_version().version()),
             Self::Remote(dist) => dist.version(),
@@ -161,11 +160,11 @@ impl ChangedDist {
 #[derive(Debug, Clone, Default)]
 pub struct Changelog {
     /// The distributions that were installed.
-    pub installed: HashSet<ChangedDist>,
+    installed: HashSet<ChangedDist>,
     /// The distributions that were uninstalled.
-    pub uninstalled: HashSet<ChangedDist>,
+    uninstalled: HashSet<ChangedDist>,
     /// The distributions that were reinstalled.
-    pub reinstalled: HashSet<ChangedDist>,
+    reinstalled: HashSet<ChangedDist>,
 }
 
 impl Changelog {
