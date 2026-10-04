@@ -7,6 +7,7 @@ use uv_configuration::NoSources;
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
 };
+use uv_git_types::GitLfs;
 use uv_normalize::PackageName;
 use uv_workspace::pyproject::{ExtraBuildDependencies, ExtraBuildDependency, ToolUvSources};
 use uv_workspace::{
@@ -25,13 +26,13 @@ pub struct BuildRequires {
 impl BuildRequires {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
+    fn from_metadata23(metadata: uv_pypi_types::BuildRequires, git_lfs: GitLfs) -> Self {
         Self {
             name: metadata.name,
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(Requirement::from)
+                .map(|requirement| Requirement::from(requirement).with_git_lfs(git_lfs))
                 .collect(),
         }
     }
@@ -48,6 +49,7 @@ impl BuildRequires {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
             stop_discovery_at: stop_discovery_at.map(Path::to_path_buf),
@@ -65,7 +67,7 @@ impl BuildRequires {
         )
         .await?
         else {
-            return Ok(Self::from_metadata23(metadata));
+            return Ok(Self::from_metadata23(metadata, git_lfs));
         };
 
         Self::from_project_workspace(
@@ -77,6 +79,7 @@ impl BuildRequires {
             cache,
             workspace_cache,
             credentials_cache,
+            git_lfs,
         )
         .await
     }
@@ -91,6 +94,7 @@ impl BuildRequires {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -127,7 +131,7 @@ impl BuildRequires {
         let mut requires_dist = Vec::new();
         for requirement in metadata.requires_dist {
             if sources.for_package(&requirement.name) {
-                requires_dist.push(Requirement::from(requirement));
+                requires_dist.push(Requirement::from(requirement).with_git_lfs(git_lfs));
                 continue;
             }
 
@@ -146,6 +150,7 @@ impl BuildRequires {
                     project_workspace.workspace(),
                     None,
                     editable,
+                    git_lfs,
                     cache,
                     workspace_cache,
                     credentials_cache,
@@ -177,6 +182,7 @@ impl BuildRequires {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -222,6 +228,7 @@ impl BuildRequires {
                     workspace,
                     None,
                     true,
+                    git_lfs,
                     cache,
                     workspace_cache,
                     credentials_cache,
@@ -267,6 +274,7 @@ impl LoweredExtraBuildDependencies {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Self, MetadataError> {
         match source_strategy {
             NoSources::None => {
@@ -313,6 +321,7 @@ impl LoweredExtraBuildDependencies {
                                 workspace,
                                 None,
                                 true,
+                                git_lfs,
                                 cache,
                                 workspace_cache,
                                 credentials_cache,

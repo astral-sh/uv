@@ -105,6 +105,7 @@ pub(crate) async fn pip_compile(
     cuda_driver_version: Option<Version>,
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
+    git_lfs: uv_git::GitLfs,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
     config_settings: ConfigSettings,
@@ -230,6 +231,7 @@ pub(crate) async fn pip_compile(
         overrides,
         excludes,
         Some(&groups),
+        git_lfs,
         &client_builder,
     )
     .await?;
@@ -260,7 +262,7 @@ pub(crate) async fn pip_compile(
 
     // Read build constraints.
     let build_constraints = Constraints::from_specifications(
-        operations::read_constraints(build_constraints, &client_builder)
+        operations::read_constraints(build_constraints, git_lfs, &client_builder)
             .await?
             .into_iter()
             .chain(build_constraints_from_workspace),
@@ -541,6 +543,7 @@ pub(crate) async fn pip_compile(
         workspace_cache,
         concurrency.clone(),
         preview,
+        git_lfs,
     );
 
     if universal

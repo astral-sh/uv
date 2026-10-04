@@ -312,6 +312,7 @@ fn pip_compile_baseline() {
             dependency_metadata: DependencyMetadata(
                 {},
             ),
+            git_lfs: Disabled,
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -689,6 +690,7 @@ fn pip_install_baseline() {
             dependency_metadata: DependencyMetadata(
                 {},
             ),
+            git_lfs: Disabled,
             output_file: None,
             no_strip_extras: false,
             no_strip_markers: false,
@@ -820,6 +822,7 @@ fn lock_baseline() {
             dependency_metadata: DependencyMetadata(
                 {},
             ),
+            git_lfs: Disabled,
             exclude_newer: ExcludeNewer {
                 global: None,
                 package: ExcludeNewerPackage(
@@ -955,6 +958,7 @@ fn version_baseline() {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
+                git_lfs: Disabled,
                 exclude_newer: ExcludeNewer {
                     global: None,
                     package: ExcludeNewerPackage(
@@ -1131,6 +1135,7 @@ fn tool_install_baseline() {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
+                git_lfs: Disabled,
                 exclude_newer: ExcludeNewer {
                     global: None,
                     package: ExcludeNewerPackage(

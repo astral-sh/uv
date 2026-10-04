@@ -836,7 +836,8 @@ async fn get_or_create_environment(
     .into_interpreter();
 
     let build_constraints = Constraints::from_specifications(
-        operations::read_constraints(build_constraints, client_builder).await?,
+        operations::read_constraints(build_constraints, settings.resolver.git_lfs, client_builder)
+            .await?,
     );
 
     let from = match request {
@@ -1026,6 +1027,7 @@ async fn get_or_create_environment(
         overrides,
         &[],
         None,
+        settings.resolver.git_lfs,
         client_builder,
     )
     .await?;

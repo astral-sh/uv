@@ -59,6 +59,7 @@ pub(crate) async fn collect_module_owners(
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
             dependency_metadata: &settings.dependency_metadata,
+            git_lfs: settings.git_lfs,
             config_setting: &settings.config_setting,
             config_settings_package: &settings.config_settings_package,
             build_isolation: &settings.build_isolation,

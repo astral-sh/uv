@@ -52,6 +52,23 @@ pub struct UnresolvedRequirementSpecification {
     pub hashes: Vec<String>,
 }
 
+impl UnresolvedRequirementSpecification {
+    /// Set the default Git LFS mode for this requirement's Git source.
+    #[must_use]
+    pub fn with_git_lfs(self, lfs: GitLfs) -> Self {
+        Self {
+            requirement: self.requirement.augment_requirement(
+                None,
+                None,
+                None,
+                Some(lfs.enabled()),
+                None,
+            ),
+            hashes: self.hashes,
+        }
+    }
+}
+
 /// A requirement read from a `requirements.txt` or `pyproject.toml` file.
 ///
 /// It is considered unresolved as we still need to query the URL for the `Unnamed` variant to

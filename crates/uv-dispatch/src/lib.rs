@@ -28,7 +28,7 @@ use uv_distribution_types::{
     Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
-use uv_git::GitResolver;
+use uv_git::{GitLfs, GitResolver};
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
@@ -148,6 +148,7 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
+    git_lfs: GitLfs,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -175,6 +176,7 @@ impl<'a> BuildDispatch<'a> {
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: Preview,
+        git_lfs: GitLfs,
     ) -> Self {
         Self {
             client,
@@ -202,6 +204,7 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+            git_lfs,
         }
     }
 
@@ -254,6 +257,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn git(&self) -> &GitResolver {
         &self.shared_state.git
+    }
+
+    fn git_lfs(&self) -> GitLfs {
+        self.git_lfs
     }
 
     fn build_arena(&self) -> &BuildArena<SourceBuild> {

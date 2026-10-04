@@ -153,8 +153,12 @@ pub(crate) async fn install(
     .await?
     .into_interpreter();
 
-    let receipt_build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+    let receipt_build_constraints = operations::read_constraints(
+        build_constraints,
+        settings.resolver.git_lfs,
+        &client_builder,
+    )
+    .await?;
     let build_constraints =
         Constraints::from_specifications(receipt_build_constraints.iter().cloned());
 
@@ -375,6 +379,7 @@ pub(crate) async fn install(
         overrides,
         excludes,
         None,
+        settings.resolver.git_lfs,
         &client_builder,
     )
     .await?;

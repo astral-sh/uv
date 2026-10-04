@@ -2208,6 +2208,7 @@ pub(crate) async fn resolve_names(
                 config_setting,
                 config_settings_package,
                 dependency_metadata,
+                git_lfs,
                 exclude_newer,
                 fork_strategy: _,
                 index_locations,
@@ -2311,6 +2312,7 @@ pub(crate) async fn resolve_names(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+        *git_lfs,
     );
 
     // Resolve the unnamed requirements.
@@ -2405,6 +2407,7 @@ pub(crate) async fn resolve_environment(
         prerelease,
         fork_strategy,
         dependency_metadata,
+        git_lfs,
         config_setting,
         config_settings_package,
         build_isolation,
@@ -2581,6 +2584,7 @@ pub(crate) async fn resolve_environment(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+        *git_lfs,
     );
 
     // Resolve the requirements.
@@ -2641,6 +2645,7 @@ pub(crate) async fn sync_environment(
         index_strategy,
         keyring_provider,
         dependency_metadata,
+        git_lfs: _,
         config_setting,
         config_settings_package,
         build_isolation,
@@ -2722,6 +2727,7 @@ pub(crate) async fn sync_environment(
         workspace_cache,
         concurrency.clone(),
         preview,
+        settings.git_lfs,
     );
 
     // Sync the environment.
@@ -2803,6 +2809,7 @@ pub(crate) async fn update_environment(
                 config_setting,
                 config_settings_package,
                 dependency_metadata,
+                git_lfs,
                 exclude_newer,
                 fork_strategy,
                 index_locations,
@@ -2979,6 +2986,7 @@ pub(crate) async fn update_environment(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+        *git_lfs,
     );
 
     // Resolve the requirements.
@@ -3180,6 +3188,7 @@ pub(crate) async fn script_specification(
                 script_sources.as_ref(),
                 &script_indexes,
                 &settings.index_locations,
+                settings.git_lfs,
                 cache,
                 workspace_cache,
                 credentials_cache,
@@ -3207,6 +3216,7 @@ pub(crate) async fn script_specification(
                 script_sources.as_ref(),
                 &script_indexes,
                 &settings.index_locations,
+                settings.git_lfs,
                 cache,
                 workspace_cache,
                 credentials_cache,
@@ -3237,6 +3247,7 @@ pub(crate) async fn script_specification(
                             script_sources.as_ref(),
                             &script_indexes,
                             &settings.index_locations,
+                            settings.git_lfs,
                             cache,
                             workspace_cache,
                             credentials_cache,
@@ -3257,6 +3268,7 @@ pub(crate) async fn script_specification(
                                 script_sources.as_ref(),
                                 &script_indexes,
                                 &settings.index_locations,
+                                settings.git_lfs,
                                 cache,
                                 workspace_cache,
                                 credentials_cache,
@@ -3336,6 +3348,7 @@ pub(crate) async fn script_extra_build_requires(
                     script_sources.as_ref(),
                     &script_indexes,
                     &settings.index_locations,
+                    settings.git_lfs,
                     cache,
                     workspace_cache,
                     credentials_cache,

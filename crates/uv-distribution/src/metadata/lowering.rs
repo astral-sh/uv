@@ -53,6 +53,7 @@ impl LoweredRequirement {
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
         editable: bool,
+        git_lfs: GitLfs,
         cache: &'data Cache,
         workspace_cache: &'data WorkspaceCache,
         credentials_cache: &'data CredentialsCache,
@@ -156,6 +157,7 @@ impl LoweredRequirement {
             return Either::Left(std::iter::once(Self::preserve_git_source(
                 requirement,
                 git_member,
+                git_lfs,
             )));
         };
 
@@ -202,6 +204,7 @@ impl LoweredRequirement {
                                 tag,
                                 branch,
                                 lfs,
+                                git_lfs,
                             )?;
                             (source, marker)
                         }
@@ -332,6 +335,7 @@ impl LoweredRequirement {
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
         locations: &'data IndexLocations,
+        git_lfs: GitLfs,
         cache: &'data Cache,
         workspace_cache: &'data WorkspaceCache,
         credentials_cache: &'data CredentialsCache,
@@ -399,6 +403,7 @@ impl LoweredRequirement {
                                 tag,
                                 branch,
                                 lfs,
+                                git_lfs,
                             )?;
                             (source, marker)
                         }
@@ -510,25 +515,26 @@ impl LoweredRequirement {
     pub(crate) fn preserve_git_source(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         git_member: Option<&GitWorkspaceMember>,
+        git_lfs: GitLfs,
     ) -> Result<Self, LoweringError> {
         let Some(git_member) = git_member else {
-            return Ok(Self(Requirement::from(requirement)));
+            return Ok(Self(Requirement::from(requirement).with_git_lfs(git_lfs)));
         };
 
         let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
-            return Ok(Self(Requirement::from(requirement)));
+            return Ok(Self(Requirement::from(requirement).with_git_lfs(git_lfs)));
         };
 
         let (install_path, is_archive) = match &url.parsed_url {
             ParsedUrl::Directory(directory) => (directory.install_path.as_ref(), false),
             ParsedUrl::Path(path) => (path.install_path.as_ref(), true),
-            _ => return Ok(Self(Requirement::from(requirement))),
+            _ => return Ok(Self(Requirement::from(requirement).with_git_lfs(git_lfs))),
         };
 
         let install_path = git_path(install_path)?;
         let fetch_root = git_path(git_member.fetch_root)?;
         if !install_path.starts_with(&fetch_root) {
-            return Ok(Self(Requirement::from(requirement)));
+            return Ok(Self(Requirement::from(requirement).with_git_lfs(git_lfs)));
         }
 
         Ok(Self(Requirement {
@@ -684,6 +690,7 @@ fn git_source(
     tag: Option<String>,
     branch: Option<String>,
     lfs: Option<bool>,
+    default_lfs: GitLfs,
 ) -> Result<RequirementSource, LoweringError> {
     let reference = match (rev, tag, branch) {
         (None, None, None) => GitReference::DefaultBranch,
@@ -706,10 +713,9 @@ fn git_source(
             .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.to_path_buf()))?;
         frags.push(format!("subdirectory={subdirectory}"));
     }
-    // Loads Git LFS Enablement according to priority.
-    // First: lfs = true, lfs = false from pyproject.toml
-    // Second: UV_GIT_LFS from environment
-    let lfs = GitLfs::from(lfs);
+    // Prefer the source-specific setting from `pyproject.toml`, falling back to the
+    // environment-derived setting passed in by the resolver.
+    let lfs = lfs.map(GitLfs::from).unwrap_or(default_lfs);
     // Preserve that we're using Git LFS in the Verbatim Url representations
     if lfs.enabled() {
         frags.push("lfs=true".to_string());
