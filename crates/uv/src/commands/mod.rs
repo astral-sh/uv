@@ -1,15 +1,3 @@
-use std::borrow::Cow;
-use std::io::stdout;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
-use std::{fmt::Write, process::ExitCode};
-
-use anstream::AutoStream;
-use anyhow::{Context, bail};
-use owo_colors::OwoColorize;
-use tracing::debug;
-use uv_warnings::warn_user;
-
 pub(crate) use auth::dir::dir as auth_dir;
 pub(crate) use auth::helper::helper as auth_helper;
 pub(crate) use auth::login::login as auth_login;
@@ -36,14 +24,14 @@ pub(crate) use project::audit::audit;
 pub(crate) use project::check::check;
 pub(crate) use project::export::export;
 pub(crate) use project::format::format;
-pub(crate) use project::init::{InitKind, InitProjectKind, init};
+pub(crate) use project::init::init;
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
 pub(crate) use project::run::{ParsedRunCommand, RunCommand, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
 pub(crate) use project::upgrade::upgrade;
-pub(crate) use project::version::{project_version, self_version};
+pub(crate) use project::version::project_version;
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
@@ -65,20 +53,12 @@ pub(crate) use tool::run::run as tool_run;
 pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
-use uv_cache::Cache;
-use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
-use uv_fs::{CWD, Simplified};
-use uv_installer::{compile_files, compile_tree};
-use uv_python::PythonEnvironment;
-use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
+pub(crate) use version::self_version;
 pub(crate) use workspace::dir::dir;
 pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
-
-use crate::commands::pip::operations::ChangedDist;
-use crate::printer::Printer;
 
 mod auth;
 pub(crate) mod build_backend;
@@ -88,107 +68,22 @@ mod cache_dir;
 mod cache_prune;
 mod cache_size;
 pub(crate) mod diagnostics;
-mod editable;
 mod help;
-mod install_report;
-mod locked_requirements;
-pub(crate) mod pip;
-mod project;
+pub(crate) use uv_pip_commands as pip;
+pub(crate) use uv_project_commands::project;
 mod publish;
-mod pylock;
-mod python;
+pub(crate) use uv_python_commands as python;
 pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
 mod self_update;
-mod tool;
-mod update_shell;
+pub(crate) use uv_tool_commands as tool;
 mod venv;
-mod workspace;
+mod version;
+pub(crate) use uv_workspace_commands as workspace;
 
-/// The process status for a command that completed without a final error to render.
-#[derive(Copy, Clone)]
-pub enum ExitStatus {
-    /// The command succeeded.
-    Success,
-
-    /// The command reported a failure caused by user input.
-    Failure,
-
-    /// The command reported an unexpected failure.
-    Error,
-
-    /// The command's exit status is propagated from an external command.
-    External(u8),
-}
-
-/// A command error propagated to the entrypoint for exit-status selection.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum UvError {
-    /// An error caused by invalid or unsatisfiable user input.
-    #[error(transparent)]
-    User(anyhow::Error),
-
-    /// An error caused by invalid command-line arguments.
-    #[error(transparent)]
-    Argument(anyhow::Error),
-
-    /// An unexpected internal or environmental error.
-    #[error(transparent)]
-    Unexpected(anyhow::Error),
-}
-
-impl UvError {
-    /// Create a user-facing error.
-    fn user(error: impl Into<anyhow::Error>) -> Self {
-        Self::User(error.into())
-    }
-
-    /// Create an argument error.
-    pub(crate) fn argument(error: anyhow::Error) -> Self {
-        Self::Argument(error)
-    }
-
-    /// Create an unexpected error.
-    pub(crate) fn unexpected(error: anyhow::Error) -> Self {
-        Self::Unexpected(error)
-    }
-
-    /// Add command-specific context to a user error without changing unexpected errors.
-    fn map_user(self, context: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
-        match self {
-            Self::User(error) => Self::User(context(error)),
-            Self::Argument(error) => Self::Argument(error),
-            Self::Unexpected(error) => Self::Unexpected(error),
-        }
-    }
-}
-
-impl From<project::ProjectError> for UvError {
-    fn from(error: project::ProjectError) -> Self {
-        match error {
-            error @ (project::ProjectError::LockMismatch(..)
-            | project::ProjectError::LockFormat(..)
-            | project::ProjectError::MissingLockfile(..)
-            | project::ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
-            project::ProjectError::Operation(error) => Self::from(error),
-            project::ProjectError::Requirements(error) => {
-                Self::from(pip::operations::Error::Requirements(error))
-            }
-            error => Self::unexpected(error.into()),
-        }
-    }
-}
-
-impl From<pip::operations::Error> for UvError {
-    fn from(error: pip::operations::Error) -> Self {
-        let error = error.with_default_resolution_context();
-        if error.is_user_failure() {
-            Self::user(error)
-        } else {
-            Self::unexpected(error.into())
-        }
-    }
-}
+pub use uv_command_support::ExitStatus;
+pub(crate) use uv_command_support::UvError;
+pub(crate) use uv_project_commands::ScriptPath;
 
 #[cfg(test)]
 mod error_tests {
@@ -197,38 +92,59 @@ mod error_tests {
     use anyhow::bail;
     use insta::{allow_duplicates, assert_snapshot};
 
-    use super::{UvError, pip, project};
+    use uv_lock_operations::LockError;
+    use uv_settings::{LockedFlag, LockedSource};
+
+    use super::{UvError, project};
 
     #[test]
     fn contextual_operations_keep_their_classification_and_cause() -> anyhow::Result<()> {
-        for (kind, user_failure) in [
-            (ErrorKind::NotFound, true),
-            (ErrorKind::PermissionDenied, false),
-        ] {
-            let error = pip::operations::Error::Requirements(uv_requirements::Error::Io(
-                Error::new(kind, "requirements failure"),
-            ));
-            let error = UvError::from(
-                error
-                    .with_resolution_context("script")
-                    .with_resolution_context("tool"),
-            );
-            let ((UvError::User(error), true) | (UvError::Unexpected(error), false)) =
-                (error, user_failure)
-            else {
-                bail!("operation classification changed with context");
-            };
-            allow_duplicates! {
-                assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
+        let conversions: [fn(uv_resolve_operations::Error) -> UvError; 6] = [
+            UvError::from,
+            |error| UvError::from(uv_environment_operations::OperationsError::from(error)),
+            |error| UvError::from(uv_environment_operations::EnvironmentError::from(error)),
+            |error| UvError::from(LockError::from(error)),
+            |error| UvError::from(project::ProjectError::from(LockError::from(error))),
+            |error| {
+                UvError::from(project::ProjectError::from(
+                    uv_environment_operations::EnvironmentError::from(error),
+                ))
+            },
+        ];
+        for convert in conversions {
+            for (kind, user_failure) in [
+                (ErrorKind::NotFound, true),
+                (ErrorKind::PermissionDenied, false),
+            ] {
+                let error = uv_resolve_operations::Error::Requirements(uv_requirements::Error::Io(
+                    Error::new(kind, "requirements failure"),
+                ));
+                let error = convert(
+                    error
+                        .with_resolution_context("script")
+                        .with_resolution_context("tool"),
+                );
+                let ((UvError::User(error), true) | (UvError::Unexpected(error), false)) =
+                    (error, user_failure)
+                else {
+                    bail!("operation classification changed with context");
+                };
+                allow_duplicates! {
+                    assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
+                }
+                assert!(
+                    error
+                        .chain()
+                        .any(<dyn std::error::Error>::is::<uv_requirements::Error>)
+                );
             }
-            assert!(error.downcast_ref::<pip::operations::Error>().is_some());
         }
         Ok(())
     }
 
     #[test]
     fn resolution_context_leaves_other_errors_unchanged() -> anyhow::Result<()> {
-        let error = pip::operations::Error::Io(Error::new(
+        let error = uv_resolve_operations::Error::Io(Error::new(
             ErrorKind::PermissionDenied,
             "cache write failed",
         ));
@@ -237,330 +153,38 @@ mod error_tests {
             bail!("operation classification changed with context");
         };
         assert_snapshot!(format!("{error:#}"), @"cache write failed");
-        assert!(error.downcast_ref::<pip::operations::Error>().is_some());
+        assert!(
+            error
+                .downcast_ref::<uv_resolve_operations::Error>()
+                .is_some()
+        );
         Ok(())
     }
 
     #[test]
-    fn project_requirements_use_operation_classification() {
-        let error = project::ProjectError::Requirements(uv_requirements::Error::Io(Error::new(
-            ErrorKind::NotFound,
-            "requirements failure",
-        )));
-        assert!(matches!(UvError::from(error), UvError::User(_)));
-    }
-}
+    fn project_errors_use_shared_operation_classification() -> anyhow::Result<()> {
+        let error = uv_environment_operations::EnvironmentError::Requirements(
+            uv_requirements::Error::Io(Error::new(ErrorKind::NotFound, "requirements failure")),
+        );
+        assert!(matches!(
+            UvError::from(project::ProjectError::from(error)),
+            UvError::User(_)
+        ));
 
-/// Read dotenv files into an overlay for a spawned process.
-///
-/// These values intentionally do not mutate uv's process environment and cannot mutate
-/// the current uv process' settings.
-fn read_env_files<'a>(
-    env_file: impl DoubleEndedIterator<Item = &'a PathBuf>,
-) -> anyhow::Result<Vec<(String, String)>> {
-    let mut environment = Vec::new();
-
-    for env_file_path in env_file.rev().map(PathBuf::as_path) {
-        let iter = match dotenvy::from_path_iter(env_file_path) {
-            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!(
-                    "No environment file found at: {}",
-                    env_file_path.simplified_display()
-                );
+        let conversions: [fn(LockError) -> UvError; 2] = [UvError::from, |error| {
+            UvError::from(project::ProjectError::from(error))
+        }];
+        for convert in conversions {
+            let error =
+                LockError::LockFormat("uv.lock".into(), 3, LockedSource::Cli(LockedFlag::Check));
+            let UvError::User(error) = convert(error) else {
+                bail!("lock policy errors must be classified as user failures");
+            };
+            allow_duplicates! {
+                assert_snapshot!(format!("{error:#}"), @"The lockfile at `uv.lock` has non-canonical formatting at line 3, but `--check` was provided.");
             }
-            Err(dotenvy::Error::Io(err)) => {
-                bail!(
-                    "Failed to read environment file `{}`: {err}",
-                    env_file_path.simplified_display()
-                );
-            }
-            Err(dotenvy::Error::LineParse(content, position)) => {
-                warn_user!(
-                    "Failed to parse environment file `{}` at position {position}: {content}",
-                    env_file_path.simplified_display(),
-                );
-                continue;
-            }
-            Err(err) => {
-                warn_user!(
-                    "Failed to parse environment file `{}`: {err}",
-                    env_file_path.simplified_display(),
-                );
-                continue;
-            }
-            Ok(iter) => iter,
-        };
-
-        let mut parsed = true;
-        for item in iter {
-            match item {
-                Ok((key, value)) => {
-                    if std::env::var(&key).is_err() {
-                        environment.push((key, value));
-                    }
-                }
-                Err(dotenvy::Error::Io(err)) => {
-                    bail!(
-                        "Failed to read environment file `{}`: {err}",
-                        env_file_path.simplified_display()
-                    );
-                }
-                Err(dotenvy::Error::LineParse(content, position)) => {
-                    warn_user!(
-                        "Failed to parse environment file `{}` at position {position}: {content}",
-                        env_file_path.simplified_display(),
-                    );
-                    parsed = false;
-                    break;
-                }
-                Err(err) => {
-                    warn_user!(
-                        "Failed to parse environment file `{}`: {err}",
-                        env_file_path.simplified_display(),
-                    );
-                    parsed = false;
-                    break;
-                }
-            }
-        }
-
-        if parsed {
-            debug!(
-                "Read environment file at: {}",
-                env_file_path.simplified_display()
-            );
-        }
-    }
-
-    // `dotenvy::from_path` preserves the first loaded value, while `Command::envs` preserves the
-    // last value set for the child process.
-    environment.reverse();
-
-    Ok(environment)
-}
-
-impl From<ExitStatus> for ExitCode {
-    fn from(status: ExitStatus) -> Self {
-        match status {
-            ExitStatus::Success => Self::from(0),
-            ExitStatus::Failure => Self::from(1),
-            ExitStatus::Error => Self::from(2),
-            ExitStatus::External(code) => Self::from(code),
-        }
-    }
-}
-
-/// Format a duration as a human-readable string, Cargo-style.
-pub(super) fn elapsed(duration: Duration) -> String {
-    let secs = duration.as_secs();
-    let ms = duration.subsec_millis();
-
-    if secs >= 60 {
-        format!("{}m {:02}s", secs / 60, secs % 60)
-    } else if secs > 0 {
-        format!("{}.{:02}s", secs, duration.subsec_nanos() / 10_000_000)
-    } else if ms > 0 {
-        format!("{ms}ms")
-    } else {
-        format!("0.{:02}ms", duration.subsec_nanos() / 10_000)
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub(super) enum ChangeEventKind {
-    /// The package was removed from the environment.
-    Removed,
-    /// The package was added to the environment.
-    Added,
-    /// The package was reinstalled without changing versions.
-    Reinstalled,
-}
-
-#[derive(Debug)]
-pub(super) struct ChangeEvent<'a> {
-    dist: &'a ChangedDist,
-    kind: ChangeEventKind,
-}
-
-/// Compile all Python source files in site-packages to bytecode, to speed up the
-/// initial run of any subsequent executions.
-///
-/// See the `--compile` option on `pip sync` and `pip install`.
-pub(super) async fn compile_bytecode(
-    venv: &PythonEnvironment,
-    concurrency: &Concurrency,
-    cache: &Cache,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let start = std::time::Instant::now();
-    let mut files = 0;
-    for site_packages in venv.site_packages() {
-        let site_packages = CWD.join(site_packages);
-        if !site_packages.exists() {
-            debug!(
-                "Skipping non-existent site-packages directory: {}",
-                site_packages.display()
-            );
-            continue;
-        }
-        files += compile_tree(
-            &site_packages,
-            venv.python_executable(),
-            concurrency,
-            cache.root(),
-        )
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to bytecode-compile Python file in: {}",
-                site_packages.user_display()
-            )
-        })?;
-    }
-    write_bytecode_summary(files, start, printer)?;
-    Ok(())
-}
-
-/// Compile the given Python source files to bytecode.
-pub(super) async fn compile_bytecode_files(
-    files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
-    venv: &PythonEnvironment,
-    concurrency: &Concurrency,
-    cache: &Cache,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let start = std::time::Instant::now();
-    let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
-        .await
-        .context("Failed to bytecode-compile installed packages")?;
-    if files == 0 {
-        return Ok(());
-    }
-
-    write_bytecode_summary(files, start, printer)?;
-    Ok(())
-}
-
-fn write_bytecode_summary(
-    files: usize,
-    start: std::time::Instant,
-    printer: Printer,
-) -> std::fmt::Result {
-    let s = if files == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Bytecode compiled {} {}",
-            format!("{files} file{s}").bold(),
-            format!("in {}", elapsed(start.elapsed())).dimmed()
-        )
-        .dimmed()
-    )
-}
-
-/// A multicasting writer that writes to both the standard output and an output file, if present.
-struct OutputWriter<'a> {
-    stdout: Option<AutoStream<std::io::Stdout>>,
-    output_file: Option<&'a Path>,
-    buffer: Vec<u8>,
-}
-
-impl<'a> OutputWriter<'a> {
-    /// Create a new output writer.
-    fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Self {
-        let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
-        Self {
-            stdout,
-            output_file,
-            buffer: Vec::new(),
-        }
-    }
-
-    /// Commit the buffer to the output file.
-    async fn commit(self) -> std::io::Result<()> {
-        if let Some(output_file) = self.output_file {
-            if let Some(parent_dir) = output_file.parent() {
-                fs_err::create_dir_all(parent_dir)?;
-            }
-
-            // If the output file is an existing symlink, write to the destination instead.
-            let output_file = fs_err::read_link(output_file)
-                .map(Cow::Owned)
-                .unwrap_or(Cow::Borrowed(output_file));
-            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
-            uv_fs::write_atomic(output_file, &stream).await?;
+            assert!(error.downcast_ref::<LockError>().is_some());
         }
         Ok(())
     }
-}
-
-impl std::io::Write for OutputWriter<'_> {
-    /// Write to both standard output and the output buffer, if present.
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        // Write to the buffer.
-        if self.output_file.is_some() {
-            self.buffer.write_all(buf)?;
-        }
-
-        // Write to standard output.
-        if let Some(stdout) = &mut self.stdout {
-            stdout.write_all(buf)?;
-        }
-
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        if let Some(stdout) = &mut self.stdout {
-            stdout.flush()?;
-        }
-        Ok(())
-    }
-}
-
-/// Given a list of names, return a conjunction of the names (e.g., "Alice, Bob, and Charlie").
-pub(super) fn conjunction(names: Vec<String>) -> String {
-    let mut names = names.into_iter();
-    let first = names.next();
-    let last = names.next_back();
-    match (first, last) {
-        (Some(first), Some(last)) => {
-            let mut result = first;
-            let mut comma = false;
-            for name in names {
-                result.push_str(", ");
-                result.push_str(&name);
-                comma = true;
-            }
-            if comma {
-                result.push_str(", and ");
-            } else {
-                result.push_str(" and ");
-            }
-            result.push_str(&last);
-            result
-        }
-        (Some(first), None) => first,
-        _ => String::new(),
-    }
-}
-
-/// Capitalize the first letter of a string.
-pub(super) fn capitalize(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
-    }
-}
-
-/// A Python file that may or may not include an existing PEP 723 script tag.
-#[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
-pub(crate) enum ScriptPath {
-    /// The Python file already includes a PEP 723 script tag.
-    Script(Pep723Script),
-    /// The Python file does not include a PEP 723 script tag.
-    Path(PathBuf),
 }

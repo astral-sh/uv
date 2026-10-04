@@ -50,11 +50,11 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
-use crate::commands::pip::operations;
-use crate::commands::project::{ProjectError, find_requires_python};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::ResolverSettings;
+use uv_environment_operations::{EnvironmentError, find_requires_python};
+use uv_python_context::PythonDownloadReporter;
+use uv_resolve_operations as operations;
+use uv_settings::ResolverSettings;
 
 #[derive(Debug, Error)]
 pub(crate) enum Error {
@@ -87,7 +87,7 @@ pub(crate) enum Error {
     #[error("Build requirement is not satisfied: `{0}`")]
     UnsatisfiedBuildRequirement(Box<Requirement>),
     #[error(transparent)]
-    Project(#[from] Box<ProjectError>),
+    Environment(#[from] Box<EnvironmentError>),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -111,9 +111,9 @@ pub(crate) enum Error {
     VersionMismatch(Version, Version),
 }
 
-impl From<ProjectError> for Error {
-    fn from(error: ProjectError) -> Self {
-        Self::Project(Box::new(error))
+impl From<EnvironmentError> for Error {
+    fn from(error: EnvironmentError) -> Self {
+        Self::Environment(Box::new(error))
     }
 }
 
@@ -123,7 +123,7 @@ impl Hinted for Error {
             Self::BuildBackend(err) => err.hints(),
             Self::BuildFrontend(err) => err.hints(),
             Self::BuildDispatch(err) => err.hints(),
-            Self::Project(err) => err.hints(),
+            Self::Environment(err) => err.hints(),
             Self::Operations(err) => err.hints(),
             Self::Extract(uv_extract::Error::Tar(err)) => {
                 // TODO(konsti): astral-tokio-tar should use a proper error instead of
@@ -631,7 +631,8 @@ async fn build_package(
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
             let groups = DependencyGroupsWithDefaults::none();
-            interpreter_request = find_requires_python(workspace, &groups)?
+            interpreter_request = find_requires_python(workspace, &groups)
+                .map_err(EnvironmentError::from)?
                 .as_ref()
                 .and_then(PythonRequest::from_requires_python);
         }

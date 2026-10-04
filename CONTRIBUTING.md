@@ -220,6 +220,33 @@ CARGO_BUILD_WARNINGS=deny uv run --only-dev cargo xwin clippy --workspace --all-
 
 ## Crate structure
 
+The `uv` crate owns process-global initialization and command dispatch. CLI parsing lives in
+`uv-cli`, and settings resolution lives in `uv-cli-settings`. Command implementations live in
+`uv-pip-commands`, `uv-project-commands`, `uv-workspace-commands`, `uv-tool-commands`, and
+`uv-python-commands`.
+
+Command crates should not depend on one another or on `uv-cli`. Shared workflows belong in
+`uv-lock-operations`, `uv-environment-operations`, `uv-resolve-operations`, `uv-install-operations`,
+or `uv-audit-operations`. Lockfile policy and resolution live in `uv-lock-operations`; installing a
+locked selection lives in `uv-environment-operations`. Python discovery and compatibility checks
+live in `uv-python-context`; output and process utilities live in `uv-command-support`. Keep these
+shared layers independent of command implementations and CLI settings resolution, and keep Python
+context and command support free of resolver and installer dependencies.
+
+Keep command-specific errors and reporting in their command crate. Shared option types used below
+the CLI layer belong in `uv-configuration`; `uv-cli` may re-export them. `uv-cli-settings` should
+not depend on command implementations or operations crates, so command edits do not recompile
+settings resolution.
+
+When iterating on a command family, check its crate to compile fewer crates than the full CLI:
+
+```shell
+cargo check -p uv-python-commands
+```
+
+Build the `uv` binary and run the relevant integration tests to verify command dispatch, feature
+wiring, and end-to-end behavior.
+
 Rust does not allow circular dependencies between crates. To visualize the crate hierarchy, install
 [cargo-depgraph](https://github.com/jplatte/cargo-depgraph) and graphviz, then run:
 

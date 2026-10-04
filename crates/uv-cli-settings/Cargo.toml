@@ -1,0 +1,42 @@
+[package]
+name = "uv-cli-settings"
+version = "0.0.90"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-audit = { workspace = true }
+uv-auth = { workspace = true }
+uv-cache = { workspace = true }
+uv-cli = { workspace = true }
+uv-client = { workspace = true }
+uv-configuration = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-install-wheel = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-preview = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-python = { workspace = true }
+uv-redacted = { workspace = true }
+uv-settings = { workspace = true }
+uv-static = { workspace = true }
+uv-torch = { workspace = true }
+uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
+
+anyhow = { workspace = true }
+jiff = { workspace = true }
+rustc-hash = { workspace = true }

@@ -19,6 +19,12 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildRequires, IndexLocations, PackageConfigSettings,
     Requirement,
 };
+use uv_environment_operations::{
+    LinkErrorReporting, ProjectEnvironmentTarget, ProjectPythonRequest,
+    centralized_environment_root, centralized_environments_enabled,
+    is_centralized_environment_reference, lock_project_environment,
+    update_project_environment_link,
+};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
@@ -38,16 +44,11 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::ExitStatus;
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::pip::operations::{Changelog, report_interpreter};
-use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironmentTarget, ProjectPythonRequest,
-    centralized_environment_root, centralized_environments_enabled,
-    is_centralized_environment_reference, lock_project_environment,
-    update_project_environment_link,
-};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
+
+use uv_install_operations::Changelog;
+use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
+use uv_python_context::{PythonDownloadReporter, report_interpreter};
 
 #[derive(Error, Debug)]
 enum VenvError {

@@ -1,18 +1,6 @@
-use std::str::FromStr;
-use std::sync::LazyLock;
-
-use owo_colors::OwoColorize;
-use rustc_hash::FxHashMap;
-use version_ranges::Ranges;
-
-use uv_distribution_types::{DerivationChain, DerivationStep};
 use uv_errors::{Hinted, Hints};
-use uv_normalize::PackageName;
-use uv_pep440::{Version, strip_local_version_sentinels};
 
-use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
-use crate::commands::pip::operations::ExtrasWithoutSourceError;
 use crate::commands::project::ProjectError;
 use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
@@ -22,20 +10,7 @@ use crate::commands::python::install::InvalidUpgradeRequestError;
 use crate::commands::tool::common::NoExecutablesError;
 use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
 use crate::printer::Printer;
-
-static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
-    let suggestions: Vec<(String, String)> =
-        serde_json::from_str(include_str!("suggestions.json")).unwrap();
-    suggestions
-        .iter()
-        .map(|(k, v)| {
-            (
-                PackageName::from_str(k).unwrap(),
-                PackageName::from_str(v).unwrap(),
-            )
-        })
-        .collect()
-});
+use uv_resolve_operations::ExtrasWithoutSourceError;
 
 /// Format an error chain with the default user-facing hints and output settings.
 pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::fmt::Result {
@@ -60,12 +35,17 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
         collect_hint::<uv_lock::LockError>(cause, &mut hints);
-        collect_hint::<pip::operations::Error>(cause, &mut hints);
+        collect_hint::<uv_lock_operations::LockError>(cause, &mut hints);
+        collect_hint::<uv_resolve_operations::Error>(cause, &mut hints);
+        collect_hint::<uv_install_operations::Error>(cause, &mut hints);
+        collect_hint::<uv_environment_operations::OperationsError>(cause, &mut hints);
+        collect_hint::<uv_python_context::PythonContextError>(cause, &mut hints);
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
         collect_hint::<RecursionLimitError>(cause, &mut hints);
         collect_hint::<DependencyNotFoundError>(cause, &mut hints);
         collect_hint::<ExtrasWithoutSourceError>(cause, &mut hints);
         collect_hint::<ProjectError>(cause, &mut hints);
+        collect_hint::<uv_environment_operations::EnvironmentError>(cause, &mut hints);
         collect_hint::<NoExecutablesError>(cause, &mut hints);
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
@@ -100,157 +80,19 @@ fn collect_hint<T: Hinted + std::error::Error + 'static>(
     }
 }
 
-/// Format package context that should follow a distribution error as hints.
-pub(crate) fn dist_hints(
-    name: &PackageName,
-    version: Option<&Version>,
-    chain: &DerivationChain,
-    cause_hints: Hints<'_>,
-) -> Hints<'static> {
-    let mut hints = Hints::none();
-    if let Some(suggestion) = SUGGESTIONS.get(name) {
-        hints.push(format!(
-            "`{}` is often confused for `{}`. Did you mean to install `{}` instead?",
-            name.cyan(),
-            suggestion.cyan(),
-            suggestion.cyan(),
-        ));
-    } else if !chain.is_empty() {
-        hints.push(format_chain(name, version, chain));
-    }
-    hints.extend(cause_hints);
-    hints.into_owned()
-}
-
-/// Format a [`DerivationChain`] as a human-readable error message.
-fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
-    /// Format a step in the [`DerivationChain`] as a human-readable error message.
-    fn format_step(step: &DerivationStep, range: Option<Ranges<Version>>) -> String {
-        if let Some(range) =
-            range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
-        {
-            if let Some(extra) = &step.extra {
-                if let Some(version) = step.version.as_ref() {
-                    // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)
-                    format!(
-                        "`{}{}` ({})",
-                        format!("{}[{}]", step.name, extra).cyan(),
-                        range.cyan(),
-                        format!("v{version}").cyan(),
-                    )
-                } else {
-                    // Ex) `flask[dotenv]>=1.0.0`
-                    format!(
-                        "`{}{}`",
-                        format!("{}[{}]", step.name, extra).cyan(),
-                        range.cyan(),
-                    )
-                }
-            } else if let Some(group) = &step.group {
-                if let Some(version) = step.version.as_ref() {
-                    // Ex) `flask:dev>=1.0.0` (v1.2.3)
-                    format!(
-                        "`{}{}` ({})",
-                        format!("{}:{}", step.name, group).cyan(),
-                        range.cyan(),
-                        format!("v{version}").cyan(),
-                    )
-                } else {
-                    // Ex) `flask:dev>=1.0.0`
-                    format!(
-                        "`{}{}`",
-                        format!("{}:{}", step.name, group).cyan(),
-                        range.cyan(),
-                    )
-                }
-            } else {
-                if let Some(version) = step.version.as_ref() {
-                    // Ex) `flask>=1.0.0` (v1.2.3)
-                    format!(
-                        "`{}{}` ({})",
-                        step.name.cyan(),
-                        range.cyan(),
-                        format!("v{version}").cyan(),
-                    )
-                } else {
-                    // Ex) `flask>=1.0.0`
-                    format!("`{}{}`", step.name.cyan(), range.cyan())
-                }
-            }
-        } else {
-            if let Some(extra) = &step.extra {
-                if let Some(version) = step.version.as_ref() {
-                    // Ex) `flask[dotenv]` (v1.2.3)
-                    format!(
-                        "`{}` ({})",
-                        format!("{}[{}]", step.name, extra).cyan(),
-                        format!("v{version}").cyan(),
-                    )
-                } else {
-                    // Ex) `flask[dotenv]`
-                    format!("`{}`", format!("{}[{}]", step.name, extra).cyan())
-                }
-            } else if let Some(group) = &step.group {
-                if let Some(version) = step.version.as_ref() {
-                    // Ex) `flask:dev` (v1.2.3)
-                    format!(
-                        "`{}` ({})",
-                        format!("{}:{}", step.name, group).cyan(),
-                        format!("v{version}").cyan(),
-                    )
-                } else {
-                    // Ex) `flask:dev`
-                    format!("`{}`", format!("{}:{}", step.name, group).cyan())
-                }
-            } else {
-                if let Some(version) = step.version.as_ref() {
-                    // Ex) `flask` (v1.2.3)
-                    format!("`{}` ({})", step.name.cyan(), format!("v{version}").cyan())
-                } else {
-                    // Ex) `flask`
-                    format!("`{}`", step.name.cyan())
-                }
-            }
-        }
-    }
-
-    let mut message = if let Some(version) = version {
-        format!(
-            "`{}` ({}) was included because",
-            name.cyan(),
-            format!("v{version}").cyan()
-        )
-    } else {
-        format!("`{}` was included because", name.cyan())
-    };
-    let mut range: Option<Ranges<Version>> = None;
-    for (i, step) in chain.iter().enumerate() {
-        if i > 0 {
-            message = format!("{message} {} which depends on", format_step(step, range));
-        } else {
-            message = format!("{message} {} depends on", format_step(step, range));
-        }
-        range = Some(strip_local_version_sentinels(&step.range));
-    }
-    if let Some(range) = range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
-    {
-        message = format!("{message} `{}{}`", name.cyan(), range.cyan());
-    } else {
-        message = format!("{message} `{}`", name.cyan());
-    }
-    message
-}
-
 #[cfg(test)]
 mod tests {
-    use insta::assert_debug_snapshot;
+    use insta::{allow_duplicates, assert_debug_snapshot};
 
+    use uv_lock_operations::LockError;
+    use uv_project_commands::project::ProjectError;
+    use uv_settings::{LockedFlag, LockedSource};
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
     use super::hints_for_error;
 
     #[test]
-    fn collects_source_hints_through_pyproject_errors() {
+    fn collects_hints_through_wrapped_errors() {
         let err = anyhow::Error::new(PyprojectTomlError::Source(SourceError::OverlappingMarkers(
             "sys_platform == 'win32'".to_string(),
             "python_version == '3.12'".to_string(),
@@ -263,5 +105,22 @@ mod tests {
             "replace `python_version == '3.12'` with `python_version != '3.12'`",
         ]
         "#);
+
+        let conversions: [fn(LockError) -> anyhow::Error; 2] = [anyhow::Error::new, |error| {
+            anyhow::Error::new(ProjectError::from(error))
+        }];
+        for convert in conversions {
+            let error =
+                LockError::LockFormat("uv.lock".into(), 3, LockedSource::Cli(LockedFlag::Check));
+            let error = convert(error).context("Failed to check the lockfile");
+            let hints = hints_for_error(&error);
+            allow_duplicates! {
+                assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+                [
+                    "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
+                ]
+                "#);
+            }
+        }
     }
 }

@@ -19,9 +19,11 @@ use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
 
 pub use crate::combine::*;
+pub use crate::resolved::*;
 pub use crate::settings::*;
 
 mod combine;
+mod resolved;
 mod settings;
 
 /// The [`Options`] as loaded from a configuration file on disk.
