@@ -2,68 +2,54 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use uv_environment_operations::malware::{MalwareCheckContext, maybe_check_malware};
 
 use anyhow::Result;
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
 use tracing::warn;
+
 use uv_cache::Cache;
-use uv_cli::SyncFormat;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::BaseClientBuilder;
+use uv_command_support::Printer;
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
-    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
-    InstallOptions, InstallTarget as InstallOptionTarget, TargetTriple, Upgrade,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode,
+    ExtrasSpecification, InstallOptions, InstallTarget as InstallOptionTarget, SyncFormat,
+    TargetTriple,
 };
-use uv_dispatch::BuildDispatch;
-use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{
-    Dist, NameRequirementSpecification, Resolution, ResolvedDist, SourceDist,
+use uv_distribution_types::NameRequirementSpecification;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
+    EnvironmentError, EnvironmentUpdate, LinkErrorReporting, PlatformState, ProjectEnvironment,
+    ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest, UniversalState, detect_conflicts,
+    script_extra_build_requires, script_specification, sync_from_lock, update_environment,
 };
 use uv_fs::{PortablePathBuf, Simplified};
-use uv_installer::{InstallationStrategy, SitePackages};
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_install_operations::report::{PackageChangesReport, SchemaReport};
+use uv_install_operations::{Changelog, Modifications};
 use uv_lock::{Installable, Lock, PythonReport};
+use uv_lock_operations::{
+    DiscoveredProject, FrozenWorkspace, LockError, LockMode, LockOperation, LockResult, LockTarget,
+    MissingLockfileSource,
+};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
 };
-use uv_resolver::{FlatIndex, ForkStrategy, Prerelease, ResolutionMode};
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_settings::{
+    FrozenSource, LockCheck, LockedSource, MalwareCheckSettings, PythonInstallMirrors,
+    ResolverInstallerSettings,
+};
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
-use crate::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::pip::operations::{Changelog, Modifications};
-use crate::pip::resolution_markers;
-use crate::pip::{operations, resolution_tags};
-use crate::project::discovery::DiscoveredProject;
-use crate::project::install_target::{InstallTarget, PackageSelection};
-use crate::project::lock::{LockMode, LockOperation, LockResult};
-use crate::project::lock_target::LockTarget;
-use crate::project::lockfile::FrozenWorkspace;
-use crate::project::{
-    EnvironmentError, EnvironmentUpdate, LinkErrorReporting, MissingLockfileSource, PlatformState,
-    ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ScriptEnvironment, UniversalState,
-    detect_conflicts, script_extra_build_requires, script_specification, update_environment,
-};
 use crate::{ExitStatus, UvError};
-use uv_command_support::Printer;
-use uv_install_operations::editable::apply_editable_mode;
-use uv_install_operations::report::{PackageChangesReport, SchemaReport};
-use uv_settings::{
-    FrozenSource, InstallerSettingsRef, LockCheck, LockedSource, ResolverInstallerSettings,
-    ResolverSettings,
-};
 
 /// Sync the project environment.
 pub async fn sync(
@@ -172,7 +158,7 @@ pub async fn sync(
                 .read_frozen(MissingLockfileSource::from(source))
                 .await
                 .map_err(|err| match (err, *manifest) {
-                    (ProjectError::MissingLockfile(..), SyncManifest::Script(script)) => anyhow::anyhow!(
+                    (LockError::MissingLockfile(..), SyncManifest::Script(script)) => anyhow::anyhow!(
                         "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
                         format!("uv lock --script {}", script.path.user_display()).green(),
                     ),
@@ -482,21 +468,18 @@ pub async fn sync(
             };
             let outcome = match result {
                 Ok(result) => Outcome::Success(result),
-                Err(ProjectError::Environment(EnvironmentError::Operation(err))) => {
+                Err(LockError::Environment(EnvironmentError::Operation(err))) => {
                     return Err(UvError::from(*err).into());
                 }
-                Err(err @ ProjectError::LockFormat(..)) => return Err(UvError::user(err).into()),
-                Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
+                Err(err @ LockError::LockFormat(..)) => return Err(UvError::user(err).into()),
+                Err(LockError::LockMismatch(prev, cur, lock_source)) => {
                     if dry_run.enabled() {
                         // A dry run continues with the new resolution but exits unsuccessfully.
                         Outcome::LockMismatch(prev, cur, lock_source)
                     } else {
-                        return Err(UvError::user(ProjectError::LockMismatch(
-                            prev,
-                            cur,
-                            lock_source,
-                        ))
-                        .into());
+                        return Err(
+                            UvError::user(LockError::LockMismatch(prev, cur, lock_source)).into(),
+                        );
                     }
                 }
                 Err(err) => return Err(UvError::from(err).into()),
@@ -534,24 +517,26 @@ pub async fn sync(
     let state = state.fork();
 
     // Perform the sync operation.
-    let changelog = match do_sync(
-        sync_target,
-        &environment,
-        &extras,
-        &groups,
-        editable,
-        install_options,
-        modifications,
-        python_platform.as_ref(),
-        (&settings).into(),
+    let changelog = match sync_from_lock(
+        SyncRequest {
+            target: sync_target,
+            environment: &environment,
+            extras: &extras,
+            groups: &groups,
+            editable,
+            install_options,
+            modifications,
+            python_platform: python_platform.as_ref(),
+            settings: (&settings).into(),
+            installer_metadata,
+            dry_run,
+        },
         &client_builder,
         &state,
         Box::new(DefaultInstallLogger),
-        installer_metadata,
         &concurrency,
         cache,
         workspace_cache,
-        dry_run,
         printer,
         preview,
         &malware_settings,
@@ -559,7 +544,7 @@ pub async fn sync(
     .await
     {
         Ok(changelog) => changelog,
-        Err(ProjectError::Environment(EnvironmentError::Operation(error))) => {
+        Err(EnvironmentError::Operation(error)) => {
             if let Some(changelog) = error.outdated_environment() {
                 write_sync_report(
                     &target,
@@ -589,7 +574,7 @@ pub async fn sync(
     match outcome {
         Outcome::Success(..) | Outcome::Frozen(..) => Ok(ExitStatus::Success),
         Outcome::LockMismatch(prev, cur, lock_source) => {
-            Err(UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into())
+            Err(UvError::user(LockError::LockMismatch(prev, cur, lock_source)).into())
         }
     }
 }
@@ -838,434 +823,6 @@ impl Deref for SyncEnvironment {
             Self::Script(environment) => environment,
         }
     }
-}
-
-/// Sync a lockfile with an environment.
-pub(crate) async fn do_sync<'a>(
-    target: InstallTarget<'_>,
-    venv: &PythonEnvironment,
-    extras: &ExtrasSpecificationWithDefaults,
-    groups: &DependencyGroupsWithDefaults,
-    editable: Option<EditableMode>,
-    install_options: InstallOptions,
-    modifications: Modifications,
-    python_platform: Option<&TargetTriple>,
-    settings: InstallerSettingsRef<'_>,
-    client_builder: &BaseClientBuilder<'_>,
-    state: &PlatformState,
-    logger: Box<dyn InstallLogger>,
-    installer_metadata: bool,
-    concurrency: &Concurrency,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
-    dry_run: DryRun,
-    printer: Printer,
-    preview: Preview,
-    malware_settings: impl Into<MalwareCheckContext<'a>>,
-) -> Result<Changelog, ProjectError> {
-    let malware_context = malware_settings.into();
-
-    // Extract the project settings.
-    let InstallerSettingsRef {
-        index_locations,
-        index_strategy,
-        keyring_provider,
-        dependency_metadata,
-        config_setting,
-        config_settings_package,
-        build_isolation,
-        extra_build_dependencies,
-        extra_build_variables,
-        exclude_newer,
-        link_mode,
-        compile_bytecode,
-        reinstall,
-        build_options,
-        sources,
-    } = settings;
-
-    // Lower the extra build dependencies with source resolution.
-    let extra_build_requires = match &target {
-        InstallTarget::Workspace { workspace, .. }
-        | InstallTarget::Project { workspace, .. }
-        | InstallTarget::Projects { workspace, .. }
-        | InstallTarget::NonProjectWorkspace { workspace, .. } => {
-            LoweredExtraBuildDependencies::from_workspace(
-                extra_build_dependencies.clone(),
-                workspace,
-                index_locations,
-                &sources,
-                cache,
-                workspace_cache,
-                client_builder.credentials_cache(),
-            )
-            .await?
-        }
-        InstallTarget::Lockfile {
-            root,
-            project_name,
-            lock,
-            ..
-        } => {
-            let member = project_name.and_then(|name| {
-                lock.workspace_member_paths()
-                    .find_map(|(member, path)| (member == name).then(|| root.join(path)))
-            });
-            if let Some(member) = member.filter(|path| {
-                !extra_build_dependencies.is_empty() && path.join("pyproject.toml").is_file()
-            }) {
-                let workspace = Workspace::discover(
-                    &member,
-                    &DiscoveryOptions {
-                        members: MemberDiscovery::Existing,
-                        stop_discovery_at: Some(root.to_path_buf()),
-                    },
-                    cache,
-                    workspace_cache,
-                )
-                .await?;
-                LoweredExtraBuildDependencies::from_workspace(
-                    extra_build_dependencies.clone(),
-                    &workspace,
-                    index_locations,
-                    &sources,
-                    cache,
-                    workspace_cache,
-                    client_builder.credentials_cache(),
-                )
-                .await?
-            } else {
-                LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-            }
-        }
-        InstallTarget::Script { script, .. } => {
-            // Try to get extra build dependencies from the script metadata
-            let resolver_settings = ResolverSettings {
-                build_options: build_options.clone(),
-                config_setting: config_setting.clone(),
-                config_settings_package: config_settings_package.clone(),
-                dependency_metadata: dependency_metadata.clone(),
-                exclude_newer: exclude_newer.clone(),
-                fork_strategy: ForkStrategy::default(),
-                index_locations: index_locations.clone(),
-                index_strategy,
-                keyring_provider,
-                link_mode,
-                build_isolation: build_isolation.clone(),
-                extra_build_dependencies: extra_build_dependencies.clone(),
-                extra_build_variables: extra_build_variables.clone(),
-                prerelease: Prerelease::default(),
-                resolution: ResolutionMode::default(),
-                sources: sources.clone(),
-                torch_backend: None,
-                cuda_driver_version: None,
-                amd_gpu_architecture: None,
-                upgrade: Upgrade::default(),
-            };
-            script_extra_build_requires(
-                (*script).into(),
-                &resolver_settings,
-                cache,
-                workspace_cache,
-                client_builder.credentials_cache(),
-            )
-            .await?
-        }
-    }
-    .into_inner();
-
-    let client_builder = client_builder.clone().keyring(keyring_provider);
-    // Save an authenticated builder for the malware check before moving the
-    // primary builder into the registry client below.
-    let malware_check_client_builder = client_builder.clone();
-
-    // Validate that the Python version is supported by the lockfile.
-    if !target
-        .lock()
-        .requires_python()
-        .contains(venv.interpreter().python_version())
-    {
-        return Err(ProjectError::LockedPythonIncompatibility(
-            venv.interpreter().python_version().clone(),
-            target.lock().requires_python().clone(),
-        ));
-    }
-
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&target, extras, groups)?;
-
-    // Validate that the set of requested extras and development groups are defined in the lockfile.
-    target.validate_extras(extras)?;
-    target.validate_groups(groups)?;
-
-    // Determine the markers to use for resolution.
-    let marker_env = resolution_markers(None, python_platform, venv.interpreter());
-
-    // Validate that the platform is supported by the lockfile.
-    let environments = target.lock().supported_environments();
-    if !environments.is_empty() {
-        if !environments
-            .iter()
-            .any(|env| env.evaluate(&marker_env, &[]))
-        {
-            return Err(ProjectError::LockedPlatformIncompatibility(
-                // For error reporting, we use the "simplified"
-                // supported environments, because these correspond to
-                // what the end user actually wrote. The non-simplified
-                // environments, by contrast, are explicitly
-                // constrained by `requires-python`.
-                target
-                    .lock()
-                    .simplified_supported_environments()
-                    .into_iter()
-                    .filter_map(MarkerTree::contents)
-                    .map(|env| format!("`{env}`"))
-                    .join(", "),
-            ));
-        }
-    }
-
-    // Determine the tags to use for the resolution.
-    let tags = resolution_tags(None, python_platform, venv.interpreter())
-        .map_err(EnvironmentError::from)?;
-
-    // Read the lockfile.
-    let resolution = target.to_resolution(
-        &marker_env,
-        &tags,
-        extras,
-        groups,
-        build_options,
-        &install_options,
-    )?;
-
-    // Always skip virtual projects, which shouldn't be built or installed.
-    let resolution = apply_no_virtual_project(resolution);
-
-    // If necessary, convert editable to non-editable distributions.
-    let resolution = apply_editable_mode(resolution, editable);
-
-    // Constrain any build requirements marked as `match-runtime = true`.
-    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
-
-    // Extract the hashes from the lockfile.
-    let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
-
-    // Populate credentials from the target.
-    store_credentials_from_target(target, &client_builder)?;
-
-    let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
-    let site_packages = SitePackages::from_environment(venv)?;
-    let installation_plan = operations::InstallationPlan::build(
-        &resolution,
-        site_packages,
-        InstallationStrategy::Strict,
-        reinstall,
-        build_options,
-        &hasher,
-        index_locations,
-        config_setting,
-        config_settings_package,
-        &extra_build_requires,
-        extra_build_variables,
-        cache,
-        venv,
-        &tags,
-    )?;
-
-    // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
-    // installation work to perform.
-    if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
-        maybe_check_malware(
-            &target,
-            &resolution,
-            &malware_check_client_builder,
-            concurrency,
-            cache,
-            preview,
-            &malware_context,
-        )
-        .await?;
-
-        return Ok(installation_plan.finish_noop(
-            &resolution,
-            modifications,
-            bytecode_compilation,
-            logger.as_ref(),
-            dry_run,
-            printer,
-        )?);
-    }
-
-    // Initialize the registry client.
-    let client = RegistryClientBuilder::new(client_builder, cache.clone())
-        .index_locations(index_locations.clone())
-        .index_strategy(index_strategy)
-        .markers(venv.interpreter().markers())
-        .platform(venv.interpreter().platform())
-        .build()?;
-
-    // Determine whether to enable build isolation.
-    let build_isolation = match build_isolation {
-        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
-        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(venv),
-        uv_configuration::BuildIsolation::SharedPackage(packages) => {
-            BuildIsolation::SharedPackage(venv, packages)
-        }
-    };
-
-    // Read the build constraints from the lockfile.
-    let build_constraints = target.build_constraints();
-
-    let build_hasher = HashStrategy::from_constraints(
-        &build_constraints,
-        Some(&venv.interpreter().to_resolver_marker_environment()),
-        uv_configuration::HashCheckingMode::Verify,
-    )?;
-    // Also verify artifacts in the full lockfile, including unselected extras and groups.
-    let build_hasher = target
-        .lock()
-        .hash_strategy(target.install_path(), &FxHashSet::default())?
-        .with_constraint_hashes(&build_hasher)?;
-
-    // Resolve the flat indexes from `--find-links`.
-    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
-
-    // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        &build_constraints,
-        venv.interpreter(),
-        index_locations,
-        &flat_index,
-        dependency_metadata,
-        state.clone().into_inner(),
-        index_strategy,
-        config_setting,
-        config_settings_package,
-        build_isolation,
-        &extra_build_requires,
-        extra_build_variables,
-        link_mode,
-        build_options,
-        &build_hasher,
-        exclude_newer.clone(),
-        sources.clone(),
-        SourceTreeEditablePolicy::Project,
-        workspace_cache.clone(),
-        concurrency.clone(),
-        preview,
-    );
-
-    // Run a malware check against OSV before installing.
-    maybe_check_malware(
-        &target,
-        &resolution,
-        &malware_check_client_builder,
-        concurrency,
-        cache,
-        preview,
-        &malware_context,
-    )
-    .await?;
-
-    // Sync the environment.
-    let changelog = installation_plan
-        .execute(
-            &resolution,
-            modifications,
-            build_options,
-            link_mode,
-            bytecode_compilation,
-            &hasher,
-            &tags,
-            &client,
-            state.in_flight(),
-            concurrency,
-            &build_dispatch,
-            cache,
-            venv,
-            logger,
-            installer_metadata,
-            dry_run,
-            printer,
-            preview,
-        )
-        .await?;
-
-    Ok(changelog)
-}
-
-/// Filter out any virtual workspace members.
-fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
-    resolution.filter(|dist| {
-        let ResolvedDist::Installable { dist, .. } = dist else {
-            return true;
-        };
-
-        let Dist::Source(dist) = dist.as_ref() else {
-            return true;
-        };
-
-        let SourceDist::Directory(dist) = dist else {
-            return true;
-        };
-
-        !dist.r#virtual.unwrap_or(false)
-    })
-}
-
-/// Extract any credentials that are defined on the workspace dependencies themselves. While we
-/// don't store plaintext credentials in the `uv.lock`, we do respect credentials that are defined
-/// in the `pyproject.toml`.
-///
-/// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
-/// `project.dependencies`, and `project.optional-dependencies`.
-pub(super) fn store_credentials_from_target(
-    target: InstallTarget<'_>,
-    client_builder: &BaseClientBuilder,
-) -> Result<()> {
-    // Iterate over any indexes in the target.
-    for index in target.indexes() {
-        if let Some(credentials) = index.credentials()? {
-            if let Some(root_url) = index.root_url() {
-                client_builder.store_credentials(&root_url, credentials.clone());
-            }
-            client_builder.store_credentials(index.raw_url(), credentials);
-        }
-    }
-
-    // Iterate over any sources in the target.
-    for source in target.sources() {
-        match source {
-            Source::Git { git, .. } => {
-                uv_git::store_credentials_from_url(git)?;
-            }
-            Source::Url { url, .. } => {
-                client_builder.store_credentials_from_url(url)?;
-            }
-            _ => {}
-        }
-    }
-
-    // Iterate over any dependencies defined in the target.
-    for requirement in target.requirements() {
-        let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
-            continue;
-        };
-        match &url.parsed_url {
-            ParsedUrl::GitDirectory(ParsedGitDirectoryUrl { url, .. })
-            | ParsedUrl::GitPath(ParsedGitPathUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.url())?;
-            }
-            ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
-                client_builder.store_credentials_from_url(url)?;
-            }
-            _ => {}
-        }
-    }
-    Ok(())
 }
 
 #[derive(Debug, Serialize)]

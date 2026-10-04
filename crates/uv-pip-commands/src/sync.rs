@@ -7,8 +7,8 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_cli::PipInstallFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::PipInstallFormat;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,

@@ -18,18 +18,29 @@ use tracing::{debug, trace, warn};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
+use uv_command_support::Printer;
+use uv_command_support::child::run_to_completion;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
+use uv_environment_operations::environment::{CachedEnvironment, EphemeralEnvironment};
+use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::{
+    EnvironmentError, EnvironmentSpecification, LinkErrorReporting, PreferenceLocation,
+    ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest, UniversalState,
+    script_extra_build_requires, script_specification, sync_from_lock, update_environment,
+};
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_lock::{Installable, Lock};
+use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
@@ -37,18 +48,24 @@ use uv_python::{
     PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionFileDiscoveryOptions,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_settings::{
+    FrozenSource, LockCheck, LockedSource, MalwareCheckSettings, PythonInstallMirrors,
+    ResolverInstallerSettings, ResolverSettings,
+};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use uv_command_support::child::run_to_completion;
+use crate::reporters::PythonDownloadReporter;
+use crate::{ExitStatus, UvError, read_env_files};
 
 /// GitHub Gist API response structure
 #[derive(serde::Deserialize)]
@@ -60,26 +77,6 @@ struct GistResponse {
 struct GistFile {
     raw_url: String,
 }
-use crate::pip::loggers::{
-    DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
-};
-use crate::pip::operations::Modifications;
-use crate::project::environment::{CachedEnvironment, EphemeralEnvironment};
-use crate::project::install_target::InstallTarget;
-use crate::project::lock::LockMode;
-use crate::project::lock_target::LockTarget;
-use crate::project::{
-    EnvironmentError, EnvironmentSpecification, LinkErrorReporting, PreferenceLocation,
-    ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ProjectPythonRequest,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, script_extra_build_requires,
-    script_specification, update_environment,
-};
-use crate::reporters::PythonDownloadReporter;
-use crate::{ExitStatus, UvError, project, read_env_files};
-use uv_command_support::Printer;
-use uv_settings::{
-    FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings, ResolverSettings,
-};
 
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -243,7 +240,7 @@ pub async fn run(
 
             // Generate a lockfile.
             let lock = match Box::pin(
-                project::lock::LockOperation::new(
+                LockOperation::new(
                     mode,
                     &settings.resolver,
                     &client_builder,
@@ -264,7 +261,7 @@ pub async fn run(
             .await
             {
                 Ok(result) => result.into_lock(),
-                Err(ProjectError::Environment(EnvironmentError::Operation(err))) => {
+                Err(LockError::Environment(EnvironmentError::Operation(err))) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
@@ -279,16 +276,20 @@ pub async fn run(
 
             let install_options = InstallOptions::default();
 
-            match project::sync::do_sync(
-                target,
-                &environment,
-                &extras.with_defaults(DefaultExtras::default()),
-                &groups.with_defaults(DefaultGroups::default()),
-                editable.clone(),
-                install_options,
-                modifications,
-                python_platform.as_ref(),
-                (&settings).into(),
+            match sync_from_lock(
+                SyncRequest {
+                    target,
+                    environment: &environment,
+                    extras: &extras.with_defaults(DefaultExtras::default()),
+                    groups: &groups.with_defaults(DefaultGroups::default()),
+                    editable: editable.clone(),
+                    install_options,
+                    modifications,
+                    python_platform: python_platform.as_ref(),
+                    settings: (&settings).into(),
+                    installer_metadata,
+                    dry_run: DryRun::Disabled,
+                },
                 &client_builder,
                 &sync_state,
                 if show_resolution {
@@ -296,11 +297,9 @@ pub async fn run(
                 } else {
                     Box::new(SummaryInstallLogger)
                 },
-                installer_metadata,
                 &concurrency,
                 &cache,
                 workspace_cache,
-                DryRun::Disabled,
                 printer,
                 preview,
                 &malware_settings,
@@ -308,7 +307,7 @@ pub async fn run(
             .await
             {
                 Ok(_) => {}
-                Err(ProjectError::Environment(EnvironmentError::Operation(err))) => {
+                Err(EnvironmentError::Operation(err)) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
@@ -757,7 +756,7 @@ pub async fn run(
                 };
 
                 let result = match Box::pin(
-                    project::lock::LockOperation::new(
+                    LockOperation::new(
                         mode,
                         &settings.resolver,
                         &client_builder,
@@ -832,16 +831,20 @@ pub async fn run(
                 target.validate_extras(&extras)?;
                 target.validate_groups(&groups)?;
 
-                match project::sync::do_sync(
-                    target,
-                    &venv,
-                    &extras,
-                    &groups,
-                    editable,
-                    install_options,
-                    modifications,
-                    python_platform.as_ref(),
-                    (&settings).into(),
+                match sync_from_lock(
+                    SyncRequest {
+                        target,
+                        environment: &venv,
+                        extras: &extras,
+                        groups: &groups,
+                        editable,
+                        install_options,
+                        modifications,
+                        python_platform: python_platform.as_ref(),
+                        settings: (&settings).into(),
+                        installer_metadata,
+                        dry_run: DryRun::Disabled,
+                    },
                     &client_builder,
                     &sync_state,
                     if show_resolution {
@@ -849,11 +852,9 @@ pub async fn run(
                     } else {
                         Box::new(SummaryInstallLogger)
                     },
-                    installer_metadata,
                     &concurrency,
                     &cache,
                     workspace_cache,
-                    DryRun::Disabled,
                     printer,
                     preview,
                     &malware_settings,
@@ -1503,13 +1504,12 @@ impl ParsedRunCommand {
 
     /// Determine the [`ParsedRunCommand`] for a given set of arguments.
     pub fn from_args(
-        command: &ExternalCommand,
+        command: &[OsString],
         module: bool,
         script: bool,
         gui_script: bool,
     ) -> anyhow::Result<Self> {
-        let (target, args) = command.split();
-        let Some(target) = target else {
+        let Some((target, args)) = command.split_first() else {
             return Ok(Self::Ready(RunCommand::Empty));
         };
 

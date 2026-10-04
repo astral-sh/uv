@@ -2,34 +2,33 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result};
+
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer, Stdout, UvError};
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectInterpreter, ScriptEnvironment, UniversalState,
+};
+use uv_install_operations::Modifications;
 use uv_lock::{Lock, Metadata, Package};
+use uv_lock_operations::{
+    DiscoveredProject, FrozenWorkspace, LockError, LockMode, LockOperation, LockTarget,
+};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_settings::{
+    FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverSettings,
+};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, WorkspaceCache};
-
-use crate::pip::loggers::DefaultResolveLogger;
-use crate::pip::operations::Modifications;
-use crate::project::discovery::DiscoveredProject;
-use crate::project::install_target::{InstallTarget, PackageSelection};
-use crate::project::lock::{LockMode, LockOperation};
-use crate::project::lock_target::LockTarget;
-use crate::project::lockfile::FrozenWorkspace;
-use crate::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectError, ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter,
-    UniversalState,
-};
-use crate::{ExitStatus, UvError};
-use uv_command_support::{Printer, Stdout};
-use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 
 use super::module_owners::collect_module_owners;
 
@@ -183,7 +182,7 @@ pub async fn metadata(
             .await
             {
                 Ok(lock) => lock.into_lock(),
-                Err(err @ ProjectError::LockMismatch(..)) => return Err(UvError::user(err).into()),
+                Err(err @ LockError::LockMismatch(..)) => return Err(UvError::user(err).into()),
                 Err(err) => return Err(UvError::from(err).into()),
             };
             &resolved_lock

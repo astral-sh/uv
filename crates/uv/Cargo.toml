@@ -15,7 +15,6 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
-uv-audit = { workspace = true }
 uv-auth = { workspace = true }
 uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }
@@ -23,6 +22,7 @@ uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cli = { workspace = true }
+uv-cli-settings = { workspace = true }
 uv-client = { workspace = true }
 uv-command-support = { workspace = true }
 uv-configuration = { workspace = true }
@@ -40,6 +40,7 @@ uv-install-operations = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
+uv-lock-operations = { workspace = true }
 uv-logging = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
@@ -65,12 +66,12 @@ uv-static = { workspace = true }
 uv-test = { workspace = true, optional = true }
 uv-threads = { workspace = true }
 uv-tool-commands = { workspace = true }
-uv-torch = { workspace = true }
 uv-types = { workspace = true }
 uv-version = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true, features = ["clap"] }
+uv-workspace-commands = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
@@ -85,11 +86,9 @@ etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
-jiff = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
-rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tar-codec = { workspace = true }

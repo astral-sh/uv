@@ -4,43 +4,38 @@ use std::path::Path;
 use anstream::print;
 use anyhow::{Error, Result, bail};
 use futures::StreamExt;
+
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_cli::TreeFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple};
+use uv_command_support::Printer;
+use uv_configuration::{
+    ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple, TreeFormat,
+};
 use uv_distribution_types::IndexCapabilities;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, UniversalState,
+};
 use uv_lock::{PackageMap, TreeDisplay, TreeJsonTarget};
-use uv_normalize::DefaultGroups;
-use uv_normalize::PackageName;
+use uv_lock_operations::{DiscoveredProject, FrozenWorkspace, LockMode, LockOperation, LockTarget};
+use uv_normalize::{DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
     PythonVersion,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::loggers::DefaultResolveLogger;
+use uv_resolve_operations::resolution_markers;
 use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
-use crate::pip::latest::LatestClient;
-use crate::pip::loggers::DefaultResolveLogger;
-use crate::pip::resolution_markers;
-use crate::project::discovery::DiscoveredProject;
-use crate::project::install_target::{InstallTarget, PackageSelection};
-use crate::project::lock::{LockMode, LockOperation};
-use crate::project::lock_target::LockTarget;
-use crate::project::lockfile::FrozenWorkspace;
-use crate::project::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
-    ScriptInterpreter, UniversalState,
-};
 use crate::reporters::LatestVersionReporter;
 use crate::{ExitStatus, UvError};
-use uv_command_support::Printer;
-use uv_settings::FrozenSource;
-use uv_settings::LockCheck;
-use uv_settings::ResolverSettings;
 
 /// A tree reads an existing workspace lock or resolves a project or script manifest.
 #[derive(Clone, Copy)]

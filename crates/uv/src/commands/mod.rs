@@ -24,14 +24,14 @@ pub(crate) use project::audit::audit;
 pub(crate) use project::check::check;
 pub(crate) use project::export::export;
 pub(crate) use project::format::format;
-pub(crate) use project::init::{InitKind, InitProjectKind, init};
+pub(crate) use project::init::init;
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
 pub(crate) use project::run::{ParsedRunCommand, RunCommand, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
 pub(crate) use project::upgrade::upgrade;
-pub(crate) use project::version::{project_version, self_version};
+pub(crate) use project::version::project_version;
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
@@ -55,6 +55,7 @@ pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 pub(crate) use uv_console::human_readable_bytes;
 pub(crate) use venv::venv;
+pub(crate) use version::self_version;
 pub(crate) use workspace::dir::dir;
 pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
@@ -77,10 +78,12 @@ pub(crate) mod reporters;
 mod self_update;
 pub(crate) use uv_tool_commands as tool;
 mod venv;
-pub(crate) use uv_project_commands::workspace;
+mod version;
+pub(crate) use uv_workspace_commands as workspace;
 
 pub use uv_command_support::ExitStatus;
-pub(crate) use uv_command_support::{ScriptPath, UvError};
+pub(crate) use uv_command_support::UvError;
+pub(crate) use uv_project_commands::ScriptPath;
 
 #[cfg(test)]
 mod error_tests {
@@ -89,14 +92,19 @@ mod error_tests {
     use anyhow::bail;
     use insta::{allow_duplicates, assert_snapshot};
 
+    use uv_lock_operations::LockError;
+    use uv_settings::{LockedFlag, LockedSource};
+
     use super::{UvError, project};
 
     #[test]
     fn contextual_operations_keep_their_classification_and_cause() -> anyhow::Result<()> {
-        let conversions: [fn(uv_resolve_operations::Error) -> UvError; 4] = [
+        let conversions: [fn(uv_resolve_operations::Error) -> UvError; 6] = [
             UvError::from,
             |error| UvError::from(uv_environment_operations::OperationsError::from(error)),
             |error| UvError::from(uv_environment_operations::EnvironmentError::from(error)),
+            |error| UvError::from(LockError::from(error)),
+            |error| UvError::from(project::ProjectError::from(LockError::from(error))),
             |error| {
                 UvError::from(project::ProjectError::from(
                     uv_environment_operations::EnvironmentError::from(error),
@@ -154,7 +162,7 @@ mod error_tests {
     }
 
     #[test]
-    fn project_requirements_use_operation_classification() {
+    fn project_errors_use_shared_operation_classification() -> anyhow::Result<()> {
         let error = uv_environment_operations::EnvironmentError::Requirements(
             uv_requirements::Error::Io(Error::new(ErrorKind::NotFound, "requirements failure")),
         );
@@ -162,5 +170,21 @@ mod error_tests {
             UvError::from(project::ProjectError::from(error)),
             UvError::User(_)
         ));
+
+        let conversions: [fn(LockError) -> UvError; 2] = [UvError::from, |error| {
+            UvError::from(project::ProjectError::from(error))
+        }];
+        for convert in conversions {
+            let error =
+                LockError::LockFormat("uv.lock".into(), 3, LockedSource::Cli(LockedFlag::Check));
+            let UvError::User(error) = convert(error) else {
+                bail!("lock policy errors must be classified as user failures");
+            };
+            allow_duplicates! {
+                assert_snapshot!(format!("{error:#}"), @"The lockfile at `uv.lock` has non-canonical formatting at line 3, but `--check` was provided.");
+            }
+            assert!(error.downcast_ref::<LockError>().is_some());
+        }
+        Ok(())
     }
 }

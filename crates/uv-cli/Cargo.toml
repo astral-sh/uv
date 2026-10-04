@@ -35,7 +35,6 @@ uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
-anstream = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "string"] }
 clap_complete_command = { workspace = true }

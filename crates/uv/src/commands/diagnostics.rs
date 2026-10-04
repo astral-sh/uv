@@ -35,6 +35,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
         collect_hint::<uv_lock::LockError>(cause, &mut hints);
+        collect_hint::<uv_lock_operations::LockError>(cause, &mut hints);
         collect_hint::<uv_resolve_operations::Error>(cause, &mut hints);
         collect_hint::<uv_install_operations::Error>(cause, &mut hints);
         collect_hint::<uv_environment_operations::OperationsError>(cause, &mut hints);
@@ -81,14 +82,17 @@ fn collect_hint<T: Hinted + std::error::Error + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use insta::assert_debug_snapshot;
+    use insta::{allow_duplicates, assert_debug_snapshot};
 
+    use uv_lock_operations::LockError;
+    use uv_project_commands::project::ProjectError;
+    use uv_settings::{LockedFlag, LockedSource};
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
     use super::hints_for_error;
 
     #[test]
-    fn collects_source_hints_through_pyproject_errors() {
+    fn collects_hints_through_wrapped_errors() {
         let err = anyhow::Error::new(PyprojectTomlError::Source(SourceError::OverlappingMarkers(
             "sys_platform == 'win32'".to_string(),
             "python_version == '3.12'".to_string(),
@@ -101,5 +105,22 @@ mod tests {
             "replace `python_version == '3.12'` with `python_version != '3.12'`",
         ]
         "#);
+
+        let conversions: [fn(LockError) -> anyhow::Error; 2] = [anyhow::Error::new, |error| {
+            anyhow::Error::new(ProjectError::from(error))
+        }];
+        for convert in conversions {
+            let error =
+                LockError::LockFormat("uv.lock".into(), 3, LockedSource::Cli(LockedFlag::Check));
+            let error = convert(error).context("Failed to check the lockfile");
+            let hints = hints_for_error(&error);
+            allow_duplicates! {
+                assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+                [
+                    "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
+                ]
+                "#);
+            }
+        }
     }
 }

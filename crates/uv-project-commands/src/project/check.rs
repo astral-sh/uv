@@ -5,38 +5,40 @@ use anyhow::Result;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
+use uv_command_support::Printer;
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, InstallOptions,
+    ActiveEnvironment, ColorChoice, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
+    DryRun, ExtrasSpecification, InstallOptions,
+};
+use uv_environment_operations::environment::CachedEnvironment;
+use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::{
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectInterpreter, ScriptEnvironment, SyncRequest, UniversalState,
+    store_credentials_from_target, sync_from_lock,
 };
 use uv_fs::normalize_path;
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::SummaryInstallLogger;
+use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_resolve_operations::loggers::SummaryResolveLogger;
 use uv_scripts::Pep723Script;
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_settings::{
+    FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
-use crate::pip::operations::Modifications;
-use crate::project::environment::CachedEnvironment;
-use crate::project::install_target::InstallTarget;
-use crate::project::lock::LockMode;
-use crate::project::lock_target::LockTarget;
-use crate::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter, UniversalState,
-};
 use crate::reporters::PythonDownloadReporter;
 use crate::{ExitStatus, UvError, project};
-use uv_command_support::Printer;
-use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 mod ty;
 
@@ -398,7 +400,7 @@ pub async fn check(
             LockMode::Write(venv.interpreter())
         };
         let result = match Box::pin(
-            project::lock::LockOperation::new(
+            LockOperation::new(
                 mode,
                 &settings.resolver,
                 &client_builder,
@@ -442,24 +444,26 @@ pub async fn check(
             script,
             lock: result.lock(),
         };
-        match project::sync::do_sync(
-            target,
-            &venv,
-            &extras,
-            &groups,
-            None,
-            InstallOptions::default(),
-            Modifications::Sufficient,
-            None,
-            (&settings).into(),
+        match sync_from_lock(
+            SyncRequest {
+                target,
+                environment: &venv,
+                extras: &extras,
+                groups: &groups,
+                editable: None,
+                install_options: InstallOptions::default(),
+                modifications: Modifications::Sufficient,
+                python_platform: None,
+                settings: (&settings).into(),
+                installer_metadata,
+                dry_run: DryRun::Disabled,
+            },
             &client_builder,
             &sync_state,
             Box::new(SummaryInstallLogger),
-            installer_metadata,
             &concurrency,
             cache,
             workspace_cache,
-            DryRun::Disabled,
             printer,
             preview,
             &malware_settings,
@@ -479,7 +483,8 @@ pub async fn check(
         Some(venv)
     } else if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
-        let mut malware_context = project::malware::MalwareCheckContext::from(&malware_settings);
+        let mut malware_context =
+            uv_environment_operations::malware::MalwareCheckContext::from(&malware_settings);
         let install_options = InstallOptions::new(
             no_install_project,
             false,
@@ -575,7 +580,7 @@ pub async fn check(
         };
 
         let result = match Box::pin(
-            project::lock::LockOperation::new(
+            LockOperation::new(
                 mode,
                 &settings.resolver,
                 &client_builder,
@@ -639,7 +644,7 @@ pub async fn check(
                     &base_interpreter,
                     &settings.resolver.build_options,
                 )?;
-                project::sync::store_credentials_from_target(target, &client_builder)?;
+                store_credentials_from_target(target, &client_builder)?;
                 let ty_state = state.fork();
                 let environment = match CachedEnvironment::from_locked_resolution(
                     &resolution,
@@ -674,24 +679,26 @@ pub async fn check(
             debug!("Skipping environment synchronization due to `--no-sync`");
         } else {
             let sync_state = state.fork();
-            match project::sync::do_sync(
-                target,
-                &venv,
-                &extras,
-                &groups,
-                None,
-                install_options,
-                Modifications::Sufficient,
-                None,
-                (&settings).into(),
+            match sync_from_lock(
+                SyncRequest {
+                    target,
+                    environment: &venv,
+                    extras: &extras,
+                    groups: &groups,
+                    editable: None,
+                    install_options,
+                    modifications: Modifications::Sufficient,
+                    python_platform: None,
+                    settings: (&settings).into(),
+                    installer_metadata,
+                    dry_run: DryRun::Disabled,
+                },
                 &client_builder,
                 &sync_state,
                 Box::new(SummaryInstallLogger),
-                installer_metadata,
                 &concurrency,
                 cache,
                 workspace_cache,
-                DryRun::Disabled,
                 printer,
                 preview,
                 malware_context,

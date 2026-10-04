@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use anyhow::Result;
 use tracing::{debug, warn};
+
 use uv_fs::Simplified;
 
 /// Restore project or script files on errors and Ctrl-C, unless the edit is committed.

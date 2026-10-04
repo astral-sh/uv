@@ -15,6 +15,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::Printer;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
@@ -26,9 +27,18 @@ use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
 };
+use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::{
+    EnvironmentError, LinkErrorReporting, PlatformState, ProjectEnvironment,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, SyncRequest,
+    UniversalState, init_script_python_requirement, sync_from_lock,
+};
 use uv_errors::HintOrdering;
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::store_credentials;
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
@@ -36,11 +46,15 @@ use uv_python::{
     ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonEnvironment,
     PythonPreference, PythonRequest,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_settings::{
+    FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+};
 use uv_static::is_known_standard_library_package;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
@@ -50,21 +64,10 @@ use uv_workspace::pyproject::{
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger};
-use crate::pip::operations::Modifications;
+use crate::project::ProjectError;
 use crate::project::edit::ProjectEdit;
-use crate::project::install_target::InstallTarget;
-use crate::project::lock::LockMode;
-use crate::project::lock_target::LockTarget;
-use crate::project::{
-    EnvironmentError, LinkErrorReporting, PlatformState, ProjectEnvironment,
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError, ProjectInterpreter,
-    ProjectPythonRequest, ScriptInterpreter, UniversalState, init_script_python_requirement,
-};
 use crate::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::{ExitStatus, ScriptPath, UvError, project};
-use uv_command_support::Printer;
-use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// A failed dependency addition, with `uv add`-specific recovery context.
 #[derive(Debug, thiserror::Error)]
@@ -815,7 +818,8 @@ pub async fn add(
             Ok(ExitStatus::Success)
         }
         Err(err) => match err {
-            ProjectError::Environment(EnvironmentError::Operation(err)) => {
+            ProjectError::Environment(EnvironmentError::Operation(err))
+            | ProjectError::Lock(LockError::Environment(EnvironmentError::Operation(err))) => {
                 let err = *err;
                 let standard_library_package = standard_library_package(&err, &edits, python_minor);
                 Err(UvError::from(err)
@@ -834,7 +838,7 @@ pub async fn add(
 }
 
 fn standard_library_package(
-    operation_error: &crate::pip::operations::Error,
+    operation_error: &uv_environment_operations::OperationsError,
     edits: &[DependencyEdit],
     python_minor: u8,
 ) -> Option<PackageName> {
@@ -1099,7 +1103,7 @@ async fn lock_and_sync(
     );
     let first_party_exclusions = target.first_party_exclusions(&install_options);
     let mut lock = Box::pin(
-        project::lock::LockOperation::new(
+        LockOperation::new(
             if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(target.interpreter(), lock_check)
             } else if dry_run {
@@ -1229,7 +1233,7 @@ async fn lock_and_sync(
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = Box::pin(
-                project::lock::LockOperation::new(
+                LockOperation::new(
                     if let LockCheck::Enabled(lock_check) = lock_check {
                         LockMode::Locked(target.interpreter(), lock_check)
                     } else if dry_run {
@@ -1278,24 +1282,26 @@ async fn lock_and_sync(
         },
     };
 
-    project::sync::do_sync(
-        target,
-        venv,
-        extras,
-        groups,
-        None,
-        install_options,
-        Modifications::Sufficient,
-        None,
-        settings.into(),
+    sync_from_lock(
+        SyncRequest {
+            target,
+            environment: venv,
+            extras,
+            groups,
+            editable: None,
+            install_options,
+            modifications: Modifications::Sufficient,
+            python_platform: None,
+            settings: settings.into(),
+            installer_metadata,
+            dry_run: DryRun::Disabled,
+        },
         client_builder,
         &sync_state,
         Box::new(DefaultInstallLogger),
-        installer_metadata,
         concurrency,
         cache,
         &WorkspaceCache::default(),
-        DryRun::Disabled,
         printer,
         preview,
         malware_settings,

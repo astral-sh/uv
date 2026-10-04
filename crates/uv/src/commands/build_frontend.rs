@@ -51,10 +51,10 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::ResolverSettings;
 use uv_environment_operations::{EnvironmentError, find_requires_python};
 use uv_python_context::PythonDownloadReporter;
 use uv_resolve_operations as operations;
+use uv_settings::ResolverSettings;
 
 #[derive(Debug, Error)]
 pub(crate) enum Error {

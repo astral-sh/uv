@@ -1,38 +1,35 @@
 use std::path::Path;
 
-use crate::ExitStatus;
-use crate::UvError;
-use crate::pip::loggers::DefaultResolveLogger;
-use crate::pip::resolution_markers;
-use crate::project::lock::{LockMode, LockOperation};
-use crate::project::lock_target::LockTarget;
-use crate::project::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
-    ScriptInterpreter, UniversalState,
-};
-use uv_command_support::Printer;
-use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
-
 use anyhow::{Result, bail};
+
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
+use uv_audit_operations::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
 use uv_cache::Cache;
-use uv_cli::AuditOutputFormat;
 use uv_client::BaseClientBuilder;
+use uv_command_support::Printer;
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple,
+    ActiveEnvironment, AuditOutputFormat, Concurrency, DependencyGroups, ExtrasSpecification,
+    TargetTriple,
 };
+use uv_environment_operations::{
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, UniversalState,
+};
+use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
+use uv_resolve_operations::loggers::DefaultResolveLogger;
+use uv_resolve_operations::resolution_markers;
 use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use uv_audit_operations::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
+use crate::{ExitStatus, UvError};
 
 pub async fn audit(
     project_dir: &Path,

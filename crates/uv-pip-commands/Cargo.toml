@@ -18,7 +18,6 @@ workspace = true
 [dependencies]
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
-uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-command-support = { workspace = true }
 uv-configuration = { workspace = true }

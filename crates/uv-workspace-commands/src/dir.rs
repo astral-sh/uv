@@ -2,15 +2,13 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Result, bail};
-
 use owo_colors::OwoColorize;
+
 use uv_cache::Cache;
+use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
-
-use crate::ExitStatus;
-use uv_command_support::Printer;
 
 /// Print the path to the workspace dir
 pub async fn dir(

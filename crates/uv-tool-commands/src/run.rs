@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -15,7 +15,6 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyMode, DependencyModifiers, Excludes, GitLfsSetting,
@@ -65,23 +64,7 @@ use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::ResolverInstallerSettings;
 use uv_settings::ResolverSettings;
 
-/// The user-facing command used to invoke a tool run.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ToolRunCommand {
-    /// via the `uvx` alias
-    Uvx,
-    /// via `uv tool run`
-    ToolRun,
-}
-
-impl Display for ToolRunCommand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Uvx => write!(f, "uvx"),
-            Self::ToolRun => write!(f, "uv tool run"),
-        }
-    }
-}
+pub use uv_configuration::ToolRunCommand;
 
 /// Context for invocation mistakes that are specific to `uv tool run` and `uvx`.
 #[derive(Debug)]
@@ -147,7 +130,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
 pub async fn run(
-    command: Option<ExternalCommand>,
+    command: Option<Vec<OsString>>,
     from: Option<String>,
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -217,8 +200,7 @@ pub async fn run(
         return Ok(ExitStatus::Error);
     };
 
-    let (target, args) = command.split();
-    let Some(target) = target else {
+    let Some((target, args)) = command.split_first() else {
         return Err(anyhow::anyhow!("No tool command provided"));
     };
 

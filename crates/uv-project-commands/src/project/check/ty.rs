@@ -8,19 +8,19 @@ use tracing::debug;
 
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
-use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
+use uv_command_support::Printer;
+use uv_command_support::child::run_to_completion;
+use uv_configuration::ColorChoice;
 use uv_fs::Simplified;
 use uv_pep440::Version;
+use uv_scripts::{ScriptDiscoveryError, find_scripts};
+use uv_settings::{FrozenSource, LockCheck};
 use uv_shell::shlex_posix;
 use uv_static::EnvVars;
 
 use crate::ExitStatus;
 use crate::reporters::BinaryDownloadReporter;
-use crate::workspace::list::{ScriptDiscoveryError, find_scripts};
-use uv_command_support::Printer;
-use uv_command_support::child::run_to_completion;
-use uv_settings::{FrozenSource, LockCheck};
 
 /// Run a type check powered by ty.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -173,7 +173,7 @@ pub(super) async fn run(
         command.arg("--exclude-scripts");
     } else if let Some(workspace_root) = workspace_root {
         excluded_scripts.extend(
-            find_scripts(workspace_root, cache)
+            find_scripts(workspace_root, cache.root())
                 .filter_map(|script| match script {
                     Ok(script) => check_targets
                         .iter()

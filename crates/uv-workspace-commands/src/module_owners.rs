@@ -1,31 +1,29 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
+
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
 };
 use uv_distribution_types::{Dist, Name, ResolvedDist};
+use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::{SyncRequest, UniversalState, sync_from_lock};
 use uv_fs::PortablePathBuf;
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_installer::SitePackages;
 use uv_lock::{Installable, Metadata};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
-use uv_settings::MalwareCheckSettings;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
+use uv_settings::{InstallerSettingsRef, MalwareCheckSettings, ResolverSettings};
 use uv_workspace::WorkspaceCache;
-
-use crate::pip::loggers::DefaultInstallLogger;
-use crate::pip::operations::Modifications;
-use crate::pip::{resolution_markers, resolution_tags};
-use crate::project::UniversalState;
-use crate::project::install_target::InstallTarget;
-use crate::project::sync::do_sync;
-use uv_command_support::Printer;
-use uv_settings::{InstallerSettingsRef, ResolverSettings};
 
 /// Map importable modules to package IDs, optionally syncing all locked extras and groups first.
 ///
@@ -72,24 +70,26 @@ pub(super) async fn collect_module_owners(
             sources: settings.sources.clone(),
         };
 
-        do_sync(
-            target,
-            venv,
-            &extras,
-            &groups,
-            None,
-            InstallOptions::default(),
-            modifications,
-            None,
-            installer_settings,
+        sync_from_lock(
+            SyncRequest {
+                target,
+                environment: venv,
+                extras: &extras,
+                groups: &groups,
+                editable: None,
+                install_options: InstallOptions::default(),
+                modifications,
+                python_platform: None,
+                settings: installer_settings,
+                installer_metadata: false,
+                dry_run: DryRun::Disabled,
+            },
             client_builder,
             &state.fork(),
             Box::new(DefaultInstallLogger),
-            false,
             concurrency,
             cache,
             workspace_cache,
-            DryRun::Disabled,
             Printer::Silent,
             preview,
             malware_settings,

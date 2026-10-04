@@ -5,9 +5,8 @@ use uv_distribution_types::Resolution;
 use uv_lock::{Lock, SelectedDependency};
 use uv_normalize::{GroupName, PackageName};
 use uv_python::Interpreter;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_workspace::VirtualProject;
-
-use crate::pip::{resolution_markers, resolution_tags};
 
 /// A locked package selected for use as a project tool.
 pub(super) struct LockedTool<'lock> {

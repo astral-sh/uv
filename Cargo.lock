@@ -5801,12 +5801,10 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.14.0",
- "jiff",
  "owo-colors",
  "predicates",
  "regex",
  "reqwest",
- "rustc-hash",
  "self-replace",
  "serde",
  "serde_json",
@@ -5825,7 +5823,6 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tree",
  "url",
- "uv-audit",
  "uv-auth",
  "uv-bin-install",
  "uv-build-backend",
@@ -5834,6 +5831,7 @@ dependencies = [
  "uv-cache-info",
  "uv-cache-key",
  "uv-cli",
+ "uv-cli-settings",
  "uv-client",
  "uv-command-support",
  "uv-configuration",
@@ -5851,6 +5849,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-installer",
  "uv-lock",
+ "uv-lock-operations",
  "uv-logging",
  "uv-normalize",
  "uv-pep440",
@@ -5877,7 +5876,6 @@ dependencies = [
  "uv-test",
  "uv-threads",
  "uv-tool-commands",
- "uv-torch",
  "uv-trampoline-builder",
  "uv-types",
  "uv-unix",
@@ -5886,6 +5884,7 @@ dependencies = [
  "uv-warnings",
  "uv-windows",
  "uv-workspace",
+ "uv-workspace-commands",
  "walkdir",
  "which",
  "wiremock",
@@ -6222,7 +6221,6 @@ dependencies = [
 name = "uv-cli"
 version = "0.0.90"
 dependencies = [
- "anstream",
  "anyhow",
  "clap",
  "clap_complete_command",
@@ -6246,6 +6244,35 @@ dependencies = [
  "uv-static",
  "uv-torch",
  "uv-version",
+ "uv-warnings",
+ "uv-workspace",
+]
+
+[[package]]
+name = "uv-cli-settings"
+version = "0.0.90"
+dependencies = [
+ "anyhow",
+ "jiff",
+ "rustc-hash",
+ "uv-audit",
+ "uv-auth",
+ "uv-cache",
+ "uv-cli",
+ "uv-client",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-install-wheel",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-preview",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-redacted",
+ "uv-settings",
+ "uv-static",
+ "uv-torch",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -6351,7 +6378,6 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-redacted",
- "uv-scripts",
  "uv-shell",
  "uv-static",
  "uv-warnings",
@@ -6361,6 +6387,7 @@ dependencies = [
 name = "uv-configuration"
 version = "0.0.90"
 dependencies = [
+ "anstream",
  "anyhow",
  "astral-version-ranges",
  "clap",
@@ -6651,6 +6678,7 @@ dependencies = [
  "uv-installer",
  "uv-lock",
  "uv-normalize",
+ "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
  "uv-preview",
@@ -7015,6 +7043,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-lock-operations"
+version = "0.0.90"
+dependencies = [
+ "anyhow",
+ "fs-err",
+ "itertools 0.14.0",
+ "rustc-hash",
+ "thiserror",
+ "toml",
+ "toml_edit",
+ "toml_parser",
+ "tracing",
+ "uv-auth",
+ "uv-cache",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-dispatch",
+ "uv-distribution",
+ "uv-distribution-types",
+ "uv-environment-operations",
+ "uv-errors",
+ "uv-fs",
+ "uv-git",
+ "uv-lock",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-preview",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-python-context",
+ "uv-requirements",
+ "uv-resolve-operations",
+ "uv-resolver",
+ "uv-scripts",
+ "uv-settings",
+ "uv-types",
+ "uv-warnings",
+ "uv-workspace",
+]
+
+[[package]]
 name = "uv-logging"
 version = "0.0.90"
 dependencies = [
@@ -7161,7 +7232,6 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-cache-info",
- "uv-cli",
  "uv-client",
  "uv-command-support",
  "uv-configuration",
@@ -7255,7 +7325,6 @@ dependencies = [
  "ctrlc",
  "fs-err",
  "futures",
- "ignore",
  "indicatif",
  "indoc",
  "itertools 0.14.0",
@@ -7269,7 +7338,6 @@ dependencies = [
  "tokio",
  "toml",
  "toml_edit",
- "toml_parser",
  "tracing",
  "url",
  "uv-audit",
@@ -7279,7 +7347,6 @@ dependencies = [
  "uv-cache",
  "uv-cache-info",
  "uv-cache-key",
- "uv-cli",
  "uv-client",
  "uv-command-support",
  "uv-configuration",
@@ -7295,6 +7362,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-installer",
  "uv-lock",
+ "uv-lock-operations",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -7724,6 +7792,7 @@ name = "uv-scripts"
 version = "0.0.90"
 dependencies = [
  "fs-err",
+ "ignore",
  "indoc",
  "memchr",
  "regex",
@@ -7734,6 +7803,7 @@ dependencies = [
  "url",
  "uv-configuration",
  "uv-distribution-types",
+ "uv-fs",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -7939,7 +8009,6 @@ dependencies = [
  "uv-cache",
  "uv-cache-info",
  "uv-cache-key",
- "uv-cli",
  "uv-client",
  "uv-command-support",
  "uv-configuration",
@@ -8133,6 +8202,37 @@ dependencies = [
  "uv-static",
  "uv-toml",
  "uv-warnings",
+]
+
+[[package]]
+name = "uv-workspace-commands"
+version = "0.0.90"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "owo-colors",
+ "tracing",
+ "uv-cache",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-environment-operations",
+ "uv-fs",
+ "uv-install-operations",
+ "uv-installer",
+ "uv-lock",
+ "uv-lock-operations",
+ "uv-normalize",
+ "uv-preview",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-python-context",
+ "uv-resolve-operations",
+ "uv-scripts",
+ "uv-settings",
+ "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]

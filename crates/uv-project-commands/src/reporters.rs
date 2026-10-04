@@ -1,9 +1,11 @@
 use indicatif::{MultiProgress, ProgressBar};
+
 use uv_command_support::{
     Printer,
     progress::{Direction, ProgressReporter},
 };
 use uv_pep440::Version;
+
 pub(crate) use uv_python_context::PythonDownloadReporter;
 pub(crate) use uv_resolve_operations::reporters::{LatestVersionReporter, ResolverReporter};
 

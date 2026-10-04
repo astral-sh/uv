@@ -10,7 +10,6 @@ use anstream::AutoStream;
 use anyhow::bail;
 use tracing::debug;
 use uv_fs::Simplified;
-use uv_scripts::Pep723Script;
 use uv_warnings::warn_user;
 
 pub mod child;
@@ -290,14 +289,4 @@ pub fn capitalize(s: &str) -> String {
         None => String::new(),
         Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
     }
-}
-
-/// A Python file that may or may not include an existing PEP 723 script tag.
-#[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
-pub enum ScriptPath {
-    /// The Python file already includes a PEP 723 script tag.
-    Script(Pep723Script),
-    /// The Python file does not include a PEP 723 script tag.
-    Path(PathBuf),
 }

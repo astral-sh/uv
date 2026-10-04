@@ -45,6 +45,7 @@ pub mod report;
 pub mod reporters;
 
 pub use error::Error;
+pub use uv_configuration::Modifications;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 enum ChangeEventKind {
@@ -60,21 +61,6 @@ enum ChangeEventKind {
 struct ChangeEvent<'a> {
     dist: &'a ChangedDist,
     kind: ChangeEventKind,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Modifications {
-    /// Use `pip install` semantics, whereby existing installations are left as-is, unless they are
-    /// marked for re-installation or upgrade.
-    ///
-    /// Ensures that the resulting environment is sufficient to meet the requirements, but without
-    /// any unnecessary changes.
-    Sufficient,
-    /// Use `pip sync` semantics, whereby any existing, extraneous installations are removed.
-    ///
-    /// Ensures that the resulting environment is an exact match for the requirements, but may
-    /// result in more changes than necessary.
-    Exact,
 }
 
 /// A distribution which was or would be modified

@@ -34,6 +34,7 @@ uv-install-operations = { workspace = true }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
 uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }

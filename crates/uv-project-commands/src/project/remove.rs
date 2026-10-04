@@ -9,37 +9,39 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_command_support::Printer;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
+use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::{
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectInterpreter, SyncRequest, UniversalState, sync_from_lock,
+};
 use uv_fs::Simplified;
-use uv_normalize::PackageName;
-use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_lock_operations::{LockMode, LockOperation, LockTarget};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::{Pep723Metadata, Pep723Script};
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_settings::{
+    FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, PyProjectToml};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::pip::operations::Modifications;
+use crate::project::ProjectError;
 use crate::project::add::{AddTarget, PythonTarget};
 use crate::project::edit::ProjectEdit;
-use crate::project::install_target::InstallTarget;
-use crate::project::lock::LockMode;
-use crate::project::lock_target::LockTarget;
-use crate::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectError, ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, UniversalState,
-};
-use crate::{ExitStatus, UvError, project};
-use uv_command_support::Printer;
-use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+use crate::{ExitStatus, UvError};
 
 /// Remove one or more packages from the project requirements.
 pub async fn remove(
@@ -338,7 +340,7 @@ pub async fn remove(
 
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
-        project::lock::LockOperation::new(
+        LockOperation::new(
             mode,
             &settings.resolver,
             &client_builder,
@@ -385,24 +387,26 @@ pub async fn remove(
 
     let state = state.fork();
 
-    match project::sync::do_sync(
-        target,
-        venv,
-        &extras,
-        &groups,
-        None,
-        InstallOptions::default(),
-        Modifications::Exact,
-        None,
-        (&settings).into(),
+    match sync_from_lock(
+        SyncRequest {
+            target,
+            environment: venv,
+            extras: &extras,
+            groups: &groups,
+            editable: None,
+            install_options: InstallOptions::default(),
+            modifications: Modifications::Exact,
+            python_platform: None,
+            settings: (&settings).into(),
+            installer_metadata,
+            dry_run: DryRun::Disabled,
+        },
         &client_builder,
         &state,
         Box::new(DefaultInstallLogger),
-        installer_metadata,
         &concurrency,
         cache,
         &WorkspaceCache::default(),
-        DryRun::Disabled,
         printer,
         preview,
         &malware_settings,

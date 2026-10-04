@@ -5,24 +5,35 @@ use std::str::FromStr;
 use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
 use thiserror::Error;
-
 use tracing::debug;
+
 use uv_cache::Cache;
-use uv_cli::version::ProjectVersionInfo;
-use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
+use uv_command_support::Printer;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    VersionBump, VersionBumpSpec, VersionFormat,
+};
+use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::{
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectInterpreter, SyncRequest, UniversalState, sync_from_lock,
 };
 use uv_fs::Simplified;
-use uv_normalize::DefaultExtras;
-use uv_normalize::PackageName;
+use uv_install_operations::Modifications;
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_lock_operations::{LockMode, LockOperation, LockTarget};
+use uv_normalize::{DefaultExtras, PackageName};
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_python_context::ProjectPythonRequest;
+use uv_resolve_operations::loggers::DefaultResolveLogger;
+use uv_settings::{
+    FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+};
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
@@ -31,43 +42,36 @@ use uv_workspace::{
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
-use crate::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::pip::operations::Modifications;
+use crate::project::ProjectError;
 use crate::project::add::{AddTarget, PythonTarget};
 use crate::project::edit::ProjectEdit;
-use crate::project::install_target::InstallTarget;
-use crate::project::lock::LockMode;
-use crate::project::lock_target::LockTarget;
-use crate::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectError, ProjectInterpreter, ProjectPythonRequest, UniversalState,
-};
-use crate::{ExitStatus, UvError, project};
-use uv_command_support::Printer;
-use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+use crate::{ExitStatus, UvError};
 
-/// Display version information for uv itself (`uv self version`)
-pub fn self_version(
-    short: bool,
-    output_format: VersionFormat,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    let version_info = uv_cli::version::uv_self_version();
-    match output_format {
-        VersionFormat::Text => {
-            if short {
-                writeln!(printer.stdout(), "{}", version_info.version().cyan())?;
-            } else {
-                writeln!(printer.stdout(), "uv {}", version_info.cyan())?;
-            }
-        }
-        VersionFormat::Json => {
-            let string = serde_json::to_string_pretty(&version_info)?;
-            writeln!(printer.stdout(), "{string}")?;
+/// Version information for a project (`uv version`).
+#[derive(serde::Serialize)]
+struct ProjectVersionInfo {
+    /// Name of the package.
+    package_name: Option<String>,
+    /// Version, such as "0.5.1".
+    version: String,
+    /// Always `null` for project versions, kept for backwards compatibility.
+    commit_info: Option<()>,
+}
+
+impl ProjectVersionInfo {
+    fn new(package_name: Option<&PackageName>, version: &Version) -> Self {
+        Self {
+            package_name: package_name.map(ToString::to_string),
+            version: version.to_string(),
+            commit_info: None,
         }
     }
+}
 
-    Ok(ExitStatus::Success)
+impl std::fmt::Display for ProjectVersionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.version)
+    }
 }
 
 /// Read or update project version (`uv version`)
@@ -499,7 +503,7 @@ async fn print_frozen_version(
 
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
-        project::lock::LockOperation::new(
+        LockOperation::new(
             LockMode::Frozen(frozen_source.into()),
             &settings.resolver,
             &client_builder,
@@ -644,7 +648,7 @@ async fn lock_and_sync(
 
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
-        project::lock::LockOperation::new(
+        LockOperation::new(
             mode,
             &settings.resolver,
             &client_builder,
@@ -691,24 +695,26 @@ async fn lock_and_sync(
 
     let state = state.fork();
 
-    match project::sync::do_sync(
-        target,
-        venv,
-        &extras,
-        &groups,
-        None,
-        install_options,
-        Modifications::Sufficient,
-        None,
-        settings.into(),
+    match sync_from_lock(
+        SyncRequest {
+            target,
+            environment: venv,
+            extras: &extras,
+            groups: &groups,
+            editable: None,
+            install_options,
+            modifications: Modifications::Sufficient,
+            python_platform: None,
+            settings: settings.into(),
+            installer_metadata,
+            dry_run: DryRun::Disabled,
+        },
         &client_builder,
         &state,
         Box::new(DefaultInstallLogger),
-        installer_metadata,
         concurrency,
         cache,
         &workspace_cache,
-        DryRun::Disabled,
         printer,
         preview,
         malware_settings,

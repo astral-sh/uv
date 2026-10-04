@@ -16,7 +16,6 @@ use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Error, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
-use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
 
@@ -32,9 +31,16 @@ use uv_cli::{
     PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace,
     TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
+use uv_cli_settings as settings;
+use uv_cli_settings::{
+    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
+    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipTreeSettings,
+    PipUninstallSettings, PublishSettings, resolve_color,
+};
 use uv_client::BaseClientBuilder;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
+use uv_lock_operations::LockError;
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
@@ -54,18 +60,12 @@ use crate::commands::{
     ExitStatus, ParsedRunCommand, ProjectError, RunCommand, ScriptPath, ToolRunCommand, UvError,
 };
 use crate::printer::Printer;
-use crate::settings::{
-    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
-    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings, resolve_color,
-};
 
 pub mod commands;
 #[cfg(not(feature = "self-update"))]
 mod install_source;
 mod logging;
 pub(crate) mod printer;
-pub(crate) mod settings;
 
 /// Construct the shared HTTP client builder from the resolved global settings.
 fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
@@ -165,7 +165,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }) = **command
     {
         Some(ParsedRunCommand::from_args(
-            command, module, script, gui_script,
+            command.as_slice(),
+            module,
+            script,
+            gui_script,
         )?)
     } else {
         None
@@ -3143,7 +3146,10 @@ where
                 Err(err)
                     if matches!(
                         err.downcast_ref::<ProjectError>(),
-                        Some(ProjectError::LockFormat(..))
+                        Some(ProjectError::Lock(LockError::LockFormat(..)))
+                    ) || matches!(
+                        err.downcast_ref::<LockError>(),
+                        Some(LockError::LockFormat(..))
                     ) =>
                 {
                     UvError::User(err)

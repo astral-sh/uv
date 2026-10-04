@@ -73,6 +73,9 @@ pub use uv_resolve_operations::locked_requirements;
 pub mod malware;
 mod operations_error;
 mod python;
+mod sync;
+pub use sync::{SyncRequest, store_credentials_from_target, sync_from_lock};
+
 mod validated_lock;
 
 pub use operations_error::OperationsError;

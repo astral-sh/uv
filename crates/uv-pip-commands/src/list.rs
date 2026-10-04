@@ -12,8 +12,8 @@ use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::ListFormat;
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{

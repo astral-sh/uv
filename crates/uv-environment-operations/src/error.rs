@@ -5,6 +5,7 @@ use uv_auth::CredentialsFromUrlError;
 use uv_command_support::UvError;
 use uv_distribution_types::{IndexCredentialsError, IndexUrlError, RequiresPython};
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::Version;
 use uv_python_context::format_requires_python_sources;
 use uv_workspace::RequiresPythonSources;
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -43,6 +44,16 @@ pub enum EnvironmentError {
         locked: RequiresPython,
         groups: RequiresPythonSources,
     },
+
+    #[error(
+        "The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`"
+    )]
+    LockedPythonIncompatibility(Version, RequiresPython),
+
+    #[error(
+        "The current Python platform is not compatible with the lockfile's supported environments: {0}"
+    )]
+    LockedPlatformIncompatibility(String),
 
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
@@ -206,6 +217,8 @@ impl From<EnvironmentError> for UvError {
             | EnvironmentError::MissingExtraProjects(..)
             | EnvironmentError::MissingExtraScript(..)
             | EnvironmentError::DisjointLockedRequiresPython { .. }
+            | EnvironmentError::LockedPythonIncompatibility(..)
+            | EnvironmentError::LockedPlatformIncompatibility(..)
             | EnvironmentError::InvalidProjectEnvironmentDir(..)
             | EnvironmentError::MalwareFound
             | EnvironmentError::Osv(..)
@@ -258,6 +271,8 @@ impl uv_errors::Hinted for EnvironmentError {
             | Self::MissingExtraProjects(..)
             | Self::MissingExtraScript(..)
             | Self::DisjointLockedRequiresPython { .. }
+            | Self::LockedPythonIncompatibility(..)
+            | Self::LockedPlatformIncompatibility(..)
             | Self::InvalidProjectEnvironmentDir(..)
             | Self::MalwareFound
             | Self::Osv(..)

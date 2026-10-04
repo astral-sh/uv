@@ -1,4 +1,7 @@
+//! Resolve command settings from CLI arguments, environment variables, and configuration files.
+
 use std::env::VarError;
+use std::ffi::OsString;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -34,18 +37,20 @@ use uv_cli::{
     },
 };
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
-use uv_configuration::RequirementsInput;
 use uv_configuration::{
-    ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode,
-    DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification,
-    GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary,
-    NoBuild, NoSources, Override, PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl,
-    Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    ActiveEnvironment, AnnotationStyle, BuildIsolation, BuildOptions, Concurrency,
+    DependencyGroups, DependencyMode, DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency,
+    ExcludeNewer, ExcludeNewerPackage, ExportFormat, ExtrasSpecification, ForkStrategy,
+    GitLfsSetting, HashCheckingMode, IndexStrategy, InitKind, InitProjectKind, InstallOptions,
+    KeyringProviderType, Modifications, NoBinary, NoBuild, NoSources, Override, PackageOverride,
+    PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl, PythonUpgrade,
+    PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput, ResolutionMode,
+    TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
-    MinimumLibcVersion, NameRequirementSpecification, PackageConfigSettings, Requirement,
+    ConfigSettings, DependencyMetadata, ExcludeNewerOverride, ExtraBuildVariables, Index,
+    IndexLocations, IndexUrl, MinimumLibcVersion, NameRequirementSpecification,
+    PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
@@ -57,19 +62,12 @@ use uv_python::{
     Prefix, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion, Target,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{
-    AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage,
-    ForkStrategy, Prerelease, ResolutionMode,
-};
 use uv_settings::{
-    Combine, EnvFlag, EnvironmentOptions, FilesystemOptions, IndexOptions, MalwareCheckSettings,
-    Options, PipOptions, PreviewFeaturesOption, PreviewOption, PublishOptions,
-    PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
-    resolve_prerelease,
-};
-pub(crate) use uv_settings::{
-    FrozenFlag, FrozenSource, LockCheck, LockedFlag, LockedSource, PythonListKinds,
-    ResolverInstallerSettings, ResolverSettings,
+    Combine, EnvFlag, EnvironmentOptions, FilesystemOptions, FrozenFlag, FrozenSource,
+    IndexOptions, LockCheck, LockedFlag, LockedSource, MalwareCheckSettings, Options, PipOptions,
+    PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors, PythonListKinds,
+    ResolverInstallerOptions, ResolverInstallerSchema, ResolverInstallerSettings, ResolverOptions,
+    ResolverSettings, resolve_prerelease,
 };
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
@@ -77,35 +75,30 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, OverrideDependency};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
-use crate::commands::{
-    InitKind, InitProjectKind, PythonUpgrade, PythonUpgradeSource, ToolRunCommand,
-};
-use uv_install_operations::Modifications;
-
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
 
 /// The resolved global settings to use for any invocation of the CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct GlobalSettings {
-    pub(crate) required_version: Option<RequiredVersion>,
-    pub(crate) quiet: u8,
-    pub(crate) verbose: u8,
-    pub(crate) color: ColorChoice,
-    pub(crate) network_settings: NetworkSettings,
-    pub(crate) concurrency: Concurrency,
-    pub(crate) show_settings: bool,
-    pub(crate) preview: Preview,
-    pub(crate) python_preference: PythonPreference,
-    pub(crate) python_arch: Option<PythonArchitecture>,
-    pub(crate) python_downloads: PythonDownloads,
-    pub(crate) no_progress: bool,
-    pub(crate) installer_metadata: bool,
+pub struct GlobalSettings {
+    pub required_version: Option<RequiredVersion>,
+    pub quiet: u8,
+    pub verbose: u8,
+    pub color: ColorChoice,
+    pub network_settings: NetworkSettings,
+    pub concurrency: Concurrency,
+    pub show_settings: bool,
+    pub preview: Preview,
+    pub python_preference: PythonPreference,
+    pub python_arch: Option<PythonArchitecture>,
+    pub python_downloads: PythonDownloads,
+    pub no_progress: bool,
+    pub installer_metadata: bool,
 }
 
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: &GlobalArgs,
         workspace: Option<&FilesystemOptions>,
         environment: &EnvironmentOptions,
@@ -176,7 +169,7 @@ impl GlobalSettings {
 }
 
 /// Resolve the color choice from CLI arguments and environment variables.
-pub(crate) fn resolve_color(args: &GlobalArgs) -> ColorChoice {
+pub fn resolve_color(args: &GlobalArgs) -> ColorChoice {
     if let Some(color_choice) = args.color {
         // If `--color` is passed explicitly, use its value.
         color_choice
@@ -240,7 +233,7 @@ fn resolve_python_preference(
 }
 
 /// Resolve the preview setting from CLI, environment, and workspace config.
-pub(crate) fn resolve_preview(
+pub fn resolve_preview(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
@@ -283,19 +276,19 @@ pub(crate) fn resolve_preview(
 
 /// The resolved network settings to use for any invocation of the CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct NetworkSettings {
-    pub(super) connectivity: Connectivity,
-    pub(super) offline: Flag,
-    pub(super) system_certs: bool,
-    pub(super) custom_certificates: Option<Certificates>,
-    pub(super) http_proxy: Option<ProxyUrl>,
-    pub(super) https_proxy: Option<ProxyUrl>,
-    pub(super) no_proxy: Option<Vec<String>>,
-    pub(super) allow_insecure_host: Vec<TrustedHost>,
-    pub(super) read_timeout: Duration,
-    pub(super) connect_timeout: Duration,
-    pub(super) retries: u32,
-    pub(super) metadata_range_request: MetadataRangeRequest,
+pub struct NetworkSettings {
+    pub connectivity: Connectivity,
+    offline: Flag,
+    pub system_certs: bool,
+    pub custom_certificates: Option<Certificates>,
+    pub http_proxy: Option<ProxyUrl>,
+    pub https_proxy: Option<ProxyUrl>,
+    pub no_proxy: Option<Vec<String>>,
+    pub allow_insecure_host: Vec<TrustedHost>,
+    pub read_timeout: Duration,
+    pub connect_timeout: Duration,
+    pub retries: u32,
+    pub metadata_range_request: MetadataRangeRequest,
 }
 
 impl NetworkSettings {
@@ -433,7 +426,7 @@ impl NetworkSettings {
     ///
     /// This should be called when a command uses refresh functionality to ensure
     /// offline mode and refresh are not both enabled.
-    pub(crate) fn check_refresh_conflict(&self, refresh: &Refresh) -> anyhow::Result<()> {
+    pub fn check_refresh_conflict(&self, refresh: &Refresh) -> anyhow::Result<()> {
         if !matches!(refresh, Refresh::None(_)) {
             // TODO(charlie): `Refresh` isn't a `Flag`, so we create a synthetic one here
             // (which matches Clap's representation). Consider a dedicated helper for
@@ -446,14 +439,14 @@ impl NetworkSettings {
 
 /// The resolved cache settings to use for any invocation of the CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct CacheSettings {
-    pub(crate) no_cache: bool,
-    pub(crate) cache_dir: Option<PathBuf>,
+pub struct CacheSettings {
+    pub no_cache: bool,
+    pub cache_dir: Option<PathBuf>,
 }
 
 impl CacheSettings {
     /// Resolve the [`CacheSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
+    pub fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
             no_cache: args.no_cache
                 || workspace
@@ -468,26 +461,26 @@ impl CacheSettings {
 
 /// The resolved settings to use for a `init` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct InitSettings {
-    pub(crate) path: Option<PathBuf>,
-    pub(crate) name: Option<PackageName>,
-    pub(crate) kind: InitKind,
-    pub(crate) bare: bool,
-    pub(crate) description: Option<String>,
-    pub(crate) no_description: bool,
-    pub(crate) vcs: Option<VersionControlSystem>,
-    pub(crate) build_backend: Option<ProjectBuildBackend>,
-    pub(crate) no_readme: bool,
-    pub(crate) author_from: Option<AuthorFrom>,
-    pub(crate) pin_python: bool,
-    pub(crate) no_workspace: bool,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
+pub struct InitSettings {
+    pub path: Option<PathBuf>,
+    pub name: Option<PackageName>,
+    pub kind: InitKind,
+    pub bare: bool,
+    pub description: Option<String>,
+    pub no_description: bool,
+    pub vcs: Option<VersionControlSystem>,
+    pub build_backend: Option<ProjectBuildBackend>,
+    pub no_readme: bool,
+    pub author_from: Option<AuthorFrom>,
+    pub pin_python: bool,
+    pub no_workspace: bool,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
 }
 
 impl InitSettings {
     /// Resolve the [`InitSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: InitArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -682,33 +675,33 @@ fn resolve_lock_check(
 
 /// The resolved settings to use for a `run` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct RunSettings {
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DependencyGroups,
-    pub(crate) editable: Option<EditableMode>,
-    pub(crate) modifications: Modifications,
-    pub(crate) with: Vec<String>,
-    pub(crate) with_editable: Vec<String>,
-    pub(crate) with_requirements: Vec<RequirementsInput>,
-    pub(crate) isolated: bool,
-    pub(crate) show_resolution: bool,
-    pub(crate) all_packages: bool,
-    pub(crate) package: Option<PackageName>,
-    pub(crate) no_project: bool,
-    pub(crate) active: ActiveEnvironment,
-    pub(crate) no_sync: bool,
-    pub(crate) python: Option<String>,
-    pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) env_file: EnvFile,
-    pub(crate) max_recursion_depth: u32,
-    pub(crate) malware_settings: MalwareCheckSettings,
+pub struct RunSettings {
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub extras: ExtrasSpecification,
+    pub groups: DependencyGroups,
+    pub editable: Option<EditableMode>,
+    pub modifications: Modifications,
+    pub with: Vec<String>,
+    pub with_editable: Vec<String>,
+    pub with_requirements: Vec<RequirementsInput>,
+    pub isolated: bool,
+    pub show_resolution: bool,
+    pub all_packages: bool,
+    pub package: Option<PackageName>,
+    pub no_project: bool,
+    pub active: ActiveEnvironment,
+    pub no_sync: bool,
+    pub python: Option<String>,
+    pub python_platform: Option<TargetTriple>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverInstallerSettings,
+    pub env_file: EnvFile,
+    pub max_recursion_depth: u32,
+    pub malware_settings: MalwareCheckSettings,
     #[cfg(unix)]
-    pub(crate) run_rlimit_nofile: Option<u32>,
+    pub run_rlimit_nofile: Option<u32>,
 }
 
 impl RunSettings {
@@ -719,7 +712,7 @@ impl RunSettings {
     const DEFAULT_MAX_RECURSION_DEPTH: u32 = 100;
 
     /// Resolve the [`RunSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: RunArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -884,31 +877,31 @@ impl RunSettings {
 
 /// The resolved settings to use for a `tool run` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct ToolRunSettings {
-    pub(crate) command: Option<ExternalCommand>,
-    pub(crate) from: Option<String>,
-    pub(crate) with: Vec<String>,
-    pub(crate) with_requirements: Vec<RequirementsInput>,
-    pub(crate) with_editable: Vec<String>,
-    pub(crate) constraints: Vec<RequirementsInput>,
-    pub(crate) overrides: Vec<RequirementsInput>,
-    pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) isolated: bool,
-    pub(crate) show_resolution: bool,
-    pub(crate) lfs: GitLfsSetting,
-    pub(crate) python: Option<String>,
-    pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) options: ResolverInstallerOptions,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) env_file: Vec<PathBuf>,
-    pub(crate) no_env_file: bool,
+pub struct ToolRunSettings {
+    pub command: Option<Vec<OsString>>,
+    pub from: Option<String>,
+    pub with: Vec<String>,
+    pub with_requirements: Vec<RequirementsInput>,
+    pub with_editable: Vec<String>,
+    pub constraints: Vec<RequirementsInput>,
+    pub overrides: Vec<RequirementsInput>,
+    pub build_constraints: Vec<RequirementsInput>,
+    pub isolated: bool,
+    pub show_resolution: bool,
+    pub lfs: GitLfsSetting,
+    pub python: Option<String>,
+    pub python_platform: Option<TargetTriple>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub options: ResolverInstallerOptions,
+    pub settings: ResolverInstallerSettings,
+    pub env_file: Vec<PathBuf>,
+    pub no_env_file: bool,
 }
 
 impl ToolRunSettings {
     /// Resolve the [`ToolRunSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: ToolRunArgs,
         filesystem: Option<FilesystemOptions>,
         invocation_source: ToolRunCommand,
@@ -999,7 +992,7 @@ impl ToolRunSettings {
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
 
         Ok(Self {
-            command,
+            command: command.map(|ExternalCommand::Cmd(command)| command),
             from,
             with: with
                 .into_iter()
@@ -1044,31 +1037,31 @@ impl ToolRunSettings {
 
 /// The resolved settings to use for a `tool install` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct ToolInstallSettings {
-    pub(crate) package: String,
-    pub(crate) from: Option<String>,
-    pub(crate) with: Vec<String>,
-    pub(crate) with_requirements: Vec<RequirementsInput>,
-    pub(crate) with_executables_from: Vec<String>,
-    pub(crate) with_editable: Vec<String>,
-    pub(crate) constraints: Vec<RequirementsInput>,
-    pub(crate) overrides: Vec<RequirementsInput>,
-    pub(crate) excludes: Vec<RequirementsInput>,
-    pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) lfs: GitLfsSetting,
-    pub(crate) python: Option<String>,
-    pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) refresh: Refresh,
-    pub(crate) options: ResolverInstallerOptions,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) force: bool,
-    pub(crate) editable: bool,
-    pub(crate) install_mirrors: PythonInstallMirrors,
+pub struct ToolInstallSettings {
+    pub package: String,
+    pub from: Option<String>,
+    pub with: Vec<String>,
+    pub with_requirements: Vec<RequirementsInput>,
+    pub with_executables_from: Vec<String>,
+    pub with_editable: Vec<String>,
+    pub constraints: Vec<RequirementsInput>,
+    pub overrides: Vec<RequirementsInput>,
+    pub excludes: Vec<RequirementsInput>,
+    pub build_constraints: Vec<RequirementsInput>,
+    pub lfs: GitLfsSetting,
+    pub python: Option<String>,
+    pub python_platform: Option<TargetTriple>,
+    pub refresh: Refresh,
+    pub options: ResolverInstallerOptions,
+    pub settings: ResolverInstallerSettings,
+    pub force: bool,
+    pub editable: bool,
+    pub install_mirrors: PythonInstallMirrors,
 }
 
 impl ToolInstallSettings {
     /// Resolve the [`ToolInstallSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: ToolInstallArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -1177,17 +1170,17 @@ impl ToolInstallSettings {
 
 /// The resolved settings to use for a `tool upgrade` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct ToolUpgradeSettings {
-    pub(crate) names: Vec<String>,
-    pub(crate) python: Option<String>,
-    pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) args: ResolverInstallerOptions,
-    pub(crate) filesystem: ResolverInstallerOptions,
+pub struct ToolUpgradeSettings {
+    pub names: Vec<String>,
+    pub python: Option<String>,
+    pub python_platform: Option<TargetTriple>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub args: ResolverInstallerOptions,
+    pub filesystem: ResolverInstallerOptions,
 }
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: ToolUpgradeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
@@ -1271,20 +1264,20 @@ impl ToolUpgradeSettings {
 
 /// The resolved settings to use for a `tool list` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct ToolListSettings {
-    pub(crate) show_paths: bool,
-    pub(crate) show_version_specifiers: bool,
-    pub(crate) show_with: bool,
-    pub(crate) show_extras: bool,
-    pub(crate) show_python: bool,
-    pub(crate) outdated: bool,
-    pub(crate) args: ResolverInstallerOptions,
-    pub(crate) filesystem: ResolverInstallerOptions,
+pub struct ToolListSettings {
+    pub show_paths: bool,
+    pub show_version_specifiers: bool,
+    pub show_with: bool,
+    pub show_extras: bool,
+    pub show_python: bool,
+    pub outdated: bool,
+    pub args: ResolverInstallerOptions,
+    pub filesystem: ResolverInstallerOptions,
 }
 
 impl ToolListSettings {
     /// Resolve the [`ToolListSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: ToolListArgs,
         filesystem: Option<FilesystemOptions>,
     ) -> anyhow::Result<Self> {
@@ -1338,19 +1331,19 @@ impl ToolListSettings {
 
 /// The resolved settings to use for a `tool audit` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct ToolAuditSettings {
-    pub(crate) names: Vec<PackageName>,
-    pub(crate) output_format: AuditOutputFormat,
-    pub(crate) service_format: VulnerabilityServiceFormat,
-    pub(crate) service_url: Option<DisplaySafeUrl>,
-    pub(crate) ignore: Vec<VulnerabilityID>,
-    pub(crate) ignore_until_fixed: Vec<VulnerabilityID>,
-    pub(crate) filesystem: ResolverInstallerOptions,
+pub struct ToolAuditSettings {
+    pub names: Vec<PackageName>,
+    pub output_format: AuditOutputFormat,
+    pub service_format: VulnerabilityServiceFormat,
+    pub service_url: Option<DisplaySafeUrl>,
+    pub ignore: Vec<VulnerabilityID>,
+    pub ignore_until_fixed: Vec<VulnerabilityID>,
+    pub filesystem: ResolverInstallerOptions,
 }
 
 impl ToolAuditSettings {
     /// Resolve the [`ToolAuditSettings`] from the CLI and user-level configuration.
-    pub(crate) fn resolve(args: ToolAuditArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub fn resolve(args: ToolAuditArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolAuditArgs {
             name,
             all,
@@ -1399,13 +1392,13 @@ impl ToolAuditSettings {
 
 /// The resolved settings to use for a `tool uninstall` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct ToolUninstallSettings {
-    pub(crate) name: Vec<PackageName>,
+pub struct ToolUninstallSettings {
+    pub name: Vec<PackageName>,
 }
 
 impl ToolUninstallSettings {
     /// Resolve the [`ToolUninstallSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: ToolUninstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub fn resolve(args: ToolUninstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let ToolUninstallArgs { name, all } = args;
 
         Self {
@@ -1416,14 +1409,14 @@ impl ToolUninstallSettings {
 
 /// The resolved settings to use for a `tool dir` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct ToolDirSettings {
-    pub(crate) bin: bool,
+pub struct ToolDirSettings {
+    pub bin: bool,
 }
 
 impl ToolDirSettings {
     /// Resolve the [`ToolDirSettings`] from the CLI and filesystem configuration.
     #[expect(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolDirArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub fn resolve(args: ToolDirArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let ToolDirArgs { bin } = args;
 
         Self { bin }
@@ -1432,23 +1425,23 @@ impl ToolDirSettings {
 
 /// The resolved settings to use for a `tool run` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PythonListSettings {
-    pub(crate) request: Option<String>,
-    pub(crate) kinds: PythonListKinds,
-    pub(crate) all_platforms: bool,
-    pub(crate) all_arches: bool,
-    pub(crate) all_versions: bool,
-    pub(crate) show_urls: bool,
-    pub(crate) output_format: PythonListFormat,
-    pub(crate) python_downloads_json_url: Option<String>,
-    pub(crate) python_install_mirror: Option<String>,
-    pub(crate) pypy_install_mirror: Option<String>,
+pub struct PythonListSettings {
+    pub request: Option<String>,
+    pub kinds: PythonListKinds,
+    pub all_platforms: bool,
+    pub all_arches: bool,
+    pub all_versions: bool,
+    pub show_urls: bool,
+    pub output_format: PythonListFormat,
+    pub python_downloads_json_url: Option<String>,
+    pub python_install_mirror: Option<String>,
+    pub pypy_install_mirror: Option<String>,
 }
 
 impl PythonListSettings {
     /// Resolve the [`PythonListSettings`] from the CLI and filesystem configuration.
     #[expect(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PythonListArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -1523,14 +1516,14 @@ impl PythonListSettings {
 
 /// The resolved settings to use for a `python dir` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PythonDirSettings {
-    pub(crate) bin: bool,
+pub struct PythonDirSettings {
+    pub bin: bool,
 }
 
 impl PythonDirSettings {
     /// Resolve the [`PythonDirSettings`] from the CLI and filesystem configuration.
     #[expect(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonDirArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub fn resolve(args: PythonDirArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonDirArgs { bin } = args;
 
         Self { bin }
@@ -1539,24 +1532,24 @@ impl PythonDirSettings {
 
 /// The resolved settings to use for a `python install` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PythonInstallSettings {
-    pub(crate) install_dir: Option<PathBuf>,
-    pub(crate) targets: Vec<String>,
-    pub(crate) reinstall: bool,
-    pub(crate) force: bool,
-    pub(crate) upgrade: PythonUpgrade,
-    pub(crate) bin: Option<bool>,
-    pub(crate) registry: Option<bool>,
-    pub(crate) python_install_mirror: Option<String>,
-    pub(crate) pypy_install_mirror: Option<String>,
-    pub(crate) python_downloads_json_url: Option<String>,
-    pub(crate) default: bool,
-    pub(crate) compile_bytecode: bool,
+pub struct PythonInstallSettings {
+    pub install_dir: Option<PathBuf>,
+    pub targets: Vec<String>,
+    pub reinstall: bool,
+    pub force: bool,
+    pub upgrade: PythonUpgrade,
+    pub bin: Option<bool>,
+    pub registry: Option<bool>,
+    pub python_install_mirror: Option<String>,
+    pub pypy_install_mirror: Option<String>,
+    pub python_downloads_json_url: Option<String>,
+    pub default: bool,
+    pub compile_bytecode: bool,
 }
 
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PythonInstallArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -1631,23 +1624,23 @@ impl PythonInstallSettings {
 /// The resolved settings to use for a `python upgrade` invocation.
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct PythonUpgradeSettings {
-    pub(crate) install_dir: Option<PathBuf>,
-    pub(crate) targets: Vec<String>,
-    pub(crate) force: bool,
-    pub(crate) registry: Option<bool>,
-    pub(crate) python_install_mirror: Option<String>,
-    pub(crate) pypy_install_mirror: Option<String>,
-    pub(crate) reinstall: bool,
-    pub(crate) python_downloads_json_url: Option<String>,
-    pub(crate) default: bool,
-    pub(crate) bin: Option<bool>,
-    pub(crate) compile_bytecode: bool,
+pub struct PythonUpgradeSettings {
+    pub install_dir: Option<PathBuf>,
+    pub targets: Vec<String>,
+    pub force: bool,
+    pub registry: Option<bool>,
+    pub python_install_mirror: Option<String>,
+    pub pypy_install_mirror: Option<String>,
+    pub reinstall: bool,
+    pub python_downloads_json_url: Option<String>,
+    pub default: bool,
+    pub bin: Option<bool>,
+    pub compile_bytecode: bool,
 }
 
 impl PythonUpgradeSettings {
     /// Resolve the [`PythonUpgradeSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PythonUpgradeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -1711,18 +1704,15 @@ impl PythonUpgradeSettings {
 
 /// The resolved settings to use for a `python uninstall` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PythonUninstallSettings {
-    pub(crate) install_dir: Option<PathBuf>,
-    pub(crate) targets: Vec<String>,
-    pub(crate) all: bool,
+pub struct PythonUninstallSettings {
+    pub install_dir: Option<PathBuf>,
+    pub targets: Vec<String>,
+    pub all: bool,
 }
 
 impl PythonUninstallSettings {
     /// Resolve the [`PythonUninstallSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: PythonUninstallArgs,
-        _filesystem: Option<FilesystemOptions>,
-    ) -> Self {
+    pub fn resolve(args: PythonUninstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonUninstallArgs {
             install_dir,
             targets,
@@ -1739,18 +1729,18 @@ impl PythonUninstallSettings {
 
 /// The resolved settings to use for a `python find` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PythonFindSettings {
-    pub(crate) request: Option<String>,
-    pub(crate) show_version: bool,
-    pub(crate) resolve_links: bool,
-    pub(crate) no_project: bool,
-    pub(crate) system: bool,
-    pub(crate) python_downloads_json_url: Option<String>,
+pub struct PythonFindSettings {
+    pub request: Option<String>,
+    pub show_version: bool,
+    pub resolve_links: bool,
+    pub no_project: bool,
+    pub system: bool,
+    pub python_downloads_json_url: Option<String>,
 }
 
 impl PythonFindSettings {
     /// Resolve the [`PythonFindSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PythonFindArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -1796,18 +1786,18 @@ impl PythonFindSettings {
 
 /// The resolved settings to use for a `python pin` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PythonPinSettings {
-    pub(crate) request: Option<String>,
-    pub(crate) resolved: bool,
-    pub(crate) no_project: bool,
-    pub(crate) global: bool,
-    pub(crate) rm: bool,
-    pub(crate) install_mirrors: PythonInstallMirrors,
+pub struct PythonPinSettings {
+    pub request: Option<String>,
+    pub resolved: bool,
+    pub no_project: bool,
+    pub global: bool,
+    pub rm: bool,
+    pub install_mirrors: PythonInstallMirrors,
 }
 
 impl PythonPinSettings {
     /// Resolve the [`PythonPinSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PythonPinArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -1845,33 +1835,32 @@ impl PythonPinSettings {
 }
 
 /// The resolved settings to use for a `sync` invocation.
-#[expect(dead_code)]
 #[derive(Debug, Clone)]
-pub(crate) struct SyncSettings {
-    pub(super) lock_check: LockCheck,
-    pub(super) frozen: Option<FrozenSource>,
-    pub(super) dry_run: DryRun,
-    pub(super) script: Option<PathBuf>,
-    pub(super) active: ActiveEnvironment,
-    pub(super) extras: ExtrasSpecification,
-    pub(super) groups: DependencyGroups,
-    pub(super) editable: Option<EditableMode>,
-    pub(super) install_options: InstallOptions,
-    pub(super) modifications: Modifications,
-    pub(super) all_packages: bool,
-    pub(super) package: Vec<PackageName>,
-    pub(super) python: Option<String>,
-    pub(super) python_platform: Option<TargetTriple>,
-    pub(super) install_mirrors: PythonInstallMirrors,
-    pub(super) refresh: Refresh,
-    pub(super) settings: ResolverInstallerSettings,
-    pub(super) output_format: SyncFormat,
-    pub(super) malware_settings: MalwareCheckSettings,
+pub struct SyncSettings {
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub dry_run: DryRun,
+    pub script: Option<PathBuf>,
+    pub active: ActiveEnvironment,
+    pub extras: ExtrasSpecification,
+    pub groups: DependencyGroups,
+    pub editable: Option<EditableMode>,
+    pub install_options: InstallOptions,
+    pub modifications: Modifications,
+    pub all_packages: bool,
+    pub package: Vec<PackageName>,
+    pub python: Option<String>,
+    pub python_platform: Option<TargetTriple>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverInstallerSettings,
+    pub output_format: SyncFormat,
+    pub malware_settings: MalwareCheckSettings,
 }
 
 impl SyncSettings {
     /// Resolve the [`SyncSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: SyncArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -2066,20 +2055,20 @@ impl SyncSettings {
 
 /// The resolved settings to use for a `lock` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct LockSettings {
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) dry_run: DryRun,
-    pub(crate) script: Option<PathBuf>,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverSettings,
+pub struct LockSettings {
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub dry_run: DryRun,
+    pub script: Option<PathBuf>,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverSettings,
 }
 
 impl LockSettings {
     /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: LockArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -2145,16 +2134,16 @@ impl LockSettings {
 
 /// The resolved settings to use for an `upgrade` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct UpgradeSettings {
-    pub(crate) packages: Vec<PackageName>,
-    pub(crate) exclude: Vec<PackageName>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) settings: ResolverSettings,
+pub struct UpgradeSettings {
+    pub packages: Vec<PackageName>,
+    pub exclude: Vec<PackageName>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub settings: ResolverSettings,
 }
 
 impl UpgradeSettings {
     /// Resolve the [`UpgradeSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: UpgradeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -2185,23 +2174,23 @@ impl UpgradeSettings {
 
 /// The resolved settings to use for a `lock` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct MetadataSettings {
+pub struct MetadataSettings {
     #[expect(dead_code)]
     script: Option<PathBuf>,
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) sync: Option<Modifications>,
-    pub(crate) active: ActiveEnvironment,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverSettings,
-    pub(crate) malware_settings: MalwareCheckSettings,
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub sync: Option<Modifications>,
+    pub active: ActiveEnvironment,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverSettings,
+    pub malware_settings: MalwareCheckSettings,
 }
 
 impl MetadataSettings {
     /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: Box<MetadataArgs>,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -2258,46 +2247,46 @@ impl MetadataSettings {
 /// The resolved settings to use for a `add` invocation.
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct AddSettings {
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) active: ActiveEnvironment,
-    pub(crate) no_sync: bool,
-    pub(crate) packages: Vec<String>,
-    pub(crate) requirements: Vec<RequirementsInput>,
-    pub(crate) constraints: Vec<RequirementsInput>,
-    pub(crate) marker: Option<MarkerTree>,
-    pub(crate) dependency_type: DependencyType,
-    pub(crate) editable: Option<EditableMode>,
-    pub(crate) extras: Vec<ExtraName>,
-    pub(crate) raw: bool,
-    pub(crate) bounds: Option<AddBoundsKind>,
-    pub(crate) rev: Option<String>,
-    pub(crate) tag: Option<String>,
-    pub(crate) branch: Option<String>,
-    pub(crate) lfs: GitLfsSetting,
-    pub(crate) package: Option<PackageName>,
-    pub(crate) script: Option<PathBuf>,
-    pub(crate) python: Option<String>,
-    pub(crate) workspace: Option<bool>,
-    pub(crate) no_install_project: bool,
-    pub(crate) only_install_project: bool,
-    pub(crate) no_install_workspace: bool,
-    pub(crate) only_install_workspace: bool,
-    pub(crate) no_install_local: bool,
-    pub(crate) only_install_local: bool,
-    pub(crate) no_install_package: Vec<PackageName>,
-    pub(crate) only_install_package: Vec<PackageName>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) indexes: Vec<Index>,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) malware_settings: MalwareCheckSettings,
+pub struct AddSettings {
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub active: ActiveEnvironment,
+    pub no_sync: bool,
+    pub packages: Vec<String>,
+    pub requirements: Vec<RequirementsInput>,
+    pub constraints: Vec<RequirementsInput>,
+    pub marker: Option<MarkerTree>,
+    pub dependency_type: DependencyType,
+    pub editable: Option<EditableMode>,
+    pub extras: Vec<ExtraName>,
+    pub raw: bool,
+    pub bounds: Option<AddBoundsKind>,
+    pub rev: Option<String>,
+    pub tag: Option<String>,
+    pub branch: Option<String>,
+    pub lfs: GitLfsSetting,
+    pub package: Option<PackageName>,
+    pub script: Option<PathBuf>,
+    pub python: Option<String>,
+    pub workspace: Option<bool>,
+    pub no_install_project: bool,
+    pub only_install_project: bool,
+    pub no_install_workspace: bool,
+    pub only_install_workspace: bool,
+    pub no_install_local: bool,
+    pub only_install_local: bool,
+    pub no_install_package: Vec<PackageName>,
+    pub only_install_package: Vec<PackageName>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub indexes: Vec<Index>,
+    pub settings: ResolverInstallerSettings,
+    pub malware_settings: MalwareCheckSettings,
 }
 
 impl AddSettings {
     /// Resolve the [`AddSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: AddArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -2539,27 +2528,26 @@ impl AddSettings {
 }
 
 /// The resolved settings to use for a `remove` invocation.
-#[expect(dead_code)]
 #[derive(Debug, Clone)]
-pub(crate) struct RemoveSettings {
-    pub(super) lock_check: LockCheck,
-    pub(super) frozen: Option<FrozenSource>,
-    pub(super) active: ActiveEnvironment,
-    pub(super) no_sync: bool,
-    pub(super) packages: Vec<PackageName>,
-    pub(super) dependency_type: DependencyType,
-    pub(super) package: Option<PackageName>,
-    pub(super) script: Option<PathBuf>,
-    pub(super) python: Option<String>,
-    pub(super) install_mirrors: PythonInstallMirrors,
-    pub(super) refresh: Refresh,
-    pub(super) settings: ResolverInstallerSettings,
-    pub(super) malware_settings: MalwareCheckSettings,
+pub struct RemoveSettings {
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub active: ActiveEnvironment,
+    pub no_sync: bool,
+    pub packages: Vec<PackageName>,
+    pub dependency_type: DependencyType,
+    pub package: Option<PackageName>,
+    pub script: Option<PathBuf>,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverInstallerSettings,
+    pub malware_settings: MalwareCheckSettings,
 }
 
 impl RemoveSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: RemoveArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -2646,27 +2634,27 @@ impl RemoveSettings {
 
 /// The resolved settings to use for a `version` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct VersionSettings {
-    pub(crate) value: Option<String>,
-    pub(crate) bump: Vec<VersionBumpSpec>,
-    pub(crate) short: bool,
-    pub(crate) output_format: VersionFormat,
-    pub(crate) dry_run: bool,
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) active: ActiveEnvironment,
-    pub(crate) no_sync: bool,
-    pub(crate) package: Option<PackageName>,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) malware_settings: MalwareCheckSettings,
+pub struct VersionSettings {
+    pub value: Option<String>,
+    pub bump: Vec<VersionBumpSpec>,
+    pub short: bool,
+    pub output_format: VersionFormat,
+    pub dry_run: bool,
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub active: ActiveEnvironment,
+    pub no_sync: bool,
+    pub package: Option<PackageName>,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverInstallerSettings,
+    pub malware_settings: MalwareCheckSettings,
 }
 
 impl VersionSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: VersionArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -2737,31 +2725,30 @@ impl VersionSettings {
 
 /// The resolved settings to use for a `tree` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct TreeSettings {
-    pub(super) groups: DependencyGroups,
-    pub(super) lock_check: LockCheck,
-    pub(super) frozen: Option<FrozenSource>,
-    pub(super) universal: bool,
-    pub(super) format: TreeFormat,
-    pub(super) depth: u8,
-    pub(super) prune: Vec<PackageName>,
-    pub(super) package: Vec<PackageName>,
-    pub(super) no_dedupe: bool,
-    pub(super) invert: bool,
-    pub(super) outdated: bool,
-    pub(super) show_sizes: bool,
-    #[expect(dead_code)]
-    pub(super) script: Option<PathBuf>,
-    pub(super) python_version: Option<PythonVersion>,
-    pub(super) python_platform: Option<TargetTriple>,
-    pub(super) python: Option<String>,
-    pub(super) install_mirrors: PythonInstallMirrors,
-    pub(super) resolver: ResolverSettings,
+pub struct TreeSettings {
+    pub groups: DependencyGroups,
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub universal: bool,
+    pub format: TreeFormat,
+    pub depth: u8,
+    pub prune: Vec<PackageName>,
+    pub package: Vec<PackageName>,
+    pub no_dedupe: bool,
+    pub invert: bool,
+    pub outdated: bool,
+    pub show_sizes: bool,
+    pub script: Option<PathBuf>,
+    pub python_version: Option<PythonVersion>,
+    pub python_platform: Option<TargetTriple>,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub resolver: ResolverSettings,
 }
 
 impl TreeSettings {
     /// Resolve the [`TreeSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: TreeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -2850,36 +2837,36 @@ impl TreeSettings {
 }
 
 /// The resolved settings to use for an `export` invocation.
-#[expect(clippy::struct_excessive_bools, dead_code)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct ExportSettings {
-    pub(super) format: Option<ExportFormat>,
-    pub(super) all_packages: bool,
-    pub(super) package: Vec<PackageName>,
-    pub(super) prune: Vec<PackageName>,
-    pub(super) extras: ExtrasSpecification,
-    pub(super) groups: DependencyGroups,
-    pub(super) editable: Option<EditableMode>,
-    pub(super) hashes: bool,
-    pub(super) install_options: InstallOptions,
-    pub(super) batch: Option<PathBuf>,
-    pub(super) output_file: Option<PathBuf>,
-    pub(super) lock_check: LockCheck,
-    pub(super) frozen: Option<FrozenSource>,
-    pub(super) include_annotations: bool,
-    pub(super) include_header: bool,
-    pub(super) include_index_url: bool,
-    pub(super) include_find_links: bool,
-    pub(super) script: Option<PathBuf>,
-    pub(super) python: Option<String>,
-    pub(super) install_mirrors: PythonInstallMirrors,
-    pub(super) refresh: Refresh,
-    pub(super) settings: ResolverSettings,
+pub struct ExportSettings {
+    pub format: Option<ExportFormat>,
+    pub all_packages: bool,
+    pub package: Vec<PackageName>,
+    pub prune: Vec<PackageName>,
+    pub extras: ExtrasSpecification,
+    pub groups: DependencyGroups,
+    pub editable: Option<EditableMode>,
+    pub hashes: bool,
+    pub install_options: InstallOptions,
+    pub batch: Option<PathBuf>,
+    pub output_file: Option<PathBuf>,
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub include_annotations: bool,
+    pub include_header: bool,
+    pub include_index_url: bool,
+    pub include_find_links: bool,
+    pub script: Option<PathBuf>,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverSettings,
 }
 
 impl ExportSettings {
     /// Resolve the [`ExportSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: ExportArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -3034,20 +3021,20 @@ impl ExportSettings {
 
 /// The resolved settings to use for a `format` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct FormatSettings {
-    pub(crate) ruff_path: Option<PathBuf>,
-    pub(crate) check: bool,
-    pub(crate) diff: bool,
-    pub(crate) extra_args: Vec<String>,
-    pub(crate) version: Option<String>,
-    pub(crate) exclude_newer: Option<jiff::Timestamp>,
-    pub(crate) no_project: bool,
-    pub(crate) show_version: bool,
+pub struct FormatSettings {
+    pub ruff_path: Option<PathBuf>,
+    pub check: bool,
+    pub diff: bool,
+    pub extra_args: Vec<String>,
+    pub version: Option<String>,
+    pub exclude_newer: Option<jiff::Timestamp>,
+    pub no_project: bool,
+    pub show_version: bool,
 }
 
 impl FormatSettings {
     /// Resolve the [`FormatSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: FormatArgs,
         _filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -3079,34 +3066,34 @@ impl FormatSettings {
 
 /// The resolved settings to use for a `check` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct CheckSettings {
-    pub(crate) ty_path: Option<PathBuf>,
+pub struct CheckSettings {
+    pub ty_path: Option<PathBuf>,
     #[expect(dead_code)]
     script: Option<PathBuf>,
-    pub(crate) fix: bool,
-    pub(crate) all_packages: bool,
-    pub(crate) package: Vec<PackageName>,
-    pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DependencyGroups,
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) no_sync: bool,
-    pub(crate) no_install_project: bool,
-    pub(crate) isolated: bool,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) ty_version: Option<String>,
-    pub(crate) show_version: bool,
-    pub(crate) show_command: bool,
-    pub(crate) no_project: bool,
-    pub(crate) malware_settings: MalwareCheckSettings,
+    pub fix: bool,
+    pub all_packages: bool,
+    pub package: Vec<PackageName>,
+    pub extras: ExtrasSpecification,
+    pub groups: DependencyGroups,
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub no_sync: bool,
+    pub no_install_project: bool,
+    pub isolated: bool,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverInstallerSettings,
+    pub ty_version: Option<String>,
+    pub show_version: bool,
+    pub show_command: bool,
+    pub no_project: bool,
+    pub malware_settings: MalwareCheckSettings,
 }
 
 impl CheckSettings {
     /// Resolve the [`CheckSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: CheckArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -3229,25 +3216,25 @@ impl CheckSettings {
 
 /// The resolved settings to use for an `audit` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct AuditSettings {
-    pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DependencyGroups,
-    pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) python_version: Option<PythonVersion>,
-    pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) settings: ResolverSettings,
-    pub(crate) output_format: AuditOutputFormat,
-    pub(crate) service_format: VulnerabilityServiceFormat,
-    pub(crate) service_url: Option<DisplaySafeUrl>,
-    pub(crate) ignore: Vec<VulnerabilityID>,
-    pub(crate) ignore_until_fixed: Vec<VulnerabilityID>,
+pub struct AuditSettings {
+    pub extras: ExtrasSpecification,
+    pub groups: DependencyGroups,
+    pub lock_check: LockCheck,
+    pub frozen: Option<FrozenSource>,
+    pub python_version: Option<PythonVersion>,
+    pub python_platform: Option<TargetTriple>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub settings: ResolverSettings,
+    pub output_format: AuditOutputFormat,
+    pub service_format: VulnerabilityServiceFormat,
+    pub service_url: Option<DisplaySafeUrl>,
+    pub ignore: Vec<VulnerabilityID>,
+    pub ignore_until_fixed: Vec<VulnerabilityID>,
 }
 
 impl AuditSettings {
     /// Resolve the [`AuditSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: AuditArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -3386,27 +3373,27 @@ fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<R
 
 /// The resolved settings to use for a `pip compile` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipCompileSettings {
-    pub(crate) format: Option<PipCompileFormat>,
-    pub(crate) src_file: Vec<RequirementsInput>,
-    pub(crate) constraints: Vec<RequirementsInput>,
-    pub(crate) overrides: Vec<RequirementsInput>,
-    pub(crate) excludes: Vec<RequirementsInput>,
-    pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) constraints_from_workspace: Vec<Requirement>,
-    pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
-    pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
-    pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
-    pub(crate) environments: SupportedEnvironments,
-    pub(crate) required_environments: SupportedEnvironments,
-    pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: PipSettings,
+pub struct PipCompileSettings {
+    pub format: Option<PipCompileFormat>,
+    pub src_file: Vec<RequirementsInput>,
+    pub constraints: Vec<RequirementsInput>,
+    pub overrides: Vec<RequirementsInput>,
+    pub excludes: Vec<RequirementsInput>,
+    pub build_constraints: Vec<RequirementsInput>,
+    pub constraints_from_workspace: Vec<Requirement>,
+    pub overrides_from_workspace: Vec<Override<Requirement>>,
+    pub excludes_from_workspace: Vec<ExcludeDependency>,
+    pub build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    pub environments: SupportedEnvironments,
+    pub required_environments: SupportedEnvironments,
+    pub minimum_libc_version: Option<MinimumLibcVersion>,
+    pub refresh: Refresh,
+    pub settings: PipSettings,
 }
 
 impl PipCompileSettings {
     /// Resolve the [`PipCompileSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PipCompileArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -3608,19 +3595,19 @@ impl PipCompileSettings {
 
 /// The resolved settings to use for a `pip sync` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipSyncSettings {
-    pub(crate) src_file: Vec<RequirementsInput>,
-    pub(crate) constraints: Vec<RequirementsInput>,
-    pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) dry_run: DryRun,
-    pub(crate) output_format: PipInstallFormat,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: PipSettings,
+pub struct PipSyncSettings {
+    pub src_file: Vec<RequirementsInput>,
+    pub constraints: Vec<RequirementsInput>,
+    pub build_constraints: Vec<RequirementsInput>,
+    pub dry_run: DryRun,
+    pub output_format: PipInstallFormat,
+    pub refresh: Refresh,
+    pub settings: PipSettings,
 }
 
 impl PipSyncSettings {
     /// Resolve the [`PipSyncSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: Box<PipSyncArgs>,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -3722,29 +3709,29 @@ impl PipSyncSettings {
 
 /// The resolved settings to use for a `pip install` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipInstallSettings {
-    pub(crate) package: Vec<String>,
-    pub(crate) requirements: Vec<RequirementsInput>,
-    pub(crate) editables: Vec<String>,
-    pub(crate) editable: Option<EditableMode>,
-    pub(crate) constraints: Vec<RequirementsInput>,
-    pub(crate) overrides: Vec<RequirementsInput>,
-    pub(crate) excludes: Vec<RequirementsInput>,
-    pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) dry_run: DryRun,
-    pub(crate) output_format: PipInstallFormat,
-    pub(crate) constraints_from_workspace: Vec<Requirement>,
-    pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
-    pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
-    pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
-    pub(crate) modifications: Modifications,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: PipSettings,
+pub struct PipInstallSettings {
+    pub package: Vec<String>,
+    pub requirements: Vec<RequirementsInput>,
+    pub editables: Vec<String>,
+    pub editable: Option<EditableMode>,
+    pub constraints: Vec<RequirementsInput>,
+    pub overrides: Vec<RequirementsInput>,
+    pub excludes: Vec<RequirementsInput>,
+    pub build_constraints: Vec<RequirementsInput>,
+    pub dry_run: DryRun,
+    pub output_format: PipInstallFormat,
+    pub constraints_from_workspace: Vec<Requirement>,
+    pub overrides_from_workspace: Vec<Override<Requirement>>,
+    pub excludes_from_workspace: Vec<ExcludeDependency>,
+    pub build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    pub modifications: Modifications,
+    pub refresh: Refresh,
+    pub settings: PipSettings,
 }
 
 impl PipInstallSettings {
     /// Resolve the [`PipInstallSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PipInstallArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -3922,16 +3909,16 @@ impl PipInstallSettings {
 
 /// The resolved settings to use for a `pip uninstall` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipUninstallSettings {
-    pub(crate) package: Vec<String>,
-    pub(crate) requirements: Vec<RequirementsInput>,
-    pub(crate) dry_run: DryRun,
-    pub(crate) settings: PipSettings,
+pub struct PipUninstallSettings {
+    pub package: Vec<String>,
+    pub requirements: Vec<RequirementsInput>,
+    pub dry_run: DryRun,
+    pub settings: PipSettings,
 }
 
 impl PipUninstallSettings {
     /// Resolve the [`PipUninstallSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PipUninstallArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -3978,16 +3965,16 @@ impl PipUninstallSettings {
 
 /// The resolved settings to use for a `pip freeze` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipFreezeSettings {
-    pub(crate) exclude_editable: bool,
-    pub(crate) exclude: FxHashSet<PackageName>,
-    pub(crate) paths: Option<Vec<PathBuf>>,
-    pub(crate) settings: PipSettings,
+pub struct PipFreezeSettings {
+    pub exclude_editable: bool,
+    pub exclude: FxHashSet<PackageName>,
+    pub paths: Option<Vec<PathBuf>>,
+    pub settings: PipSettings,
 }
 
 impl PipFreezeSettings {
     /// Resolve the [`PipFreezeSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PipFreezeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -4028,17 +4015,17 @@ impl PipFreezeSettings {
 
 /// The resolved settings to use for a `pip list` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipListSettings {
-    pub(crate) editable: Option<bool>,
-    pub(crate) exclude: FxHashSet<PackageName>,
-    pub(crate) format: ListFormat,
-    pub(crate) outdated: bool,
-    pub(crate) settings: PipSettings,
+pub struct PipListSettings {
+    pub editable: Option<bool>,
+    pub exclude: FxHashSet<PackageName>,
+    pub format: ListFormat,
+    pub outdated: bool,
+    pub settings: PipSettings,
 }
 
 impl PipListSettings {
     /// Resolve the [`PipListSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PipListArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -4084,15 +4071,15 @@ impl PipListSettings {
 
 /// The resolved settings to use for a `pip show` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipShowSettings {
-    pub(crate) package: Vec<PackageName>,
-    pub(crate) files: bool,
-    pub(crate) settings: PipSettings,
+pub struct PipShowSettings {
+    pub package: Vec<PackageName>,
+    pub files: bool,
+    pub settings: PipSettings,
 }
 
 impl PipShowSettings {
     /// Resolve the [`PipShowSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PipShowArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -4131,20 +4118,20 @@ impl PipShowSettings {
 
 /// The resolved settings to use for a `pip tree` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipTreeSettings {
-    pub(crate) show_version_specifiers: bool,
-    pub(crate) depth: u8,
-    pub(crate) prune: Vec<PackageName>,
-    pub(crate) package: Vec<PackageName>,
-    pub(crate) no_dedupe: bool,
-    pub(crate) invert: bool,
-    pub(crate) outdated: bool,
-    pub(crate) settings: PipSettings,
+pub struct PipTreeSettings {
+    pub show_version_specifiers: bool,
+    pub depth: u8,
+    pub prune: Vec<PackageName>,
+    pub package: Vec<PackageName>,
+    pub no_dedupe: bool,
+    pub invert: bool,
+    pub outdated: bool,
+    pub settings: PipSettings,
 }
 
 impl PipTreeSettings {
     /// Resolve the [`PipTreeSettings`] from the CLI and workspace configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PipTreeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -4185,13 +4172,13 @@ impl PipTreeSettings {
 
 /// The resolved settings to use for a `pip check` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct PipCheckSettings {
-    pub(crate) settings: PipSettings,
+pub struct PipCheckSettings {
+    pub settings: PipSettings,
 }
 
 impl PipCheckSettings {
     /// Resolve the [`PipCheckSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: PipCheckArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -4222,31 +4209,31 @@ impl PipCheckSettings {
 
 /// The resolved settings to use for a `build` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct BuildSettings {
-    pub(crate) skip_dependency_check: bool,
-    pub(crate) src: Option<PathBuf>,
-    pub(crate) package: Option<PackageName>,
-    pub(crate) all_packages: bool,
-    pub(crate) out_dir: Option<PathBuf>,
-    pub(crate) sdist: bool,
-    pub(crate) wheel: bool,
-    pub(crate) list: bool,
-    pub(crate) build_logs: bool,
-    pub(crate) gitignore: bool,
-    pub(crate) force_pep517: bool,
-    pub(crate) clear: bool,
-    pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
-    pub(crate) hash_checking: Option<HashCheckingMode>,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: ResolverSettings,
+pub struct BuildSettings {
+    pub skip_dependency_check: bool,
+    pub src: Option<PathBuf>,
+    pub package: Option<PackageName>,
+    pub all_packages: bool,
+    pub out_dir: Option<PathBuf>,
+    pub sdist: bool,
+    pub wheel: bool,
+    pub list: bool,
+    pub build_logs: bool,
+    pub gitignore: bool,
+    pub force_pep517: bool,
+    pub clear: bool,
+    pub build_constraints: Vec<RequirementsInput>,
+    pub build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    pub hash_checking: Option<HashCheckingMode>,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub refresh: Refresh,
+    pub settings: ResolverSettings,
 }
 
 impl BuildSettings {
     /// Resolve the [`BuildSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: BuildArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -4338,25 +4325,25 @@ impl BuildSettings {
 
 /// The resolved settings to use for a `venv` invocation.
 #[derive(Debug, Clone)]
-pub(crate) struct VenvSettings {
-    pub(crate) seed: bool,
-    pub(crate) allow_existing: bool,
-    pub(crate) clear: bool,
-    pub(crate) force: bool,
-    pub(crate) no_clear: bool,
-    pub(crate) path: Option<PathBuf>,
-    pub(crate) prompt: Option<String>,
-    pub(crate) system_site_packages: bool,
-    pub(crate) relocatable: bool,
-    pub(crate) no_relocatable: bool,
-    pub(crate) no_project: bool,
-    pub(crate) refresh: Refresh,
-    pub(crate) settings: PipSettings,
+pub struct VenvSettings {
+    pub seed: bool,
+    pub allow_existing: bool,
+    pub clear: bool,
+    pub force: bool,
+    pub no_clear: bool,
+    pub path: Option<PathBuf>,
+    pub prompt: Option<String>,
+    pub system_site_packages: bool,
+    pub relocatable: bool,
+    pub no_relocatable: bool,
+    pub no_project: bool,
+    pub refresh: Refresh,
+    pub settings: PipSettings,
 }
 
 impl VenvSettings {
     /// Resolve the [`VenvSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
+    pub fn resolve(
         args: VenvArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
@@ -4557,58 +4544,58 @@ fn resolver_installer_options_with_environment(
 /// Represents the shared settings that are used across all `pip` commands. Analogous to the
 /// settings contained in the `[tool.uv.pip]` table.
 #[derive(Debug, Clone)]
-pub(crate) struct PipSettings {
-    pub(crate) index_locations: IndexLocations,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) system: bool,
-    pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: Vec<PipGroupName>,
-    pub(crate) break_system_packages: bool,
-    pub(crate) target: Option<Target>,
-    pub(crate) prefix: Option<Prefix>,
-    pub(crate) index_strategy: IndexStrategy,
-    pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) torch_backend: Option<TorchMode>,
-    pub(crate) cuda_driver_version: Option<Version>,
-    pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
-    pub(crate) build_isolation: BuildIsolation,
-    pub(crate) extra_build_dependencies: ExtraBuildDependencies,
-    pub(crate) extra_build_variables: ExtraBuildVariables,
-    pub(crate) build_options: BuildOptions,
-    pub(crate) allow_empty_requirements: bool,
-    pub(crate) strict: bool,
-    pub(crate) dependency_mode: DependencyMode,
-    pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: Prerelease,
-    pub(crate) fork_strategy: ForkStrategy,
-    pub(crate) dependency_metadata: DependencyMetadata,
-    pub(crate) output_file: Option<PathBuf>,
-    pub(crate) no_strip_extras: bool,
-    pub(crate) no_strip_markers: bool,
-    pub(crate) no_annotate: bool,
-    pub(crate) no_header: bool,
-    pub(crate) custom_compile_command: Option<String>,
-    pub(crate) generate_hashes: bool,
-    pub(crate) config_setting: ConfigSettings,
-    pub(crate) config_settings_package: PackageConfigSettings,
-    pub(crate) python_version: Option<PythonVersion>,
-    pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) universal: bool,
-    pub(crate) exclude_newer: ExcludeNewer,
-    pub(crate) no_emit_package: Vec<PackageName>,
-    pub(crate) emit_index_url: bool,
-    pub(crate) emit_find_links: bool,
-    pub(crate) emit_build_options: bool,
-    pub(crate) emit_marker_expression: bool,
-    pub(crate) emit_index_annotation: bool,
-    pub(crate) annotation_style: AnnotationStyle,
-    pub(crate) link_mode: LinkMode,
-    pub(crate) compile_bytecode: bool,
-    pub(crate) sources: NoSources,
-    pub(crate) hash_checking: Option<HashCheckingMode>,
-    pub(crate) upgrade: Upgrade,
-    pub(crate) reinstall: Reinstall,
+pub struct PipSettings {
+    pub index_locations: IndexLocations,
+    pub python: Option<String>,
+    pub install_mirrors: PythonInstallMirrors,
+    pub system: bool,
+    pub extras: ExtrasSpecification,
+    pub groups: Vec<PipGroupName>,
+    pub break_system_packages: bool,
+    pub target: Option<Target>,
+    pub prefix: Option<Prefix>,
+    pub index_strategy: IndexStrategy,
+    pub keyring_provider: KeyringProviderType,
+    pub torch_backend: Option<TorchMode>,
+    pub cuda_driver_version: Option<Version>,
+    pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    pub build_isolation: BuildIsolation,
+    pub extra_build_dependencies: ExtraBuildDependencies,
+    pub extra_build_variables: ExtraBuildVariables,
+    pub build_options: BuildOptions,
+    pub allow_empty_requirements: bool,
+    pub strict: bool,
+    pub dependency_mode: DependencyMode,
+    pub resolution: ResolutionMode,
+    pub prerelease: Prerelease,
+    pub fork_strategy: ForkStrategy,
+    pub dependency_metadata: DependencyMetadata,
+    pub output_file: Option<PathBuf>,
+    pub no_strip_extras: bool,
+    pub no_strip_markers: bool,
+    pub no_annotate: bool,
+    pub no_header: bool,
+    pub custom_compile_command: Option<String>,
+    pub generate_hashes: bool,
+    pub config_setting: ConfigSettings,
+    pub config_settings_package: PackageConfigSettings,
+    pub python_version: Option<PythonVersion>,
+    pub python_platform: Option<TargetTriple>,
+    pub universal: bool,
+    pub exclude_newer: ExcludeNewer,
+    pub no_emit_package: Vec<PackageName>,
+    pub emit_index_url: bool,
+    pub emit_find_links: bool,
+    pub emit_build_options: bool,
+    pub emit_marker_expression: bool,
+    pub emit_index_annotation: bool,
+    pub annotation_style: AnnotationStyle,
+    pub link_mode: LinkMode,
+    pub compile_bytecode: bool,
+    pub sources: NoSources,
+    pub hash_checking: Option<HashCheckingMode>,
+    pub upgrade: Upgrade,
+    pub reinstall: Reinstall,
 }
 
 impl PipSettings {
@@ -4995,23 +4982,23 @@ impl PipSettings {
 
 /// The resolved settings to use for an invocation of the `uv publish` CLI.
 #[derive(Clone)]
-pub(crate) struct PublishSettings {
+pub struct PublishSettings {
     // CLI only, see [`PublishArgs`] for docs.
-    pub(crate) files: Vec<String>,
-    pub(crate) username: Option<String>,
-    pub(crate) password: Option<String>,
-    pub(crate) index: Option<String>,
-    pub(crate) dry_run: bool,
-    pub(crate) no_attestations: bool,
+    pub files: Vec<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub index: Option<String>,
+    pub dry_run: bool,
+    pub no_attestations: bool,
 
     // Both CLI and configuration.
-    pub(crate) publish_url: DisplaySafeUrl,
-    pub(crate) trusted_publishing: TrustedPublishing,
-    pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) check_url: Option<IndexUrl>,
+    pub publish_url: DisplaySafeUrl,
+    pub trusted_publishing: TrustedPublishing,
+    pub keyring_provider: KeyringProviderType,
+    pub check_url: Option<IndexUrl>,
 
     // Configuration only
-    pub(crate) index_locations: IndexLocations,
+    pub index_locations: IndexLocations,
 }
 
 impl fmt::Debug for PublishSettings {
@@ -5034,7 +5021,7 @@ impl fmt::Debug for PublishSettings {
 
 impl PublishSettings {
     /// Resolve the [`PublishSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PublishArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub fn resolve(args: PublishArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let Options {
             publish, top_level, ..
         } = filesystem
@@ -5096,14 +5083,14 @@ impl PublishSettings {
 
 /// The resolved settings to use for an invocation of the `uv auth logout` CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct AuthLogoutSettings {
-    pub(crate) service: Service,
-    pub(crate) username: Option<String>,
+pub struct AuthLogoutSettings {
+    pub service: Service,
+    pub username: Option<String>,
 }
 
 impl AuthLogoutSettings {
     /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthLogoutArgs) -> Self {
+    pub fn resolve(args: AuthLogoutArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
@@ -5113,14 +5100,14 @@ impl AuthLogoutSettings {
 
 /// The resolved settings to use for an invocation of the `uv auth token` CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct AuthTokenSettings {
-    pub(crate) service: Service,
-    pub(crate) username: Option<String>,
+pub struct AuthTokenSettings {
+    pub service: Service,
+    pub username: Option<String>,
 }
 
 impl AuthTokenSettings {
     /// Resolve the [`AuthTokenSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthTokenArgs) -> Self {
+    pub fn resolve(args: AuthTokenArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
@@ -5130,16 +5117,16 @@ impl AuthTokenSettings {
 
 /// The resolved settings to use for an invocation of the `uv auth set` CLI.
 #[derive(Debug, Clone)]
-pub(crate) struct AuthLoginSettings {
-    pub(crate) service: Service,
-    pub(crate) username: Option<String>,
-    pub(crate) password: Option<String>,
-    pub(crate) token: Option<String>,
+pub struct AuthLoginSettings {
+    pub service: Service,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub token: Option<String>,
 }
 
 impl AuthLoginSettings {
     /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: AuthLoginArgs) -> Self {
+    pub fn resolve(args: AuthLoginArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,

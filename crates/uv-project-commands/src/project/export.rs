@@ -12,37 +12,34 @@ use serde::Deserialize;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::Printer;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, UniversalState,
+    detect_conflicts,
+};
 use uv_fs::CWD;
 use uv_lock::{Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
+use uv_lock_operations::{DiscoveredProject, FrozenWorkspace, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_requirements::is_pylock_toml;
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
 
-use crate::pip::loggers::DefaultResolveLogger;
-use crate::project::discovery::DiscoveredProject;
-use crate::project::install_target::{InstallTarget, PackageSelection};
-use crate::project::lock::{LockMode, LockOperation};
-use crate::project::lock_target::LockTarget;
-use crate::project::lockfile::FrozenWorkspace;
-use crate::project::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
-    ScriptInterpreter, UniversalState, detect_conflicts,
-};
 use crate::{ExitStatus, OutputWriter, UvError};
-use uv_command_support::Printer;
-use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]
