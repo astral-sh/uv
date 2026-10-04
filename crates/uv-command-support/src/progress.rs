@@ -7,7 +7,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use uv_console::human_readable_bytes;
-use uv_distribution_types::{BuildableSource, DistributionMetadata, Name, SourceDist};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
@@ -135,7 +134,8 @@ impl ProgressReporter {
         }
     }
 
-    pub fn on_build_start(&self, source: &BuildableSource) -> usize {
+    /// Start reporting a build for a source formatted by the caller.
+    pub fn on_build_start(&self, source: &str) -> usize {
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -153,11 +153,7 @@ impl ProgressReporter {
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        let message = format!(
-            "   {} {}",
-            "Building".bold().cyan(),
-            source.to_color_string()
-        );
+        let message = format!("   {} {}", "Building".bold().cyan(), source);
         if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
@@ -168,7 +164,8 @@ impl ProgressReporter {
         id
     }
 
-    pub fn on_build_complete(&self, source: &BuildableSource, id: usize) {
+    /// Finish reporting a build for a source formatted by the caller.
+    pub fn on_build_complete(&self, source: &str, id: usize) {
         let ProgressMode::Multi {
             state,
             multi_progress,
@@ -183,11 +180,7 @@ impl ProgressReporter {
             state.bars.remove(&id).unwrap()
         };
 
-        let message = format!(
-            "      {} {}",
-            "Built".bold().green(),
-            source.to_color_string()
-        );
+        let message = format!("      {} {}", "Built".bold().green(), source);
         if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
@@ -419,27 +412,5 @@ impl ProgressReporter {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.finish_with_message(message);
-    }
-}
-
-/// Like [`std::fmt::Display`], but with colors.
-trait ColorDisplay {
-    fn to_color_string(&self) -> String;
-}
-
-impl ColorDisplay for SourceDist {
-    fn to_color_string(&self) -> String {
-        let name = self.name();
-        let version_or_url = self.version_or_url();
-        format!("{}{}", name, version_or_url.to_string().dimmed())
-    }
-}
-
-impl ColorDisplay for BuildableSource<'_> {
-    fn to_color_string(&self) -> String {
-        match self {
-            Self::Dist(dist) => dist.to_color_string(),
-            Self::Url(url) => url.to_string(),
-        }
     }
 }

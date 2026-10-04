@@ -38,7 +38,6 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_lock_operations::LockError>(cause, &mut hints);
         collect_hint::<uv_resolve_operations::Error>(cause, &mut hints);
         collect_hint::<uv_install_operations::Error>(cause, &mut hints);
-        collect_hint::<uv_environment_operations::OperationsError>(cause, &mut hints);
         collect_hint::<uv_python_context::PythonContextError>(cause, &mut hints);
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
         collect_hint::<RecursionLimitError>(cause, &mut hints);

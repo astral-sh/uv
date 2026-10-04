@@ -6,7 +6,7 @@ use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_audit_operations::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, AuditOutputFormat, Concurrency, DependencyGroups, ExtrasSpecification,
     TargetTriple,
@@ -29,8 +29,6 @@ use uv_scripts::Pep723Script;
 use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
-
-use crate::{ExitStatus, UvError};
 
 pub async fn audit(
     project_dir: &Path,

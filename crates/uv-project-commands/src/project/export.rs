@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
@@ -38,8 +38,6 @@ use uv_scripts::Pep723Script;
 use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
-
-use crate::{ExitStatus, OutputWriter, UvError};
 
 #[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]

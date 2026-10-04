@@ -11,10 +11,10 @@ use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode,
-    ExtrasSpecification, InstallOptions, SyncFormat, TargetTriple,
+    ExtrasSpecification, InstallOptions, Modifications, SyncFormat, TargetTriple,
 };
 use uv_dispatch::{PlatformState, UniversalState};
 use uv_distribution_types::NameRequirementSpecification;
@@ -25,9 +25,9 @@ use uv_environment_operations::{
     script_specification, sync_from_lock, update_environment,
 };
 use uv_fs::{PortablePathBuf, Simplified};
+use uv_install_operations::Changelog;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_install_operations::report::{PackageChangesReport, SchemaReport};
-use uv_install_operations::{Changelog, Modifications};
 use uv_lock::{Installable, Lock, PythonReport};
 use uv_lock_operations::{
     DiscoveredProject, FrozenWorkspace, LockError, LockMode, LockOperation, LockResult, LockTarget,
@@ -49,8 +49,6 @@ use uv_settings::{
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
-
-use crate::{ExitStatus, UvError};
 
 /// Sync the project environment.
 pub async fn sync(
@@ -398,7 +396,7 @@ pub async fn sync(
                     )?;
                     return Ok(ExitStatus::Success);
                 }
-                Err(EnvironmentError::Operation(error)) => {
+                Err(EnvironmentError::Install(error)) => {
                     if let Some(changelog) = error.outdated_environment() {
                         write_sync_report(
                             &target,
@@ -552,7 +550,7 @@ pub async fn sync(
     .await
     {
         Ok(changelog) => changelog,
-        Err(EnvironmentError::Operation(error)) => {
+        Err(EnvironmentError::Install(error)) => {
             if let Some(changelog) = error.outdated_environment() {
                 write_sync_report(
                     &target,

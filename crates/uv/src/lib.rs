@@ -38,6 +38,7 @@ use uv_cli_settings::{
     PipUninstallSettings, PublishSettings, resolve_color,
 };
 use uv_client::BaseClientBuilder;
+use uv_configuration::{PythonUpgrade, PythonUpgradeSource, ToolRunCommand};
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_lock_operations::LockError;
@@ -57,7 +58,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::{
-    ExitStatus, ParsedRunCommand, ProjectError, RunCommand, ScriptPath, ToolRunCommand, UvError,
+    ExitStatus, ParsedRunCommand, ProjectError, RunCommand, ScriptPath, UvError,
 };
 use crate::printer::Printer;
 
@@ -1917,7 +1918,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
-            let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
+            let upgrade = PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade);
 
             // Initialize the cache.
             let cache = cache.init().await?;

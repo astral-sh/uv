@@ -7,8 +7,8 @@ use crate::{
     sync_environment,
 };
 use uv_command_support::Printer;
+use uv_configuration::{Concurrency, Constraints, HashCheckingMode, Modifications, TargetTriple};
 use uv_dispatch::PlatformState;
-use uv_install_operations::Modifications;
 use uv_install_operations::loggers::InstallLogger;
 use uv_resolve_operations::loggers::ResolveLogger;
 use uv_settings::ResolverInstallerSettings;
@@ -17,7 +17,6 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple};
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };

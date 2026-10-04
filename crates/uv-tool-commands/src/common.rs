@@ -50,7 +50,7 @@ use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
-use uv_resolve_operations::{resolution_markers, resolution_tags};
+use uv_resolve_operations::{Error as ResolveError, resolution_markers, resolution_tags};
 
 /// An error raised when a tool package provides no executables.
 #[derive(Debug, Error)]
@@ -111,12 +111,9 @@ impl Hinted for NoExecutablesError {
     }
 }
 use uv_command_support::Printer;
-use uv_environment_operations::{
-    EnvironmentError, EnvironmentSpecification, OperationsError, PreferenceLocation,
-    PythonRequestSource,
-};
+use uv_environment_operations::{EnvironmentError, EnvironmentSpecification, PreferenceLocation};
 use uv_lock_operations::{LockValidationError, ValidatedLock};
-use uv_python_context::PythonDownloadReporter;
+use uv_python_context::{PythonDownloadReporter, PythonRequestSource};
 use uv_settings::ResolverSettings;
 
 /// Return all packages which contain an executable with the given name.
@@ -183,7 +180,7 @@ impl ToolPython {
         git_resolver: &GitResolver,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
-    ) -> Result<Self, EnvironmentError> {
+    ) -> Result<Self, io::Error> {
         let requires_python = if python_request.is_none() {
             match requirement {
                 Some(requirement) => {
@@ -647,7 +644,7 @@ pub(super) fn tool_environment_spec<'lock>(
 pub(super) async fn refine_interpreter(
     interpreter: &Interpreter,
     python_request: Option<&PythonRequest>,
-    err: &OperationsError,
+    err: &ResolveError,
     client_builder: &BaseClientBuilder<'_>,
     reporter: &PythonDownloadReporter,
     install_mirrors: &PythonInstallMirrors,
@@ -655,7 +652,7 @@ pub(super) async fn refine_interpreter(
     python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
-) -> anyhow::Result<Option<Interpreter>, EnvironmentError> {
+) -> Result<Option<Interpreter>, uv_python::Error> {
     let Some(no_solution_err) = err.as_no_solution() else {
         return Ok(None);
     };

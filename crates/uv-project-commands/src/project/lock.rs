@@ -7,11 +7,11 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_dispatch::UniversalState;
 use uv_environment_operations::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ScriptInterpreter,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
     init_script_python_requirement,
 };
 use uv_git_types::GitOid;
@@ -25,14 +25,14 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
-use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter};
+use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::{ExitStatus, ScriptPath, UvError};
+use crate::ScriptPath;
 
 /// Resolve the project requirements into a lockfile.
 pub async fn lock(

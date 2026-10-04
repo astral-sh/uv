@@ -6,14 +6,14 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, TargetTriple,
+    ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, Modifications, TargetTriple,
 };
 use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{Dist, Resolution, ResolvedDist, SourceDist};
 use uv_install_operations::editable::apply_editable_mode;
 use uv_install_operations::loggers::InstallLogger;
-use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan, Modifications};
+use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_lock::Installable;
 use uv_pep508::{MarkerTree, VersionOrUrl};

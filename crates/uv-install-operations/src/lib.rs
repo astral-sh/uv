@@ -12,7 +12,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_command_support::Printer;
-use uv_configuration::{BuildOptions, Concurrency, DryRun, Reinstall};
+use uv_configuration::{BuildOptions, Concurrency, DryRun, Modifications, Reinstall};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
@@ -45,7 +45,6 @@ pub mod report;
 pub mod reporters;
 
 pub use error::Error;
-pub use uv_configuration::Modifications;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 enum ChangeEventKind {

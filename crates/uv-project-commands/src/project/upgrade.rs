@@ -9,7 +9,7 @@ use itertools::Itertools;
 
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
 };
@@ -42,7 +42,6 @@ use uv_workspace::{
 
 use crate::project::edit::ProjectEdit;
 use crate::project::lock::LockEvent;
-use crate::{ExitStatus, UvError};
 
 /// A dependency requirement selected for upgrading.
 struct UpgradableRequirement {

@@ -7,14 +7,13 @@ use uv_client::BaseClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
+    ExtrasSpecificationWithDefaults, InstallOptions, Modifications, Reinstall,
 };
 use uv_dispatch::UniversalState;
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_environment_operations::install_target::InstallTarget;
 use uv_environment_operations::{SyncRequest, sync_from_lock};
 use uv_fs::PortablePathBuf;
-use uv_install_operations::Modifications;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_installer::SitePackages;
 use uv_lock::{Installable, Metadata};

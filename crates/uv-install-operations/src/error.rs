@@ -1,5 +1,6 @@
 use owo_colors::OwoColorize;
-use uv_command_support::{UvError, dist_hints};
+use uv_command_support::UvError;
+use uv_distribution::dist_hints;
 use uv_distribution_types::Name;
 
 use crate::Changelog;
@@ -38,7 +39,7 @@ impl Error {
     }
 
     /// Return whether this operation failure is an expected user-facing failure.
-    pub fn is_user_failure(&self) -> bool {
+    fn is_user_failure(&self) -> bool {
         match self {
             Self::Prepare(error) => error.is_user_failure(),
             Self::Hash(_) | Self::OutdatedEnvironment(_) => true,

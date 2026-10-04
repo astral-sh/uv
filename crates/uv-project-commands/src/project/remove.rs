@@ -7,9 +7,10 @@ use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    Modifications,
 };
 use uv_dispatch::UniversalState;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
@@ -18,7 +19,6 @@ use uv_environment_operations::{
     ProjectInterpreter, SyncRequest, sync_from_lock,
 };
 use uv_fs::Simplified;
-use uv_install_operations::Modifications;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
@@ -38,7 +38,6 @@ use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::project::edit::{EditTarget, ProjectEdit, PythonTarget};
-use crate::{ExitStatus, UvError};
 
 /// Remove one or more packages from the project requirements.
 pub async fn remove(
@@ -88,7 +87,7 @@ pub async fn remove(
                 "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        EditTarget::Script(script, ())
+        EditTarget::Script(script)
     } else {
         // Find the project in the workspace.
         // No workspace caching since `uv remove` changes the workspace definition.
@@ -111,14 +110,14 @@ pub async fn remove(
             .await?
         };
 
-        EditTarget::Project(project, ())
+        EditTarget::Project(project)
     };
 
     let mut toml = match &target {
-        EditTarget::Script(script, ()) => {
+        EditTarget::Script(script) => {
             PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
         }
-        EditTarget::Project(project, ()) => PyProjectTomlMut::from_toml(
+        EditTarget::Project(project) => PyProjectTomlMut::from_toml(
             project.pyproject_toml().raw.as_ref(),
             DependencyTarget::PyProjectToml,
         ),
@@ -192,8 +191,8 @@ pub async fn remove(
     let content = toml.to_string();
 
     let (path, lock_target) = match &target {
-        EditTarget::Script(script, ()) => (script.path.clone(), LockTarget::from(script)),
-        EditTarget::Project(project, ()) => (
+        EditTarget::Script(script) => (script.path.clone(), LockTarget::from(script)),
+        EditTarget::Project(project) => (
             project.root().join("pyproject.toml"),
             LockTarget::from(project.workspace()),
         ),
@@ -215,7 +214,7 @@ pub async fn remove(
     }
 
     // If we're modifying a script, and lockfile doesn't exist, don't create it.
-    if let EditTarget::Script(ref script, ()) = target {
+    if let EditTarget::Script(ref script) = target {
         if !LockTarget::from(script).lock_path().is_file() {
             writeln!(
                 printer.stderr(),
@@ -232,15 +231,15 @@ pub async fn remove(
 
     // Determine enabled groups and extras
     let default_groups = match &target {
-        EditTarget::Project(project, ()) => project.default_groups()?,
-        EditTarget::Script(_, ()) => DefaultGroups::default(),
+        EditTarget::Project(project) => project.default_groups()?,
+        EditTarget::Script(_) => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
     let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
 
-    // Attach the appropriate interpreter or environment.
-    let target = match target {
-        EditTarget::Project(project, ()) => {
+    // Discover the interpreter or environment used to lock and sync the target.
+    let python_target = match &target {
+        EditTarget::Project(project) => {
             if no_sync {
                 // Discover the interpreter.
                 let project_python = ProjectPythonRequest::from_request(
@@ -268,7 +267,7 @@ pub async fn remove(
                 .await?
                 .into_interpreter();
 
-                EditTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
+                PythonTarget::Interpreter(interpreter)
             } else {
                 // Discover or create the virtual environment.
                 let environment = ProjectEnvironment::get_or_init(
@@ -292,12 +291,12 @@ pub async fn remove(
                 .await?
                 .into_environment()?;
 
-                EditTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
+                PythonTarget::Environment(environment)
             }
         }
-        EditTarget::Script(script, ()) => {
+        EditTarget::Script(script) => {
             let interpreter = ScriptInterpreter::discover(
-                (&script).into(),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
                 python_preference,
@@ -313,12 +312,13 @@ pub async fn remove(
             .await?
             .into_interpreter();
 
-            EditTarget::Script(script, Box::new(PythonTarget::Interpreter(interpreter)))
+            PythonTarget::Interpreter(interpreter)
         }
     };
 
-    let _lock = target
-        .acquire_lock()
+    let _lock = python_target
+        .interpreter()
+        .lock()
         .await
         .inspect_err(|err| {
             warn!("Failed to acquire environment lock: {err}");
@@ -327,9 +327,9 @@ pub async fn remove(
 
     // Determine the lock mode.
     let mode = if let LockCheck::Enabled(lock_check) = lock_check {
-        LockMode::Locked(target.interpreter(), lock_check)
+        LockMode::Locked(python_target.interpreter(), lock_check)
     } else {
-        LockMode::Write(target.interpreter())
+        LockMode::Write(python_target.interpreter())
     };
 
     // Initialize any shared state.
@@ -357,13 +357,13 @@ pub async fn remove(
         Err(err) => return Err(UvError::from(err).into()),
     };
 
-    let EditTarget::Project(project, environment) = target else {
+    let EditTarget::Project(project) = target else {
         // If we're not adding to a project, exit early.
         edit.commit();
         return Ok(ExitStatus::Success);
     };
 
-    let PythonTarget::Environment(venv) = &*environment else {
+    let PythonTarget::Environment(venv) = &python_target else {
         // If we're not syncing, exit early.
         edit.commit();
         return Ok(ExitStatus::Success);

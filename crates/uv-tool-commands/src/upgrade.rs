@@ -10,7 +10,9 @@ use tracing::{debug, trace};
 use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraints, DryRun, HashCheckingMode, Modifications, TargetTriple,
+};
 use uv_dispatch::PlatformState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
@@ -30,13 +32,11 @@ use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
 use crate::common::{ToolLock, remove_entrypoints, tool_environment_spec};
-use uv_command_support::Printer;
-use uv_command_support::{ExitStatus, conjunction};
+use uv_command_support::{ExitStatus, Printer, conjunction};
 use uv_environment_operations::{
     EnvironmentResolution, EnvironmentUpdate, resolve_environment, sync_environment,
     update_environment,
 };
-use uv_install_operations::Modifications;
 use uv_install_operations::loggers::{DefaultInstallLogger, UpgradeInstallLogger};
 use uv_python_context::PythonDownloadReporter;
 use uv_resolve_operations::loggers::SummaryResolveLogger;

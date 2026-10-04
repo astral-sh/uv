@@ -16,8 +16,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::Concurrency;
-pub use uv_configuration::{PythonUpgrade, PythonUpgradeSource};
+use uv_configuration::{Concurrency, PythonUpgrade, PythonUpgradeSource};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
@@ -41,8 +40,7 @@ use uv_trampoline_builder::{Launcher, LauncherKind};
 use uv_warnings::warn_user;
 
 use crate::{ChangeEvent, ChangeEventKind};
-use uv_command_support::Printer;
-use uv_command_support::{ExitStatus, UvError, conjunction, elapsed};
+use uv_command_support::{ExitStatus, Printer, UvError, conjunction, elapsed};
 use uv_python_context::PythonDownloadReporter;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

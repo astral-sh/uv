@@ -51,8 +51,8 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use uv_environment_operations::{EnvironmentError, find_requires_python};
-use uv_python_context::PythonDownloadReporter;
+use uv_environment_operations::EnvironmentError;
+use uv_python_context::{PythonDownloadReporter, find_requires_python};
 use uv_resolve_operations as operations;
 use uv_settings::ResolverSettings;
 

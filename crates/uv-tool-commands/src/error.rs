@@ -1,5 +1,5 @@
 use uv_command_support::UvError;
-use uv_environment_operations::{EnvironmentError, OperationsError};
+use uv_environment_operations::EnvironmentError;
 
 /// A failure while finding or creating an environment for a tool invocation.
 #[derive(Debug, thiserror::Error)]
@@ -8,6 +8,22 @@ pub(crate) enum ToolError {
     Environment(#[from] EnvironmentError),
     #[error(transparent)]
     Tool(Box<uv_tool::Error>),
+    #[error(transparent)]
+    Requirements(#[from] uv_requirements::Error),
+    #[error(transparent)]
+    Python(Box<uv_python::Error>),
+    #[error(transparent)]
+    Resolve(Box<uv_resolve_operations::Error>),
+    #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
+    #[error(transparent)]
+    Client(#[from] uv_client::Error),
+    #[error(transparent)]
+    Tags(#[from] uv_platform_tags::TagsError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
 }
 
 impl From<uv_tool::Error> for ToolError {
@@ -16,45 +32,15 @@ impl From<uv_tool::Error> for ToolError {
     }
 }
 
-impl From<uv_requirements::Error> for ToolError {
-    fn from(error: uv_requirements::Error) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
 impl From<uv_python::Error> for ToolError {
     fn from(error: uv_python::Error) -> Self {
-        Self::Environment(error.into())
+        Self::Python(Box::new(error))
     }
 }
 
 impl From<uv_resolve_operations::Error> for ToolError {
     fn from(error: uv_resolve_operations::Error) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<uv_client::ClientBuildError> for ToolError {
-    fn from(error: uv_client::ClientBuildError) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<uv_client::Error> for ToolError {
-    fn from(error: uv_client::Error) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<OperationsError> for ToolError {
-    fn from(error: OperationsError) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<anyhow::Error> for ToolError {
-    fn from(error: anyhow::Error) -> Self {
-        Self::Environment(error.into())
+        Self::Resolve(Box::new(error))
     }
 }
 
@@ -62,7 +48,17 @@ impl From<ToolError> for UvError {
     fn from(error: ToolError) -> Self {
         match error {
             ToolError::Environment(error) => Self::from(error),
-            error @ ToolError::Tool(_) => Self::unexpected(error.into()),
+            ToolError::Resolve(error) => Self::from(*error),
+            ToolError::Requirements(error) => {
+                Self::from(uv_resolve_operations::Error::Requirements(error))
+            }
+            ToolError::Python(error) => Self::unexpected((*error).into()),
+            ToolError::Client(error) => Self::unexpected(error.into()),
+            error @ (ToolError::Tool(_)
+            | ToolError::ClientBuild(_)
+            | ToolError::Tags(_)
+            | ToolError::Io(_)
+            | ToolError::Anyhow(_)) => Self::unexpected(error.into()),
         }
     }
 }

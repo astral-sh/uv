@@ -37,7 +37,6 @@ pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
 pub(crate) use python::find::find_script as python_find_script;
 pub(crate) use python::install::install as python_install;
-pub(crate) use python::install::{PythonUpgrade, PythonUpgradeSource};
 pub(crate) use python::list::list as python_list;
 pub(crate) use python::pin::pin as python_pin;
 pub(crate) use python::uninstall::uninstall as python_uninstall;
@@ -48,7 +47,6 @@ pub(crate) use tool::audit::audit as tool_audit;
 pub(crate) use tool::dir::dir as tool_dir;
 pub(crate) use tool::install::install as tool_install;
 pub(crate) use tool::list::list as tool_list;
-pub(crate) use tool::run::ToolRunCommand;
 pub(crate) use tool::run::run as tool_run;
 pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
@@ -99,9 +97,8 @@ mod error_tests {
 
     #[test]
     fn contextual_operations_keep_their_classification_and_cause() -> anyhow::Result<()> {
-        let conversions: [fn(uv_resolve_operations::Error) -> UvError; 6] = [
+        let conversions: [fn(uv_resolve_operations::Error) -> UvError; 5] = [
             UvError::from,
-            |error| UvError::from(uv_environment_operations::OperationsError::from(error)),
             |error| UvError::from(uv_environment_operations::EnvironmentError::from(error)),
             |error| UvError::from(LockError::from(error)),
             |error| UvError::from(project::ProjectError::from(LockError::from(error))),

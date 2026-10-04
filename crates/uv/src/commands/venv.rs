@@ -20,10 +20,9 @@ use uv_distribution_types::{
     Requirement,
 };
 use uv_environment_operations::{
-    LinkErrorReporting, ProjectEnvironmentTarget, ProjectPythonRequest,
-    centralized_environment_root, centralized_environments_enabled,
-    is_centralized_environment_reference, lock_project_environment,
-    update_project_environment_link,
+    LinkErrorReporting, ProjectEnvironmentTarget, centralized_environment_root,
+    centralized_environments_enabled, is_centralized_environment_reference,
+    lock_project_environment, update_project_environment_link,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -33,6 +32,7 @@ use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads,
     PythonInstallation, PythonPreference, PythonRequest,
 };
+use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, report_interpreter};
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
@@ -48,7 +48,6 @@ use crate::printer::Printer;
 
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
-use uv_python_context::{PythonDownloadReporter, report_interpreter};
 
 #[derive(Error, Debug)]
 enum VenvError {

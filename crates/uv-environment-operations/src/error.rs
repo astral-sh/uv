@@ -11,7 +11,7 @@ use uv_requirements::ScriptExtraBuildRequiresError;
 use uv_workspace::RequiresPythonSources;
 use uv_workspace::dependency_groups::DependencyGroupError;
 
-use crate::{ConflictError, OperationsError};
+use crate::ConflictError;
 
 /// A failure while resolving, creating, or updating a Python environment.
 #[derive(thiserror::Error, Debug)]
@@ -116,7 +116,10 @@ pub enum EnvironmentError {
     Lock(#[from] uv_lock::LockError),
 
     #[error(transparent)]
-    Operation(#[from] Box<OperationsError>),
+    Resolve(#[from] Box<uv_resolve_operations::Error>),
+
+    #[error(transparent)]
+    Install(#[from] Box<uv_install_operations::Error>),
 
     #[error(transparent)]
     Interpreter(#[from] uv_python::InterpreterError),
@@ -179,12 +182,6 @@ impl From<uv_client::FlatIndexError> for EnvironmentError {
     }
 }
 
-impl From<OperationsError> for EnvironmentError {
-    fn from(error: OperationsError) -> Self {
-        Self::Operation(Box::new(error))
-    }
-}
-
 impl From<uv_distribution::LoweringError> for EnvironmentError {
     fn from(error: uv_distribution::LoweringError) -> Self {
         Self::Lowering(Box::new(error))
@@ -193,20 +190,21 @@ impl From<uv_distribution::LoweringError> for EnvironmentError {
 
 impl From<uv_resolve_operations::Error> for EnvironmentError {
     fn from(error: uv_resolve_operations::Error) -> Self {
-        Self::from(OperationsError::from(error))
+        Self::Resolve(Box::new(error))
     }
 }
 
 impl From<uv_install_operations::Error> for EnvironmentError {
     fn from(error: uv_install_operations::Error) -> Self {
-        Self::from(OperationsError::from(error))
+        Self::Install(Box::new(error))
     }
 }
 
 impl From<EnvironmentError> for UvError {
     fn from(error: EnvironmentError) -> Self {
         match error {
-            EnvironmentError::Operation(error) => Self::from(*error),
+            EnvironmentError::Resolve(error) => Self::from(*error),
+            EnvironmentError::Install(error) => Self::from(*error),
             EnvironmentError::Requirements(error) => {
                 Self::from(uv_resolve_operations::Error::Requirements(error))
             }
@@ -262,7 +260,8 @@ impl uv_errors::Hinted for EnvironmentError {
             Self::Lock(error) => error.hints(),
             Self::Python(error) => error.hints(),
             Self::PythonContext(error) => error.hints(),
-            Self::Operation(error) => error.hints(),
+            Self::Resolve(error) => error.hints(),
+            Self::Install(error) => error.hints(),
             Self::Client(error) => uv_errors::Hinted::hints(error),
             Self::Conflict(..)
             | Self::MissingGroupProject(..)

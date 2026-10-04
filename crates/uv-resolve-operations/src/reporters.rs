@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use uv_command_support::Printer;
-use uv_command_support::progress::ProgressReporter;
+use uv_command_support::{Printer, progress::ProgressReporter};
 use uv_distribution_types::BuildableSource;
 use uv_distribution_types::VersionOrUrlRef;
 use uv_normalize::PackageName;
@@ -57,11 +56,12 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_build_start(source)
+        self.reporter.on_build_start(&source.to_color_string())
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter.on_build_complete(source, id);
+        self.reporter
+            .on_build_complete(&source.to_color_string(), id);
     }
 
     fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
@@ -87,11 +87,12 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
 
 impl uv_distribution::Reporter for ResolverReporter {
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_build_start(source)
+        self.reporter.on_build_start(&source.to_color_string())
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter.on_build_complete(source, id);
+        self.reporter
+            .on_build_complete(&source.to_color_string(), id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {

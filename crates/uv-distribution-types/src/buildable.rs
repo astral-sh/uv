@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::path::Path;
 
+use owo_colors::OwoColorize;
+
 use uv_distribution_filename::SourceDistExtension;
 use uv_git_types::GitUrl;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -10,8 +12,8 @@ use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::{
-    DirectorySourceDist, GitDirectorySourceDist, GitPathSourceDist, Name, PathSourceDist,
-    SourceDist,
+    DirectorySourceDist, DistributionMetadata, GitDirectorySourceDist, GitPathSourceDist, Name,
+    PathSourceDist, SourceDist,
 };
 
 /// A reference to a source that can be built into a built distribution.
@@ -27,6 +29,20 @@ pub enum BuildableSource<'a> {
 }
 
 impl BuildableSource<'_> {
+    /// Format the source for terminal output, dimming a distribution's version or URL.
+    pub fn to_color_string(&self) -> String {
+        match self {
+            Self::Dist(dist) => {
+                format!(
+                    "{}{}",
+                    dist.name(),
+                    dist.version_or_url().to_string().dimmed()
+                )
+            }
+            Self::Url(url) => url.to_string(),
+        }
+    }
+
     /// Return the [`PackageName`] of the source, if available.
     pub fn name(&self) -> Option<&PackageName> {
         match self {

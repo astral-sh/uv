@@ -6,10 +6,10 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, ColorChoice, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
-    DryRun, ExtrasSpecification, InstallOptions,
+    DryRun, ExtrasSpecification, InstallOptions, Modifications,
 };
 use uv_dispatch::UniversalState;
 use uv_environment_operations::environment::CachedEnvironment;
@@ -20,7 +20,6 @@ use uv_environment_operations::{
     sync_from_lock,
 };
 use uv_fs::normalize_path;
-use uv_install_operations::Modifications;
 use uv_install_operations::loggers::SummaryInstallLogger;
 use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
@@ -29,7 +28,7 @@ use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest,
 };
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter};
 use uv_resolve_operations::loggers::SummaryResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{
@@ -38,8 +37,7 @@ use uv_settings::{
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::reporters::PythonDownloadReporter;
-use crate::{ExitStatus, UvError, project};
+use crate::project;
 
 mod ty;
 

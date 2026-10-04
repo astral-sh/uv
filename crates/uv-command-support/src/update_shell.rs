@@ -5,11 +5,10 @@ use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use tokio::io::AsyncWriteExt;
 use tracing::debug;
 
 use uv_fs::Simplified;
-use uv_shell::Shell;
+use uv_shell::{ConfigurationUpdate, Shell, update_configuration_file};
 
 use crate::ExitStatus;
 use crate::Printer;
@@ -78,34 +77,8 @@ pub async fn update_shell(executable_directory: &Path, printer: Printer) -> Resu
     // Update each file, as necessary.
     let mut updated = false;
     for file in files {
-        // Search for the command in the file, to avoid redundant updates.
-        match fs_err::tokio::read_to_string(&file).await {
-            Ok(contents) => {
-                if contents
-                    .lines()
-                    .map(str::trim)
-                    .filter(|line| !line.starts_with('#'))
-                    .any(|line| line.contains(&command))
-                {
-                    debug!(
-                        "Skipping already-updated configuration file: {}",
-                        file.simplified_display()
-                    );
-                    continue;
-                }
-
-                // Append the command to the file.
-                let mut configuration_file = fs_err::tokio::OpenOptions::new()
-                    .create(true)
-                    .truncate(true)
-                    .write(true)
-                    .open(&file)
-                    .await?;
-                configuration_file
-                    .write_all(format!("{contents}\n# uv\n{command}\n").as_bytes())
-                    .await?;
-                configuration_file.flush().await?;
-
+        match update_configuration_file(&file, &command).await? {
+            ConfigurationUpdate::Updated => {
                 writeln!(
                     printer.stderr(),
                     "Updated configuration file: {}",
@@ -113,24 +86,7 @@ pub async fn update_shell(executable_directory: &Path, printer: Printer) -> Resu
                 )?;
                 updated = true;
             }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                // Ensure that the directory containing the file exists.
-                if let Some(parent) = file.parent() {
-                    fs_err::tokio::create_dir_all(&parent).await?;
-                }
-
-                // Append the command to the file.
-                let mut configuration_file = fs_err::tokio::OpenOptions::new()
-                    .create(true)
-                    .truncate(true)
-                    .write(true)
-                    .open(&file)
-                    .await?;
-                configuration_file
-                    .write_all(format!("# uv\n{command}\n").as_bytes())
-                    .await?;
-                configuration_file.flush().await?;
-
+            ConfigurationUpdate::Created => {
                 writeln!(
                     printer.stderr(),
                     "Created configuration file: {}",
@@ -138,9 +94,7 @@ pub async fn update_shell(executable_directory: &Path, printer: Printer) -> Resu
                 )?;
                 updated = true;
             }
-            Err(err) => {
-                return Err(err.into());
-            }
+            ConfigurationUpdate::Unchanged => {}
         }
     }
 

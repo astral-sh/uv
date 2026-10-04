@@ -19,11 +19,12 @@ use url::Url;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
-use uv_command_support::child::run_to_completion;
+use uv_command_support::{
+    ExitStatus, Printer, UvError, child::read_env_files, child::run_to_completion,
+};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
+    ExtrasSpecification, InstallOptions, Modifications, RequirementsInput, TargetTriple,
 };
 use uv_dispatch::UniversalState;
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -37,7 +38,6 @@ use uv_environment_operations::{
 };
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
-use uv_install_operations::Modifications;
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_lock::{Installable, Lock};
@@ -49,7 +49,7 @@ use uv_python::{
     PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionFileDiscoveryOptions,
 };
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification, script_extra_build_requires};
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
@@ -64,9 +64,6 @@ use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
-
-use crate::reporters::PythonDownloadReporter;
-use crate::{ExitStatus, UvError, read_env_files};
 
 /// GitHub Gist API response structure
 #[derive(serde::Deserialize)]
@@ -308,7 +305,7 @@ pub async fn run(
             .await
             {
                 Ok(_) => {}
-                Err(EnvironmentError::Operation(err)) => {
+                Err(EnvironmentError::Resolve(err)) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
@@ -456,7 +453,7 @@ pub async fn run(
                 .await
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(EnvironmentError::Operation(err)) => {
+                    Err(EnvironmentError::Resolve(err)) => {
                         let err = *err;
                         return Err(UvError::from(err.with_resolution_context("script")).into());
                     }
@@ -987,7 +984,7 @@ pub async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(EnvironmentError::Operation(err)) => {
+                Err(EnvironmentError::Resolve(err)) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("`--with`")).into());
                 }

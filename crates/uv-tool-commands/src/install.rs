@@ -13,7 +13,7 @@ use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyMode, DependencyModifiers, DryRun, Excludes, GitLfsSetting,
-    HashCheckingMode, Overrides, Reinstall, TargetTriple, Upgrade,
+    HashCheckingMode, Modifications, Overrides, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -41,14 +41,11 @@ use crate::common::{
     tool_environment_spec,
 };
 use crate::{Target, ToolRequest};
-use uv_command_support::ExitStatus;
-use uv_command_support::Printer;
-use uv_command_support::UvError;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_environment_operations::{
     EnvironmentError, EnvironmentResolution, EnvironmentSpecification, resolve_environment,
     resolve_names, sync_environment, update_environment,
 };
-use uv_install_operations::Modifications;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_resolve_operations as operations;
 use uv_resolve_operations::latest::LatestClient;
@@ -942,7 +939,7 @@ pub async fn install(
             let (resolution, interpreter) = match resolution {
                 Ok(resolution) => (resolution, interpreter),
                 Err(err) => match err {
-                    EnvironmentError::Operation(err) => {
+                    EnvironmentError::Resolve(err) => {
                         let err = *err;
                         // If the resolution failed due to the discovered interpreter not satisfying the
                         // `requires-python` constraint, we can try to refine the interpreter.

@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     AuthorFrom, DependencyGroupsWithDefaults, InitKind, InitProjectKind, ProjectBuildBackend,
     VersionControlError, VersionControlSystem,
@@ -28,7 +28,7 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_python_context::find_requires_python;
+use uv_python_context::{PythonDownloadReporter, find_requires_python};
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
@@ -37,9 +37,6 @@ use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
 };
-
-use crate::ExitStatus;
-use crate::reporters::PythonDownloadReporter;
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]

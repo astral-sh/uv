@@ -16,8 +16,8 @@ use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageOverride, Reinstall,
-    TargetTriple, Upgrade,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Modifications, Override, PackageOverride,
+    Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, PlatformState, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -52,14 +52,15 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{ProjectEnvironmentSelection, Workspace, WorkspaceCache};
 
 use crate::install_target::{InstallTarget, PackageSelection};
-use crate::locked_requirements::{LockedRequirements, read_lock_requirements};
-use uv_command_support::Printer;
-use uv_command_support::{capitalize, conjunction};
+use uv_command_support::{Printer, capitalize, conjunction};
+use uv_install_operations::Changelog;
 use uv_install_operations::loggers::InstallLogger;
-use uv_install_operations::{Changelog, Modifications};
-use uv_python_context::CompatibleProjectPython;
-use uv_python_context::PythonDownloadReporter;
-pub use uv_python_context::{ProjectPythonRequest, PythonRequestSource, find_requires_python};
+use uv_python_context::{
+    CompatibleProjectPython, EnvironmentIncompatibilityError, EnvironmentKind,
+    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter,
+    check_environment_compatibility,
+};
+use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_requirements};
 use uv_resolve_operations::loggers::ResolveLogger;
 use uv_resolve_operations::reporters::ResolverReporter;
 use uv_settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
@@ -68,19 +69,12 @@ pub mod environment;
 mod error;
 pub use error::EnvironmentError;
 pub mod install_target;
-pub use uv_resolve_operations::locked_requirements;
 pub mod malware;
-mod operations_error;
 mod python;
 mod sync;
 pub use sync::{SyncRequest, store_credentials_from_target, sync_from_lock};
 
-pub use operations_error::OperationsError;
 pub use python::from_lockfile;
-pub use uv_python_context::ScriptInterpreter;
-use uv_python_context::{
-    EnvironmentIncompatibilityError, EnvironmentKind, check_environment_compatibility,
-};
 
 /// Vulnerability identifiers grouped by dependency.
 #[derive(Debug)]

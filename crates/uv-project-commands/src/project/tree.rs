@@ -8,7 +8,7 @@ use futures::StreamExt;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple, TreeFormat,
 };
@@ -35,8 +35,7 @@ use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSetting
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
-use crate::reporters::LatestVersionReporter;
-use crate::{ExitStatus, UvError};
+use uv_resolve_operations::reporters::LatestVersionReporter;
 
 /// A tree reads an existing workspace lock or resolves a project or script manifest.
 #[derive(Clone, Copy)]

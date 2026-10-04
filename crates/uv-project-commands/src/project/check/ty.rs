@@ -9,8 +9,7 @@ use tracing::debug;
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::Printer;
-use uv_command_support::child::run_to_completion;
+use uv_command_support::{ExitStatus, Printer, child::run_to_completion};
 use uv_configuration::ColorChoice;
 use uv_fs::Simplified;
 use uv_pep440::Version;
@@ -19,7 +18,6 @@ use uv_settings::{FrozenSource, LockCheck};
 use uv_shell::shlex_posix;
 use uv_static::EnvVars;
 
-use crate::ExitStatus;
 use crate::reporters::BinaryDownloadReporter;
 
 /// Run a type check powered by ty.
