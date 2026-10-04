@@ -746,7 +746,43 @@ impl Cache {
             Err(err) => return Err(err),
         }
 
-        // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
+        // Third, remove stale temporary build environments left by interrupted processes.
+        //
+        // `CacheBucket::Builds` is exclusively for ephemeral virtual environments used to
+        // execute PEP 517 builds. Entries are created via `tempfile::tempdir_in`, which uses
+        // a `.tmp` prefix. On a normal exit the `TempDir` drop handler removes them; after a
+        // SIGINT or crash they are orphaned. We only remove directories whose name begins
+        // with `.tmp` to be conservative if future code adds other entries to this bucket.
+        match fs_err::read_dir(self.bucket(CacheBucket::Builds)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path();
+
+                    let Ok(file_type) = entry.file_type() else {
+                        continue;
+                    };
+
+                    // Only remove temporary directories (`.tmp*` prefix).
+                    let is_temp_build = file_type.is_dir()
+                        && path
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| name.starts_with(".tmp"));
+
+                    if !is_temp_build {
+                        continue;
+                    }
+
+                    debug!("Removing temporary build environment: {}", path.display());
+                    summary += self.remove_path(path)?;
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
+        }
+
+        // Fourth, if enabled, remove all unzipped wheels, leaving only the wheel archives.
         if ci {
             // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
             match fs_err::read_dir(self.bucket(CacheBucket::Wheels)) {
@@ -806,7 +842,7 @@ impl Cache {
             }
         }
 
-        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
+        // Fifth, remove any unused archives (by searching for archives that are not symlinked).
         let references = self.find_archive_references()?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
