@@ -374,6 +374,13 @@ impl From<BuildConstraintDependency> for NameRequirementSpecification {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
+    /// Whether `uv build` includes the project lock in built distributions.
+    ///
+    /// With the `locked-tools` preview feature, uv includes the lock by default for projects
+    /// using `uv_build` when all dependencies come from PyPI. Set this to `true` to enable export
+    /// for other build backends or indexes, or to `false` to disable export.
+    export_lock: Option<bool>,
+
     /// The sources to use when resolving dependencies.
     ///
     /// `tool.uv.sources` enriches the dependency metadata with additional sources, incorporated

@@ -2649,6 +2649,7 @@ mod tests {
                   },
                   "tool": {
                     "uv": {
+                      "export-lock": null,
                       "sources": {
                         "bird-feeder": [
                           {
@@ -2760,6 +2761,7 @@ mod tests {
                   "project": null,
                   "tool": {
                     "uv": {
+                      "export-lock": null,
                       "sources": null,
                       "index": null,
                       "workspace": {
@@ -3094,6 +3096,7 @@ mod tests {
                   },
                   "tool": {
                     "uv": {
+                      "export-lock": null,
                       "sources": null,
                       "index": null,
                       "workspace": {
@@ -3204,6 +3207,7 @@ mod tests {
                   },
                   "tool": {
                     "uv": {
+                      "export-lock": null,
                       "sources": null,
                       "index": null,
                       "workspace": {
@@ -3328,6 +3332,7 @@ mod tests {
                   },
                   "tool": {
                     "uv": {
+                      "export-lock": null,
                       "sources": null,
                       "index": null,
                       "workspace": {
@@ -3426,6 +3431,7 @@ mod tests {
                   },
                   "tool": {
                     "uv": {
+                      "export-lock": null,
                       "sources": null,
                       "index": null,
                       "workspace": {

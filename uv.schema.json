@@ -206,6 +206,10 @@
         }
       ]
     },
+    "export-lock": {
+      "description": "Whether `uv build` includes the project lock in built distributions.\n\nWith the `locked-tools` preview feature, uv includes the lock by default for projects\nusing `uv_build` when all dependencies come from PyPI. Set this to `true` to enable export\nfor other build backends or indexes, or to `false` to disable export.",
+      "type": ["boolean", "null"]
+    },
     "extra-build-dependencies": {
       "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages like\n`pip`, and do not declare them as build dependencies.",
       "anyOf": [
@@ -1888,6 +1892,7 @@
             "batch-export",
             "frozen-lockfile",
             "minimum-libc-version",
+            "locked-tools",
             "build-dependency-check",
             "build-lazy-imports"
           ]

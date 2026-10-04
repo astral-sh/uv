@@ -197,6 +197,9 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub(crate) build_backend: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub(crate) export_lock: Option<serde::de::IgnoredAny>,
 }
 
 impl Options {
@@ -2657,6 +2660,7 @@ struct OptionsWire {
 
     // Build backend
     build_backend: Option<serde::de::IgnoredAny>,
+    export_lock: Option<serde::de::IgnoredAny>,
 }
 
 impl TryFrom<OptionsWire> for Options {
@@ -2742,6 +2746,7 @@ impl TryFrom<OptionsWire> for Options {
             add_bounds: bounds,
             // Used by the build backend
             build_backend,
+            export_lock,
         } = value;
 
         Ok(Self {
@@ -2802,6 +2807,7 @@ impl TryFrom<OptionsWire> for Options {
             pip,
             cache_keys,
             build_backend,
+            export_lock,
             override_dependencies,
             exclude_dependencies,
             constraint_dependencies,

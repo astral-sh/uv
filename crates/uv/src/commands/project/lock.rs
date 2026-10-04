@@ -40,7 +40,8 @@ use uv_resolver::{
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{
-    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, HashVerification,
+    SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::{
@@ -295,6 +296,7 @@ pub(crate) enum LockMode<'env> {
 pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
+    build_policy: Option<(&'env Constraints, &'env HashStrategy)>,
     first_party_exclusions: BTreeSet<PackageName>,
     refresh: Option<&'env Refresh>,
     check_lockfile_contents: bool,
@@ -326,6 +328,7 @@ impl<'env> LockOperation<'env> {
         Self {
             mode,
             constraints: vec![],
+            build_policy: None,
             first_party_exclusions: BTreeSet::new(),
             refresh: None,
             check_lockfile_contents: false,
@@ -348,6 +351,17 @@ impl<'env> LockOperation<'env> {
         constraints: Vec<NameRequirementSpecification>,
     ) -> Self {
         self.constraints = constraints;
+        self
+    }
+
+    /// Apply the invoking command's build constraints and hash policy during lock validation.
+    #[must_use]
+    pub(crate) fn with_build_policy(
+        mut self,
+        constraints: &'env Constraints,
+        hasher: &'env HashStrategy,
+    ) -> Self {
+        self.build_policy = Some((constraints, hasher));
         self
     }
 
@@ -413,6 +427,7 @@ impl<'env> LockOperation<'env> {
                     self.mode,
                     check_lockfile_contents,
                     self.constraints,
+                    self.build_policy,
                     self.first_party_exclusions,
                     self.refresh,
                     self.settings,
@@ -468,6 +483,7 @@ impl<'env> LockOperation<'env> {
                     self.mode,
                     check_lockfile_contents,
                     self.constraints,
+                    self.build_policy,
                     self.first_party_exclusions,
                     self.refresh,
                     self.settings,
@@ -495,6 +511,32 @@ impl<'env> LockOperation<'env> {
     }
 }
 
+/// Apply lock hashes without adding packages to a command's required-hash allowlist.
+fn combine_build_hashes(
+    command: &HashStrategy,
+    lock: &HashStrategy,
+) -> Result<HashStrategy, uv_types::HashStrategyError> {
+    match command.verification() {
+        HashVerification::Required(allowed) => {
+            let hashes = match lock.verification() {
+                HashVerification::None => return Ok(command.clone()),
+                HashVerification::IfPresent(hashes) | HashVerification::Required(hashes) => hashes,
+            };
+            let hashes = hashes
+                .iter()
+                .filter(|(id, _)| allowed.contains_key(*id))
+                .map(|(id, digests)| (id.clone(), digests.clone()))
+                .collect();
+            command
+                .clone()
+                .with_constraint_hashes(&HashStrategy::verify(Arc::new(hashes)))
+        }
+        HashVerification::None | HashVerification::IfPresent(_) => {
+            lock.clone().with_constraint_hashes(command)
+        }
+    }
+}
+
 /// Lock the project requirements into a lockfile.
 async fn do_lock(
     target: LockTarget<'_>,
@@ -503,6 +545,7 @@ async fn do_lock(
     mode: LockMode<'_>,
     check_lockfile_contents: Option<String>,
     external: Vec<NameRequirementSpecification>,
+    build_policy: Option<(&Constraints, &HashStrategy)>,
     first_party_exclusions: BTreeSet<PackageName>,
     refresh: Option<&Refresh>,
     settings: &ResolverSettings,
@@ -871,21 +914,22 @@ async fn do_lock(
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
-    let (locked_hasher, locked_build_hasher) = if let Some(existing_lock) = existing_lock.as_ref() {
-        let locked_hasher =
-            existing_lock.hash_strategy(target.install_path(), &FxHashSet::default())?;
-        let build_hasher = HashStrategy::from_constraints(
-            &existing_lock.build_constraints(target.install_path()),
-            Some(&interpreter.to_resolver_marker_environment()),
-            uv_configuration::HashCheckingMode::Verify,
-        )?;
-        let locked_build_hasher = locked_hasher
-            .clone()
-            .with_constraint_hashes(&build_hasher)?;
-        (locked_hasher, locked_build_hasher)
-    } else {
-        (HashStrategy::default(), HashStrategy::default())
-    };
+    let (locked_hasher, mut locked_build_hasher) =
+        if let Some(existing_lock) = existing_lock.as_ref() {
+            let locked_hasher =
+                existing_lock.hash_strategy(target.install_path(), &FxHashSet::default())?;
+            let build_hasher = HashStrategy::from_constraints(
+                &existing_lock.build_constraints(target.install_path()),
+                Some(&interpreter.to_resolver_marker_environment()),
+                uv_configuration::HashCheckingMode::Verify,
+            )?;
+            let locked_build_hasher = locked_hasher
+                .clone()
+                .with_constraint_hashes(&build_hasher)?;
+            (locked_hasher, locked_build_hasher)
+        } else {
+            (HashStrategy::default(), HashStrategy::default())
+        };
     // Re-resolving an outdated lock does not authorize replacing known artifacts. Only an
     // explicit unlocked upgrade releases the selected packages' hashes.
     let hash_upgrade = match mode {
@@ -911,9 +955,26 @@ async fn do_lock(
         uv_configuration::HashCheckingMode::Verify,
     )?;
     // Explicit build constraints apply even when fresh resolution can replace lockfile hashes.
-    let resolution_build_hasher = match mode {
+    let mut resolution_build_hasher = match mode {
         LockMode::Locked(..) => locked_hasher.with_constraint_hashes(&build_hasher)?,
         LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => build_hasher,
+    };
+
+    // Lock validation may build metadata. Those builds must obey the invoking command's policy,
+    // while retaining the hashes from the lock for packages allowed by that policy.
+    let effective_build_constraints;
+    let dispatch_build_constraints = if let Some((constraints, command_hasher)) = build_policy {
+        effective_build_constraints = Constraints::from_specifications(
+            build_constraints
+                .specifications()
+                .chain(constraints.specifications())
+                .cloned(),
+        );
+        locked_build_hasher = combine_build_hashes(command_hasher, &locked_build_hasher)?;
+        resolution_build_hasher = combine_build_hashes(command_hasher, &resolution_build_hasher)?;
+        &effective_build_constraints
+    } else {
+        &build_constraints
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -956,7 +1017,7 @@ async fn do_lock(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        dispatch_build_constraints,
         interpreter,
         index_locations,
         &flat_index,

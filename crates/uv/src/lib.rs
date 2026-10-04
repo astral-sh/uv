@@ -1303,7 +1303,14 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::BuildSettings::resolve(args, filesystem, environment)?;
+            let args = settings::BuildSettings::resolve(
+                args,
+                filesystem,
+                environment,
+                cli.top_level.config_file.is_none()
+                    && !deprecated_isolated
+                    && config_discovery.enabled(),
+            )?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -1344,6 +1351,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.python,
                 args.install_mirrors,
                 &args.settings,
+                &args.lock_settings,
                 &client_builder.subcommand(vec!["build".to_owned()]),
                 config_discovery,
                 globals.python_preference,
