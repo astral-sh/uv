@@ -12,12 +12,10 @@ use crate::ExitStatus;
 ///
 /// These values intentionally do not mutate uv's process environment and cannot mutate
 /// the current uv process' settings.
-pub fn read_env_files<'a>(
-    env_file: impl DoubleEndedIterator<Item = &'a PathBuf>,
-) -> anyhow::Result<Vec<(String, String)>> {
+pub fn read_env_files(env_files: &[PathBuf]) -> anyhow::Result<Vec<(String, String)>> {
     let mut environment = Vec::new();
 
-    for env_file_path in env_file.rev().map(PathBuf::as_path) {
+    for env_file_path in env_files.iter().rev().map(PathBuf::as_path) {
         let iter = match dotenvy::from_path_iter(env_file_path) {
             Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 bail!(

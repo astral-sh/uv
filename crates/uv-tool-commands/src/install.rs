@@ -36,10 +36,13 @@ use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
+use uv_lock_operations::LockValidationError;
+
 use crate::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
     tool_environment_spec,
 };
+use crate::error::ToolLockError;
 use crate::{Target, ToolRequest};
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_environment_operations::{
@@ -193,7 +196,7 @@ pub async fn install(
             let requirement = resolve_names(
                 requirements,
                 &interpreter,
-                &settings,
+                &settings.resolver,
                 &build_constraints,
                 &client_builder,
                 &state,
@@ -386,7 +389,7 @@ pub async fn install(
             resolve_names(
                 spec.requirements.clone(),
                 &interpreter,
-                &settings,
+                &settings.resolver,
                 &build_constraints,
                 &client_builder,
                 &state,
@@ -443,7 +446,7 @@ pub async fn install(
     let receipt_overrides = resolve_names(
         spec.overrides,
         &interpreter,
-        &settings,
+        &settings.resolver,
         &build_constraints,
         &client_builder,
         &state,
@@ -552,8 +555,10 @@ pub async fn install(
             .await
             {
                 Ok(lock) => Some(lock),
-                Err(EnvironmentError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
-                    return Err(EnvironmentError::Lock(err).into());
+                Err(ToolLockError::Validation(LockValidationError::Lock(err)))
+                    if err.is_resolution() || err.is_no_build() =>
+                {
+                    return Err(err.into());
                 }
                 Err(err) => {
                     warn_user_with_chain!(

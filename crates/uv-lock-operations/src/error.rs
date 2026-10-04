@@ -15,7 +15,7 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTreeContents;
 use uv_platform_tags::TagsError;
 use uv_python_context::PythonContextError;
-use uv_requirements::ScriptExtraBuildRequiresError;
+use uv_requirements::ScriptRequirementsError;
 use uv_resolve_operations::Error as ResolveError;
 use uv_settings::{FrozenSource, LockedSource};
 use uv_types::HashStrategyError;
@@ -287,12 +287,12 @@ impl From<ResolveError> for LockError {
     }
 }
 
-impl From<ScriptExtraBuildRequiresError> for LockError {
-    fn from(error: ScriptExtraBuildRequiresError) -> Self {
+impl From<ScriptRequirementsError> for LockError {
+    fn from(error: ScriptRequirementsError) -> Self {
         match error {
-            ScriptExtraBuildRequiresError::Io(error) => Self::Io(error),
-            ScriptExtraBuildRequiresError::IndexUrl(error) => Self::IndexUrl(error),
-            ScriptExtraBuildRequiresError::Lowering(error) => Self::Lowering(error),
+            ScriptRequirementsError::Io(error) => Self::Io(error),
+            ScriptRequirementsError::IndexUrl(error) => Self::IndexUrl(error),
+            ScriptRequirementsError::Lowering(error) => Self::Lowering(error),
         }
     }
 }

@@ -10,17 +10,16 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 use uv_audit::{Dependency, VulnerabilityID};
-use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Modifications, Override, PackageOverride,
-    Reinstall, TargetTriple, Upgrade,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Modifications, Reinstall, TargetTriple,
+    Upgrade,
 };
 use uv_dispatch::{BuildDispatch, PlatformState, SharedState};
-use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     ExtraBuildRequires, HashCollection, Index, Requirement, RequiresPython, Resolution,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
@@ -36,8 +35,7 @@ use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{
     BrokenLink, ConfigDiscovery, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
     LenientImplementationName, PythonArchitecture, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
@@ -52,7 +50,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{ProjectEnvironmentSelection, Workspace, WorkspaceCache};
 
 use crate::install_target::{InstallTarget, PackageSelection};
-use uv_command_support::{Printer, capitalize, conjunction};
+use uv_command_support::{Printer, conjunction};
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::InstallLogger;
 use uv_python_context::{
@@ -201,6 +199,15 @@ impl std::fmt::Display for ConflictError {
 }
 
 impl std::error::Error for ConflictError {}
+
+/// Capitalize the first letter of a string.
+fn capitalize(value: &str) -> String {
+    let mut characters = value.chars();
+    match characters.next() {
+        None => String::new(),
+        Some(character) => character.to_uppercase().collect::<String>() + characters.as_str(),
+    }
+}
 
 /// The policy for discovering and initializing a project environment.
 #[derive(Debug, Clone, Copy)]
@@ -1299,7 +1306,7 @@ impl std::ops::Deref for ScriptEnvironment {
 pub async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
-    settings: &ResolverInstallerSettings,
+    settings: &ResolverSettings,
     build_constraints: &Constraints,
     client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
@@ -1328,32 +1335,27 @@ pub async fn resolve_names(
     }
 
     // Extract the project settings.
-    let ResolverInstallerSettings {
-        resolver:
-            ResolverSettings {
-                build_options,
-                config_setting,
-                config_settings_package,
-                dependency_metadata,
-                exclude_newer,
-                fork_strategy: _,
-                index_locations,
-                index_strategy,
-                keyring_provider,
-                link_mode,
-                build_isolation,
-                extra_build_dependencies,
-                extra_build_variables,
-                prerelease: _,
-                resolution: _,
-                sources,
-                torch_backend,
-                cuda_driver_version,
-                amd_gpu_architecture,
-                upgrade: _,
-            },
-        compile_bytecode: _,
-        reinstall: _,
+    let ResolverSettings {
+        build_options,
+        config_setting,
+        config_settings_package,
+        dependency_metadata,
+        exclude_newer,
+        fork_strategy: _,
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        link_mode,
+        build_isolation,
+        extra_build_dependencies,
+        extra_build_variables,
+        prerelease: _,
+        resolution: _,
+        sources,
+        torch_backend,
+        cuda_driver_version,
+        amd_gpu_architecture,
+        upgrade: _,
     } = settings;
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
@@ -2181,60 +2183,6 @@ pub async fn update_environment(
     })
 }
 
-/// Determine the [`RequiresPython`] requirement for a new PEP 723 script.
-pub async fn init_script_python_requirement(
-    python: Option<&str>,
-    install_mirrors: &PythonInstallMirrors,
-    directory: &Path,
-    no_pin_python: bool,
-    python_preference: PythonPreference,
-    python_arch: Option<PythonArchitecture>,
-    python_downloads: PythonDownloads,
-    config_discovery: ConfigDiscovery,
-    client_builder: &BaseClientBuilder<'_>,
-    cache: &Cache,
-    reporter: &PythonDownloadReporter,
-) -> anyhow::Result<RequiresPython> {
-    let python_request = if let Some(request) = python {
-        // (1) Explicit request from user
-        Some(PythonRequest::parse(request))
-    } else if let (false, Some(request)) = (
-        no_pin_python,
-        PythonVersionFile::discover(
-            directory,
-            &VersionFileDiscoveryOptions::default().with_config_discovery(config_discovery),
-        )
-        .await?
-        .and_then(PythonVersionFile::into_version),
-    ) {
-        // (2) Request from `.python-version`
-        Some(request)
-    } else {
-        // (3) No explicit request
-        None
-    };
-
-    let interpreter = PythonInstallation::find_or_download(
-        python_request.as_ref(),
-        EnvironmentPreference::Any,
-        python_preference,
-        python_arch,
-        python_downloads,
-        client_builder,
-        cache,
-        Some(reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
-        install_mirrors.python_downloads_json_url.as_deref(),
-    )
-    .await?
-    .into_interpreter();
-
-    Ok(RequiresPython::greater_than_equal_version(
-        &interpreter.python_minor_version(),
-    ))
-}
-
 /// Validate that we aren't trying to install extras or groups that
 /// are declared as conflicting.
 pub fn detect_conflicts(
@@ -2276,149 +2224,6 @@ pub fn detect_conflicts(
         }
     }
     Ok(())
-}
-
-/// Determine the [`RequirementsSpecification`] for a script.
-pub async fn script_specification(
-    script: Pep723ItemRef<'_>,
-    settings: &ResolverSettings,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
-    credentials_cache: &CredentialsCache,
-) -> Result<Option<RequirementsSpecification>, EnvironmentError> {
-    let Some(dependencies) = script.metadata().dependencies.as_ref() else {
-        return Ok(None);
-    };
-
-    let script_dir = script.directory()?;
-    let script_indexes = script
-        .indexes(&settings.sources)
-        .iter()
-        .cloned()
-        .map(|index| index.relative_to(&script_dir))
-        .collect::<Result<Vec<_>, _>>()?;
-    let script_sources = script.sources(&settings.sources);
-
-    let mut requirements = Vec::new();
-    for requirement in dependencies.iter().cloned() {
-        requirements.extend(
-            LoweredRequirement::from_non_workspace_requirement(
-                requirement,
-                script_dir.as_ref(),
-                script_sources.as_ref(),
-                &script_indexes,
-                &settings.index_locations,
-                cache,
-                workspace_cache,
-                credentials_cache,
-            )
-            .await
-            .map_ok(LoweredRequirement::into_inner)
-            .collect::<Result<Vec<_>, _>>()?,
-        );
-    }
-    let constraint_dependencies = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.constraint_dependencies.as_ref())
-        .into_iter()
-        .flatten()
-        .cloned();
-    let mut constraints = Vec::new();
-    for requirement in constraint_dependencies {
-        constraints.extend(
-            LoweredRequirement::from_non_workspace_requirement(
-                requirement,
-                script_dir.as_ref(),
-                script_sources.as_ref(),
-                &script_indexes,
-                &settings.index_locations,
-                cache,
-                workspace_cache,
-                credentials_cache,
-            )
-            .await
-            .map_ok(LoweredRequirement::into_inner)
-            .collect::<Result<Vec<_>, _>>()?,
-        );
-    }
-    let overrides = {
-        let override_entries = script
-            .metadata()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.override_dependencies.as_ref())
-            .into_iter()
-            .flatten()
-            .cloned();
-        let mut overrides = Vec::new();
-        for entry in override_entries {
-            match entry {
-                Override::Requirement(requirement) => {
-                    overrides.extend(
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script_dir.as_ref(),
-                            script_sources.as_ref(),
-                            &script_indexes,
-                            &settings.index_locations,
-                            cache,
-                            workspace_cache,
-                            credentials_cache,
-                        )
-                        .await
-                        .map_ok(LoweredRequirement::into_inner)
-                        .map_ok(Override::Requirement)
-                        .collect::<Result<Vec<_>, _>>()?,
-                    );
-                }
-                Override::Package(package) => {
-                    let mut dependencies = Vec::new();
-                    for requirement in package.dependencies.into_vec() {
-                        dependencies.extend(
-                            LoweredRequirement::from_non_workspace_requirement(
-                                requirement,
-                                script_dir.as_ref(),
-                                script_sources.as_ref(),
-                                &script_indexes,
-                                &settings.index_locations,
-                                cache,
-                                workspace_cache,
-                                credentials_cache,
-                            )
-                            .await
-                            .map_ok(LoweredRequirement::into_inner)
-                            .collect::<Result<Vec<_>, _>>()?,
-                        );
-                    }
-                    overrides.push(Override::Package(PackageOverride {
-                        package: package.package,
-                        dependencies: dependencies.into_boxed_slice(),
-                    }));
-                }
-            }
-        }
-        overrides
-    };
-    let excludes = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.exclude_dependencies.as_ref())
-        .into_iter()
-        .flatten()
-        .cloned()
-        .collect::<Vec<_>>();
-
-    let mut specification =
-        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), Vec::new());
-    specification.override_dependencies = overrides;
-    specification.excludes = excludes;
-    Ok(Some(specification))
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.

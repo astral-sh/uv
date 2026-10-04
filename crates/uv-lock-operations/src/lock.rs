@@ -36,7 +36,10 @@ use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
 use crate::lock_target::find_lock_format_error;
-use crate::{LockError, LockTarget, LockValidationError, MissingLockfileSource, ValidatedLock};
+use crate::{
+    LockError, LockTarget, LockValidationError, LockValidationRequest, LockValidationWorkspace,
+    MissingLockfileSource, ValidatedLock,
+};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -776,32 +779,39 @@ async fn do_lock(
         .with_first_party_packages(&first_party_packages);
         match Box::pin(ValidatedLock::validate(
             existing_lock,
-            target.install_path(),
-            packages,
-            &members,
-            required_members,
-            &requirements,
-            &dependency_groups,
-            &workspace_group_metadata,
-            workspace_default_groups.as_ref(),
-            &constraints,
-            &overrides,
-            &excludes,
-            &build_constraints,
-            &conflicts,
-            environments,
-            required_environments,
-            dependency_metadata,
-            interpreter,
-            &requires_python,
-            index_locations,
-            upgrade,
-            refresh,
-            &options,
-            &hasher,
-            state.index(),
+            LockValidationRequest {
+                install_path: target.install_path(),
+                workspace: match target {
+                    LockTarget::Workspace(_) => Some(LockValidationWorkspace {
+                        packages,
+                        members: &members,
+                        required_members,
+                        dependency_groups: &dependency_groups,
+                        group_metadata: &workspace_group_metadata,
+                        default_groups: workspace_default_groups.as_ref(),
+                    }),
+                    LockTarget::Script(_) => None,
+                },
+                requirements: &requirements,
+                constraints: &constraints,
+                overrides: &overrides,
+                excludes: &excludes,
+                build_constraints: &build_constraints,
+                conflicts: &conflicts,
+                environments,
+                required_environments,
+                dependency_metadata,
+                interpreter,
+                requires_python: &requires_python,
+                index_locations,
+                upgrade,
+                refresh,
+                options: &options,
+                hasher: &hasher,
+                index: state.index(),
+                preview,
+            },
             &database,
-            preview,
             printer,
         ))
         .await

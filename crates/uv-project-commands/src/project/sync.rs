@@ -21,8 +21,8 @@ use uv_distribution_types::NameRequirementSpecification;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
     EnvironmentError, EnvironmentUpdate, LinkErrorReporting, ProjectEnvironment,
-    ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest, detect_conflicts,
-    script_specification, sync_from_lock, update_environment,
+    ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest, detect_conflicts, sync_from_lock,
+    update_environment,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_install_operations::Changelog;
@@ -39,7 +39,7 @@ use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
 };
-use uv_requirements::script_extra_build_requires;
+use uv_requirements::{script_extra_build_requires, script_specification};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{
@@ -323,7 +323,8 @@ pub async fn sync(
             // Parse the requirements from the script.
             let spec = script_specification(
                 script.into(),
-                &settings.resolver,
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
@@ -338,8 +339,7 @@ pub async fn sync(
                 workspace_cache,
                 client_builder.credentials_cache(),
             )
-            .await
-            .map_err(EnvironmentError::from)?
+            .await?
             .into_inner();
 
             // Parse the build constraints from the script.

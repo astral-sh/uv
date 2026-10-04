@@ -28,6 +28,41 @@ macro_rules! debug {
     };
 }
 
+/// Workspace membership and dependency groups checked against an existing lockfile.
+pub struct LockValidationWorkspace<'a> {
+    pub(crate) packages: &'a BTreeMap<PackageName, WorkspaceMember>,
+    pub(crate) members: &'a [PackageName],
+    pub(crate) required_members: &'a BTreeMap<PackageName, Editability>,
+    pub(crate) dependency_groups: &'a BTreeMap<GroupName, Vec<Requirement>>,
+    pub(crate) group_metadata: &'a BTreeMap<GroupName, GroupMetadata>,
+    pub(crate) default_groups: Option<&'a DefaultGroups>,
+}
+
+/// Requirements and resolution policy used to validate an existing lockfile.
+pub struct LockValidationRequest<'a> {
+    pub install_path: &'a Path,
+    /// Workspace-specific inputs, absent for scripts and tools.
+    pub workspace: Option<LockValidationWorkspace<'a>>,
+    pub requirements: &'a [Requirement],
+    pub constraints: &'a [Requirement],
+    pub overrides: &'a [Override<Requirement>],
+    pub excludes: &'a [ExcludeDependency],
+    pub build_constraints: &'a Constraints,
+    pub conflicts: &'a Conflicts,
+    pub environments: Option<&'a SupportedEnvironments>,
+    pub required_environments: Option<&'a SupportedEnvironments>,
+    pub dependency_metadata: &'a DependencyMetadata,
+    pub interpreter: &'a Interpreter,
+    pub requires_python: &'a RequiresPython,
+    pub index_locations: &'a IndexLocations,
+    pub upgrade: &'a Upgrade,
+    pub refresh: Option<&'a Refresh>,
+    pub options: &'a Options,
+    pub hasher: &'a HashStrategy,
+    pub index: &'a InMemoryIndex,
+    pub preview: Preview,
+}
+
 /// Whether an existing lockfile can satisfy or guide a new resolution.
 #[derive(Debug)]
 pub enum ValidatedLock {
@@ -44,37 +79,55 @@ pub enum ValidatedLock {
 }
 
 impl ValidatedLock {
-    /// Validate a [`Lock`] against the workspace requirements.
+    /// Validate a [`Lock`] against its requirements and resolution policy.
     pub async fn validate(
         lock: Lock,
-        install_path: &Path,
-        packages: &BTreeMap<PackageName, WorkspaceMember>,
-        members: &[PackageName],
-        required_members: &BTreeMap<PackageName, Editability>,
-        requirements: &[Requirement],
-        dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
-        workspace_group_metadata: &BTreeMap<GroupName, GroupMetadata>,
-        workspace_default_groups: Option<&DefaultGroups>,
-        constraints: &[Requirement],
-        overrides: &[Override<Requirement>],
-        excludes: &[ExcludeDependency],
-        build_constraints: &Constraints,
-        conflicts: &Conflicts,
-        environments: Option<&SupportedEnvironments>,
-        required_environments: Option<&SupportedEnvironments>,
-        dependency_metadata: &DependencyMetadata,
-        interpreter: &Interpreter,
-        requires_python: &RequiresPython,
-        index_locations: &IndexLocations,
-        upgrade: &Upgrade,
-        refresh: Option<&Refresh>,
-        options: &Options,
-        hasher: &HashStrategy,
-        index: &InMemoryIndex,
+        request: LockValidationRequest<'_>,
         database: &DistributionDatabase<'_, BuildDispatch<'_>>,
-        preview: Preview,
         printer: Printer,
     ) -> Result<Self, LockValidationError> {
+        let LockValidationRequest {
+            install_path,
+            workspace,
+            requirements,
+            constraints,
+            overrides,
+            excludes,
+            build_constraints,
+            conflicts,
+            environments,
+            required_environments,
+            dependency_metadata,
+            interpreter,
+            requires_python,
+            index_locations,
+            upgrade,
+            refresh,
+            options,
+            hasher,
+            index,
+            preview,
+        } = request;
+        let empty_packages = BTreeMap::new();
+        let empty_required_members = BTreeMap::new();
+        let empty_dependency_groups = BTreeMap::new();
+        let empty_group_metadata = BTreeMap::new();
+        let LockValidationWorkspace {
+            packages,
+            members,
+            required_members,
+            dependency_groups,
+            group_metadata: workspace_group_metadata,
+            default_groups: workspace_default_groups,
+        } = workspace.unwrap_or(LockValidationWorkspace {
+            packages: &empty_packages,
+            members: &[],
+            required_members: &empty_required_members,
+            dependency_groups: &empty_dependency_groups,
+            group_metadata: &empty_group_metadata,
+            default_groups: None,
+        });
+
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
         // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and

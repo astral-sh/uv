@@ -7,7 +7,7 @@ use uv_distribution_types::{IndexCredentialsError, IndexUrlError, RequiresPython
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_python_context::format_requires_python_sources;
-use uv_requirements::ScriptExtraBuildRequiresError;
+use uv_requirements::ScriptRequirementsError;
 use uv_workspace::RequiresPythonSources;
 use uv_workspace::dependency_groups::DependencyGroupError;
 
@@ -306,12 +306,12 @@ impl uv_errors::Hinted for EnvironmentError {
     }
 }
 
-impl From<ScriptExtraBuildRequiresError> for EnvironmentError {
-    fn from(error: ScriptExtraBuildRequiresError) -> Self {
+impl From<ScriptRequirementsError> for EnvironmentError {
+    fn from(error: ScriptRequirementsError) -> Self {
         match error {
-            ScriptExtraBuildRequiresError::Io(error) => Self::Io(error),
-            ScriptExtraBuildRequiresError::IndexUrl(error) => Self::IndexUrl(error),
-            ScriptExtraBuildRequiresError::Lowering(error) => Self::Lowering(error),
+            ScriptRequirementsError::Io(error) => Self::Io(error),
+            ScriptRequirementsError::IndexUrl(error) => Self::IndexUrl(error),
+            ScriptRequirementsError::Lowering(error) => Self::Lowering(error),
         }
     }
 }

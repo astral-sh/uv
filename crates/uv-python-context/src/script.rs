@@ -28,6 +28,60 @@ use crate::{
     find_requires_python,
 };
 
+/// Determine the [`RequiresPython`] requirement for a new PEP 723 script.
+pub async fn init_script_python_requirement(
+    python: Option<&str>,
+    install_mirrors: &PythonInstallMirrors,
+    directory: &Path,
+    no_pin_python: bool,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
+    python_downloads: PythonDownloads,
+    config_discovery: ConfigDiscovery,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+    reporter: &PythonDownloadReporter,
+) -> Result<RequiresPython, PythonContextError> {
+    let python_request = if let Some(request) = python {
+        // (1) Explicit request from user
+        Some(PythonRequest::parse(request))
+    } else if let (false, Some(request)) = (
+        no_pin_python,
+        PythonVersionFile::discover(
+            directory,
+            &VersionFileDiscoveryOptions::default().with_config_discovery(config_discovery),
+        )
+        .await?
+        .and_then(PythonVersionFile::into_version),
+    ) {
+        // (2) Request from `.python-version`
+        Some(request)
+    } else {
+        // (3) No explicit request
+        None
+    };
+
+    let interpreter = PythonInstallation::find_or_download(
+        python_request.as_ref(),
+        EnvironmentPreference::Any,
+        python_preference,
+        python_arch,
+        python_downloads,
+        client_builder,
+        cache,
+        Some(reporter),
+        install_mirrors.python_install_mirror.as_deref(),
+        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
+    )
+    .await?
+    .into_interpreter();
+
+    Ok(RequiresPython::greater_than_equal_version(
+        &interpreter.python_minor_version(),
+    ))
+}
+
 /// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
 fn validate_script_requires_python(
     interpreter: &Interpreter,

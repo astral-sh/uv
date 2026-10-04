@@ -12,7 +12,6 @@ use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefau
 use uv_dispatch::UniversalState;
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
-    init_script_python_requirement,
 };
 use uv_git_types::GitOid;
 use uv_lock::{Lock, Package};
@@ -25,7 +24,9 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
-use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter};
+use uv_python_context::{
+    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter, init_script_python_requirement,
+};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};

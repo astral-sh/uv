@@ -186,7 +186,7 @@ pub async fn run(
     let env_file_environment = if no_env_file {
         Vec::new()
     } else {
-        read_env_files(env_file.iter())?
+        read_env_files(env_file.as_slice())?
     };
 
     let Some(command) = command else {
@@ -876,7 +876,7 @@ async fn get_or_create_environment(
                     let requirement = resolve_names(
                         vec![spec],
                         &interpreter,
-                        settings,
+                        &settings.resolver,
                         &build_constraints,
                         client_builder,
                         &state,
@@ -1041,7 +1041,7 @@ async fn get_or_create_environment(
             resolve_names(
                 spec.requirements.clone(),
                 &interpreter,
-                settings,
+                &settings.resolver,
                 &build_constraints,
                 client_builder,
                 &state,
@@ -1069,7 +1069,7 @@ async fn get_or_create_environment(
     let overrides = resolve_names(
         spec.overrides.clone(),
         &interpreter,
-        settings,
+        &settings.resolver,
         &build_constraints,
         client_builder,
         &state,

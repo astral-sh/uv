@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, Bound},
+    collections::{BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
     io,
@@ -111,10 +111,12 @@ impl Hinted for NoExecutablesError {
     }
 }
 use uv_command_support::Printer;
-use uv_environment_operations::{EnvironmentError, EnvironmentSpecification, PreferenceLocation};
-use uv_lock_operations::{LockValidationError, ValidatedLock};
+use uv_environment_operations::{EnvironmentSpecification, PreferenceLocation};
+use uv_lock_operations::{LockValidationRequest, ValidatedLock};
 use uv_python_context::{PythonDownloadReporter, PythonRequestSource};
 use uv_settings::ResolverSettings;
+
+use crate::error::ToolLockError;
 
 /// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
@@ -412,7 +414,7 @@ impl ToolLock {
         workspace_cache: &WorkspaceCache,
         printer: Printer,
         preview: Preview,
-    ) -> Result<ValidatedToolLock, EnvironmentError> {
+    ) -> Result<ValidatedToolLock, ToolLockError> {
         let ResolverSettings {
             index_locations,
             index_strategy,
@@ -520,39 +522,32 @@ impl ToolLock {
         let Self { root, lock } = self;
         let validated = ValidatedLock::validate(
             lock,
-            &root,
-            &BTreeMap::new(),
-            &[],
-            &BTreeMap::new(),
-            requirements,
-            &BTreeMap::new(),
-            &BTreeMap::new(),
-            None,
-            constraints,
-            &overrides,
-            excludes,
-            build_constraints,
-            &Conflicts::empty(),
-            None,
-            None,
-            dependency_metadata,
-            interpreter,
-            &requires_python,
-            index_locations,
-            upgrade,
-            Some(refresh),
-            &options,
-            &hasher,
-            state.index(),
+            LockValidationRequest {
+                install_path: &root,
+                workspace: None,
+                requirements,
+                constraints,
+                overrides: &overrides,
+                excludes,
+                build_constraints,
+                conflicts: &Conflicts::empty(),
+                environments: None,
+                required_environments: None,
+                dependency_metadata,
+                interpreter,
+                requires_python: &requires_python,
+                index_locations,
+                upgrade,
+                refresh: Some(refresh),
+                options: &options,
+                hasher: &hasher,
+                index: state.index(),
+                preview,
+            },
             &database,
-            preview,
             printer,
         )
-        .await
-        .map_err(|error| match error {
-            LockValidationError::Lock(error) => EnvironmentError::Lock(error),
-            LockValidationError::Tags(error) => EnvironmentError::Tags(error),
-        })?;
+        .await?;
         let satisfied = validated.is_satisfied();
         let usable = validated.is_usable();
 

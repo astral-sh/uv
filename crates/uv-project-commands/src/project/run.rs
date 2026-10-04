@@ -33,8 +33,8 @@ use uv_environment_operations::environment::{CachedEnvironment, EphemeralEnviron
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
     EnvironmentError, EnvironmentSpecification, LinkErrorReporting, PreferenceLocation,
-    ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest,
-    script_specification, sync_from_lock, update_environment,
+    ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest, sync_from_lock,
+    update_environment,
 };
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
@@ -51,7 +51,10 @@ use uv_python::{
 };
 use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
-use uv_requirements::{RequirementsSource, RequirementsSpecification, script_extra_build_requires};
+use uv_requirements::{
+    RequirementsSource, RequirementsSpecification, script_extra_build_requires,
+    script_specification,
+};
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
@@ -162,7 +165,7 @@ pub async fn run(
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
 
-    let env_file_environment = read_env_files(env_file.iter())?;
+    let env_file_environment = read_env_files(env_file.as_slice())?;
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
@@ -377,7 +380,8 @@ pub async fn run(
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification(
                 (&script).into(),
-                &settings.resolver,
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
                 &cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
@@ -392,8 +396,7 @@ pub async fn run(
                     workspace_cache,
                     client_builder.credentials_cache(),
                 )
-                .await
-                .map_err(EnvironmentError::from)?
+                .await?
                 .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),

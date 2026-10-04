@@ -17,7 +17,6 @@ use uv_configuration::{
     VersionControlError, VersionControlSystem,
 };
 use uv_distribution_types::RequiresPython;
-use uv_environment_operations::init_script_python_requirement;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_install_wheel::reserved_script_name;
@@ -28,7 +27,9 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_python_context::{PythonDownloadReporter, find_requires_python};
+use uv_python_context::{
+    PythonDownloadReporter, find_requires_python, init_script_python_requirement,
+};
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
