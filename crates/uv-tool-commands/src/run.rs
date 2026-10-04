@@ -3,6 +3,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use uv_dispatch::PlatformState;
 use uv_distribution_types::RequirementScope;
 use uv_environment_operations::environment::CachedEnvironment;
 
@@ -52,9 +53,7 @@ use crate::error::ToolError;
 use crate::{Target, ToolRequest};
 use uv_command_support::Printer;
 use uv_command_support::{UvError, read_env_files};
-use uv_environment_operations::{
-    EnvironmentError, EnvironmentSpecification, PlatformState, resolve_names,
-};
+use uv_environment_operations::{EnvironmentError, EnvironmentSpecification, resolve_names};
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_context::PythonDownloadReporter;
 use uv_resolve_operations as operations;

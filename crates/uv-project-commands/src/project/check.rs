@@ -11,12 +11,13 @@ use uv_configuration::{
     ActiveEnvironment, ColorChoice, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
     DryRun, ExtrasSpecification, InstallOptions,
 };
+use uv_dispatch::UniversalState;
 use uv_environment_operations::environment::CachedEnvironment;
-use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectInterpreter, ScriptEnvironment, SyncRequest, UniversalState,
-    store_credentials_from_target, sync_from_lock,
+    ProjectInterpreter, ScriptEnvironment, SyncRequest, store_credentials_from_target,
+    sync_from_lock,
 };
 use uv_fs::normalize_path;
 use uv_install_operations::Modifications;
@@ -466,7 +467,7 @@ pub async fn check(
             workspace_cache,
             printer,
             preview,
-            &malware_settings,
+            (&malware_settings).into(),
         )
         .await
         {
@@ -579,6 +580,7 @@ pub async fn check(
             LockMode::Write(lock_interpreter)
         };
 
+        let selection = PackageSelection::from_args(all_packages, &package, project.project_name());
         let result = match Box::pin(
             LockOperation::new(
                 mode,
@@ -592,10 +594,9 @@ pub async fn check(
                 printer,
                 preview,
             )
-            .with_first_party_exclusions(project::sync::first_party_exclusions(
-                project,
-                all_packages,
-                &package,
+            .with_first_party_exclusions(selection.first_party_exclusions(
+                project.workspace(),
+                project.project_name(),
                 &install_options,
             ))
             .execute(project.workspace().into()),
@@ -606,12 +607,7 @@ pub async fn check(
             Err(err) => return Err(UvError::from(err).into()),
         };
 
-        let target = project::sync::identify_project_installation_target(
-            project,
-            result.lock(),
-            all_packages,
-            &package,
-        );
+        let target = InstallTarget::from_project(project, result.lock(), selection);
 
         target.validate_extras(&extras)?;
         target.validate_groups(&groups)?;

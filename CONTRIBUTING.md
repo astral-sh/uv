@@ -233,6 +233,11 @@ live in `uv-python-context`; output and process utilities live in `uv-command-su
 shared layers independent of command implementations and CLI settings resolution, and keep Python
 context and command support free of resolver and installer dependencies.
 
+Lock operations should not depend on environment or install operations. Lock validation belongs in
+`uv-lock-operations`, script requirement lowering in `uv-requirements`, and shared resolution state
+in `uv-dispatch`. Keep substantial shared workflow functions non-generic so command crates can reuse
+their compiled implementations.
+
 Keep command-specific errors and reporting in their command crate. Shared option types used below
 the CLI layer belong in `uv-configuration`; `uv-cli` may re-export them. `uv-cli-settings` should
 not depend on command implementations or operations crates, so command edits do not recompile

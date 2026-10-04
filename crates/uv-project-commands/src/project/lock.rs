@@ -9,9 +9,10 @@ use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
+use uv_dispatch::UniversalState;
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ScriptInterpreter,
-    UniversalState, init_script_python_requirement,
+    init_script_python_requirement,
 };
 use uv_git_types::GitOid;
 use uv_lock::{Lock, Package};

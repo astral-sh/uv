@@ -6,9 +6,9 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, TargetTriple, Upgrade,
+    ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, TargetTriple,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{Dist, Resolution, ResolvedDist, SourceDist};
 use uv_install_operations::editable::apply_editable_mode;
@@ -21,15 +21,16 @@ use uv_preview::Preview;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::PythonEnvironment;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
-use uv_resolver::{FlatIndex, ForkStrategy, Prerelease, ResolutionMode};
-use uv_settings::{InstallerSettingsRef, ResolverSettings};
+use uv_resolver::FlatIndex;
+use uv_settings::InstallerSettingsRef;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache};
 
 use crate::install_target::InstallTarget;
 use crate::malware::{MalwareCheckContext, maybe_check_malware};
-use crate::{EnvironmentError, PlatformState, detect_conflicts, script_extra_build_requires};
+use crate::{EnvironmentError, detect_conflicts};
+use uv_requirements::script_extra_build_requires;
 
 /// The locked packages, environment, and installation policy for a sync operation.
 pub struct SyncRequest<'a> {
@@ -49,7 +50,7 @@ pub struct SyncRequest<'a> {
 /// Install the selected packages from a lockfile into an environment.
 ///
 /// Validates interpreter, platform, extras, and groups before planning or applying changes.
-pub async fn sync_from_lock<'a>(
+pub async fn sync_from_lock(
     request: SyncRequest<'_>,
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
@@ -59,7 +60,7 @@ pub async fn sync_from_lock<'a>(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-    malware_settings: impl Into<MalwareCheckContext<'a>>,
+    malware_context: MalwareCheckContext<'_>,
 ) -> Result<Changelog, EnvironmentError> {
     let SyncRequest {
         target,
@@ -74,7 +75,6 @@ pub async fn sync_from_lock<'a>(
         installer_metadata,
         dry_run,
     } = request;
-    let malware_context = malware_settings.into();
 
     // Extract the project settings.
     let InstallerSettingsRef {
@@ -150,32 +150,10 @@ pub async fn sync_from_lock<'a>(
             }
         }
         InstallTarget::Script { script, .. } => {
-            // Try to get extra build dependencies from the script metadata
-            let resolver_settings = ResolverSettings {
-                build_options: build_options.clone(),
-                config_setting: config_setting.clone(),
-                config_settings_package: config_settings_package.clone(),
-                dependency_metadata: dependency_metadata.clone(),
-                exclude_newer: exclude_newer.clone(),
-                fork_strategy: ForkStrategy::default(),
-                index_locations: index_locations.clone(),
-                index_strategy,
-                keyring_provider,
-                link_mode,
-                build_isolation: build_isolation.clone(),
-                extra_build_dependencies: extra_build_dependencies.clone(),
-                extra_build_variables: extra_build_variables.clone(),
-                prerelease: Prerelease::default(),
-                resolution: ResolutionMode::default(),
-                sources: sources.clone(),
-                torch_backend: None,
-                cuda_driver_version: None,
-                amd_gpu_architecture: None,
-                upgrade: Upgrade::default(),
-            };
             script_extra_build_requires(
                 (*script).into(),
-                &resolver_settings,
+                &sources,
+                index_locations,
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),

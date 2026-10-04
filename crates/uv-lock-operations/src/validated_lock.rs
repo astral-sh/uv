@@ -19,7 +19,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user;
 use uv_workspace::{Editability, WorkspaceMember};
 
-use crate::EnvironmentError;
+use crate::LockValidationError;
 
 // Lock diagnostics use a stable target for command-specific `RUST_LOG` filters.
 macro_rules! debug {
@@ -28,6 +28,7 @@ macro_rules! debug {
     };
 }
 
+/// Whether an existing lockfile can satisfy or guide a new resolution.
 #[derive(Debug)]
 pub enum ValidatedLock {
     /// An existing lockfile was provided, but its contents should be ignored.
@@ -73,7 +74,7 @@ impl ValidatedLock {
         database: &DistributionDatabase<'_, BuildDispatch<'_>>,
         preview: Preview,
         printer: Printer,
-    ) -> Result<Self, EnvironmentError> {
+    ) -> Result<Self, LockValidationError> {
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
         // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and

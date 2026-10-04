@@ -3,10 +3,11 @@ use std::path::Path;
 use tracing::debug;
 
 use crate::{
-    EnvironmentError, EnvironmentResolution, EnvironmentSpecification, PlatformState,
-    resolve_environment, sync_environment,
+    EnvironmentError, EnvironmentResolution, EnvironmentSpecification, resolve_environment,
+    sync_environment,
 };
 use uv_command_support::Printer;
+use uv_dispatch::PlatformState;
 use uv_install_operations::Modifications;
 use uv_install_operations::loggers::InstallLogger;
 use uv_resolve_operations::loggers::ResolveLogger;

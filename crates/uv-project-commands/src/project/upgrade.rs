@@ -13,10 +13,11 @@ use uv_command_support::Printer;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
 use uv_environment_operations::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, UniversalState,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
 use uv_lock::implicit_constraints_marker;
 use uv_lock_operations::{LockMode, LockOperation, LockResult, LockTarget};

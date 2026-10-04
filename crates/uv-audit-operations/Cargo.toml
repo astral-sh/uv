@@ -27,7 +27,6 @@ uv-fs = { workspace = true }
 uv-lock = { workspace = true }
 uv-normalize = { workspace = true }
 uv-redacted = { workspace = true }
-uv-settings = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 

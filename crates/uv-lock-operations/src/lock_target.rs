@@ -17,7 +17,6 @@ use uv_distribution_types::{
     Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
     RequiresPython,
 };
-use uv_environment_operations::EnvironmentError;
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
@@ -164,16 +163,16 @@ impl<'lock> LockTarget<'lock> {
                 for group in groups {
                     if !known_groups.contains(group) {
                         return if workspace.packages().len() == 1 && !workspace.is_non_project() {
-                            Err(EnvironmentError::MissingGroupProject(group.clone()).into())
+                            Err(LockError::MissingGroupProject(group.clone()))
                         } else {
-                            Err(EnvironmentError::MissingGroupProjects(group.clone()).into())
+                            Err(LockError::MissingGroupProjects(group.clone()))
                         };
                     }
                 }
             }
             Self::Script(_) => {
                 if let Some(group) = groups.iter().next() {
-                    return Err(EnvironmentError::MissingGroupScript(group.clone()).into());
+                    return Err(LockError::MissingGroupScript(group.clone()));
                 }
             }
         }

@@ -1,5 +1,6 @@
 use std::fmt::Write;
 use std::str::FromStr;
+use uv_dispatch::PlatformState;
 use uv_distribution_types::RequirementScope;
 use uv_python_context::PythonDownloadReporter;
 
@@ -44,8 +45,8 @@ use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
 use uv_command_support::UvError;
 use uv_environment_operations::{
-    EnvironmentError, EnvironmentResolution, EnvironmentSpecification, PlatformState,
-    resolve_environment, resolve_names, sync_environment, update_environment,
+    EnvironmentError, EnvironmentResolution, EnvironmentSpecification, resolve_environment,
+    resolve_names, sync_environment, update_environment,
 };
 use uv_install_operations::Modifications;
 use uv_install_operations::loggers::DefaultInstallLogger;

@@ -21,6 +21,7 @@ uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-command-support = { workspace = true }
 uv-configuration = { workspace = true }
+uv-dispatch = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-environment-operations = { workspace = true }
 uv-fs = { workspace = true }

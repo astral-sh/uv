@@ -7,14 +7,15 @@ use std::path::PathBuf;
 use uv_client::{ClientBuildError, FlatIndexError};
 use uv_command_support::UvError;
 use uv_distribution::{LoweringError, MetadataError};
-use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError};
-use uv_environment_operations::EnvironmentError;
+use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError};
 use uv_errors::{Hinted, Hints};
 use uv_lock::{Lock, LockError as LockDataError, LockParseError};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTreeContents;
+use uv_platform_tags::TagsError;
 use uv_python_context::PythonContextError;
+use uv_requirements::ScriptExtraBuildRequiresError;
 use uv_resolve_operations::Error as ResolveError;
 use uv_settings::{FrozenSource, LockedSource};
 use uv_types::HashStrategyError;
@@ -99,8 +100,68 @@ pub enum LockError {
     #[error("Failed to parse `uv.lock`")]
     UvLockParse(#[source] toml::de::Error),
 
+    #[error("Group `{0}` is not defined in the project's `dependency-groups` table")]
+    MissingGroupProject(GroupName),
+
+    #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
+    MissingGroupProjects(GroupName),
+
+    #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
+    MissingGroupScript(GroupName),
+
     #[error(transparent)]
-    Environment(#[from] EnvironmentError),
+    ClientBuild(#[from] ClientBuildError),
+
+    #[error(transparent)]
+    FlatIndex(#[from] Box<FlatIndexError>),
+
+    #[error(transparent)]
+    Lowering(#[from] Box<LoweringError>),
+
+    #[error(transparent)]
+    Metadata(#[from] MetadataError),
+
+    #[error(transparent)]
+    ExtraBuildRequires(#[from] ExtraBuildRequiresError),
+
+    #[error(transparent)]
+    IndexCredentials(#[from] IndexCredentialsError),
+
+    #[error(transparent)]
+    IndexUrl(#[from] IndexUrlError),
+
+    #[error(transparent)]
+    Lock(#[from] LockDataError),
+
+    #[error(transparent)]
+    Tags(#[from] TagsError),
+
+    #[error(transparent)]
+    PythonContext(#[from] Box<PythonContextError>),
+
+    #[error(transparent)]
+    Resolve(#[from] Box<ResolveError>),
+
+    #[error(transparent)]
+    HashStrategy(#[from] HashStrategyError),
+
+    #[error(transparent)]
+    DependencyGroup(#[from] DependencyGroupError),
+
+    #[error(transparent)]
+    DefaultGroups(#[from] DefaultGroupsError),
+
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceError),
+
+    #[error(transparent)]
+    Fmt(#[from] fmt::Error),
+
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
 }
 
 impl From<LockParseError> for LockError {
@@ -126,14 +187,34 @@ impl From<LockError> for UvError {
             | LockError::LockFormat(..)
             | LockError::MissingLockfile(..)
             | LockError::LockWorkspaceMismatch(..)) => Self::user(error),
-            LockError::Environment(error) => Self::from(error),
+            LockError::Resolve(error) => Self::from(*error),
             error @ (LockError::UnsupportedLockVersion(..)
             | LockError::UnparsableLockVersion(..)
             | LockError::LockSerialization(_)
             | LockError::OverlappingMarkers(..)
             | LockError::DisjointEnvironment(..)
             | LockError::EmptyEnvironment
-            | LockError::UvLockParse(_)) => Self::unexpected(error.into()),
+            | LockError::UvLockParse(_)
+            | LockError::MissingGroupProject(_)
+            | LockError::MissingGroupProjects(_)
+            | LockError::MissingGroupScript(_)
+            | LockError::ClientBuild(_)
+            | LockError::FlatIndex(_)
+            | LockError::Lowering(_)
+            | LockError::Metadata(_)
+            | LockError::ExtraBuildRequires(_)
+            | LockError::IndexCredentials(_)
+            | LockError::IndexUrl(_)
+            | LockError::Lock(_)
+            | LockError::Tags(_)
+            | LockError::PythonContext(_)
+            | LockError::HashStrategy(_)
+            | LockError::DependencyGroup(_)
+            | LockError::DefaultGroups(_)
+            | LockError::Workspace(_)
+            | LockError::Fmt(_)
+            | LockError::Io(_)
+            | LockError::Anyhow(_)) => Self::unexpected(error.into()),
         }
     }
 }
@@ -150,110 +231,87 @@ impl Hinted for LockError {
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
-            Self::Environment(error) => error.hints(),
+            Self::Resolve(error) => error.hints(),
+            Self::Lock(error) => error.hints(),
+            Self::PythonContext(error) => error.hints(),
             Self::MissingLockfile(..)
             | Self::UnsupportedLockVersion(..)
             | Self::UnparsableLockVersion(..)
             | Self::LockSerialization(_)
             | Self::DisjointEnvironment(..)
             | Self::EmptyEnvironment
-            | Self::UvLockParse(_) => Hints::none(),
+            | Self::UvLockParse(_)
+            | Self::MissingGroupProject(_)
+            | Self::MissingGroupProjects(_)
+            | Self::MissingGroupScript(_)
+            | Self::ClientBuild(_)
+            | Self::FlatIndex(_)
+            | Self::Lowering(_)
+            | Self::Metadata(_)
+            | Self::ExtraBuildRequires(_)
+            | Self::IndexCredentials(_)
+            | Self::IndexUrl(_)
+            | Self::Tags(_)
+            | Self::HashStrategy(_)
+            | Self::DependencyGroup(_)
+            | Self::DefaultGroups(_)
+            | Self::Workspace(_)
+            | Self::Fmt(_)
+            | Self::Io(_)
+            | Self::Anyhow(_) => Hints::none(),
         }
-    }
-}
-
-impl From<ClientBuildError> for LockError {
-    fn from(error: ClientBuildError) -> Self {
-        Self::Environment(error.into())
     }
 }
 
 impl From<FlatIndexError> for LockError {
     fn from(error: FlatIndexError) -> Self {
-        Self::Environment(error.into())
+        Self::FlatIndex(Box::new(error))
     }
 }
 
 impl From<LoweringError> for LockError {
     fn from(error: LoweringError) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<MetadataError> for LockError {
-    fn from(error: MetadataError) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<ExtraBuildRequiresError> for LockError {
-    fn from(error: ExtraBuildRequiresError) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<IndexCredentialsError> for LockError {
-    fn from(error: IndexCredentialsError) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<LockDataError> for LockError {
-    fn from(error: LockDataError) -> Self {
-        Self::Environment(error.into())
+        Self::Lowering(Box::new(error))
     }
 }
 
 impl From<PythonContextError> for LockError {
     fn from(error: PythonContextError) -> Self {
-        Self::Environment(error.into())
+        Self::PythonContext(Box::new(error))
     }
 }
 
 impl From<ResolveError> for LockError {
     fn from(error: ResolveError) -> Self {
-        Self::Environment(error.into())
+        Self::Resolve(Box::new(error))
     }
 }
 
-impl From<HashStrategyError> for LockError {
-    fn from(error: HashStrategyError) -> Self {
-        Self::Environment(error.into())
+impl From<ScriptExtraBuildRequiresError> for LockError {
+    fn from(error: ScriptExtraBuildRequiresError) -> Self {
+        match error {
+            ScriptExtraBuildRequiresError::Io(error) => Self::Io(error),
+            ScriptExtraBuildRequiresError::IndexUrl(error) => Self::IndexUrl(error),
+            ScriptExtraBuildRequiresError::Lowering(error) => Self::Lowering(error),
+        }
     }
 }
 
-impl From<DependencyGroupError> for LockError {
-    fn from(error: DependencyGroupError) -> Self {
-        Self::Environment(error.into())
+impl From<LockValidationError> for LockError {
+    fn from(error: LockValidationError) -> Self {
+        match error {
+            LockValidationError::Lock(error) => Self::Lock(error),
+            LockValidationError::Tags(error) => Self::Tags(error),
+        }
     }
 }
 
-impl From<DefaultGroupsError> for LockError {
-    fn from(error: DefaultGroupsError) -> Self {
-        Self::Environment(error.into())
-    }
-}
+/// A failure while validating an existing lockfile against its requirements.
+#[derive(Debug, thiserror::Error)]
+pub enum LockValidationError {
+    #[error(transparent)]
+    Lock(#[from] LockDataError),
 
-impl From<WorkspaceError> for LockError {
-    fn from(error: WorkspaceError) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<fmt::Error> for LockError {
-    fn from(error: fmt::Error) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<io::Error> for LockError {
-    fn from(error: io::Error) -> Self {
-        Self::Environment(error.into())
-    }
-}
-
-impl From<anyhow::Error> for LockError {
-    fn from(error: anyhow::Error) -> Self {
-        Self::Environment(error.into())
-    }
+    #[error(transparent)]
+    Tags(#[from] TagsError),
 }

@@ -25,14 +25,15 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
 use uv_environment_operations::environment::{CachedEnvironment, EphemeralEnvironment};
-use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
     EnvironmentError, EnvironmentSpecification, LinkErrorReporting, PreferenceLocation,
-    ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest, UniversalState,
-    script_extra_build_requires, script_specification, sync_from_lock, update_environment,
+    ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest,
+    script_specification, sync_from_lock, update_environment,
 };
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
@@ -50,7 +51,7 @@ use uv_python::{
 };
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{RequirementsSource, RequirementsSpecification, script_extra_build_requires};
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
@@ -261,7 +262,7 @@ pub async fn run(
             .await
             {
                 Ok(result) => result.into_lock(),
-                Err(LockError::Environment(EnvironmentError::Operation(err))) => {
+                Err(LockError::Resolve(err)) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
@@ -302,7 +303,7 @@ pub async fn run(
                 workspace_cache,
                 printer,
                 preview,
-                &malware_settings,
+                (&malware_settings).into(),
             )
             .await
             {
@@ -388,12 +389,14 @@ pub async fn run(
             {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
-                    &settings.resolver,
+                    &settings.resolver.sources,
+                    &settings.resolver.index_locations,
                     &cache,
                     workspace_cache,
                     client_builder.credentials_cache(),
                 )
-                .await?
+                .await
+                .map_err(EnvironmentError::from)?
                 .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
@@ -781,50 +784,15 @@ pub async fn run(
                 };
 
                 // Identify the installation target.
-                let target = match &project {
-                    VirtualProject::Project(project) => {
-                        if all_packages {
-                            InstallTarget::Workspace {
-                                workspace: project.workspace(),
-                                project_name: Some(project.project_name()),
-                                lock: result.lock(),
-                            }
-                        } else if let Some(package) = package.as_ref() {
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: package,
-                                lock: result.lock(),
-                            }
-                        } else {
-                            // By default, install the root package.
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: project.project_name(),
-                                lock: result.lock(),
-                            }
-                        }
-                    }
-                    VirtualProject::NonProject(workspace) => {
-                        if all_packages {
-                            InstallTarget::NonProjectWorkspace {
-                                workspace,
-                                lock: result.lock(),
-                            }
-                        } else if let Some(package) = package.as_ref() {
-                            InstallTarget::Project {
-                                workspace,
-                                name: package,
-                                lock: result.lock(),
-                            }
-                        } else {
-                            // By default, install the entire workspace.
-                            InstallTarget::NonProjectWorkspace {
-                                workspace,
-                                lock: result.lock(),
-                            }
-                        }
-                    }
-                };
+                let target = InstallTarget::from_project(
+                    &project,
+                    result.lock(),
+                    PackageSelection::from_args(
+                        all_packages,
+                        package.as_slice(),
+                        project.project_name(),
+                    ),
+                );
 
                 let install_options = InstallOptions::default();
                 // Validate that the set of requested extras and development groups are defined in the lockfile.
@@ -857,7 +825,7 @@ pub async fn run(
                     workspace_cache,
                     printer,
                     preview,
-                    &malware_settings,
+                    (&malware_settings).into(),
                 )
                 .await
                 {

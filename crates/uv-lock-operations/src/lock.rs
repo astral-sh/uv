@@ -10,14 +10,11 @@ use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, UniversalState};
 use uv_distribution::{DistributionDatabase, FirstPartyPackages, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     HashCollection, NameRequirementSpecification, RequiresPython, ResolutionRecorder,
     UnresolvedRequirementSpecification,
-};
-use uv_environment_operations::{
-    EnvironmentError, UniversalState, ValidatedLock, script_extra_build_requires,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_lock::{GroupMetadata, Lock, ResolverManifest};
@@ -25,7 +22,7 @@ use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, SupportedEnvironments};
 use uv_python::{Interpreter, PythonEnvironment};
-use uv_requirements::ExtrasResolver;
+use uv_requirements::{ExtrasResolver, script_extra_build_requires};
 use uv_resolve_operations::Error as ResolveError;
 use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_requirements};
 use uv_resolve_operations::loggers::{ResolveLogger, SummaryResolveLogger};
@@ -39,7 +36,7 @@ use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
 use crate::lock_target::find_lock_format_error;
-use crate::{LockError, LockTarget, MissingLockfileSource};
+use crate::{LockError, LockTarget, LockValidationError, MissingLockfileSource, ValidatedLock};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -233,7 +230,7 @@ impl<'env> LockOperation<'env> {
                         (Some(existing), Some(existing_contents))
                     }
                     Ok(None) => (None, None),
-                    Err(LockError::Environment(EnvironmentError::Lock(err))) => {
+                    Err(LockError::Lock(err)) => {
                         warn_user!(
                             "Failed to read existing lockfile; ignoring locked requirements: {err}"
                         );
@@ -730,7 +727,8 @@ async fn do_lock(
             // Try to get extra build dependencies from the script metadata
             script_extra_build_requires(
                 (*script).into(),
-                settings,
+                sources,
+                index_locations,
                 cache,
                 workspace_cache,
                 client.credentials_cache(),
@@ -809,7 +807,7 @@ async fn do_lock(
         .await
         {
             Ok(result) => Some(result),
-            Err(EnvironmentError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
+            Err(LockValidationError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
                 // Resolver errors are not recoverable, as such errors can leave the resolver in a
                 // broken state. Specifically, tasks that fail with an error can be left as pending.
                 //
@@ -818,7 +816,7 @@ async fn do_lock(
                 // metadata that cannot be obtained under `--no-build`.
                 return Err(err.into());
             }
-            Err(EnvironmentError::Lock(err)) if err.is_not_pep625() => {
+            Err(LockValidationError::Lock(err)) if err.is_not_pep625() => {
                 // A non-PEP 625-compliant sdist in the lockfile will also be rejected by a fresh
                 // resolve, so short-circuit rather than doing the extra work.
                 return Err(err.into());

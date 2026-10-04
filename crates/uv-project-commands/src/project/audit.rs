@@ -11,8 +11,9 @@ use uv_configuration::{
     ActiveEnvironment, AuditOutputFormat, Concurrency, DependencyGroups, ExtrasSpecification,
     TargetTriple,
 };
+use uv_dispatch::UniversalState;
 use uv_environment_operations::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, UniversalState,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
 use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups};
@@ -209,7 +210,8 @@ pub async fn audit(
         target.install_path(),
         &extras,
         &groups,
-        &settings,
+        &settings.index_locations,
+        settings.keyring_provider,
         client_builder,
         concurrency,
         &cache,

@@ -14,15 +14,15 @@ use uv_client::BaseClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode,
-    ExtrasSpecification, InstallOptions, InstallTarget as InstallOptionTarget, SyncFormat,
-    TargetTriple,
+    ExtrasSpecification, InstallOptions, SyncFormat, TargetTriple,
 };
+use uv_dispatch::{PlatformState, UniversalState};
 use uv_distribution_types::NameRequirementSpecification;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
-    EnvironmentError, EnvironmentUpdate, LinkErrorReporting, PlatformState, ProjectEnvironment,
-    ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest, UniversalState, detect_conflicts,
-    script_extra_build_requires, script_specification, sync_from_lock, update_environment,
+    EnvironmentError, EnvironmentUpdate, LinkErrorReporting, ProjectEnvironment,
+    ProjectEnvironmentTarget, ScriptEnvironment, SyncRequest, detect_conflicts,
+    script_specification, sync_from_lock, update_environment,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_install_operations::loggers::DefaultInstallLogger;
@@ -39,6 +39,7 @@ use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
 };
+use uv_requirements::script_extra_build_requires;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{
@@ -333,12 +334,14 @@ pub async fn sync(
             .unwrap_or_default();
             let script_extra_build_requires = script_extra_build_requires(
                 script.into(),
-                &settings.resolver,
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
             )
-            .await?
+            .await
+            .map_err(EnvironmentError::from)?
             .into_inner();
 
             // Parse the build constraints from the script.
@@ -442,7 +445,12 @@ pub async fn sync(
         SyncTarget::Manifest(manifest) => {
             let lock_target = LockTarget::from(*manifest);
             let first_party_exclusions = target.project().map_or_else(BTreeSet::new, |project| {
-                first_party_exclusions(project, all_packages, &package, &install_options)
+                PackageSelection::from_args(all_packages, &package, project.project_name())
+                    .first_party_exclusions(
+                        project.workspace(),
+                        project.project_name(),
+                        &install_options,
+                    )
             });
 
             let result = if let Some(lock) = frozen_lock {
@@ -468,7 +476,7 @@ pub async fn sync(
             };
             let outcome = match result {
                 Ok(result) => Outcome::Success(result),
-                Err(LockError::Environment(EnvironmentError::Operation(err))) => {
+                Err(LockError::Resolve(err)) => {
                     return Err(UvError::from(*err).into());
                 }
                 Err(err @ LockError::LockFormat(..)) => return Err(UvError::user(err).into()),
@@ -539,7 +547,7 @@ pub async fn sync(
         workspace_cache,
         printer,
         preview,
-        &malware_settings,
+        (&malware_settings).into(),
     )
     .await
     {
@@ -612,9 +620,11 @@ fn identify_installation_target<'a>(
     package: &'a [PackageName],
 ) -> InstallTarget<'a> {
     match target {
-        SyncTarget::Manifest(SyncManifest::Project(project)) => {
-            identify_project_installation_target(project, lock, all_packages, package)
-        }
+        SyncTarget::Manifest(SyncManifest::Project(project)) => InstallTarget::from_project(
+            project,
+            lock,
+            PackageSelection::from_args(all_packages, package, project.project_name()),
+        ),
         SyncTarget::Lockfile {
             workspace,
             project_name,
@@ -627,103 +637,6 @@ fn identify_installation_target<'a>(
         },
         SyncTarget::Manifest(SyncManifest::Script(script)) => {
             InstallTarget::Script { script, lock }
-        }
-    }
-}
-
-/// Identify workspace members excluded from installation before a lockfile is available.
-pub(super) fn first_party_exclusions(
-    project: &VirtualProject,
-    all_packages: bool,
-    package: &[PackageName],
-    install_options: &InstallOptions,
-) -> BTreeSet<PackageName> {
-    let workspace = project.workspace();
-    let members = workspace
-        .packages()
-        .keys()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let project_name = if all_packages {
-        project.project_name()
-    } else {
-        match package {
-            [] => project.project_name(),
-            [name] => Some(name),
-            _ => None,
-        }
-    };
-    members
-        .iter()
-        .filter(|name| {
-            !install_options.include_package(
-                InstallOptionTarget {
-                    name,
-                    is_local: true,
-                },
-                project_name,
-                &members,
-            )
-        })
-        .cloned()
-        .collect()
-}
-
-/// Select workspace members with the same semantics as `uv sync`.
-pub(super) fn identify_project_installation_target<'a>(
-    project: &'a VirtualProject,
-    lock: &'a Lock,
-    all_packages: bool,
-    package: &'a [PackageName],
-) -> InstallTarget<'a> {
-    match project {
-        VirtualProject::Project(project) => {
-            if all_packages {
-                InstallTarget::Workspace {
-                    workspace: project.workspace(),
-                    project_name: Some(project.project_name()),
-                    lock,
-                }
-            } else {
-                match package {
-                    // By default, install the current project.
-                    [] => InstallTarget::Project {
-                        workspace: project.workspace(),
-                        name: project.project_name(),
-                        lock,
-                    },
-                    [name] => InstallTarget::Project {
-                        workspace: project.workspace(),
-                        name,
-                        lock,
-                    },
-                    names => InstallTarget::Projects {
-                        workspace: project.workspace(),
-                        names,
-                        lock,
-                    },
-                }
-            }
-        }
-        VirtualProject::NonProject(workspace) => {
-            if all_packages {
-                InstallTarget::NonProjectWorkspace { workspace, lock }
-            } else {
-                match package {
-                    // By default, install the entire virtual workspace.
-                    [] => InstallTarget::NonProjectWorkspace { workspace, lock },
-                    [name] => InstallTarget::Project {
-                        workspace,
-                        name,
-                        lock,
-                    },
-                    names => InstallTarget::Projects {
-                        workspace,
-                        names,
-                        lock,
-                    },
-                }
-            }
         }
     }
 }

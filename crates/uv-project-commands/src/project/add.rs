@@ -1,9 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
-use std::io;
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -21,20 +19,20 @@ use uv_configuration::{
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
     InstallOptions, NoSources,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState, UniversalState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
 };
-use uv_environment_operations::install_target::InstallTarget;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
-    EnvironmentError, LinkErrorReporting, PlatformState, ProjectEnvironment,
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, SyncRequest,
-    UniversalState, init_script_python_requirement, sync_from_lock,
+    EnvironmentError, LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy,
+    ProjectEnvironmentTarget, ProjectInterpreter, SyncRequest, init_script_python_requirement,
+    sync_from_lock,
 };
 use uv_errors::HintOrdering;
-use uv_fs::{LockedFile, LockedFileError, Simplified};
+use uv_fs::Simplified;
 use uv_git::store_credentials;
 use uv_install_operations::Modifications;
 use uv_install_operations::loggers::DefaultInstallLogger;
@@ -43,31 +41,29 @@ use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, Pa
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonEnvironment,
-    PythonPreference, PythonRequest,
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
+    PythonRequest,
 };
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::FlatIndex;
-use uv_scripts::{Pep723Metadata, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_settings::{
     FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
 };
 use uv_static::is_known_standard_library_package;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::{
-    DependencyType, PyProjectToml, Source, SourceError, Sources, ToolUvSources,
-};
+use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::project::ProjectError;
-use crate::project::edit::ProjectEdit;
+use crate::project::edit::{EditTarget, ProjectEdit, PythonTarget};
 use crate::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::{ExitStatus, ScriptPath, UvError, project};
+use crate::{ExitStatus, ScriptPath, UvError};
 
 /// A failed dependency addition, with `uv add`-specific recovery context.
 #[derive(Debug, thiserror::Error)]
@@ -263,7 +259,7 @@ pub async fn add(
         .await?
         .into_interpreter();
 
-        AddTarget::Script(script, Box::new(interpreter))
+        EditTarget::Script(script, Box::new(PythonTarget::Interpreter(interpreter)))
     } else {
         // Find the project in the workspace.
         // No workspace caching since `uv add` changes the workspace definition.
@@ -337,7 +333,7 @@ pub async fn add(
             .await?
             .into_interpreter();
 
-            AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
+            EditTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
         } else {
             // Discover or create the virtual environment.
             let environment = ProjectEnvironment::get_or_init(
@@ -361,7 +357,7 @@ pub async fn add(
             .await?
             .into_environment()?;
 
-            AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
+            EditTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
         }
     };
 
@@ -464,7 +460,7 @@ pub async fn add(
                 FlatIndex::load(&client, cache, &settings.resolver.index_locations).await?;
 
             // Lower the extra build dependencies, if any.
-            let extra_build_requires = if let AddTarget::Project(project, _) = &target {
+            let extra_build_requires = if let EditTarget::Project(project, _) = &target {
                 LoweredExtraBuildDependencies::from_workspace(
                     settings.resolver.extra_build_dependencies.clone(),
                     project.workspace(),
@@ -532,7 +528,7 @@ pub async fn add(
 
     // If any of the requirements are self-dependencies, bail.
     if matches!(dependency_type, DependencyType::Production) {
-        if let AddTarget::Project(project, _) = &target {
+        if let EditTarget::Project(project, _) = &target {
             if let Some(project_name) = project.project_name() {
                 for requirement in &requirements {
                     if requirement.name == *project_name {
@@ -550,8 +546,8 @@ pub async fn add(
 
     // Store the content prior to any modifications.
     let paths = match &target {
-        AddTarget::Script(script, _) => vec![script.path.clone()],
-        AddTarget::Project(project, _) => vec![
+        EditTarget::Script(script, _) => vec![script.path.clone()],
+        EditTarget::Project(project, _) => vec![
             project.root().join("pyproject.toml"),
             project.workspace().install_path().join("pyproject.toml"),
         ],
@@ -580,7 +576,7 @@ pub async fn add(
         None => {
             // Check if we're in a project (not a script), and if any requirements are path
             // dependencies within the workspace.
-            if let AddTarget::Project(ref project, _) = target {
+            if let EditTarget::Project(ref project, _) = target {
                 let workspace_root = project.workspace().install_path();
                 requirements.iter().any(|req| {
                     if let RequirementSource::Directory { install_path, .. } = &req.source {
@@ -604,7 +600,7 @@ pub async fn add(
     // `pyproject.toml` file.
     if use_workspace {
         let mut modified = false;
-        let AddTarget::Project(project, python_target) = target else {
+        let EditTarget::Project(project, python_target) = target else {
             unreachable!("`--workspace` and `--script` are conflicting options");
         };
 
@@ -660,7 +656,7 @@ pub async fn add(
                 &workspace_content,
             )?;
 
-            AddTarget::Project(
+            EditTarget::Project(
                 VirtualProject::discover(
                     project.root(),
                     &DiscoveryOptions::default(),
@@ -671,15 +667,15 @@ pub async fn add(
                 python_target,
             )
         } else {
-            AddTarget::Project(project, python_target)
+            EditTarget::Project(project, python_target)
         }
     }
 
     let mut toml = match &target {
-        AddTarget::Script(script, _) => {
+        EditTarget::Script(script, _) => {
             PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
         }
-        AddTarget::Project(project, _) => PyProjectTomlMut::from_toml(
+        EditTarget::Project(project, _) => PyProjectTomlMut::from_toml(
             &project.pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
         ),
@@ -739,10 +735,10 @@ pub async fn add(
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
         let root_dir = match &target {
-            AddTarget::Script(script, _) => {
+            EditTarget::Script(script, _) => {
                 script.path.parent().expect("script path has no parent")
             }
-            AddTarget::Project(project, _) => project.root(),
+            EditTarget::Project(project, _) => project.root(),
         };
         let locations = IndexLocations::new(indexes, Vec::new(), false);
         let mut indexes = locations.defined_indexes().collect::<Vec<_>>();
@@ -767,7 +763,7 @@ pub async fn add(
     // If we're modifying a script, and lockfile doesn't exist, avoid creating it. We still need
     // to perform resolution, since we want to use the resolved versions to populate lower bounds
     // in the script.
-    let dry_run = if let AddTarget::Script(ref script, _) = target {
+    let dry_run = if let EditTarget::Script(ref script, _) = target {
         !LockTarget::from(script).lock_path().is_file()
     } else {
         false
@@ -817,23 +813,23 @@ pub async fn add(
             edit.commit();
             Ok(ExitStatus::Success)
         }
-        Err(err) => match err {
-            ProjectError::Environment(EnvironmentError::Operation(err))
-            | ProjectError::Lock(LockError::Environment(EnvironmentError::Operation(err))) => {
-                let err = *err;
-                let standard_library_package = standard_library_package(&err, &edits, python_minor);
-                Err(UvError::from(err)
-                    .map_user(|cause| {
-                        AddDependencyError {
-                            cause,
-                            standard_library_package,
-                        }
-                        .into()
-                    })
-                    .into())
-            }
-            err => Err(UvError::from(err).into()),
-        },
+        Err(err) => {
+            let err = match err {
+                ProjectError::Environment(EnvironmentError::Operation(err)) => *err,
+                ProjectError::Lock(LockError::Resolve(err)) => (*err).into(),
+                err => return Err(UvError::from(err).into()),
+            };
+            let standard_library_package = standard_library_package(&err, &edits, python_minor);
+            Err(UvError::from(err)
+                .map_user(|cause| {
+                    AddDependencyError {
+                        cause,
+                        standard_library_package,
+                    }
+                    .into()
+                })
+                .into())
+        }
     }
 }
 
@@ -863,7 +859,7 @@ fn standard_library_package(
 
 fn edits(
     requirements: Vec<Requirement>,
-    target: &AddTarget,
+    target: &EditTarget<Box<PythonTarget>>,
     editable: Option<&EditableMode>,
     dependency_type: &DependencyType,
     raw: bool,
@@ -887,10 +883,10 @@ fn edits(
         requirement.extras = ex.into_boxed_slice();
 
         let (requirement, source) = match target {
-            AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw => {
+            EditTarget::Script(_, _) | EditTarget::Project(_, _) if raw => {
                 (uv_pep508::Requirement::from(requirement), None)
             }
-            AddTarget::Script(script, _) => {
+            EditTarget::Script(script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");
 
@@ -908,7 +904,7 @@ fn edits(
                     existing_sources,
                 )?
             }
-            AddTarget::Project(project, _) => {
+            EditTarget::Project(project, _) => {
                 let existing_sources = project
                     .pyproject_toml()
                     .tool
@@ -1062,7 +1058,7 @@ fn edits(
 /// Re-lock and re-sync the project after a series of edits.
 #[expect(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
-    mut target: AddTarget,
+    mut target: EditTarget<Box<PythonTarget>>,
     toml: &mut PyProjectTomlMut,
     edits: &[DependencyEdit],
     mut lock_state: UniversalState,
@@ -1101,7 +1097,16 @@ async fn lock_and_sync(
         no_install_package,
         only_install_package,
     );
-    let first_party_exclusions = target.first_party_exclusions(&install_options);
+    let first_party_exclusions = match &target {
+        EditTarget::Project(project, _) => {
+            PackageSelection::from_args(false, &[], project.project_name()).first_party_exclusions(
+                project.workspace(),
+                project.project_name(),
+                &install_options,
+            )
+        }
+        EditTarget::Script(..) => BTreeSet::new(),
+    };
     let mut lock = Box::pin(
         LockOperation::new(
             if let LockCheck::Enabled(lock_check) = lock_check {
@@ -1219,7 +1224,7 @@ async fn lock_and_sync(
 
             // Invalidate any cached project metadata. Reusing a metadata-free lock may not
             // populate the in-memory index.
-            if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
+            if let EditTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let distribution_id = url.distribution_id();
@@ -1259,7 +1264,7 @@ async fn lock_and_sync(
         }
     }
 
-    let AddTarget::Project(project, environment) = target else {
+    let EditTarget::Project(project, environment) = target else {
         // If we're not adding to a project, exit early.
         return Ok(());
     };
@@ -1270,17 +1275,11 @@ async fn lock_and_sync(
     };
 
     // Identify the installation target.
-    let target = match &project {
-        VirtualProject::Project(project) => InstallTarget::Project {
-            workspace: project.workspace(),
-            name: project.project_name(),
-            lock: &lock,
-        },
-        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-            workspace,
-            lock: &lock,
-        },
-    };
+    let target = InstallTarget::from_project(
+        &project,
+        &lock,
+        PackageSelection::from_args(false, &[], project.project_name()),
+    );
 
     sync_from_lock(
         SyncRequest {
@@ -1304,7 +1303,7 @@ async fn lock_and_sync(
         &WorkspaceCache::default(),
         printer,
         preview,
-        malware_settings,
+        malware_settings.into(),
     )
     .await?;
 
@@ -1354,122 +1353,6 @@ fn resolve_requirement(
     processed_requirement.clear_url();
 
     Ok((processed_requirement, source))
-}
-
-/// A Python [`Interpreter`] or [`PythonEnvironment`] for a project.
-#[derive(Debug, Clone)]
-#[expect(clippy::large_enum_variant)]
-pub(super) enum PythonTarget {
-    Interpreter(Interpreter),
-    Environment(PythonEnvironment),
-}
-
-impl PythonTarget {
-    /// Return the [`Interpreter`] for the project.
-    fn interpreter(&self) -> &Interpreter {
-        match self {
-            Self::Interpreter(interpreter) => interpreter,
-            Self::Environment(venv) => venv.interpreter(),
-        }
-    }
-}
-
-/// Represents the destination where dependencies are added, either to a project or a script.
-#[derive(Debug, Clone)]
-#[expect(clippy::large_enum_variant)]
-pub(super) enum AddTarget {
-    /// A PEP 723 script, with inline metadata.
-    Script(Pep723Script, Box<Interpreter>),
-
-    /// A project with a `pyproject.toml`.
-    Project(VirtualProject, Box<PythonTarget>),
-}
-
-impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
-    fn from(value: &'lock AddTarget) -> Self {
-        match value {
-            AddTarget::Script(script, _) => Self::Script(script),
-            AddTarget::Project(project, _) => Self::Workspace(project.workspace()),
-        }
-    }
-}
-
-impl AddTarget {
-    /// Return workspace members excluded from the first-party build exemption.
-    fn first_party_exclusions(&self, install_options: &InstallOptions) -> BTreeSet<PackageName> {
-        match self {
-            Self::Project(project, _) => {
-                project::sync::first_party_exclusions(project, false, &[], install_options)
-            }
-            Self::Script(..) => BTreeSet::new(),
-        }
-    }
-
-    /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
-    /// modifications.
-    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, LockedFileError> {
-        match self {
-            Self::Script(_, interpreter) => interpreter.lock().await,
-            Self::Project(_, python_target) => python_target.interpreter().lock().await,
-        }
-    }
-
-    /// Returns the [`Interpreter`] for the target.
-    pub(super) fn interpreter(&self) -> &Interpreter {
-        match self {
-            Self::Script(_, interpreter) => interpreter,
-            Self::Project(_, venv) => venv.interpreter(),
-        }
-    }
-
-    /// Write the updated content to the target.
-    ///
-    /// Returns `true` if the content was modified.
-    fn write(&self, content: &str) -> Result<bool, io::Error> {
-        match self {
-            Self::Script(script, _) => {
-                if content == script.metadata.raw {
-                    debug!("No changes to dependencies; skipping update");
-                    Ok(false)
-                } else {
-                    script.write(content)?;
-                    Ok(true)
-                }
-            }
-            Self::Project(project, _) => {
-                if content == project.pyproject_toml().raw {
-                    debug!("No changes to dependencies; skipping update");
-                    Ok(false)
-                } else {
-                    let pyproject_path = project.root().join("pyproject.toml");
-                    fs_err::write(pyproject_path, content)?;
-                    Ok(true)
-                }
-            }
-        }
-    }
-
-    /// Update the target in-memory to incorporate the new content.
-    fn update(self, content: &str, workspace_cache: &WorkspaceCache) -> Result<Self, ProjectError> {
-        match self {
-            Self::Script(mut script, interpreter) => {
-                script.metadata = Pep723Metadata::from_str(content)
-                    .map_err(ProjectError::Pep723ScriptTomlParse)?;
-                Ok(Self::Script(script, interpreter))
-            }
-            Self::Project(project, venv) => {
-                let pyproject_path = project.root().join("pyproject.toml");
-                let project = project
-                    .update_member(
-                        PyProjectToml::from_string(content.to_string(), &pyproject_path)
-                            .map_err(ProjectError::PyprojectTomlParse)?,
-                        workspace_cache,
-                    )?
-                    .ok_or(ProjectError::PyprojectTomlUpdate)?;
-                Ok(Self::Project(project, venv))
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

@@ -17,7 +17,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
     ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
@@ -112,9 +112,10 @@ impl Hinted for NoExecutablesError {
 }
 use uv_command_support::Printer;
 use uv_environment_operations::{
-    EnvironmentError, EnvironmentSpecification, OperationsError, PlatformState, PreferenceLocation,
-    PythonRequestSource, ValidatedLock,
+    EnvironmentError, EnvironmentSpecification, OperationsError, PreferenceLocation,
+    PythonRequestSource,
 };
+use uv_lock_operations::{LockValidationError, ValidatedLock};
 use uv_python_context::PythonDownloadReporter;
 use uv_settings::ResolverSettings;
 
@@ -550,7 +551,11 @@ impl ToolLock {
             preview,
             printer,
         )
-        .await?;
+        .await
+        .map_err(|error| match error {
+            LockValidationError::Lock(error) => EnvironmentError::Lock(error),
+            LockValidationError::Tags(error) => EnvironmentError::Tags(error),
+        })?;
         let satisfied = validated.is_satisfied();
         let usable = validated.is_usable();
 

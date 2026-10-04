@@ -19,11 +19,11 @@ use uv_configuration::{
     ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageOverride, Reinstall,
     TargetTriple, Upgrade,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
+use uv_dispatch::{BuildDispatch, PlatformState, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, HashCollection, Index, Requirement, RequiresPython,
-    Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ExtraBuildRequires, HashCollection, Index, Requirement, RequiresPython, Resolution,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
@@ -41,15 +41,14 @@ use uv_python::{
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, FlatIndex, InMemoryIndex, OptionsBuilder, Preference, PythonRequirement,
-    ResolverEnvironment, ResolverOutput,
+    DependencyMode, FlatIndex, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::{ProjectEnvironmentSelection, Workspace, WorkspaceCache};
 
 use crate::install_target::{InstallTarget, PackageSelection};
@@ -76,15 +75,12 @@ mod python;
 mod sync;
 pub use sync::{SyncRequest, store_credentials_from_target, sync_from_lock};
 
-mod validated_lock;
-
 pub use operations_error::OperationsError;
 pub use python::from_lockfile;
 pub use uv_python_context::ScriptInterpreter;
 use uv_python_context::{
     EnvironmentIncompatibilityError, EnvironmentKind, check_environment_compatibility,
 };
-pub use validated_lock::ValidatedLock;
 
 /// Vulnerability identifiers grouped by dependency.
 #[derive(Debug)]
@@ -211,54 +207,6 @@ impl std::fmt::Display for ConflictError {
 }
 
 impl std::error::Error for ConflictError {}
-
-/// A [`SharedState`] instance to use for universal resolution.
-#[derive(Default, Clone)]
-pub struct UniversalState(SharedState);
-
-impl std::ops::Deref for UniversalState {
-    type Target = SharedState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl UniversalState {
-    /// Return mutable access to the index owner between lock operations.
-    pub fn index_mut(&mut self) -> &mut InMemoryIndex {
-        self.0.index_mut()
-    }
-
-    /// Fork the [`UniversalState`] to create a [`PlatformState`].
-    pub fn fork(&self) -> PlatformState {
-        PlatformState(self.0.fork())
-    }
-}
-
-/// A [`SharedState`] instance to use for platform-specific resolution.
-#[derive(Default, Clone)]
-pub struct PlatformState(SharedState);
-
-impl std::ops::Deref for PlatformState {
-    type Target = SharedState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl PlatformState {
-    /// Fork the [`PlatformState`] to create a [`UniversalState`].
-    pub fn fork(&self) -> UniversalState {
-        UniversalState(self.0.fork())
-    }
-
-    /// Create a [`SharedState`] from the [`PlatformState`].
-    pub fn into_inner(self) -> SharedState {
-        self.0
-    }
-}
 
 /// The policy for discovering and initializing a project environment.
 #[derive(Debug, Clone, Copy)]
@@ -2477,69 +2425,6 @@ pub async fn script_specification(
     specification.override_dependencies = overrides;
     specification.excludes = excludes;
     Ok(Some(specification))
-}
-
-/// Determine the extra build requires for a script.
-pub async fn script_extra_build_requires(
-    script: Pep723ItemRef<'_>,
-    settings: &ResolverSettings,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
-    credentials_cache: &CredentialsCache,
-) -> Result<LoweredExtraBuildDependencies, EnvironmentError> {
-    let script_dir = script.directory()?;
-    let script_indexes = script
-        .indexes(&settings.sources)
-        .iter()
-        .cloned()
-        .map(|index| index.relative_to(&script_dir))
-        .collect::<Result<Vec<_>, _>>()?;
-    let script_sources = script.sources(&settings.sources);
-
-    // Collect any `tool.uv.extra-build-dependencies` from the script.
-    let empty = BTreeMap::default();
-    let script_extra_build_dependencies = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.extra_build_dependencies.as_ref())
-        .unwrap_or(&empty);
-
-    // Lower the extra build dependencies.
-    let mut extra_build_requires = ExtraBuildRequires::default();
-    for (name, requirements) in script_extra_build_dependencies {
-        let mut lowered_requirements = Vec::new();
-        for ExtraBuildDependency {
-            requirement,
-            match_runtime,
-        } in requirements.iter().cloned()
-        {
-            lowered_requirements.extend(
-                LoweredRequirement::from_non_workspace_requirement(
-                    requirement,
-                    script_dir.as_ref(),
-                    script_sources.as_ref(),
-                    &script_indexes,
-                    &settings.index_locations,
-                    cache,
-                    workspace_cache,
-                    credentials_cache,
-                )
-                .await
-                .map_ok(|requirement| ExtraBuildRequirement {
-                    requirement: requirement.into_inner(),
-                    match_runtime,
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            );
-        }
-        extra_build_requires.insert(name.clone(), lowered_requirements);
-    }
-
-    Ok(LoweredExtraBuildDependencies::from_lowered(
-        extra_build_requires,
-    ))
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.
