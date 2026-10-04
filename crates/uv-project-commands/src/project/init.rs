@@ -795,6 +795,7 @@ fn init_project_kind(
                     def main():
                         print("Hello from {name}!")
 
+
                     if __name__ == "__main__":
                         main()
                 "#};
@@ -1057,12 +1058,14 @@ fn generate_package_scripts(
         indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
 
+
         def hello() -> str:
             return hello_from_bin()
         "}
     } else {
         indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
+
 
         def main() -> None:
             print(hello_from_bin())
