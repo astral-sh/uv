@@ -226,13 +226,12 @@ The `uv` crate owns process-global initialization and command dispatch. CLI pars
 `uv-python-commands`.
 
 Command crates should not depend on one another or on `uv-cli`. Shared workflows belong in
-`uv-lock-operations`, `uv-environment-operations`, `uv-resolve-operations`,
-`uv-install-operations`, or `uv-audit-operations`. Lockfile policy and resolution live in
-`uv-lock-operations`; installing a locked selection lives in `uv-environment-operations`. Python
-discovery and compatibility checks live in `uv-python-context`; output and process utilities live
-in `uv-command-support`. Keep these shared layers independent of command implementations and CLI
-settings resolution, and keep Python context and command support free of resolver and installer
-dependencies.
+`uv-lock-operations`, `uv-environment-operations`, `uv-resolve-operations`, `uv-install-operations`,
+or `uv-audit-operations`. Lockfile policy and resolution live in `uv-lock-operations`; installing a
+locked selection lives in `uv-environment-operations`. Python discovery and compatibility checks
+live in `uv-python-context`; output and process utilities live in `uv-command-support`. Keep these
+shared layers independent of command implementations and CLI settings resolution, and keep Python
+context and command support free of resolver and installer dependencies.
 
 Keep command-specific errors and reporting in their command crate. Shared option types used below
 the CLI layer belong in `uv-configuration`; `uv-cli` may re-export them. `uv-cli-settings` should
