@@ -1,11 +1,14 @@
 pub use uv_environment_operations::*;
 
+pub use error::{MissingLockfileSource, ProjectError};
+
 pub mod add;
 pub mod audit;
 pub mod check;
 pub(super) mod discovery;
 mod edit;
 pub mod environment;
+mod error;
 pub mod export;
 pub mod format;
 pub mod init;

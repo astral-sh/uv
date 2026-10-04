@@ -112,7 +112,7 @@ impl Hinted for NoExecutablesError {
 }
 use uv_command_support::Printer;
 use uv_environment_operations::{
-    EnvironmentSpecification, OperationsError, PlatformState, PreferenceLocation, ProjectError,
+    EnvironmentError, EnvironmentSpecification, OperationsError, PlatformState, PreferenceLocation,
     PythonRequestSource, ValidatedLock,
 };
 use uv_python_context::PythonDownloadReporter;
@@ -182,7 +182,7 @@ impl ToolPython {
         git_resolver: &GitResolver,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, EnvironmentError> {
         let requires_python = if python_request.is_none() {
             match requirement {
                 Some(requirement) => {
@@ -414,7 +414,7 @@ impl ToolLock {
         workspace_cache: &WorkspaceCache,
         printer: Printer,
         preview: Preview,
-    ) -> Result<ValidatedToolLock, ProjectError> {
+    ) -> Result<ValidatedToolLock, EnvironmentError> {
         let ResolverSettings {
             index_locations,
             index_strategy,
@@ -650,9 +650,8 @@ pub async fn refine_interpreter(
     python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
-) -> anyhow::Result<Option<Interpreter>, ProjectError> {
-    let OperationsError::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) = err
-    else {
+) -> anyhow::Result<Option<Interpreter>, EnvironmentError> {
+    let Some(no_solution_err) = err.as_no_solution() else {
         return Ok(None);
     };
 

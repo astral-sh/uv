@@ -18,9 +18,9 @@ use uv_python::{EnvironmentPreference, PythonArchitecture, PythonPreference};
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
+use crate::reporters::report_target_environment;
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, elapsed};
-use uv_install_operations::report_target_environment;
 
 /// Uninstall packages from the current environment.
 pub async fn pip_uninstall(

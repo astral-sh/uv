@@ -13,11 +13,10 @@ use uv_audit::{
     VulnerabilityID, VulnerabilityServiceFormat, osv,
 };
 use uv_cache::Cache;
-use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
-    Concurrency, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
+    AuditOutputFormat, Concurrency, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
 };
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};

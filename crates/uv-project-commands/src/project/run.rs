@@ -69,10 +69,10 @@ use crate::project::install_target::InstallTarget;
 use crate::project::lock::LockMode;
 use crate::project::lock_target::LockTarget;
 use crate::project::{
-    EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
-    ProjectEnvironmentTarget, ProjectError, ProjectPythonRequest, ScriptEnvironment,
-    ScriptInterpreter, UniversalState, script_extra_build_requires, script_specification,
-    update_environment,
+    EnvironmentError, EnvironmentSpecification, LinkErrorReporting, PreferenceLocation,
+    ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ProjectPythonRequest,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, script_extra_build_requires,
+    script_specification, update_environment,
 };
 use crate::reporters::PythonDownloadReporter;
 use crate::{ExitStatus, UvError, project, read_env_files};
@@ -264,7 +264,7 @@ pub async fn run(
             .await
             {
                 Ok(result) => result.into_lock(),
-                Err(ProjectError::Operation(err)) => {
+                Err(ProjectError::Environment(EnvironmentError::Operation(err))) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
@@ -308,7 +308,7 @@ pub async fn run(
             .await
             {
                 Ok(_) => {}
-                Err(ProjectError::Operation(err)) => {
+                Err(ProjectError::Environment(EnvironmentError::Operation(err))) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
@@ -454,7 +454,7 @@ pub async fn run(
                 .await
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(ProjectError::Operation(err)) => {
+                    Err(EnvironmentError::Operation(err)) => {
                         let err = *err;
                         return Err(UvError::from(err.with_resolution_context("script")).into());
                     }
@@ -1018,7 +1018,7 @@ pub async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Operation(err)) => {
+                Err(EnvironmentError::Operation(err)) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("`--with`")).into());
                 }

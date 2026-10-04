@@ -13,9 +13,9 @@ use uv_python::{
     PythonVersion,
 };
 
+use crate::reporters::report_target_environment;
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, elapsed};
-use uv_install_operations::report_target_environment;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// Check for incompatibilities in installed packages.

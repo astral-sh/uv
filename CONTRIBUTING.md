@@ -231,6 +231,9 @@ and process utilities live in `uv-command-support`. Keep these shared layers ind
 implementations and CLI dispatch, and keep the Python context and command support crates free of
 resolver and installer dependencies.
 
+Keep command-specific errors and reporting in their command crate. Shared option types used below
+the CLI layer belong in `uv-configuration`; `uv-cli` may re-export them.
+
 When iterating on a command family, check its crate to compile fewer crates than the full CLI:
 
 ```shell

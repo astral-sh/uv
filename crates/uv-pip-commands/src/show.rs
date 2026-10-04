@@ -18,9 +18,9 @@ use uv_python::{
     PythonRequest, Target,
 };
 
+use crate::reporters::report_target_environment;
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
-use uv_install_operations::report_target_environment;
 
 /// Show information about one or more installed packages.
 pub fn pip_show(

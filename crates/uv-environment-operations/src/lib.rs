@@ -9,9 +9,8 @@ use std::sync::Arc;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
-use uv_audit::osv;
 use uv_audit::{Dependency, VulnerabilityID};
-use uv_auth::{CredentialsCache, CredentialsFromUrlError};
+use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
@@ -23,17 +22,14 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, HashCollection, Index, IndexCredentialsError,
-    IndexUrlError, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, HashCollection, Index, Requirement, RequiresPython,
+    Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
-use uv_lock::{Installable, Lock, LockParseError};
-use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::MarkerTreeContents;
+use uv_lock::{Installable, Lock};
+use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
@@ -53,26 +49,25 @@ use uv_settings::PythonInstallMirrors;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::ExtraBuildDependency;
-use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
+use uv_workspace::{ProjectEnvironmentSelection, Workspace, WorkspaceCache};
 
 use crate::install_target::{InstallTarget, PackageSelection};
 use crate::locked_requirements::{LockedRequirements, read_lock_requirements};
 use uv_command_support::Printer;
-use uv_command_support::{UvError, capitalize, conjunction};
+use uv_command_support::{capitalize, conjunction};
 use uv_install_operations::loggers::InstallLogger;
 use uv_install_operations::{Changelog, Modifications};
+use uv_python_context::CompatibleProjectPython;
 use uv_python_context::PythonDownloadReporter;
-use uv_python_context::{CompatibleProjectPython, format_requires_python_sources};
 pub use uv_python_context::{ProjectPythonRequest, PythonRequestSource, find_requires_python};
 use uv_resolve_operations::loggers::ResolveLogger;
 use uv_resolve_operations::reporters::ResolverReporter;
-use uv_settings::{
-    FrozenSource, InstallerSettingsRef, LockedSource, ResolverInstallerSettings, ResolverSettings,
-};
+use uv_settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
 
 pub mod environment;
+mod error;
+pub use error::EnvironmentError;
 pub mod install_target;
 pub use uv_resolve_operations::locked_requirements;
 pub mod malware;
@@ -87,321 +82,6 @@ use uv_python_context::{
     EnvironmentIncompatibilityError, EnvironmentKind, check_environment_compatibility,
 };
 pub use validated_lock::ValidatedLock;
-
-/// The source of a missing lockfile error.
-#[derive(Debug, Clone, Copy)]
-pub enum MissingLockfileSource {
-    /// Frozen mode required an existing lockfile.
-    Frozen(FrozenSource),
-    /// A lock check required an existing lockfile.
-    Locked(LockedSource),
-}
-
-impl std::fmt::Display for MissingLockfileSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Frozen(source) => write!(f, "`{source}`"),
-            Self::Locked(source) => write!(f, "`{source}`"),
-        }
-    }
-}
-
-impl From<LockedSource> for MissingLockfileSource {
-    fn from(source: LockedSource) -> Self {
-        Self::Locked(source)
-    }
-}
-
-impl From<FrozenSource> for MissingLockfileSource {
-    fn from(source: FrozenSource) -> Self {
-        Self::Frozen(source)
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ProjectError {
-    #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
-
-    #[error(
-        "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
-    )]
-    LockFormat(PathBuf, usize, LockedSource),
-
-    #[error(
-        "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
-    )]
-    MissingLockfile(MissingLockfileSource, PathBuf),
-
-    #[error(
-        "The lockfile at `uv.lock` needs to be updated, but {1} was provided: Missing workspace member `{0}`."
-    )]
-    LockWorkspaceMismatch(PackageName, MissingLockfileSource),
-
-    #[error(
-        "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
-    )]
-    UnsupportedLockVersion(u32, u32),
-
-    #[error(
-        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
-    )]
-    UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
-
-    #[error("Failed to serialize `uv.lock`")]
-    LockSerialization(#[from] toml_edit::ser::Error),
-
-    #[error(
-        "The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`"
-    )]
-    LockedPythonIncompatibility(Version, RequiresPython),
-
-    #[error(
-        "The current Python platform is not compatible with the lockfile's supported environments: {0}"
-    )]
-    LockedPlatformIncompatibility(String),
-
-    #[error(transparent)]
-    Conflict(#[from] ConflictError),
-
-    #[error("Group `{0}` is not defined in the project's `dependency-groups` table")]
-    MissingGroupProject(GroupName),
-
-    #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
-    MissingGroupProjects(GroupName),
-
-    #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
-    MissingGroupScript(GroupName),
-
-    #[error("Extra `{0}` is not defined in the `optional-dependencies` table for `{1}`")]
-    MissingExtraProject(ExtraName, PackageName),
-
-    #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
-    MissingExtraProjects(ExtraName),
-
-    #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
-    MissingExtraScript(ExtraName),
-
-    #[error(
-        "Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`"
-    )]
-    OverlappingMarkers(String, String, String),
-
-    #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
-    DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
-
-    #[error(
-        "Found conflicting Python requirements:\n- lockfile: {locked}\n{groups}",
-        groups = format_requires_python_sources(.groups)
-    )]
-    DisjointLockedRequiresPython {
-        locked: RequiresPython,
-        groups: RequiresPythonSources,
-    },
-
-    #[error("Environment marker is empty")]
-    EmptyEnvironment,
-
-    #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
-    InvalidProjectEnvironmentDir(PathBuf, String),
-
-    #[error("Failed to parse `uv.lock`")]
-    UvLockParse(#[source] toml::de::Error),
-
-    #[error("Failed to parse `pyproject.toml`")]
-    PyprojectTomlParse(#[source] uv_workspace::pyproject::PyprojectTomlError),
-
-    #[error("Failed to update `pyproject.toml`")]
-    PyprojectTomlUpdate,
-
-    #[error("Failed to parse PEP 723 script metadata")]
-    Pep723ScriptTomlParse(#[source] toml::de::Error),
-
-    #[error(
-        "Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check."
-    )]
-    MalwareFound,
-
-    #[error("Malware check failed due to an error from OSV")]
-    Osv(#[from] osv::Error),
-
-    #[error("Failed to find `site-packages` directory for environment")]
-    NoSitePackages,
-
-    #[error("Cannot write parent environment path to `pyvenv.cfg` because it is not valid UTF-8")]
-    InvalidParentEnvironmentPath,
-
-    #[error("Attempted to drop a temporary virtual environment while still in-use")]
-    DroppedEnvironment,
-
-    #[error(transparent)]
-    DependencyGroup(#[from] DependencyGroupError),
-
-    #[error(transparent)]
-    Client(#[from] uv_client::Error),
-
-    #[error(transparent)]
-    ClientBuild(#[from] uv_client::ClientBuildError),
-
-    #[error(transparent)]
-    Credentials(#[from] CredentialsFromUrlError),
-
-    #[error(transparent)]
-    IndexCredentials(#[from] IndexCredentialsError),
-
-    #[error(transparent)]
-    IndexUrl(#[from] IndexUrlError),
-
-    #[error(transparent)]
-    Python(#[from] Box<uv_python::Error>),
-
-    #[error(transparent)]
-    PythonContext(#[from] Box<uv_python_context::PythonContextError>),
-
-    #[error(transparent)]
-    Virtualenv(#[from] uv_virtualenv::Error),
-
-    #[error(transparent)]
-    HashStrategy(#[from] uv_types::HashStrategyError),
-
-    #[error(transparent)]
-    Tags(#[from] uv_platform_tags::TagsError),
-
-    #[error(transparent)]
-    FlatIndex(#[from] Box<uv_client::FlatIndexError>),
-
-    #[error(transparent)]
-    Lock(#[from] uv_lock::LockError),
-
-    #[error(transparent)]
-    Operation(#[from] Box<OperationsError>),
-
-    #[error(transparent)]
-    Interpreter(#[from] uv_python::InterpreterError),
-
-    #[error(transparent)]
-    Tool(#[from] Box<uv_tool::Error>),
-
-    #[error(transparent)]
-    Name(#[from] uv_normalize::InvalidNameError),
-
-    #[error(transparent)]
-    Requirements(#[from] uv_requirements::Error),
-
-    #[error(transparent)]
-    Metadata(#[from] uv_distribution::MetadataError),
-
-    #[error(transparent)]
-    Lowering(#[from] Box<uv_distribution::LoweringError>),
-
-    #[error(transparent)]
-    Workspace(#[from] uv_workspace::WorkspaceError),
-
-    #[error(transparent)]
-    DefaultGroups(#[from] uv_workspace::DefaultGroupsError),
-
-    #[error(transparent)]
-    PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
-
-    #[error(transparent)]
-    ExtraBuildRequires(#[from] uv_distribution_types::ExtraBuildRequiresError),
-
-    #[error(transparent)]
-    Fmt(#[from] std::fmt::Error),
-
-    #[error(transparent)]
-    CacheInfo(#[from] uv_cache_info::CacheInfoError),
-
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    RetryParsing(#[from] uv_client::RetryParsingError),
-
-    #[error(transparent)]
-    Accelerator(#[from] uv_torch::AcceleratorError),
-
-    #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
-}
-
-impl From<uv_python::Error> for ProjectError {
-    fn from(error: uv_python::Error) -> Self {
-        Self::Python(Box::new(error))
-    }
-}
-
-impl From<uv_python_context::PythonContextError> for ProjectError {
-    fn from(error: uv_python_context::PythonContextError) -> Self {
-        Self::PythonContext(Box::new(error))
-    }
-}
-
-impl From<uv_client::FlatIndexError> for ProjectError {
-    fn from(error: uv_client::FlatIndexError) -> Self {
-        Self::FlatIndex(Box::new(error))
-    }
-}
-
-impl From<OperationsError> for ProjectError {
-    fn from(error: OperationsError) -> Self {
-        Self::Operation(Box::new(error))
-    }
-}
-
-impl From<uv_tool::Error> for ProjectError {
-    fn from(error: uv_tool::Error) -> Self {
-        Self::Tool(Box::new(error))
-    }
-}
-
-impl From<uv_distribution::LoweringError> for ProjectError {
-    fn from(error: uv_distribution::LoweringError) -> Self {
-        Self::Lowering(Box::new(error))
-    }
-}
-
-impl From<uv_resolve_operations::Error> for ProjectError {
-    fn from(error: uv_resolve_operations::Error) -> Self {
-        Self::from(OperationsError::from(error))
-    }
-}
-
-impl From<uv_install_operations::Error> for ProjectError {
-    fn from(error: uv_install_operations::Error) -> Self {
-        Self::from(OperationsError::from(error))
-    }
-}
-
-impl From<ProjectError> for UvError {
-    fn from(error: ProjectError) -> Self {
-        match error {
-            error @ (ProjectError::LockMismatch(..)
-            | ProjectError::LockFormat(..)
-            | ProjectError::MissingLockfile(..)
-            | ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
-            ProjectError::Operation(error) => Self::from(*error),
-            ProjectError::Requirements(error) => Self::from(OperationsError::Requirements(error)),
-            error => Self::unexpected(error.into()),
-        }
-    }
-}
-
-impl From<LockParseError> for ProjectError {
-    fn from(error: LockParseError) -> Self {
-        match error {
-            LockParseError::UnsupportedVersion { supported, version } => {
-                Self::UnsupportedLockVersion(supported, version)
-            }
-            LockParseError::UnparsableVersion {
-                supported,
-                version,
-                source,
-            } => Self::UnparsableLockVersion(supported, version, source),
-            LockParseError::Toml(source) => Self::UvLockParse(source),
-        }
-    }
-}
 
 /// Vulnerability identifiers grouped by dependency.
 #[derive(Debug)]
@@ -427,28 +107,6 @@ impl std::fmt::Display for MalwareFindings {
             }
         }
         Ok(())
-    }
-}
-
-impl uv_errors::Hinted for ProjectError {
-    fn hints(&self) -> uv_errors::Hints<'_> {
-        match self {
-            Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
-                uv_errors::Hints::from("To update the lockfile, run `uv lock`.")
-            }
-            Self::LockFormat(..) => uv_errors::Hints::from(
-                "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
-            ),
-            Self::OverlappingMarkers(_, rhs, replacement) => {
-                uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
-            }
-            Self::Lock(err) => err.hints(),
-            Self::Python(err) => err.hints(),
-            Self::PythonContext(err) => err.hints(),
-            Self::Operation(err) => err.hints(),
-            Self::Client(err) => uv_errors::Hinted::hints(err),
-            _ => uv_errors::Hints::none(),
-        }
     }
 }
 
@@ -622,14 +280,14 @@ fn existing_project_environment(
     centralized: bool,
     policy: ProjectEnvironmentPolicy,
     cache: &Cache,
-) -> Result<Option<PythonEnvironment>, ProjectError> {
+) -> Result<Option<PythonEnvironment>, EnvironmentError> {
     let environment = match PythonEnvironment::from_root(root, cache) {
         Ok(environment) => environment,
         Err(uv_python::Error::MissingEnvironment(_)) => return Ok(None),
         Err(uv_python::Error::InvalidEnvironment(inner)) => {
             match inner.kind {
                 InvalidEnvironmentKind::NotDirectory => {
-                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                    return Err(EnvironmentError::InvalidProjectEnvironmentDir(
                         root.to_path_buf(),
                         inner.kind.to_string(),
                     ));
@@ -640,7 +298,7 @@ fn existing_project_environment(
                         && fs_err::read_dir(root).is_ok_and(|mut dir| dir.next().is_some())
                     {
                         if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
-                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                            return Err(EnvironmentError::InvalidProjectEnvironmentDir(
                                 root.to_path_buf(),
                                 "it is not a valid Python environment (no Python executable was found)"
                                     .to_string(),
@@ -691,7 +349,7 @@ fn discover_project_environment(
     policy: ProjectEnvironmentPolicy,
     centralized: bool,
     cache: &Cache,
-) -> Result<Option<PythonEnvironment>, ProjectError> {
+) -> Result<Option<PythonEnvironment>, EnvironmentError> {
     let Some(environment) = existing_project_environment(root, centralized, policy, cache)? else {
         return Ok(None);
     };
@@ -1007,7 +665,7 @@ impl ProjectInterpreter {
         install_path: &Path,
         active: ActiveEnvironment,
         cache: &Cache,
-    ) -> Result<Option<PythonEnvironment>, ProjectError> {
+    ) -> Result<Option<PythonEnvironment>, EnvironmentError> {
         let selection = ProjectEnvironmentSelection::from_install_path(install_path, active);
         let root = selection
             .explicit_path()
@@ -1042,7 +700,7 @@ impl ProjectInterpreter {
         active: ActiveEnvironment,
         cache: &Cache,
         printer: Printer,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, EnvironmentError> {
         let python_request = project_python.python_request.as_ref();
         let requires_python = project_python.requires_python();
 
@@ -1234,7 +892,7 @@ impl ProjectEnvironment {
         dry_run: DryRun,
         link_error_reporting: LinkErrorReporting,
         printer: Printer,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, EnvironmentError> {
         let environment_selection =
             ProjectEnvironmentSelection::from_install_path(target.install_path(), active);
         let centralized = centralized_environments_enabled(&environment_selection, cache);
@@ -1341,7 +999,7 @@ impl ProjectEnvironment {
                                 // Unless it's the derived cache entry, which is uv-owned and safe to replace
                                 true
                             } else {
-                                return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                return Err(EnvironmentError::InvalidProjectEnvironmentDir(
                                     root,
                                     "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
                                 ));
@@ -1349,7 +1007,7 @@ impl ProjectEnvironment {
                         }
                         // Similarly, if we can't _tell_ if it exists we should bail
                         (_, Err(err)) | (Err(err), _) => {
-                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                            return Err(EnvironmentError::InvalidProjectEnvironmentDir(
                                 root,
                                 format!(
                                     "it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"
@@ -1470,13 +1128,13 @@ impl ProjectEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    pub fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+    pub fn into_environment(self) -> Result<PythonEnvironment, EnvironmentError> {
         match self {
             Self::Existing(environment) => Ok(environment),
             Self::Replaced(environment) => Ok(environment),
             Self::Created(environment) => Ok(environment),
-            Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
-            Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+            Self::WouldReplace(..) => Err(EnvironmentError::DroppedEnvironment),
+            Self::WouldCreate(..) => Err(EnvironmentError::DroppedEnvironment),
         }
     }
 
@@ -1546,7 +1204,7 @@ impl ScriptEnvironment {
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, EnvironmentError> {
         // Lock the script environment to avoid synchronization issues.
         let _lock = ScriptInterpreter::lock(script)
             .await
@@ -1659,13 +1317,13 @@ impl ScriptEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    pub fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+    pub fn into_environment(self) -> Result<PythonEnvironment, EnvironmentError> {
         match self {
             Self::Existing(environment) => Ok(environment),
             Self::Replaced(environment) => Ok(environment),
             Self::Created(environment) => Ok(environment),
-            Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
-            Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+            Self::WouldReplace(..) => Err(EnvironmentError::DroppedEnvironment),
+            Self::WouldCreate(..) => Err(EnvironmentError::DroppedEnvironment),
         }
     }
 
@@ -1918,7 +1576,7 @@ pub async fn resolve_environment(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-) -> Result<ResolverOutput, ProjectError> {
+) -> Result<ResolverOutput, EnvironmentError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettings {
@@ -2160,7 +1818,7 @@ pub async fn sync_environment(
     cache: &Cache,
     printer: Printer,
     preview: Preview,
-) -> Result<PythonEnvironment, ProjectError> {
+) -> Result<PythonEnvironment, EnvironmentError> {
     let InstallerSettingsRef {
         index_locations,
         index_strategy,
@@ -2318,7 +1976,7 @@ pub async fn update_environment(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
-) -> Result<EnvironmentUpdate, ProjectError> {
+) -> Result<EnvironmentUpdate, EnvironmentError> {
     warn_on_requirements_txt_setting(&spec, &settings.resolver);
 
     let ResolverInstallerSettings {
@@ -2638,7 +2296,7 @@ pub fn detect_conflicts(
     target: &InstallTarget,
     extras: &ExtrasSpecification,
     groups: &DependencyGroupsWithDefaults,
-) -> Result<(), ProjectError> {
+) -> Result<(), EnvironmentError> {
     // Validate that we aren't trying to install extras or groups that
     // are declared as conflicting. Note that we need to collect all
     // extras and groups that match in a particular set, since extras
@@ -2665,7 +2323,7 @@ pub fn detect_conflicts(
             }
         }
         if conflicts.len() >= 2 {
-            return Err(ProjectError::Conflict(ConflictError {
+            return Err(EnvironmentError::Conflict(ConflictError {
                 set: set.clone(),
                 conflicts,
                 groups: groups.clone(),
@@ -2682,7 +2340,7 @@ pub async fn script_specification(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
-) -> Result<Option<RequirementsSpecification>, ProjectError> {
+) -> Result<Option<RequirementsSpecification>, EnvironmentError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
     };
@@ -2825,7 +2483,7 @@ pub async fn script_extra_build_requires(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
-) -> Result<LoweredExtraBuildDependencies, ProjectError> {
+) -> Result<LoweredExtraBuildDependencies, EnvironmentError> {
     let script_dir = script.directory()?;
     let script_indexes = script
         .indexes(&settings.sources)

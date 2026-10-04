@@ -35,6 +35,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::ExtrasResolver;
+use uv_resolve_operations::Error as ResolveError;
 use uv_resolver::{
     FlatIndex, OptionsBuilder, PythonRequirement, ResolverEnvironment, UniversalMarker,
 };
@@ -47,8 +48,8 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 use crate::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::project::{
-    MissingLockfileSource, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError,
-    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, UniversalState,
+    EnvironmentError, MissingLockfileSource, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectError, ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, UniversalState,
     init_script_python_requirement, script_extra_build_requires,
 };
 use crate::reporters::{PythonDownloadReporter, ResolverReporter};
@@ -439,7 +440,7 @@ impl<'env> LockOperation<'env> {
                         (Some(existing), Some(existing_contents))
                     }
                     Ok(None) => (None, None),
-                    Err(ProjectError::Lock(err)) => {
+                    Err(ProjectError::Environment(EnvironmentError::Lock(err))) => {
                         warn_user!(
                             "Failed to read existing lockfile; ignoring locked requirements: {err}"
                         );
@@ -1015,19 +1016,19 @@ async fn do_lock(
         .await
         {
             Ok(result) => Some(result),
-            Err(ProjectError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
+            Err(EnvironmentError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
                 // Resolver errors are not recoverable, as such errors can leave the resolver in a
                 // broken state. Specifically, tasks that fail with an error can be left as pending.
                 //
                 // Disabled builds are user policy errors. Static local projects are validated
                 // before this point, so reaching this case means validation genuinely needs
                 // metadata that cannot be obtained under `--no-build`.
-                return Err(ProjectError::Lock(err));
+                return Err(err.into());
             }
-            Err(ProjectError::Lock(err)) if err.is_not_pep625() => {
+            Err(EnvironmentError::Lock(err)) if err.is_not_pep625() => {
                 // A non-PEP 625-compliant sdist in the lockfile will also be rejected by a fresh
                 // resolve, so short-circuit rather than doing the extra work.
-                return Err(ProjectError::Lock(err));
+                return Err(err.into());
             }
             Err(err) => {
                 warn_user_with_chain!(
@@ -1122,7 +1123,7 @@ async fn do_lock(
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(target.members_requirements())
                 .await
-                .map_err(|err| ProjectError::Operation(Box::new(err.into())))?;
+                .map_err(ResolveError::from)?;
             let workspace_members = member_requirements
                 .iter()
                 .map(|requirement| (requirement.name.clone(), requirement.source.clone()))

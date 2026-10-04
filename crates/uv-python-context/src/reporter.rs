@@ -1,9 +1,13 @@
-//! Progress reporting for managed Python downloads.
+//! Reporting for Python discovery and managed downloads.
+
+use std::fmt::{self, Write};
 
 use indicatif::{MultiProgress, ProgressBar};
+use owo_colors::OwoColorize;
 use uv_command_support::Printer;
 use uv_command_support::progress::{Direction, ProgressReporter};
-use uv_python::PythonInstallationKey;
+use uv_fs::Simplified;
+use uv_python::{PythonInstallation, PythonInstallationKey};
 
 #[derive(Debug)]
 pub struct PythonDownloadReporter {
@@ -55,4 +59,65 @@ fn progress_direction(direction: uv_python::downloads::Direction) -> Direction {
         uv_python::downloads::Direction::Download => Direction::Download,
         uv_python::downloads::Direction::Extract => Direction::Extract,
     }
+}
+
+/// Display a message about the interpreter that was selected for the operation.
+pub fn report_interpreter(
+    python: &PythonInstallation,
+    dimmed: bool,
+    printer: Printer,
+) -> fmt::Result {
+    let managed = python.source().is_managed();
+    let implementation = python.implementation();
+    let interpreter = python.interpreter();
+
+    if dimmed {
+        if managed {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Using {} {}{}",
+                    implementation.pretty(),
+                    interpreter.python_version(),
+                    interpreter.variant().display_suffix(),
+                )
+                .dimmed()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Using {} {}{} interpreter at: {}",
+                    implementation.pretty(),
+                    interpreter.python_version(),
+                    interpreter.variant().display_suffix(),
+                    interpreter.sys_executable().user_display()
+                )
+                .dimmed()
+            )?;
+        }
+    } else {
+        if managed {
+            writeln!(
+                printer.stderr(),
+                "Using {} {}{}",
+                implementation.pretty(),
+                interpreter.python_version().cyan(),
+                interpreter.variant().display_suffix().cyan()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Using {} {}{} interpreter at: {}",
+                implementation.pretty(),
+                interpreter.python_version(),
+                interpreter.variant().display_suffix(),
+                interpreter.sys_executable().user_display().cyan()
+            )?;
+        }
+    }
+
+    Ok(())
 }

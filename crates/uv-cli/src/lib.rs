@@ -37,6 +37,8 @@ use uv_torch::TorchMode;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
+pub use uv_configuration::{AuditOutputFormat, PythonListFormat};
+
 pub mod comma;
 pub mod compat;
 pub mod options;
@@ -47,15 +49,6 @@ pub enum VersionFormat {
     /// Display the version as plain text.
     Text,
     /// Display the version as JSON.
-    Json,
-}
-
-#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
-pub enum PythonListFormat {
-    /// Plain text (for humans).
-    #[default]
-    Text,
-    /// JSON (for computers).
     Json,
 }
 
@@ -75,17 +68,6 @@ pub enum PipInstallFormat {
     Text,
     /// Display the result in JSON format.
     Json,
-}
-
-#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
-pub enum AuditOutputFormat {
-    /// Display the result in a human-readable format.
-    #[default]
-    Text,
-    /// Display the result in JSON format.
-    Json,
-    /// Display the result in SARIF format.
-    Sarif,
 }
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]

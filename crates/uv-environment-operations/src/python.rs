@@ -9,7 +9,7 @@ use uv_python::{ConfigDiscovery, PythonRequest};
 use uv_python_context::{ProjectPythonRequest, ProjectPythonRequirement, PythonRequirementSource};
 use uv_workspace::{RequiresPythonDeclaration, RequiresPythonSources};
 
-use crate::ProjectError;
+use crate::EnvironmentError;
 use crate::install_target::InstallTarget;
 
 /// Determine the Python request and requirement from a frozen lockfile.
@@ -19,7 +19,7 @@ pub async fn from_lockfile(
     groups: &DependencyGroupsWithDefaults,
     project_dir: &Path,
     config_discovery: ConfigDiscovery,
-) -> Result<ProjectPythonRequest, ProjectError> {
+) -> Result<ProjectPythonRequest, EnvironmentError> {
     Ok(ProjectPythonRequest::from_requirements(
         python_request,
         Some(target.install_path()),
@@ -34,7 +34,7 @@ pub async fn from_lockfile(
 fn find_lockfile_requires_python(
     target: InstallTarget<'_>,
     groups: &DependencyGroupsWithDefaults,
-) -> Result<ProjectPythonRequirement, ProjectError> {
+) -> Result<ProjectPythonRequirement, EnvironmentError> {
     let lock = target.lock();
     let mut group_requirements = RequiresPythonSources::new();
 
@@ -75,7 +75,7 @@ fn find_lockfile_requires_python(
     let Some(requires_python) = RequiresPython::intersection(
         std::iter::once(lock.requires_python().specifiers()).chain(group_requirements.values()),
     ) else {
-        return Err(ProjectError::DisjointLockedRequiresPython {
+        return Err(EnvironmentError::DisjointLockedRequiresPython {
             locked: lock.requires_python().clone(),
             groups: group_requirements,
         });

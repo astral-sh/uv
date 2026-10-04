@@ -24,6 +24,19 @@ pub enum Error {
 }
 
 impl Error {
+    /// Return the changes required by an environment that failed an up-to-date check.
+    pub fn outdated_environment(&self) -> Option<&Changelog> {
+        match self {
+            Self::OutdatedEnvironment(changelog) => Some(changelog),
+            Self::Prepare(_)
+            | Self::Uninstall(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Anyhow(_) => None,
+        }
+    }
+
     /// Return whether this operation failure is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
         match self {

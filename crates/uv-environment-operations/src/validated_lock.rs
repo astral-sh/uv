@@ -19,7 +19,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user;
 use uv_workspace::{Editability, WorkspaceMember};
 
-use crate::ProjectError;
+use crate::EnvironmentError;
 
 // Lock diagnostics use a stable target for command-specific `RUST_LOG` filters.
 macro_rules! debug {
@@ -73,7 +73,7 @@ impl ValidatedLock {
         database: &DistributionDatabase<'_, BuildDispatch<'_>>,
         preview: Preview,
         printer: Printer,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, EnvironmentError> {
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
         // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and

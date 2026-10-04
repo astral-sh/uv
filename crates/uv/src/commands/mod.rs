@@ -93,31 +93,43 @@ mod error_tests {
 
     #[test]
     fn contextual_operations_keep_their_classification_and_cause() -> anyhow::Result<()> {
-        for (kind, user_failure) in [
-            (ErrorKind::NotFound, true),
-            (ErrorKind::PermissionDenied, false),
-        ] {
-            let error = uv_resolve_operations::Error::Requirements(uv_requirements::Error::Io(
-                Error::new(kind, "requirements failure"),
-            ));
-            let error = UvError::from(
-                error
-                    .with_resolution_context("script")
-                    .with_resolution_context("tool"),
-            );
-            let ((UvError::User(error), true) | (UvError::Unexpected(error), false)) =
-                (error, user_failure)
-            else {
-                bail!("operation classification changed with context");
-            };
-            allow_duplicates! {
-                assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
+        let conversions: [fn(uv_resolve_operations::Error) -> UvError; 4] = [
+            UvError::from,
+            |error| UvError::from(uv_environment_operations::OperationsError::from(error)),
+            |error| UvError::from(uv_environment_operations::EnvironmentError::from(error)),
+            |error| {
+                UvError::from(project::ProjectError::from(
+                    uv_environment_operations::EnvironmentError::from(error),
+                ))
+            },
+        ];
+        for convert in conversions {
+            for (kind, user_failure) in [
+                (ErrorKind::NotFound, true),
+                (ErrorKind::PermissionDenied, false),
+            ] {
+                let error = uv_resolve_operations::Error::Requirements(uv_requirements::Error::Io(
+                    Error::new(kind, "requirements failure"),
+                ));
+                let error = convert(
+                    error
+                        .with_resolution_context("script")
+                        .with_resolution_context("tool"),
+                );
+                let ((UvError::User(error), true) | (UvError::Unexpected(error), false)) =
+                    (error, user_failure)
+                else {
+                    bail!("operation classification changed with context");
+                };
+                allow_duplicates! {
+                    assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
+                }
+                assert!(
+                    error
+                        .chain()
+                        .any(<dyn std::error::Error>::is::<uv_requirements::Error>)
+                );
             }
-            assert!(
-                error
-                    .downcast_ref::<uv_resolve_operations::Error>()
-                    .is_some()
-            );
         }
         Ok(())
     }
@@ -143,10 +155,12 @@ mod error_tests {
 
     #[test]
     fn project_requirements_use_operation_classification() {
-        let error = project::ProjectError::Requirements(uv_requirements::Error::Io(Error::new(
-            ErrorKind::NotFound,
-            "requirements failure",
-        )));
-        assert!(matches!(UvError::from(error), UvError::User(_)));
+        let error = uv_environment_operations::EnvironmentError::Requirements(
+            uv_requirements::Error::Io(Error::new(ErrorKind::NotFound, "requirements failure")),
+        );
+        assert!(matches!(
+            UvError::from(project::ProjectError::from(error)),
+            UvError::User(_)
+        ));
     }
 }

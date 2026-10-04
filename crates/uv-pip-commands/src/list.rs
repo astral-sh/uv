@@ -29,9 +29,9 @@ use uv_python::{
 };
 use uv_resolver::{ExcludeNewer, Prerelease};
 
+use crate::reporters::report_target_environment;
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
-use uv_install_operations::report_target_environment;
 use uv_resolve_operations::latest::LatestClient;
 use uv_resolve_operations::reporters::LatestVersionReporter;
 

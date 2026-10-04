@@ -22,7 +22,7 @@ use uv_scripts::Pep723Script;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 
-use crate::ProjectError;
+use crate::EnvironmentError;
 
 /// A target that can be installed from a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -492,7 +492,7 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Validate the extras requested by the [`ExtrasSpecification`].
-    pub fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
+    pub fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), EnvironmentError> {
         if extras.is_empty() {
             return Ok(());
         }
@@ -523,14 +523,13 @@ impl<'lock> InstallTarget<'lock> {
                 for extra in extras.explicit_names() {
                     if !known_extras.contains(extra) {
                         return match self {
-                            Self::Project { name, .. } => Err(ProjectError::MissingExtraProject(
-                                extra.clone(),
-                                name.clone(),
-                            )),
+                            Self::Project { name, .. } => Err(
+                                EnvironmentError::MissingExtraProject(extra.clone(), name.clone()),
+                            ),
                             Self::Projects { .. } => {
-                                Err(ProjectError::MissingExtraProjects(extra.clone()))
+                                Err(EnvironmentError::MissingExtraProjects(extra.clone()))
                             }
-                            _ => Err(ProjectError::MissingExtraProjects(extra.clone())),
+                            _ => Err(EnvironmentError::MissingExtraProjects(extra.clone())),
                         };
                     }
                 }
@@ -542,7 +541,7 @@ impl<'lock> InstallTarget<'lock> {
                     .next()
                     .expect("non-empty extras")
                     .clone();
-                return Err(ProjectError::MissingExtraScript(extra));
+                return Err(EnvironmentError::MissingExtraScript(extra));
             }
         }
 
@@ -553,7 +552,7 @@ impl<'lock> InstallTarget<'lock> {
     pub fn validate_groups(
         self,
         groups: &DependencyGroupsWithDefaults,
-    ) -> Result<(), ProjectError> {
+    ) -> Result<(), EnvironmentError> {
         // If no groups were specified, short-circuit.
         if groups.explicit_names().next().is_none() {
             return Ok(());
@@ -585,12 +584,12 @@ impl<'lock> InstallTarget<'lock> {
                     if !known_groups.contains(group) {
                         return match selection {
                             PackageSelection::Projects([_]) => {
-                                Err(ProjectError::MissingGroupProject(group.clone()))
+                                Err(EnvironmentError::MissingGroupProject(group.clone()))
                             }
                             PackageSelection::Projects(_)
                             | PackageSelection::Workspace
                             | PackageSelection::NonProjectWorkspace => {
-                                Err(ProjectError::MissingGroupProjects(group.clone()))
+                                Err(EnvironmentError::MissingGroupProjects(group.clone()))
                             }
                         };
                     }
@@ -642,16 +641,16 @@ impl<'lock> InstallTarget<'lock> {
                     if !known_groups.contains(group) {
                         return match self {
                             Self::Project { .. } => {
-                                Err(ProjectError::MissingGroupProject(group.clone()))
+                                Err(EnvironmentError::MissingGroupProject(group.clone()))
                             }
-                            _ => Err(ProjectError::MissingGroupProjects(group.clone())),
+                            _ => Err(EnvironmentError::MissingGroupProjects(group.clone())),
                         };
                     }
                 }
             }
             Self::Script { .. } => {
                 if let Some(group) = groups.explicit_names().next() {
-                    return Err(ProjectError::MissingGroupScript(group.clone()));
+                    return Err(EnvironmentError::MissingGroupScript(group.clone()));
                 }
             }
         }

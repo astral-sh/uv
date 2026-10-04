@@ -28,7 +28,7 @@ use uv_workspace::dependency_groups::{
 use uv_workspace::pyproject::{BuildConstraintDependency, OverrideDependency};
 use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
-use crate::project::{MissingLockfileSource, ProjectError, find_requires_python};
+use crate::project::{EnvironmentError, MissingLockfileSource, ProjectError, find_requires_python};
 
 /// A target that can be resolved into a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -162,16 +162,16 @@ impl<'lock> LockTarget<'lock> {
                 for group in groups {
                     if !known_groups.contains(group) {
                         return if workspace.packages().len() == 1 && !workspace.is_non_project() {
-                            Err(ProjectError::MissingGroupProject(group.clone()))
+                            Err(EnvironmentError::MissingGroupProject(group.clone()).into())
                         } else {
-                            Err(ProjectError::MissingGroupProjects(group.clone()))
+                            Err(EnvironmentError::MissingGroupProjects(group.clone()).into())
                         };
                     }
                 }
             }
             Self::Script(_) => {
                 if let Some(group) = groups.iter().next() {
-                    return Err(ProjectError::MissingGroupScript(group.clone()));
+                    return Err(EnvironmentError::MissingGroupScript(group.clone()).into());
                 }
             }
         }

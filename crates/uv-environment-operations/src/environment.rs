@@ -3,7 +3,7 @@ use std::path::Path;
 use tracing::debug;
 
 use crate::{
-    EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentError, EnvironmentResolution, EnvironmentSpecification, PlatformState,
     resolve_environment, sync_environment,
 };
 use uv_command_support::Printer;
@@ -44,19 +44,19 @@ impl From<EphemeralEnvironment> for PythonEnvironment {
 
 impl EphemeralEnvironment {
     /// Set the ephemeral overlay for a Python environment.
-    pub fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
+    pub fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), EnvironmentError> {
         let site_packages = self
             .0
             .site_packages()
             .next()
-            .ok_or(ProjectError::NoSitePackages)?;
+            .ok_or(EnvironmentError::NoSitePackages)?;
         let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
         fs_err::write(overlay_path, contents)?;
         Ok(())
     }
 
     /// Enable system site packages for a Python environment.
-    pub fn set_system_site_packages(&self) -> Result<(), ProjectError> {
+    pub fn set_system_site_packages(&self) -> Result<(), EnvironmentError> {
         self.0
             .set_pyvenv_cfg("include-system-site-packages", "true")?;
         Ok(())
@@ -77,10 +77,10 @@ impl EphemeralEnvironment {
     pub fn set_parent_environment(
         &self,
         parent_environment_sys_prefix: &Path,
-    ) -> Result<(), ProjectError> {
+    ) -> Result<(), EnvironmentError> {
         let parent_environment_sys_prefix = parent_environment_sys_prefix
             .to_str()
-            .ok_or(ProjectError::InvalidParentEnvironmentPath)?;
+            .ok_or(EnvironmentError::InvalidParentEnvironmentPath)?;
         self.0
             .set_pyvenv_cfg("extends-environment", parent_environment_sys_prefix)?;
         Ok(())
@@ -151,7 +151,7 @@ impl CachedEnvironment {
         workspace_cache: &WorkspaceCache,
         printer: Printer,
         preview: Preview,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, EnvironmentError> {
         let interpreter = Self::base_interpreter(interpreter, cache)?;
 
         // Resolve the requirements with the interpreter.
@@ -217,7 +217,7 @@ impl CachedEnvironment {
         cache: &Cache,
         printer: Printer,
         preview: Preview,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, EnvironmentError> {
         let malware_check_client_builder = client_builder
             .clone()
             .keyring(settings.resolver.keyring_provider);
@@ -264,7 +264,7 @@ impl CachedEnvironment {
         cache: &Cache,
         printer: Printer,
         preview: Preview,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, EnvironmentError> {
         // Hash the resolution by hashing the generated lockfile.
         let resolution_hash = {
             let mut distributions = resolution
@@ -282,10 +282,10 @@ impl CachedEnvironment {
                     Ok(CachedEnvironmentDist {
                         dist: dist.clone(),
                         hashes: hashes.clone(),
-                        cache_info: Self::cache_info(dist).map_err(ProjectError::from)?,
+                        cache_info: Self::cache_info(dist).map_err(EnvironmentError::from)?,
                     })
                 })
-                .collect::<Result<Vec<_>, ProjectError>>()?;
+                .collect::<Result<Vec<_>, EnvironmentError>>()?;
             distributions.sort_unstable_by(|left, right| {
                 left.dist
                     .distribution_id()

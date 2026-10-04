@@ -32,6 +32,22 @@ pub enum Error {
 }
 
 impl Error {
+    /// Return the solver failure for an unsatisfiable resolution.
+    pub fn as_no_solution(&self) -> Option<&NoSolutionError> {
+        match self {
+            Self::NoSolution { source, .. } | Self::Resolve(ResolveError::NoSolution(source)) => {
+                Some(source)
+            }
+            Self::Resolve(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Requirements(_)
+            | Self::RequirementsWithContext { .. }
+            | Self::Anyhow(_) => None,
+        }
+    }
+
     /// Add the default heading when this operation is the final command error.
     #[must_use]
     pub fn with_default_resolution_context(self) -> Self {

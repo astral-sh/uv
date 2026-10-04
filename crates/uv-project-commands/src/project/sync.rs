@@ -52,7 +52,7 @@ use crate::project::lock::{LockMode, LockOperation, LockResult};
 use crate::project::lock_target::LockTarget;
 use crate::project::lockfile::FrozenWorkspace;
 use crate::project::{
-    EnvironmentUpdate, LinkErrorReporting, MissingLockfileSource, PlatformState,
+    EnvironmentError, EnvironmentUpdate, LinkErrorReporting, MissingLockfileSource, PlatformState,
     ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ScriptEnvironment, UniversalState,
     detect_conflicts, script_extra_build_requires, script_specification, update_environment,
 };
@@ -409,8 +409,8 @@ pub async fn sync(
                     )?;
                     return Ok(ExitStatus::Success);
                 }
-                Err(ProjectError::Operation(error)) => {
-                    if let operations::Error::OutdatedEnvironment(changelog) = &*error {
+                Err(EnvironmentError::Operation(error)) => {
+                    if let Some(changelog) = error.outdated_environment() {
                         write_sync_report(
                             &target,
                             &environment,
@@ -482,7 +482,9 @@ pub async fn sync(
             };
             let outcome = match result {
                 Ok(result) => Outcome::Success(result),
-                Err(ProjectError::Operation(err)) => return Err(UvError::from(*err).into()),
+                Err(ProjectError::Environment(EnvironmentError::Operation(err))) => {
+                    return Err(UvError::from(*err).into());
+                }
                 Err(err @ ProjectError::LockFormat(..)) => return Err(UvError::user(err).into()),
                 Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
                     if dry_run.enabled() {
@@ -557,8 +559,8 @@ pub async fn sync(
     .await
     {
         Ok(changelog) => changelog,
-        Err(ProjectError::Operation(error)) => {
-            if let operations::Error::OutdatedEnvironment(changelog) = &*error {
+        Err(ProjectError::Environment(EnvironmentError::Operation(error))) => {
+            if let Some(changelog) = error.outdated_environment() {
                 write_sync_report(
                     &target,
                     &environment,
@@ -1024,7 +1026,8 @@ pub async fn do_sync<'a>(
     }
 
     // Determine the tags to use for the resolution.
-    let tags = resolution_tags(None, python_platform, venv.interpreter())?;
+    let tags = resolution_tags(None, python_platform, venv.interpreter())
+        .map_err(EnvironmentError::from)?;
 
     // Read the lockfile.
     let resolution = target.to_resolution(

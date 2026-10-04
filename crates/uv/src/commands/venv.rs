@@ -45,9 +45,9 @@ use crate::commands::project::{
     update_project_environment_link,
 };
 use crate::printer::Printer;
+use uv_install_operations::Changelog;
 use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
-use uv_install_operations::{Changelog, report_interpreter};
-use uv_python_context::PythonDownloadReporter;
+use uv_python_context::{PythonDownloadReporter, report_interpreter};
 
 #[derive(Error, Debug)]
 enum VenvError {

@@ -11,7 +11,7 @@ pub use project::{
     PythonRequirementConflicts, PythonRequirementSource, find_requires_python,
     format_requires_python_sources, validate_python_requirement,
 };
-pub use reporter::PythonDownloadReporter;
+pub use reporter::{PythonDownloadReporter, report_interpreter};
 pub use script::{
     EnvironmentIncompatibilityError, EnvironmentKind, ScriptInterpreter,
     check_environment_compatibility, validate_script_requires_python,

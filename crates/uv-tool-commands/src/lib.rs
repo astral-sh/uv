@@ -9,6 +9,7 @@ use uv_python::PythonRequest;
 pub mod audit;
 pub mod common;
 pub mod dir;
+mod error;
 pub mod install;
 pub mod list;
 pub mod run;

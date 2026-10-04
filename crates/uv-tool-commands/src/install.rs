@@ -44,7 +44,7 @@ use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
 use uv_command_support::UvError;
 use uv_environment_operations::{
-    EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentError, EnvironmentResolution, EnvironmentSpecification, PlatformState,
     resolve_environment, resolve_names, sync_environment, update_environment,
 };
 use uv_install_operations::Modifications;
@@ -554,8 +554,8 @@ pub async fn install(
             .await
             {
                 Ok(lock) => Some(lock),
-                Err(ProjectError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
-                    return Err(ProjectError::Lock(err).into());
+                Err(EnvironmentError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
+                    return Err(EnvironmentError::Lock(err).into());
                 }
                 Err(err) => {
                     warn_user_with_chain!(
@@ -941,7 +941,7 @@ pub async fn install(
             let (resolution, interpreter) = match resolution {
                 Ok(resolution) => (resolution, interpreter),
                 Err(err) => match err {
-                    ProjectError::Operation(err) => {
+                    EnvironmentError::Operation(err) => {
                         let err = *err;
                         // If the resolution failed due to the discovered interpreter not satisfying the
                         // `requires-python` constraint, we can try to refine the interpreter.

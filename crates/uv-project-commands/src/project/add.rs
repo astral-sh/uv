@@ -57,9 +57,9 @@ use crate::project::install_target::InstallTarget;
 use crate::project::lock::LockMode;
 use crate::project::lock_target::LockTarget;
 use crate::project::{
-    LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectEnvironmentPolicy,
-    ProjectEnvironmentTarget, ProjectError, ProjectInterpreter, ProjectPythonRequest,
-    ScriptInterpreter, UniversalState, init_script_python_requirement,
+    EnvironmentError, LinkErrorReporting, PlatformState, ProjectEnvironment,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError, ProjectInterpreter,
+    ProjectPythonRequest, ScriptInterpreter, UniversalState, init_script_python_requirement,
 };
 use crate::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::{ExitStatus, ScriptPath, UvError, project};
@@ -815,7 +815,7 @@ pub async fn add(
             Ok(ExitStatus::Success)
         }
         Err(err) => match err {
-            ProjectError::Operation(err) => {
+            ProjectError::Environment(EnvironmentError::Operation(err)) => {
                 let err = *err;
                 let standard_library_package = standard_library_package(&err, &edits, python_minor);
                 Err(UvError::from(err)
@@ -838,12 +838,7 @@ fn standard_library_package(
     edits: &[DependencyEdit],
     python_minor: u8,
 ) -> Option<PackageName> {
-    let crate::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
-        no_solution_error,
-    )) = operation_error
-    else {
-        return None;
-    };
+    let no_solution_error = operation_error.as_no_solution()?;
 
     edits.iter().find_map(|edit| {
         if edit

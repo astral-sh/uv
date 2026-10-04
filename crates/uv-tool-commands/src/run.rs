@@ -49,11 +49,12 @@ use uv_command_support::ExitStatus;
 use uv_command_support::child::run_to_completion;
 
 use crate::common::{ToolPython, matching_packages, refine_interpreter};
+use crate::error::ToolError;
 use crate::{Target, ToolRequest};
 use uv_command_support::Printer;
 use uv_command_support::{UvError, read_env_files};
 use uv_environment_operations::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
+    EnvironmentError, EnvironmentSpecification, PlatformState, resolve_names,
 };
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_context::PythonDownloadReporter;
@@ -337,7 +338,7 @@ pub async fn run(
     let explicit_from = from.is_some();
     let (from, environment) = match result {
         Ok(resolution) => resolution,
-        Err(ProjectError::Operation(err)) => {
+        Err(ToolError::Environment(EnvironmentError::Operation(err))) => {
             let err = *err;
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
@@ -372,7 +373,7 @@ pub async fn run(
             return Err(UvError::from(err.with_resolution_context("tool")).into());
         }
 
-        Err(ProjectError::Requirements(err)) => {
+        Err(ToolError::Environment(EnvironmentError::Requirements(err))) => {
             return Err(UvError::from(
                 operations::Error::Requirements(err).with_resolution_context("`--with`"),
             )
@@ -765,7 +766,7 @@ async fn get_or_create_environment(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
+) -> Result<(ToolRequirement, PythonEnvironment), ToolError> {
     let reporter = PythonDownloadReporter::single(printer);
 
     // Initialize any shared state.
@@ -1129,7 +1130,8 @@ async fn get_or_create_environment(
 
                     // Determine the markers and tags to use for the resolution.
                     let markers = resolution_markers(None, python_platform.as_ref(), &interpreter);
-                    let tags = resolution_tags(None, python_platform.as_ref(), &interpreter)?;
+                    let tags = resolution_tags(None, python_platform.as_ref(), &interpreter)
+                        .map_err(EnvironmentError::from)?;
 
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(environment.environment())?;
@@ -1214,7 +1216,7 @@ async fn get_or_create_environment(
     let environment = match result {
         Ok(environment) => environment,
         Err(err) => match err {
-            ProjectError::Operation(err) => {
+            EnvironmentError::Operation(err) => {
                 let err = *err;
                 // If the resolution failed due to the discovered interpreter not satisfying the
                 // `requires-python` constraint, we can try to refine the interpreter.
@@ -1273,7 +1275,7 @@ async fn get_or_create_environment(
                 )
                 .await?
             }
-            err => return Err(err),
+            err => return Err(err.into()),
         },
     };
 

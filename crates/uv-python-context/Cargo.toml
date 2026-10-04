@@ -35,5 +35,6 @@ uv-workspace = { workspace = true }
 
 indicatif = { workspace = true }
 itertools = { workspace = true }
+owo-colors = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

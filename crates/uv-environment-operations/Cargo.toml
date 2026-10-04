@@ -34,7 +34,6 @@ uv-install-operations = { workspace = true }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
 uv-normalize = { workspace = true }
-uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
@@ -47,7 +46,6 @@ uv-resolve-operations = { workspace = true }
 uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true }
-uv-tool = { workspace = true }
 uv-torch = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
@@ -61,6 +59,4 @@ owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-toml = { workspace = true }
-toml_edit = { workspace = true }
 tracing = { workspace = true }

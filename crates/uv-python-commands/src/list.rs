@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
-use uv_cli::PythonListFormat;
+use uv_configuration::PythonListFormat;
 use uv_pep440::Version;
 
 use anyhow::Result;

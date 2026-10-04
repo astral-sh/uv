@@ -12,3 +12,4 @@ pub mod uninstall;
 
 mod install_report;
 mod pylock;
+mod reporters;
