@@ -466,12 +466,17 @@ jobs:
 
   linux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-latest-4
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - { target: "i686-unknown-linux-gnu", cc: "gcc -m32" }
-          - { target: "x86_64-unknown-linux-gnu", cc: "gcc" }
+          - target: i686-unknown-linux-gnu
+            cc: gcc -m32
+            runner: depot-ubuntu-latest-4
+          - target: x86_64-unknown-linux-gnu
+            cc: gcc
+            # Give instrumented PGO linking the same memory headroom as aarch64.
+            runner: depot-ubuntu-24.04-16
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
