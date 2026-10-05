@@ -1,4 +1,7 @@
-use anstream::{eprint, print};
+use std::io::{self, ErrorKind};
+use std::time::Duration;
+
+use anstream::print;
 use indicatif::ProgressDrawTarget;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,12 +130,91 @@ pub(crate) enum Stderr {
 impl std::fmt::Write for Stderr {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
-            Self::Enabled => {
-                eprint!("{s}");
-            }
+            Self::Enabled => write_retrying(&mut anstream::stderr(), s.as_bytes()),
             Self::Disabled => {}
         }
 
         Ok(())
+    }
+}
+
+/// The delay between attempts to write to a stream that is not ready to accept more data.
+const WRITE_RETRY_DELAY: Duration = Duration::from_millis(1);
+
+/// Write `buffer` to `writer`, retrying if the stream is non-blocking and temporarily full.
+///
+/// Parent processes like Node.js and Bun may set `O_NONBLOCK` on stdio shared with child processes,
+/// in which case a write returns [`ErrorKind::WouldBlock`] (`EAGAIN`) whenever the reader falls
+/// behind. Unlike `eprint!`, which panics on any error, we wait for the reader to catch up.
+///
+/// Any other error is ignored, since there is nothing useful to do if diagnostics cannot be
+/// written.
+fn write_retrying(writer: &mut impl io::Write, mut buffer: &[u8]) {
+    while !buffer.is_empty() {
+        match writer.write(buffer) {
+            Ok(0) => break,
+            Ok(written) => buffer = &buffer[written..],
+            Err(err) if err.kind() == ErrorKind::Interrupted => {}
+            Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                std::thread::sleep(WRITE_RETRY_DELAY);
+            }
+            Err(_) => break,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+    use std::io::{self, ErrorKind};
+
+    use super::write_retrying;
+
+    /// A writer that replays a scripted sequence of outcomes, then accepts everything.
+    struct ScriptedWriter {
+        outcomes: VecDeque<io::Result<usize>>,
+        written: Vec<u8>,
+    }
+
+    impl io::Write for ScriptedWriter {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            let accepted = match self.outcomes.pop_front() {
+                Some(Ok(limit)) => limit.min(buffer.len()),
+                Some(Err(err)) => return Err(err),
+                None => buffer.len(),
+            };
+            self.written.extend_from_slice(&buffer[..accepted]);
+            Ok(accepted)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn retries_on_would_block_and_partial_writes() {
+        let mut writer = ScriptedWriter {
+            outcomes: VecDeque::from([
+                Ok(3),
+                Err(ErrorKind::WouldBlock.into()),
+                Err(ErrorKind::Interrupted.into()),
+                Ok(2),
+                Err(ErrorKind::WouldBlock.into()),
+            ]),
+            written: Vec::new(),
+        };
+        write_retrying(&mut writer, b"hello, world");
+        assert_eq!(writer.written, b"hello, world");
+    }
+
+    #[test]
+    fn drops_output_on_other_errors() {
+        let mut writer = ScriptedWriter {
+            outcomes: VecDeque::from([Err(ErrorKind::BrokenPipe.into())]),
+            written: Vec::new(),
+        };
+        write_retrying(&mut writer, b"hello");
+        assert!(writer.written.is_empty());
     }
 }
