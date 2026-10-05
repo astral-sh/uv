@@ -529,54 +529,11 @@ async fn render_export<'output>(
 ) -> Result<OutputWriter<'output>> {
     // Identify the installation target.
     let target = match source {
-        ExportSource::Manifest(ExportTarget::Project(VirtualProject::Project(project))) => {
-            if all_packages {
-                InstallTarget::Workspace {
-                    workspace: project.workspace(),
-                    project_name: Some(project.project_name()),
-                    lock,
-                }
-            } else {
-                match package {
-                    // By default, install the root project.
-                    [] => InstallTarget::Project {
-                        workspace: project.workspace(),
-                        name: project.project_name(),
-                        lock,
-                    },
-                    [name] => InstallTarget::Project {
-                        workspace: project.workspace(),
-                        name,
-                        lock,
-                    },
-                    names => InstallTarget::Projects {
-                        workspace: project.workspace(),
-                        names,
-                        lock,
-                    },
-                }
-            }
-        }
-        ExportSource::Manifest(ExportTarget::Project(VirtualProject::NonProject(workspace))) => {
-            if all_packages {
-                InstallTarget::NonProjectWorkspace { workspace, lock }
-            } else {
-                match package {
-                    // By default, install the entire workspace.
-                    [] => InstallTarget::NonProjectWorkspace { workspace, lock },
-                    [name] => InstallTarget::Project {
-                        workspace,
-                        name,
-                        lock,
-                    },
-                    names => InstallTarget::Projects {
-                        workspace,
-                        names,
-                        lock,
-                    },
-                }
-            }
-        }
+        ExportSource::Manifest(ExportTarget::Project(project)) => InstallTarget::from_project(
+            project,
+            lock,
+            PackageSelection::from_args(all_packages, package, project.project_name()),
+        ),
         ExportSource::Manifest(ExportTarget::Script(script)) => {
             InstallTarget::Script { script, lock }
         }
