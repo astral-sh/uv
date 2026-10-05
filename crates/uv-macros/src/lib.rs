@@ -1,3 +1,4 @@
+mod debug_no_inline;
 mod options_metadata;
 
 use proc_macro::TokenStream;
@@ -5,6 +6,17 @@ use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{Attribute, DeriveInput, ImplItem, ItemImpl, LitStr, parse_macro_input};
 use textwrap::dedent;
+
+/// Derive structural [`Debug`](std::fmt::Debug) formatting for an enum, keeping
+/// the formatter out of line to avoid duplicating it at call sites.
+#[proc_macro_derive(DebugNoInline)]
+pub fn derive_debug_no_inline(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    debug_no_inline::derive_impl(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, option_group))]
 pub fn derive_options_metadata(input: TokenStream) -> TokenStream {

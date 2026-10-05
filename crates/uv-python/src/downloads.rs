@@ -35,6 +35,7 @@ use uv_client::{
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
+use uv_macros::DebugNoInline;
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{Digest, HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -51,7 +52,7 @@ use crate::managed::ManagedPythonInstallation;
 use crate::python_version::{BuildVersionError, python_build_version_from_env};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
-#[derive(Error, Debug)]
+#[derive(Error, DebugNoInline)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -1889,6 +1890,46 @@ mod tests {
     use uv_platform::{Arch, Libc, Os, Platform};
 
     use super::*;
+
+    #[test]
+    fn test_download_error_debug() {
+        let errors = [
+            Error::EmptyRequest,
+            Error::Mirror("UV_PYTHON_INSTALL_MIRROR", "file:///mirror".to_owned()),
+            Error::NetworkErrorWithRetries {
+                err: Box::new(Error::InvalidPythonVersion("3.x".to_owned())),
+                retries: 2,
+                duration: Duration::from_secs(3),
+            },
+            Error::HashMismatch {
+                installation: "cpython-3.12.0-linux-x86_64-gnu".to_owned(),
+                expected: "abc".to_owned(),
+                actual: "def".to_owned(),
+            },
+        ];
+
+        insta::assert_debug_snapshot!(errors, @r#"
+        [
+            EmptyRequest,
+            Mirror(
+                "UV_PYTHON_INSTALL_MIRROR",
+                "file:///mirror",
+            ),
+            NetworkErrorWithRetries {
+                err: InvalidPythonVersion(
+                    "3.x",
+                ),
+                retries: 2,
+                duration: 3s,
+            },
+            HashMismatch {
+                installation: "cpython-3.12.0-linux-x86_64-gnu",
+                expected: "abc",
+                actual: "def",
+            },
+        ]
+        "#);
+    }
 
     /// Parse a request with all of its fields.
     #[test]
