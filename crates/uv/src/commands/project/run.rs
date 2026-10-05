@@ -18,7 +18,6 @@ use tracing::{debug, trace, warn};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
@@ -41,16 +40,13 @@ use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
-use uv_settings::{
-    EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
-};
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::base_client_builder;
 use crate::child::run_to_completion;
 
 /// GitHub Gist API response structure
@@ -81,8 +77,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, GlobalSettings, LockCheck, LockedSource, ResolverInstallerSettings,
-    ResolverSettings,
+    FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings, ResolverSettings,
 };
 
 /// Run a command.
@@ -171,7 +166,7 @@ pub(crate) async fn run(
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
 
-    let env_file_environment = read_env_files(env_file.iter())?;
+    let env_file_environment = read_env_files(env_file.as_slice())?;
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
@@ -1472,11 +1467,12 @@ impl ParsedRunCommand {
     }
 
     /// Resolve the parsed target into a [`RunCommand`] and any associated PEP 723 metadata.
+    ///
+    /// The client factory is called only for remote scripts, so local target discovery does not
+    /// resolve global or network settings before reading the target's configuration.
     pub(crate) async fn resolve(
         self,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
+        client_builder: &(dyn Fn() -> anyhow::Result<BaseClientBuilder<'static>> + Sync),
     ) -> anyhow::Result<(Option<Pep723Item>, RunCommand)> {
         match self {
             Self::Ready(run_command) => {
@@ -1484,8 +1480,7 @@ impl ParsedRunCommand {
                 Ok((script, run_command))
             }
             Self::PendingRemote(remote_command) => {
-                let settings = GlobalSettings::resolve(global_args, filesystem, environment, None)?;
-                let client_builder = base_client_builder(&settings);
+                let client_builder = client_builder()?;
 
                 let (url, downloaded_script, args) =
                     remote_command.download(&client_builder).await?;
@@ -1503,13 +1498,12 @@ impl ParsedRunCommand {
 
     /// Determine the [`ParsedRunCommand`] for a given set of arguments.
     pub(crate) fn from_args(
-        command: &ExternalCommand,
+        command: &[OsString],
         module: bool,
         script: bool,
         gui_script: bool,
     ) -> anyhow::Result<Self> {
-        let (target, args) = command.split();
-        let Some(target) = target else {
+        let Some((target, args)) = command.split_first() else {
             return Ok(Self::Ready(RunCommand::Empty));
         };
 

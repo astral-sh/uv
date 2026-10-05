@@ -3354,15 +3354,6 @@ impl DerefMut for ExternalCommand {
     }
 }
 
-impl ExternalCommand {
-    pub fn split(&self) -> (Option<&OsString>, &[OsString]) {
-        match self.as_slice() {
-            [] => (None, &[]),
-            [cmd, args @ ..] => (Some(cmd), args),
-        }
-    }
-}
-
 #[derive(Debug, Default, Copy, Clone, clap::ValueEnum)]
 pub enum AuthorFrom {
     /// Fetch the author information from some sources (e.g., Git) automatically.

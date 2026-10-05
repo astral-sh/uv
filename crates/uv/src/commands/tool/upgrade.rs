@@ -59,6 +59,7 @@ pub(crate) async fn upgrade(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    render_error: fn(&anyhow::Error, Printer) -> std::fmt::Result,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
@@ -180,7 +181,7 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            crate::commands::diagnostics::write_error_chain(
+            render_error(
                 &err.context(format!("Failed to upgrade {}", name.green())),
                 printer,
             )?;
