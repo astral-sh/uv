@@ -67,6 +67,7 @@ use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironm
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
     ProjectEnvironmentTarget, ProjectError, ProjectPythonRequest, ScriptEnvironment,
@@ -301,7 +302,7 @@ pub(crate) async fn run(
                 DryRun::Disabled,
                 printer,
                 preview,
-                &malware_settings,
+                MalwareCheckContext::from(&malware_settings),
             )
             .await
             {
@@ -377,7 +378,8 @@ pub(crate) async fn run(
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification(
                 (&script).into(),
-                &settings.resolver,
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
                 &cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
@@ -386,7 +388,8 @@ pub(crate) async fn run(
             {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
-                    &settings.resolver,
+                    &settings.resolver.sources,
+                    &settings.resolver.index_locations,
                     &cache,
                     workspace_cache,
                     client_builder.credentials_cache(),
@@ -852,7 +855,7 @@ pub(crate) async fn run(
                     DryRun::Disabled,
                     printer,
                     preview,
-                    &malware_settings,
+                    MalwareCheckContext::from(&malware_settings),
                 )
                 .await
                 {

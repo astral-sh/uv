@@ -173,7 +173,7 @@ pub(super) async fn run(
         command.arg("--exclude-scripts");
     } else if let Some(workspace_root) = workspace_root {
         excluded_scripts.extend(
-            find_scripts(workspace_root, cache)
+            find_scripts(workspace_root, cache.root())
                 .filter_map(|script| match script {
                     Ok(script) => check_targets
                         .iter()

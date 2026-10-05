@@ -43,7 +43,7 @@ pub(crate) async fn list(
     .await?;
 
     if scripts {
-        let mut scripts = find_scripts(workspace.install_path(), cache)
+        let mut scripts = find_scripts(workspace.install_path(), cache.root())
             .filter_map(|script| match script {
                 Ok(script) => Some(Ok(script)),
                 Err(ScriptDiscoveryError::Parse { path, source }) => {
@@ -118,14 +118,14 @@ pub(crate) enum ScriptDiscoveryError {
 /// invalid candidates should fail discovery.
 pub(crate) fn find_scripts(
     workspace_root: &Path,
-    cache: &Cache,
+    cache_root: &Path,
 ) -> impl Iterator<Item = Result<PathBuf, ScriptDiscoveryError>> {
     // Avoid descending into the cache when it is inside the workspace. If the workspace itself is
     // inside the cache, it is still the requested search root and must not be excluded.
-    let cache_root = if cache.root().is_absolute() {
-        Cow::Borrowed(cache.root())
+    let cache_root = if cache_root.is_absolute() {
+        Cow::Borrowed(cache_root)
     } else {
-        Cow::Owned(CWD.join(cache.root()))
+        Cow::Owned(CWD.join(cache_root))
     };
     let cache_root = normalize_path(cache_root);
     // The filter closure requires owned data, but only capture the cache root when it is strictly

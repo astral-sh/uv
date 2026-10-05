@@ -194,7 +194,7 @@ pub(crate) async fn install(
             let requirement = resolve_names(
                 requirements,
                 &interpreter,
-                &settings,
+                &settings.resolver,
                 &build_constraints,
                 &client_builder,
                 &state,
@@ -387,7 +387,7 @@ pub(crate) async fn install(
             resolve_names(
                 spec.requirements.clone(),
                 &interpreter,
-                &settings,
+                &settings.resolver,
                 &build_constraints,
                 &client_builder,
                 &state,
@@ -444,7 +444,7 @@ pub(crate) async fn install(
     let receipt_overrides = resolve_names(
         spec.overrides,
         &interpreter,
-        &settings,
+        &settings.resolver,
         &build_constraints,
         &client_builder,
         &state,

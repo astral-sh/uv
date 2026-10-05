@@ -29,6 +29,7 @@ use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter, UniversalState,
@@ -462,7 +463,7 @@ pub(crate) async fn check(
             DryRun::Disabled,
             printer,
             preview,
-            &malware_settings,
+            MalwareCheckContext::from(&malware_settings),
         )
         .await
         {
@@ -479,7 +480,7 @@ pub(crate) async fn check(
         Some(venv)
     } else if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
-        let mut malware_context = project::sync::MalwareCheckContext::from(&malware_settings);
+        let mut malware_context = MalwareCheckContext::from(&malware_settings);
         let install_options = InstallOptions::new(
             no_install_project,
             false,
