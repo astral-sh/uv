@@ -827,16 +827,17 @@ impl AuthMiddleware {
             }
 
             // Netrc support based on: <https://github.com/gribouille/netrc>.
-            let provider_credentials = if let Some(credentials) = self.netrc.get().and_then(|netrc| {
-                debug!("Checking netrc for credentials for `{url}`");
-                Credentials::from_netrc(
-                    netrc,
-                    url,
-                    credentials
-                        .as_ref()
-                        .and_then(|credentials| credentials.username()),
-                )
-            }) {
+            let provider_credentials = if let Some(credentials) =
+                self.netrc.get().and_then(|netrc| {
+                    debug!("Checking netrc for credentials for `{url}`");
+                    Credentials::from_netrc(
+                        netrc,
+                        url,
+                        credentials
+                            .as_ref()
+                            .and_then(|credentials| credentials.username()),
+                    )
+                }) {
                 debug!("Found credentials in netrc file for `{url}`");
                 Some(credentials)
             } else {

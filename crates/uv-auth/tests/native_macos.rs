@@ -1,5 +1,7 @@
 #![cfg(target_os = "macos")]
 
+use std::assert_matches;
+use std::net::TcpListener;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use uv_auth::{AuthBackend, Credentials};
@@ -74,6 +76,98 @@ async fn native_store_does_not_migrate_http_legacy_host_credentials()
         if legacy.get_password().await? != password {
             return Err(std::io::Error::other("legacy credential changed unexpectedly").into());
         }
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+    .await;
+
+    let _ = legacy.delete_credential().await;
+    result
+}
+
+#[tokio::test]
+async fn native_store_migrates_overlapping_legacy_password_in_place()
+-> Result<(), Box<dyn std::error::Error>> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let service = format!("http://{}", listener.local_addr()?);
+    let root = DisplaySafeUrl::parse(&service)?;
+    let request = DisplaySafeUrl::parse(&format!("{service}/first"))?;
+    let legacy = uv_keyring::Entry::new(&format!("uv:{service}"), "uv")?;
+    legacy.set_password("legacy-password").await?;
+    let provider = native_provider().await?;
+
+    let result = async {
+        let expected = Some(Credentials::basic(
+            Some("uv".to_string()),
+            Some("legacy-password".to_string()),
+        ));
+        assert_eq!(provider.fetch(&request, Some("uv")).await?, expected);
+        let collection: Vec<serde_json::Value> =
+            serde_json::from_str(&legacy.get_password().await?)?;
+        assert_eq!(collection.len(), 1);
+        assert_eq!(collection[0]["service"], root.as_str());
+        assert_eq!(collection[0]["username"], "uv");
+        assert_eq!(collection[0]["password"], "legacy-password");
+        assert_eq!(provider.fetch(&request, Some("uv")).await?, expected);
+
+        // Logging out of a child service must not delete a realm-wide credential.
+        assert!(provider.remove(&request, "uv").await.is_err());
+        assert_eq!(provider.fetch(&root, Some("uv")).await?, expected);
+        provider.remove(&root, "uv").await?;
+        assert!(provider.fetch(&root, Some("uv")).await?.is_none());
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+    .await;
+
+    let _ = legacy.delete_credential().await;
+    result
+}
+
+#[tokio::test]
+async fn native_store_keeps_overlapping_legacy_password_when_adding_an_account()
+-> Result<(), Box<dyn std::error::Error>> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let service = format!("http://{}", listener.local_addr()?);
+    let root = DisplaySafeUrl::parse(&service)?;
+    let request = DisplaySafeUrl::parse(&format!("{service}/first"))?;
+    let legacy = uv_keyring::Entry::new(&format!("uv:{service}"), "uv")?;
+    legacy.set_password("{}").await?;
+    let provider = native_provider().await?;
+
+    let result = async {
+        let added = Credentials::basic(Some("other".to_string()), Some("new-password".to_string()));
+        provider.store(&request, &added).await?;
+        assert_eq!(provider.fetch(&request, Some("other")).await?, Some(added));
+        let expected = Some(Credentials::basic(
+            Some("uv".to_string()),
+            Some("{}".to_string()),
+        ));
+        assert_eq!(provider.fetch(&root, Some("uv")).await?, expected);
+        provider.remove(&request, "other").await?;
+        assert_eq!(provider.fetch(&root, Some("uv")).await?, expected);
+        provider.remove(&root, "uv").await?;
+        assert!(provider.fetch(&root, Some("uv")).await?.is_none());
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+    .await;
+
+    let _ = legacy.delete_credential().await;
+    result
+}
+
+#[tokio::test]
+async fn native_store_removes_overlapping_legacy_password() -> Result<(), Box<dyn std::error::Error>>
+{
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let service = format!("http://{}", listener.local_addr()?);
+    let root = DisplaySafeUrl::parse(&service)?;
+    let legacy = uv_keyring::Entry::new(&format!("uv:{service}"), "uv")?;
+    legacy.set_password("legacy-password").await?;
+    let provider = native_provider().await?;
+
+    let result = async {
+        provider.remove(&root, "uv").await?;
+        assert!(provider.fetch(&root, Some("uv")).await?.is_none());
+        assert_matches!(legacy.get_password().await, Err(uv_keyring::Error::NoEntry));
         Ok::<(), Box<dyn std::error::Error>>(())
     }
     .await;

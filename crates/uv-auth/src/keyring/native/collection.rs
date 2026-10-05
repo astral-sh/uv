@@ -1,11 +1,13 @@
+use std::str::FromStr;
+
 use tracing::trace;
 use zeroize::Zeroizing;
 
 use super::{
-    Error, PersistedCredentials, RealmGuardRef, RealmWriteGuard, SERVICE_PREFIX,
+    Error, LoadedCredentials, PersistedCredentials, RealmGuardRef, RealmWriteGuard, SERVICE_PREFIX,
     ensure_service_realm,
 };
-use crate::{Realm, Service, Username, persistent::PersistentCredential};
+use crate::{Credentials, Realm, Service, Username, persistent::PersistentCredential};
 
 /// Username for the single JSON entry that stores every credential in a realm.
 const PERSISTED_CREDENTIALS_USERNAME: &str = "uv";
@@ -49,19 +51,38 @@ fn realm_entry(guard: RealmGuardRef<'_>) -> Result<uv_keyring::Entry, Error> {
     .map_err(Error::Keyring)
 }
 
-/// Decode the JSON entry containing persisted credentials.
-fn decode_persisted_credentials(value: &str) -> Result<PersistedCredentials, Error> {
-    serde_json::from_str(value).map_err(Error::CorruptStoredCredentials)
+/// Decode a collection, or retain an overlapping legacy password under its original account.
+fn decode_persisted_credentials(value: &str, realm: &Realm) -> Result<LoadedCredentials, Error> {
+    if let Ok(credentials) = serde_json::from_str(value) {
+        return Ok(LoadedCredentials {
+            credentials,
+            legacy: false,
+        });
+    }
+    let service = Service::from_str(&realm.to_string()).map_err(Error::InvalidService)?;
+    Ok(LoadedCredentials {
+        credentials: PersistedCredentials(vec![PersistentCredential {
+            service,
+            credentials: Credentials::basic(
+                Some(PERSISTED_CREDENTIALS_USERNAME.to_string()),
+                Some(value.to_string()),
+            ),
+        }]),
+        legacy: true,
+    })
 }
 
 /// Load the persisted credentials in the locked realm.
 pub(super) async fn load_persisted_credentials(
     guard: RealmGuardRef<'_>,
-) -> Result<PersistedCredentials, Error> {
+) -> Result<LoadedCredentials, Error> {
     let entry = realm_entry(guard)?;
     match entry.get_password().await {
-        Ok(value) => decode_persisted_credentials(&Zeroizing::new(value)),
-        Err(uv_keyring::Error::NoEntry) => Ok(PersistedCredentials::default()),
+        Ok(value) => decode_persisted_credentials(&Zeroizing::new(value), guard.realm()),
+        Err(uv_keyring::Error::NoEntry) => Ok(LoadedCredentials {
+            credentials: PersistedCredentials::default(),
+            legacy: false,
+        }),
         Err(err) => Err(Error::Keyring(err)),
     }
 }
@@ -74,7 +95,9 @@ pub(super) async fn store_persisted_credential(
     ensure_service_realm(guard.realm(), &credential.service)?;
     let entry = realm_entry(RealmGuardRef::Write(guard))?;
     let mut credentials = match entry.get_password().await {
-        Ok(value) => decode_persisted_credentials(&Zeroizing::new(value))?,
+        Ok(value) => {
+            decode_persisted_credentials(&Zeroizing::new(value), guard.realm())?.credentials
+        }
         Err(uv_keyring::Error::NoEntry) => PersistedCredentials::default(),
         Err(err) => return Err(Error::Keyring(err)),
     };
@@ -100,7 +123,8 @@ pub(super) async fn remove_persisted_credential(
         Err(uv_keyring::Error::NoEntry) => return Ok(false),
         Err(err) => return Err(Error::Keyring(err)),
     };
-    let mut credentials = decode_persisted_credentials(&Zeroizing::new(json))?;
+    let mut credentials =
+        decode_persisted_credentials(&Zeroizing::new(json), guard.realm())?.credentials;
     if !credentials.remove(service, username) {
         return Ok(false);
     }
@@ -133,9 +157,22 @@ mod tests {
     }
 
     #[test]
-    fn corrupt_persisted_credentials_are_rejected() {
-        assert!(decode_persisted_credentials("not JSON").is_err());
-        assert!(decode_persisted_credentials("{}").is_err());
+    fn legacy_passwords_are_retained_when_the_collection_schema_does_not_match() {
+        let service = Service::from_str("http://localhost:1234").expect("valid service");
+        let realm = Realm::from(service.url());
+        for password in ["not JSON", "{}", r#"[{"service":"http://localhost:1234"}]"#] {
+            let loaded = decode_persisted_credentials(password, &realm).expect("legacy password");
+            assert!(loaded.legacy);
+            let credentials = loaded
+                .credentials
+                .select(service.url(), Some("uv"))
+                .expect("unique credentials")
+                .expect("legacy credentials");
+            assert_eq!(credentials.password(), Some(password));
+        }
+        let loaded = decode_persisted_credentials("[]", &realm).expect("empty collection");
+        assert!(!loaded.legacy);
+        assert!(loaded.credentials.is_empty());
     }
 
     #[test]

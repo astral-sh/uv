@@ -25,9 +25,6 @@ pub enum Error {
     #[error(transparent)]
     Keyring(#[from] uv_keyring::Error),
 
-    #[error("Stored credentials in the system keyring are corrupt")]
-    CorruptStoredCredentials(#[source] serde_json::Error),
-
     #[error("Failed to serialize credentials for the system keyring")]
     SerializeStoredCredentials(#[source] serde_json::Error),
 
@@ -43,7 +40,7 @@ pub enum Error {
     #[error("Credential service does not match the locked realm")]
     MismatchedRealm,
 
-    #[error("Multiple credentials found for URL '{0}', specify which username to use")]
+    #[error("Multiple credentials found for URL `{0}`, specify which username to use")]
     AmbiguousUsername(DisplaySafeUrl),
 
     #[error("Native credential storage requires a username")]
@@ -190,18 +187,18 @@ impl KeyringProvider {
         url: &DisplaySafeUrl,
         username: Option<&str>,
     ) -> Option<(String, String)> {
-        trace!("Checking keyring for URL {url}");
+        trace!("Checking keyring for URL `{url}`");
         let mut credentials = self.fetch_subprocess(url.as_str(), username).await;
         if credentials.is_some() {
             return credentials;
         }
 
         let host = legacy_host(url)?;
-        trace!("Checking keyring for host {host}");
+        trace!("Checking keyring for host `{host}`");
         credentials = self.fetch_subprocess(&host, username).await;
         if credentials.is_none() && url.scheme() != "https" {
             let scheme_host = format!("{}://{host}", url.scheme());
-            trace!("Checking keyring for scheme+host {scheme_host}");
+            trace!("Checking keyring for scheme+host `{scheme_host}`");
             credentials = self.fetch_subprocess(&scheme_host, username).await;
         }
         credentials

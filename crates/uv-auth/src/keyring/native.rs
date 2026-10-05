@@ -90,6 +90,13 @@ impl RealmWriteGuard {
 #[serde(transparent)]
 pub(super) struct PersistedCredentials(Vec<PersistentCredential>);
 
+/// Credentials loaded from a realm, including an overlapping legacy password.
+pub(super) struct LoadedCredentials {
+    credentials: PersistedCredentials,
+    /// The entry contains a legacy password and needs to be rewritten as a collection.
+    legacy: bool,
+}
+
 impl PersistedCredentials {
     /// Iterate over the persisted credentials.
     fn iter(&self) -> impl Iterator<Item = &PersistentCredential> {
@@ -183,11 +190,21 @@ pub(super) async fn fetch(
 ) -> Result<Option<Credentials>, Error> {
     let realm = Realm::from(url);
     let legacy_match = {
-        let realm_guard = acquire_realm_read(&realm).await?;
-        let credentials =
+        let mut realm_guard = acquire_realm_read(&realm).await?;
+        let mut loaded =
             platform::load_persisted_credentials(RealmGuardRef::Read(&realm_guard)).await?;
 
-        if let Some(credentials) = credentials.select(url, username)? {
+        if loaded.legacy {
+            drop(realm_guard);
+            if let Err(err) = migrate_legacy_collection(&realm).await {
+                warn!("Failed to migrate legacy credentials in realm {realm}: {err}");
+            }
+            realm_guard = acquire_realm_read(&realm).await?;
+            loaded =
+                platform::load_persisted_credentials(RealmGuardRef::Read(&realm_guard)).await?;
+        }
+
+        if let Some(credentials) = loaded.credentials.select(url, username)? {
             return Ok(Some(credentials.clone()));
         }
 
@@ -225,6 +242,19 @@ pub(super) async fn fetch(
     }
 
     Ok(Some(credentials))
+}
+
+/// Rewrite an overlapping legacy entry without deleting its replacement.
+async fn migrate_legacy_collection(realm: &Realm) -> Result<(), Error> {
+    let guard = acquire_realm_write(realm).await?;
+    let loaded = platform::load_persisted_credentials(RealmGuardRef::Write(&guard)).await?;
+    // Re-read under the write lock so a concurrent update or logout is not overwritten.
+    if loaded.legacy {
+        for credential in loaded.credentials.iter() {
+            platform::store_persisted_credential(&guard, credential).await?;
+        }
+    }
+    Ok(())
 }
 
 /// Migrate an unchanged legacy credential into persisted realm storage.
@@ -269,7 +299,7 @@ async fn migrate_legacy_credential(
     };
     let persisted_credentials =
         platform::load_persisted_credentials(RealmGuardRef::Write(&realm_guard)).await?;
-    if persisted_credentials.iter().any(|persisted| {
+    if persisted_credentials.credentials.iter().any(|persisted| {
         persisted.service == credential.service
             && persisted.credentials.to_username() == credential.credentials.to_username()
     }) {

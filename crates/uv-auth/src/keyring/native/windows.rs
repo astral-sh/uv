@@ -4,7 +4,7 @@ use uv_keyring::{Entry, WinCredential};
 use zeroize::Zeroizing;
 
 use super::{
-    Error, PersistedCredentials, RealmGuardRef, RealmWriteGuard, SERVICE_PREFIX,
+    Error, LoadedCredentials, PersistedCredentials, RealmGuardRef, RealmWriteGuard, SERVICE_PREFIX,
     ensure_service_realm,
 };
 use crate::{Realm, Service, Username, persistent::PersistentCredential};
@@ -75,7 +75,7 @@ fn entry(guard: &RealmWriteGuard, service: &Service, username: &Username) -> Res
 /// Load the persisted credentials in the locked realm.
 pub(super) async fn load_persisted_credentials(
     guard: RealmGuardRef<'_>,
-) -> Result<PersistedCredentials, Error> {
+) -> Result<LoadedCredentials, Error> {
     let realm = guard.realm();
     let prefix = target_prefix(realm);
     let entries = WinCredential::enumerate(&prefix).await?;
@@ -99,7 +99,10 @@ pub(super) async fn load_persisted_credentials(
         }
         credentials.push(credential);
     }
-    Ok(PersistedCredentials(credentials))
+    Ok(LoadedCredentials {
+        credentials: PersistedCredentials(credentials),
+        legacy: false,
+    })
 }
 
 /// Store one credential while holding its realm write lock.
