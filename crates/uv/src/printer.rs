@@ -220,7 +220,7 @@ fn write_resilient<W: std::io::Write>(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
