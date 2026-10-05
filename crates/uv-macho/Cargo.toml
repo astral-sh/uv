@@ -20,3 +20,4 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+scroll = { workspace = true }
