@@ -230,9 +230,9 @@ dependencies = [
 
 [[package]]
 name = "astral-html"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbd47e83fa1dc16c86d071179f575c424290cc77ea296d63f93fe1a247f541b3"
+checksum = "62aa805cd1a9a14520bb7f960f90dad1234837bbc71db27316e95d81243ee4d6"
 dependencies = [
  "memchr",
 ]
