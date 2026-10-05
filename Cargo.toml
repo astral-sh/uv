@@ -103,7 +103,7 @@ anstream = { version = "1.0.0", default-features = false, features = ["auto", "w
 anyhow = { version = "1.0.89", default-features = false, features = ["std"] }
 arcstr = { version = "1.2.0", default-features = false }
 arrayvec = { version = "0.7.6", default-features = false }
-astral-html = { version = "0.0.1", git = "https://github.com/astral-sh/astral-html", rev = "a205e15d60271d21c8dc4e56c872cb27af9f9321", default-features = false }
+astral-html = { version = "0.0.1", git = "https://github.com/astral-sh/astral-html", rev = "df6bb926bd16201c05a2f85239c7de3f4e70e207", default-features = false }
 astral-tokio-tar = { version = "0.7.0", default-features = false }
 async-channel = { version = "2.3.1", default-features = false, features = ["std"] }
 async-compression = { version = "0.4.12", default-features = false, features = [
