@@ -246,3 +246,48 @@ Reports and logs:
 - Linux ARM64 [build](https://github.com/astral-sh/uv/actions/runs/37338680716) and
   [artifact verification and timings](https://github.com/astral-sh/uv/actions/runs/37346420376)
 - [macOS verification and timings](https://github.com/astral-sh/uv/actions/runs/37347084186)
+
+### Windows PGO with line tables
+
+The `line-tables-only` comparison completed successfully on
+`namespace-profile-windows-2022-x86-64-16x32`. The runner reported 16 logical processors and
+34,359,107,584 bytes of physical memory. Both modes used four Cargo jobs, fat LTO, static CRT
+linkage, and independently trained PGO profiles. Peak process memory was not measured; this
+establishes successful completion on the 32 GB runner, not a precise memory reduction.
+
+| Measurement                      | No debug information | Line tables |
+| -------------------------------- | -------------------: | ----------: |
+| Instrumented build and training  |              19m 14s |      24m 6s |
+| Final build and wheel generation |              11m 18s |       9m 7s |
+| Combined pipeline                |              30m 31s |     33m 13s |
+| `uv.exe` bytes                   |           40,245,760 |  40,176,640 |
+| Wheel bytes                      |           18,137,249 |  18,104,535 |
+
+The pipeline took 8.8% longer overall. The executable was 69,120 bytes smaller (0.17%) and the wheel
+32,714 bytes smaller (0.18%). These are single observations with separate PGO training; the small
+size differences are not a guarantee of smaller binaries.
+
+| Companion file | Uncompressed bytes |
+| -------------- | -----------------: |
+| `uv.pdb`       |        150,409,216 |
+| `uvx.pdb`      |          4,509,696 |
+| `uvw.pdb`      |          4,509,696 |
+
+A standalone ZIP containing all three PDBs, compressed with Python's `ZIP_DEFLATED` at level 9, was
+45,362,507 bytes. It contains only companion symbols, excluding the executables, wheels, profiles,
+and logs. The earlier full-debug Windows PDB was 585,371,648 bytes without PGO; that is not a
+controlled comparison of debug levels because PGO also changes the output.
+
+Rust source lines in all three executables, AWS-LC's `RAND_bytes`, and `jent_read_entropy` resolved
+through the retained PDBs and stopped resolving when the PDBs were hidden. Embedded SBOM checks,
+static CRT checks, wheel installation with exact executable hashes, and smoke checks passed.
+AWS-LC's retained compiler logs show `/Z7` debug information in both PGO stages, despite the reduced
+Rust debug level. Both modes reported 19 missing-profile warnings confined to `uvx` and `uvw`, with
+no profile mismatches.
+
+The cached resolver comparisons produced identical resolutions. Median baseline/line-table times
+were 26.176/26.121 ms for Jupyter and 16.976/16.957 ms for Trio. These short workloads do not
+establish overall runtime equivalence. Full uv comparisons of `line-tables-only` versus `full` on
+Linux and macOS have not been run; their line-table checks cover only the small Rust+C fixture.
+
+[Windows line-table PGO build, verification, and timings](https://github.com/astral-sh/uv/actions/runs/37352288394)
