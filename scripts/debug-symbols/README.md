@@ -124,9 +124,10 @@ and smoke checks run on the final PGO binaries after deleting the instrumented b
 
 Both modes start with empty build and training directories. This requires four optimized builds per
 platform, so PGO workflow jobs have a three-hour timeout. Build durations are observations of the
-build and training pipeline, not application performance benchmarks. Windows PGO builds use a 64 GB
-Namespace runner: the instrumented build with full debug information exhausted memory on the 32 GB
-release runner. Cargo build parallelism remains four jobs for both Windows configurations.
+build and training pipeline, not application performance benchmarks. Windows PGO builds request a 64
+GB Namespace runner: the instrumented build with full debug information exhausted memory on the 32
+GB release runner. The larger runner still needs a completed validation run. Cargo build parallelism
+remains four jobs for both Windows configurations.
 
 Run with Python 3.12 and pass `--benchmark`, or enable the workflow's `benchmark` input, for a small
 runtime comparison of the verified binaries. It resolves the existing Jupyter and Trio requirements
@@ -137,7 +138,7 @@ single-runner measurements cover two warm resolver workloads, not overall applic
 This option also works with `--verify-only` / `verify-run`, so retained PGO binaries can be
 benchmarked without compiling again.
 
-### Native uv measurements
+### Native uv measurements without PGO
 
 Single cold comparisons of uv 0.12.23 with Rust 1.99.0 and Maturin 1.15.0 produced the following
 results. All sizes are bytes; companion symbol sizes are uncompressed and excluded from the wheels.
@@ -173,3 +174,66 @@ Reports and logs:
 - [macOS build and verification](https://github.com/astral-sh/uv/actions/runs/37332499963)
 - Windows [build](https://github.com/astral-sh/uv/actions/runs/37330457108) and
   [artifact verification](https://github.com/astral-sh/uv/actions/runs/37335292541)
+
+### Native uv measurements with PGO
+
+The same uv, Rust, and Maturin versions produced the following results using independently trained
+profiles for the baseline and symbols builds. All sizes are bytes; companion symbols are
+uncompressed and excluded from the wheels.
+
+| Native target             | Baseline `uv` | Stripped `uv` with symbols | Executable growth |    Wheel growth | `uv` companion symbols |
+| ------------------------- | ------------: | -------------------------: | ----------------: | --------------: | ---------------------: |
+| x86_64-unknown-linux-gnu  |    48,081,384 |                 48,311,408 |   230,024 (0.48%) | 101,731 (0.51%) |            681,367,000 |
+| aarch64-unknown-linux-gnu |    41,379,224 |                 41,530,904 |   151,680 (0.37%) |  39,198 (0.21%) |            700,826,864 |
+| aarch64-apple-darwin      |    35,502,816 |                 35,589,920 |    87,104 (0.25%) |  34,963 (0.20%) |            696,890,788 |
+
+`uvx` grew by 200 bytes on Linux x86-64 and 176 bytes on Linux ARM64 and macOS. All three targets
+passed Rust, AWS-LC, and jitterentropy source lookups, the negative checks with symbols hidden,
+embedded SBOM validation, wheel installation with exact executable hashes, and smoke checks. macOS
+ad hoc signatures also passed verification. Linux ARM64's symbolizer emitted nonfatal
+`.debug_aranges` warnings; its JSON output and source lookups were valid. The harness keeps those
+stderr diagnostics separate from the structured stdout used for validation.
+
+The combined instrumented build, training, and final build durations were:
+
+| Native target             | Baseline | With symbols |
+| ------------------------- | -------: | -----------: |
+| x86_64-unknown-linux-gnu  |  17m 22s |      26m 38s |
+| aarch64-unknown-linux-gnu |  22m 53s |      32m 38s |
+| aarch64-apple-darwin      |   15m 1s |      50m 31s |
+
+These are single cold observations, excluding symbol processing and verification. Full debug
+information increases build cost substantially even though the installed files remain close in size.
+On Windows x86-64, the baseline completed in 25m 6s, but LLVM exhausted memory while compiling the
+instrumented `uv` with full debug information on the 32 GB release runner. Windows PGO symbol
+coverage and size comparisons remain unverified until the larger runner completes both builds.
+
+Neither Linux target reported profile mismatches. Each configuration reported 18 missing-profile
+warnings, all for `uvx`. macOS reported 5,888 missing-profile warning lines for the baseline and
+6,000 for the symbols build, with no mismatches. These include repeated diagnostics across uv and
+its dependency crates, corresponding to 2,899 and 2,937 distinct mangled function names. Both macOS
+profiles contain more than 172,000 functions and record 90 calls to `uv::main`. Of the symbols
+build's functions with missing profiles, 128 remain in the final `uv` symbol table. The baseline
+also has missing coverage; the measurements do not establish complete PGO coverage or explain every
+missing function.
+
+Twenty timed cached resolutions per configuration produced identical dependency resolutions. The
+median wall times, including process startup, were:
+
+| Native target             | Jupyter baseline / symbols | Trio baseline / symbols |
+| ------------------------- | -------------------------: | ----------------------: |
+| x86_64-unknown-linux-gnu  |           8.582 / 8.915 ms |        7.229 / 7.123 ms |
+| aarch64-unknown-linux-gnu |         11.456 / 11.482 ms |        8.793 / 8.804 ms |
+| aarch64-apple-darwin      |         13.644 / 13.525 ms |      13.212 / 13.449 ms |
+
+Every median difference was below 0.4 ms. These short cached workloads are a smoke comparison, not
+evidence of equivalent performance across uv workloads. The native Linux results also do not
+validate the release's manylinux containers or the remaining non-PGO release targets.
+
+Reports and logs:
+
+- [Linux x86-64 and macOS builds; Windows memory failure](https://github.com/astral-sh/uv/actions/runs/37338399810)
+- [Linux x86-64 verification and timings](https://github.com/astral-sh/uv/actions/runs/37344439379)
+- Linux ARM64 [build](https://github.com/astral-sh/uv/actions/runs/37338680716) and
+  [artifact verification and timings](https://github.com/astral-sh/uv/actions/runs/37346420376)
+- [macOS verification and timings](https://github.com/astral-sh/uv/actions/runs/37347084186)
