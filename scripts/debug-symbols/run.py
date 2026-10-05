@@ -83,6 +83,14 @@ def tool(name, sysroot, host):
     raise RuntimeError(f"Missing tool {name}; install LLVM or set LLVM_BIN")
 
 
+def save_build_script_logs(target, destination):
+    # Maturin does not forward all build-script output, even with Cargo verbosity.
+    for source in target.glob("**/build/*/output"):
+        log = destination / "build-scripts" / source.relative_to(target)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, log)
+
+
 def addresses(binary, tools, system):
     if system == "Windows":
         output = run([tools["llvm-readobj"], "--coff-exports", binary])
@@ -309,6 +317,7 @@ def main():
                 log=directory / "build.log",
             )
             elapsed = time.monotonic() - started
+            save_build_script_logs(target, directory)
             (wheel,) = directory.glob("*.whl")
             binary = directory / binary_name
             with ZipFile(wheel) as archive:

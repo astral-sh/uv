@@ -51,7 +51,7 @@ unprocessed wheels are retained with an `.original.whl` suffix for inspection; t
 publishable artifacts.
 
 Size equality is measured rather than required. Enabling debug information can change native
-compiler flags, including frame pointers; the build logs capture the compiler invocation. Raw
+compiler flags, including frame pointers; `build-scripts/` retains native compiler invocations. Raw
 Maturin wheel sizes are also recorded separately. This fixture does not exercise uv's dependency
 graph, PGO, cross compilation, release signing, or publication. Those require verification with the
 actual release artifacts.

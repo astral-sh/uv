@@ -14,7 +14,15 @@ import zlib
 from pathlib import Path
 from zipfile import ZipFile
 
-from run import repack_wheel, run, separate_symbols, symbolize, tool, verify_symbols
+from run import (
+    repack_wheel,
+    run,
+    save_build_script_logs,
+    separate_symbols,
+    symbolize,
+    tool,
+    verify_symbols,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -218,6 +226,7 @@ def build(output, report, tools, system, host):
                 "executables": {},
             }
             report["builds"][mode] = measured
+            save_build_script_logs(Path(temporary), directory)
             (wheel,) = directory.glob("*.whl")
             measured["wheel_bytes"] = wheel.stat().st_size
             measured["wheel"] = wheel.name
