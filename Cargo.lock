@@ -5807,6 +5807,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "jiff",
+ "libc",
  "nix 0.31.3",
  "owo-colors",
  "petgraph",
