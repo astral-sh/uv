@@ -601,6 +601,10 @@ pub(crate) async fn pip_compile(
         None,
         Box::new(DefaultResolveLogger),
         printer,
+        match format {
+            PipCompileFormat::PylockToml => true,
+            PipCompileFormat::RequirementsTxt => false,
+        },
     )
     .await
     {

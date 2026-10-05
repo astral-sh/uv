@@ -14,7 +14,9 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
+use uv_resolver_types::SelectionNames;
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -30,6 +32,7 @@ use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResp
 /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
 pub(crate) fn from_state(
     mut resolutions: Vec<ResolvedFork>,
+    selection_names: Option<SelectionNames>,
     project: Option<&PackageName>,
     workspace_members: &BTreeSet<PackageName>,
     requirements: Vec<Requirement>,
@@ -80,6 +83,7 @@ pub(crate) fn from_state(
     }
 
     let mut seen = FxHashSet::default();
+    let mut root_markers = FxHashMap::default();
     for resolution in &resolutions {
         let marker = resolution.env.try_universal_markers().unwrap_or_default();
 
@@ -92,6 +96,14 @@ pub(crate) fn from_state(
             }
 
             add_edge(&mut graph, &inverse, root_index, edge, marker);
+            if let Some(selection_marker) = edge.selection_marker {
+                let marker = selection_marker.and(marker.pep508());
+                let target = inverse[&edge.to];
+                root_markers
+                    .entry(target)
+                    .and_modify(|existing: &mut MarkerTree| *existing = existing.or(marker))
+                    .or_insert(marker);
+            }
         }
     }
 
@@ -130,6 +142,38 @@ pub(crate) fn from_state(
 
     simplify_conflict_markers(conflicts, &mut graph);
 
+    if selection_names.is_some() {
+        let selection_graph = graph.map(
+            |_, _| (),
+            |edge_index, marker| {
+                if let Some((source, target)) = graph.edge_endpoints(edge_index)
+                    && source == root_index
+                {
+                    root_markers
+                        .get(&target)
+                        .copied()
+                        .unwrap_or(MarkerTree::FALSE)
+                } else {
+                    marker.pep508()
+                }
+            },
+        );
+        let forks = fork_markers
+            .iter()
+            .map(|marker| marker.pep508())
+            .collect::<Vec<_>>();
+        let reachability = marker_reachability(&selection_graph, &forks);
+        for index in graph.node_indices() {
+            if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
+                dist.selection_marker = Some(
+                    reachability
+                        .get(&index)
+                        .copied()
+                        .unwrap_or(MarkerTree::FALSE),
+                );
+            }
+        }
+    }
     // Discard any unreachable nodes.
     graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
@@ -138,6 +182,7 @@ pub(crate) fn from_state(
     }
 
     let output = ResolverOutput {
+        selection_names,
         graph,
         requires_python,
         fork_markers,
@@ -299,6 +344,7 @@ fn add_version(
         hashes,
         metadata,
         marker: UniversalMarker::TRUE,
+        selection_marker: None,
     }))
 }
 

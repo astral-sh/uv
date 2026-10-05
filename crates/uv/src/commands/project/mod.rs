@@ -2570,6 +2570,7 @@ pub(crate) async fn resolve_environment(
         None,
         logger,
         printer,
+        false,
     )
     .await?
     .0)
@@ -2968,6 +2969,7 @@ pub(crate) async fn update_environment(
         None,
         resolve,
         printer,
+        false,
     )
     .await
     {
