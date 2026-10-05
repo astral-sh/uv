@@ -91,7 +91,9 @@ unprocessed wheels.
 
 Pushes run the small fixture. To run the full comparison, dispatch the workflow with `uv` enabled
 and select all platforms or one platform. Full uv builds use the repository's Depot Linux and
-Namespace macOS/Windows runners to provide headroom for full debug information and fat LTO.
+Namespace macOS/Windows runners to provide headroom for full debug information and fat LTO. Set
+`verify-run` to a completed run ID to download its uv artifacts and repeat verification without
+compiling again. Enable `uv` and select the platform whose artifacts were retained.
 
 This comparison uses native runners without PGO, manylinux containers, cross compilation, or
 production signing. It measures the effect of enabling symbols on the uv dependency graph; its

@@ -62,14 +62,22 @@ def symbol_candidates(binary, symbols, tools, system):
                 r"Number: (\d+).*?VirtualAddress: (0x[0-9A-Fa-f]+)", sections, re.DOTALL
             )
         }
-        publics = run([tools["llvm-pdbutil"], "dump", "--publics", symbols])
-        # PDB public addresses are decimal section:offset pairs, not PE RVAs.
+        records = run(
+            [tools["llvm-pdbutil"], "dump", "--publics", "--symbols", symbols]
+        )
+        functions = re.findall(
+            r"S_PUB32[^\n]*`([^`]+)`\s+flags = function, addr = (\d+):(\d+)",
+            records,
+        )
+        # Rust entry points may appear only in module procedure records.
+        functions += re.findall(
+            r"S_[GL]PROC32(?:_ID)?[^\n]*`([^`]+)`\s+parent = [^\n]*?addr = (\d+):(\d+)",
+            records,
+        )
+        # PDB addresses are decimal section:offset pairs, not PE RVAs.
         return {
             name: section_addresses[int(section)] + int(offset)
-            for name, section, offset in re.findall(
-                r"S_PUB32[^\n]*`([^`]+)`\s+flags = function, addr = (\d+):(\d+)",
-                publics,
-            )
+            for name, section, offset in functions
             if int(section) in section_addresses
         }
     source = symbols
@@ -285,10 +293,10 @@ def verify(output, report, tools, system):
     names = report["executables"]
     for mode, measured in report["builds"].items():
         for name, record in measured["executables"].items():
-            if (
-                sbom_digest(output / mode / name, tools, system)
-                != record["sbom_sha256"]
-            ):
+            binary = output / mode / name
+            # Artifact downloads do not retain executable permissions.
+            binary.chmod(0o755)
+            if sbom_digest(binary, tools, system) != record["sbom_sha256"]:
                 raise RuntimeError(f"The SBOM changed in {mode}/{name}")
     for name in names:
         binary = directory / name
