@@ -12,13 +12,13 @@ use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_pep440::Version;
+use uv_scripts::{ScriptDiscoveryError, find_scripts};
 use uv_shell::shlex_posix;
 use uv_static::EnvVars;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
-use crate::commands::workspace::list::{ScriptDiscoveryError, find_scripts};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck};
 
