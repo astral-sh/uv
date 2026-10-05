@@ -462,7 +462,7 @@ pub(crate) async fn check(
             DryRun::Disabled,
             printer,
             preview,
-            &malware_settings,
+            (&malware_settings).into(),
         )
         .await
         {

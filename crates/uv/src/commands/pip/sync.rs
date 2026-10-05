@@ -457,7 +457,7 @@ pub(crate) async fn pip_sync(
             extras,
             &groups,
             preferences,
-            site_packages.clone(),
+            Some(site_packages.clone()),
             &hasher,
             &reinstall,
             &upgrade,

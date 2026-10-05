@@ -714,7 +714,7 @@ async fn lock_and_sync(
         DryRun::Disabled,
         printer,
         preview,
-        malware_settings,
+        malware_settings.into(),
     )
     .await
     {

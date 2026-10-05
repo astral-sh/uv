@@ -405,7 +405,7 @@ pub(crate) async fn remove(
         DryRun::Disabled,
         printer,
         preview,
-        &malware_settings,
+        (&malware_settings).into(),
     )
     .await
     {

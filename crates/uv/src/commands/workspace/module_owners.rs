@@ -92,7 +92,7 @@ pub(crate) async fn collect_module_owners(
             DryRun::Disabled,
             Printer::Silent,
             preview,
-            malware_settings,
+            malware_settings.into(),
         )
         .await?;
     }

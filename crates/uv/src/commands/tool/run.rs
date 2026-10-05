@@ -876,7 +876,7 @@ async fn get_or_create_environment(
                     let requirement = resolve_names(
                         vec![spec],
                         &interpreter,
-                        settings,
+                        &settings.resolver,
                         &build_constraints,
                         client_builder,
                         &state,
@@ -1041,7 +1041,7 @@ async fn get_or_create_environment(
             resolve_names(
                 spec.requirements.clone(),
                 &interpreter,
-                settings,
+                &settings.resolver,
                 &build_constraints,
                 client_builder,
                 &state,
@@ -1069,7 +1069,7 @@ async fn get_or_create_environment(
     let overrides = resolve_names(
         spec.overrides.clone(),
         &interpreter,
-        settings,
+        &settings.resolver,
         &build_constraints,
         client_builder,
         &state,

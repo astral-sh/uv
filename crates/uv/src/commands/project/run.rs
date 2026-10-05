@@ -301,7 +301,7 @@ pub(crate) async fn run(
                 DryRun::Disabled,
                 printer,
                 preview,
-                &malware_settings,
+                (&malware_settings).into(),
             )
             .await
             {
@@ -377,7 +377,8 @@ pub(crate) async fn run(
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification(
                 (&script).into(),
-                &settings.resolver,
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
                 &cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
@@ -386,7 +387,8 @@ pub(crate) async fn run(
             {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
-                    &settings.resolver,
+                    &settings.resolver.sources,
+                    &settings.resolver.index_locations,
                     &cache,
                     workspace_cache,
                     client_builder.credentials_cache(),
@@ -852,7 +854,7 @@ pub(crate) async fn run(
                     DryRun::Disabled,
                     printer,
                     preview,
-                    &malware_settings,
+                    (&malware_settings).into(),
                 )
                 .await
                 {
