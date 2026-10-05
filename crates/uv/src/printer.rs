@@ -152,16 +152,32 @@ impl std::fmt::Write for Stderr {
 
 #[cfg(unix)]
 #[allow(unsafe_code)]
-fn wait_writable(fd: std::os::fd::RawFd) {
+fn wait_writable(fd: std::os::fd::RawFd) -> bool {
     let mut pfd = libc::pollfd {
         fd,
         events: libc::POLLOUT,
         revents: 0,
     };
-    // Wait until writable or interrupted; timeout after 500ms to re-check.
-    unsafe {
-        libc::poll(&raw mut pfd, 1, 500);
+    // SAFETY: &raw mut pfd points to a valid libc::pollfd stack structure with length 1.
+    let ret = unsafe { libc::poll(&raw mut pfd, 1, 500) };
+    if ret < 0 {
+        // Interrupted by signal or poll failure. On EINTR, sleep briefly to avoid a tight
+        // spin loop if signals arrive repeatedly; on any other error, stop retrying.
+        let err = std::io::Error::last_os_error();
+        if err.kind() == std::io::ErrorKind::Interrupted {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            return true;
+        }
+        return false;
     }
+    // If the fd encountered a fatal condition (error/hangup/invalid) without being writable, stop retrying.
+    if ret > 0
+        && (pfd.revents & (libc::POLLERR | libc::POLLNVAL | libc::POLLHUP) != 0)
+        && (pfd.revents & libc::POLLOUT == 0)
+    {
+        return false;
+    }
+    true
 }
 
 fn write_resilient<W: std::io::Write>(
@@ -176,7 +192,9 @@ fn write_resilient<W: std::io::Write>(
             Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                 #[cfg(unix)]
-                wait_writable(fd);
+                if !wait_writable(fd) {
+                    break;
+                }
                 #[cfg(not(unix))]
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
@@ -191,7 +209,9 @@ fn write_resilient<W: std::io::Write>(
         }
         if err.kind() == std::io::ErrorKind::WouldBlock {
             #[cfg(unix)]
-            wait_writable(fd);
+            if !wait_writable(fd) {
+                break;
+            }
             #[cfg(not(unix))]
             std::thread::sleep(std::time::Duration::from_millis(1));
             continue;
@@ -206,22 +226,25 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    #[allow(unsafe_code, clippy::disallowed_types)]
+    #[allow(unsafe_code)]
     fn non_blocking_write_resilient() {
         use std::io::Read;
         use std::os::fd::{AsRawFd, FromRawFd};
 
         let mut fds = [0; 2];
+        // SAFETY: socketpair is called with valid AF_UNIX domain, SOCK_STREAM type, and pointer to fds buffer of size 2.
         assert_eq!(
             unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) },
             0
         );
+        // SAFETY: fds contains valid, open file descriptors from successful socketpair call.
         let mut parent = unsafe { std::fs::File::from_raw_fd(fds[0]) };
         let mut child = unsafe { std::fs::File::from_raw_fd(fds[1]) };
 
         // Set small send buffer so EAGAIN happens quickly.
         let sndbuf: libc::c_int = 2048;
         let socklen = libc::socklen_t::try_from(std::mem::size_of::<libc::c_int>()).unwrap();
+        // SAFETY: setsockopt called with valid socket fd, SOL_SOCKET level, SO_SNDBUF option and valid buffer.
         assert_eq!(
             unsafe {
                 libc::setsockopt(
@@ -236,6 +259,7 @@ mod tests {
         );
 
         // Set O_NONBLOCK on child.
+        // SAFETY: fcntl called with valid socket fd.
         let flags = unsafe { libc::fcntl(child.as_raw_fd(), libc::F_GETFL, 0) };
         assert_eq!(
             unsafe { libc::fcntl(child.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) },
@@ -244,7 +268,6 @@ mod tests {
 
         let data = "hello world\n".repeat(2000);
         let data_bytes = data.into_bytes();
-        let expected = data_bytes.clone();
 
         let reader_handle = std::thread::spawn(move || {
             // Sleep briefly so writer encounters WouldBlock
@@ -259,23 +282,26 @@ mod tests {
         drop(child);
 
         let received = reader_handle.join().unwrap();
-        assert_eq!(received, expected);
+        assert_eq!(received, data_bytes);
     }
 
     #[test]
     #[cfg(unix)]
-    #[allow(unsafe_code, clippy::disallowed_types)]
+    #[allow(unsafe_code)]
     fn non_blocking_broken_pipe_resilient() {
         use std::os::fd::{AsRawFd, FromRawFd};
 
         let mut fds = [0; 2];
+        // SAFETY: socketpair is called with valid AF_UNIX domain, SOCK_STREAM type, and pointer to fds buffer of size 2.
         assert_eq!(
             unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) },
             0
         );
+        // SAFETY: fds contains valid, open file descriptors from successful socketpair call.
         let parent = unsafe { std::fs::File::from_raw_fd(fds[0]) };
         let mut child = unsafe { std::fs::File::from_raw_fd(fds[1]) };
 
+        // SAFETY: fcntl called with valid socket fd.
         let flags = unsafe { libc::fcntl(child.as_raw_fd(), libc::F_GETFL, 0) };
         assert_eq!(
             unsafe { libc::fcntl(child.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) },
