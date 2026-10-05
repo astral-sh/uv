@@ -1,13 +1,14 @@
-use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::bytes::{array, slice};
 use crate::format::{
-    CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, HEADER_SIZE, Header, MH_DYLIB, MH_MAGIC_64,
-    S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECT_INFO_PLIST, SECTION_TYPE,
-    SEG_LINKEDIT, SEG_TEXT, Section,
+    CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, HEADER_SIZE, Header, LC_CODE_SIGNATURE, MH_DYLIB,
+    MH_MAGIC_64, S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECT_INFO_PLIST, SECTION_TYPE,
+    SEG_LINKEDIT, SEG_TEXT, Section, Segment,
 };
-use crate::{Error, InstallName};
+use crate::regions::FileRegions;
+use crate::signature::{Metadata, SigningAlgorithms};
+use crate::{Error, InstallName, SigningIdentifier};
 
 /// A validated dylib layout tied to the image from which it was parsed.
 pub(crate) struct Layout<'a> {
@@ -17,6 +18,14 @@ pub(crate) struct Layout<'a> {
     command_end: usize,
     data_start: usize,
     code_limit: usize,
+    signature: Option<&'a [u8]>,
+    signature_command: Option<usize>,
+    text: Segment<'a>,
+    linkedit: Segment<'a>,
+    linkedit_index: usize,
+    info_plist: Option<&'a [u8]>,
+    minimum_version: Option<u32>,
+    architecture: Architecture,
 }
 
 impl<'a> Layout<'a> {
@@ -28,15 +37,16 @@ impl<'a> Layout<'a> {
             ));
         }
 
-        match header.cputype {
-            CPU_TYPE_ARM64 | CPU_TYPE_X86_64 => {}
+        let architecture = match header.cputype {
+            CPU_TYPE_ARM64 => Architecture::Arm64,
+            CPU_TYPE_X86_64 => Architecture::X86_64,
             _ => {
                 return Err(Error::UnsupportedValue {
                     field: "CPU architecture",
                     value: u64::from(header.cputype),
                 });
             }
-        }
+        };
 
         let mut command_data = slice(image, HEADER_SIZE, header.sizeofcmds as usize)?;
         let command_end = HEADER_SIZE + command_data.len();
@@ -66,7 +76,7 @@ impl<'a> Layout<'a> {
         let mut text = None;
         let mut linkedit = None;
         let mut info_plist = None;
-        let mut has_deployment_target = false;
+        let mut minimum_version = None;
         let mut segments = FileRegions::default();
         let mut virtual_segments = Vec::new();
         let mut sections = FileRegions::default();
@@ -94,11 +104,12 @@ impl<'a> Layout<'a> {
                     }
                 }
 
-                Command::DeploymentTarget(_) => {
-                    if has_deployment_target {
+                Command::DeploymentTarget(data) => {
+                    let field = if data.len() == 16 { 8 } else { 12 };
+                    let version = u32::from_le_bytes(array(data, field)?);
+                    if minimum_version.replace(version).is_some() {
                         return Err(Error::Malformed("multiple deployment targets"));
                     }
-                    has_deployment_target = true;
                 }
 
                 Command::Segment(segment) => {
@@ -208,8 +219,9 @@ impl<'a> Layout<'a> {
         }
 
         let install_id = install_id.ok_or(Error::Malformed("missing LC_ID_DYLIB"))?;
-        text.ok_or(Error::Malformed("missing __TEXT segment"))?;
-        let (_, linkedit) = linkedit.ok_or(Error::Malformed("missing __LINKEDIT segment"))?;
+        let text = text.ok_or(Error::Malformed("missing __TEXT segment"))?;
+        let (linkedit_index, linkedit) =
+            linkedit.ok_or(Error::Malformed("missing __LINKEDIT segment"))?;
 
         virtual_segments.sort_unstable();
         if virtual_segments
@@ -270,6 +282,14 @@ impl<'a> Layout<'a> {
             command_end,
             data_start,
             code_limit,
+            signature: signature.map(|(_, data)| data),
+            signature_command,
+            text,
+            linkedit,
+            linkedit_index,
+            info_plist,
+            minimum_version,
+            architecture,
         })
     }
 
@@ -321,38 +341,103 @@ impl<'a> Layout<'a> {
 
         Ok(output)
     }
-}
 
-/// Nonempty file regions that cannot overlap, regardless of insertion order.
-#[derive(Default)]
-struct FileRegions {
-    /// Each start offset maps to the corresponding exclusive end offset.
-    by_start: BTreeMap<usize, usize>,
-}
+    pub(crate) fn adhoc_sign(&self, identifier: &SigningIdentifier) -> Result<Vec<u8>, Error> {
+        let metadata =
+            Metadata::read(self.signature, identifier, self.code_limit, self.info_plist)?;
 
-impl FileRegions {
-    fn insert(&mut self, region: Range<usize>) -> Result<(), Error> {
-        if region.is_empty() {
-            return Ok(());
-        }
+        let command_offset = |index: usize| {
+            HEADER_SIZE
+                + self.commands[..index]
+                    .iter()
+                    .map(|command| command.as_bytes().len())
+                    .sum::<usize>()
+        };
+        let linkedit_offset = command_offset(self.linkedit_index);
 
-        // Stored regions are disjoint, so only the last one starting before this end can overlap.
-        if self
-            .by_start
-            .range(..region.end)
-            .next_back()
-            .is_some_and(|(_, end)| *end > region.start)
+        let (mut output, signature_offset) = if let Some(index) = self.signature_command {
+            (self.image.to_vec(), command_offset(index))
+        } else {
+            let mut commands = self.image[..self.command_end].to_vec();
+            let offset = commands.len();
+            commands.resize(offset + 16, 0);
+            commands[offset..offset + 4].copy_from_slice(&u32::to_le_bytes(LC_CODE_SIGNATURE));
+            commands[offset + 4..offset + 8].copy_from_slice(&u32::to_le_bytes(16));
+            commands[16..20]
+                .copy_from_slice(&u32::to_le_bytes(u32::try_from(self.commands.len() + 1)?));
+
+            (self.replace_commands(commands)?, offset)
+        };
+
+        output.truncate(self.code_limit);
+        let signature_start = output
+            .len()
+            .checked_next_multiple_of(16)
+            .ok_or(Error::TooLarge)?;
+        output.resize(signature_start, 0);
+
+        let algorithms = if self
+            .minimum_version
+            .is_some_and(|version| version < 0x000a_0b04)
         {
-            return Err(Error::Malformed("overlapping file regions"));
-        }
+            SigningAlgorithms::Sha1AndSha256
+        } else {
+            SigningAlgorithms::Sha256
+        };
+        let signature = metadata.prepare(
+            signature_start,
+            (self.text.fileoff, self.text.filesize),
+            self.info_plist,
+            algorithms,
+        )?;
+        let signature_size = signature
+            .size()
+            .checked_next_multiple_of(16)
+            .ok_or(Error::TooLarge)?;
+        let final_size = signature_start
+            .checked_add(signature_size)
+            .ok_or(Error::TooLarge)?;
+        u32::try_from(final_size)?;
 
-        self.by_start.insert(region.start, region.end);
-        Ok(())
-    }
+        // Finalize the load commands before hashing the image they describe.
+        output[signature_offset + 8..signature_offset + 12]
+            .copy_from_slice(&u32::to_le_bytes(u32::try_from(signature_start)?));
+        output[signature_offset + 12..signature_offset + 16]
+            .copy_from_slice(&u32::to_le_bytes(u32::try_from(signature_size)?));
 
-    fn end(&self) -> Option<usize> {
-        self.by_start.last_key_value().map(|(_, end)| *end)
+        let linkedit_size = final_size
+            .checked_sub(usize::try_from(self.linkedit.fileoff)?)
+            .ok_or(Error::Malformed("invalid __LINKEDIT offset"))?;
+        output[linkedit_offset + 48..linkedit_offset + 56]
+            .copy_from_slice(&u64::to_le_bytes(linkedit_size as u64));
+
+        // __LINKEDIT must have enough virtual pages even when a replacement signature grows.
+        let segment_alignment = match self.architecture {
+            Architecture::Arm64 => 16384,
+            Architecture::X86_64 => 4096,
+        };
+        let virtual_size = self.linkedit.vmsize.max(
+            linkedit_size
+                .checked_next_multiple_of(segment_alignment)
+                .ok_or(Error::TooLarge)? as u64,
+        );
+        self.linkedit
+            .vmaddr
+            .checked_add(virtual_size)
+            .ok_or(Error::TooLarge)?;
+        output[linkedit_offset + 32..linkedit_offset + 40]
+            .copy_from_slice(&u64::to_le_bytes(virtual_size));
+
+        output.extend(signature.sign(&output)?);
+        output.resize(final_size, 0);
+
+        Ok(output)
     }
+}
+
+enum Architecture {
+    Arm64,
+    X86_64,
 }
 
 /// Extend the bounds to contain every nonempty file range.
