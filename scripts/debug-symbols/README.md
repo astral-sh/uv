@@ -88,6 +88,10 @@ fails. Use `--verify-only --output <directory>` to repeat validation of retained
 rebuilding. CI uploads the reports, logs, wheels, and symbols for seven days, excluding the large
 unprocessed wheels.
 
+Pushes run the small fixture. To run the full comparison, dispatch the workflow with `uv` enabled
+and select all platforms or one platform. Linux uses the repository's larger Depot runner to provide
+headroom for full debug information and fat LTO.
+
 This comparison uses native runners without PGO, manylinux containers, cross compilation, or
 production signing. It measures the effect of enabling symbols on the uv dependency graph; its
 baseline is not a byte-for-byte reproduction of published release artifacts.

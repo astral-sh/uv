@@ -6,7 +6,6 @@ Only this standalone fixture is compiled; the uv workspace is not built.
 
 import argparse
 import base64
-import contextlib
 import csv
 import hashlib
 import io
@@ -29,20 +28,41 @@ FUNCTIONS = {"rust_frame": "main.rs", "native_frame": "native.c"}
 def run(arguments, *, cwd=FIXTURE, env=None, log=None, allowed_exit_codes=(0,)):
     print("+", " ".join(map(str, arguments)), flush=True)
     # Keep partial build logs on disk even if a large build is interrupted.
-    with log.open("w", encoding="utf-8") if log else contextlib.nullcontext() as stream:
+    if log:
+        with (
+            log.open("w", encoding="utf-8") as stream,
+            subprocess.Popen(
+                list(map(str, arguments)),
+                cwd=cwd,
+                env=env,
+                encoding="utf-8",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            ) as process,
+        ):
+            for line in process.stdout:
+                stream.write(line)
+                if line.lstrip().startswith(
+                    ("Compiling ", "Finished ", "error:", "warning:")
+                ):
+                    print(line.rstrip(), flush=True)
+            returncode = process.wait()
+        output = log.read_text(encoding="utf-8")
+    else:
         result = subprocess.run(
             list(map(str, arguments)),
             cwd=cwd,
             env=env,
             encoding="utf-8",
-            stdout=stream if log else subprocess.PIPE,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
         )
-    output = log.read_text(encoding="utf-8") if log else result.stdout
-    if result.returncode not in allowed_exit_codes:
+        returncode = result.returncode
+        output = result.stdout
+    if returncode not in allowed_exit_codes:
         tail = "\n".join(output.splitlines()[-80:])
-        raise RuntimeError(f"Command failed ({result.returncode}):\n{tail}")
+        raise RuntimeError(f"Command failed ({returncode}):\n{tail}")
     return output
 
 
