@@ -7,6 +7,7 @@ import os
 import platform
 import re
 import shutil
+import statistics
 import sys
 import tempfile
 import time
@@ -410,7 +411,75 @@ def build(output, report, tools, system, host):
             save_report(output, report)
 
 
-def verify(output, report, tools, system):
+def benchmark_uv(output, report):
+    directory = output / "benchmarks"
+    directory.mkdir(exist_ok=True)
+    results = {}
+    with tempfile.TemporaryDirectory(prefix="uv-symbol-benchmark-") as temporary:
+        cache = Path(temporary) / "cache"
+        for workload in ("jupyter", "trio"):
+            requirements = ROOT / "test" / "requirements" / f"{workload}.in"
+            compiled = directory / f"{workload}.txt"
+            arguments = [
+                "--no-config",
+                "--no-progress",
+                "--cache-dir",
+                cache,
+                "pip",
+                "compile",
+                requirements,
+                "--python",
+                sys.executable,
+                "--exclude-newer",
+                "2026-06-30T00:00:00Z",
+                "--no-build",
+                "--no-header",
+                "--no-annotate",
+                "--quiet",
+                "--output-file",
+                compiled,
+            ]
+            binaries = {
+                mode: output / mode / report["executables"][0]
+                for mode in ("baseline", "symbols")
+            }
+            compiled.unlink(missing_ok=True)
+            run([binaries["baseline"], *arguments], cwd=ROOT)
+            expected = digest(compiled)
+            samples = {mode: [] for mode in binaries}
+            # Prime both binaries, then alternate order to reduce time/order bias.
+            # Deleting the output avoids reusing its pins on the next resolution.
+            for iteration in range(22):
+                modes = ("baseline", "symbols")
+                if iteration % 2:
+                    modes = tuple(reversed(modes))
+                for mode in modes:
+                    compiled.unlink()
+                    started = time.perf_counter()
+                    run([binaries[mode], *arguments, "--offline"], cwd=ROOT)
+                    seconds = time.perf_counter() - started
+                    if digest(compiled) != expected:
+                        raise RuntimeError(f"{mode} changed the {workload} resolution")
+                    if iteration >= 2:
+                        samples[mode].append(seconds)
+            results[workload] = {
+                "requirements_sha256": digest(requirements),
+                "resolution_sha256": expected,
+                "python": sys.version,
+                "samples_seconds": samples,
+                "median_seconds": {
+                    mode: statistics.median(values) for mode, values in samples.items()
+                },
+            }
+            medians = results[workload]["median_seconds"]
+            results[workload]["symbols_to_baseline_ratio"] = (
+                medians["symbols"] / medians["baseline"]
+            )
+            report["benchmarks"] = results
+            save_report(output, report)
+
+
+def verify(output, report, tools, system, *, benchmark=False):
     directory = output / "symbols"
     names = report["executables"]
     for mode, measured in report["builds"].items():
@@ -480,12 +549,19 @@ def verify(output, report, tools, system):
         - baseline["executables"][name]["stripped_executable_bytes"]
         for name in names
     }
+    if benchmark:
+        benchmark_uv(output, report)
     save_report(output, report)
     print(json.dumps(report, indent=2))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--benchmark",
+        action="store_true",
+        help="Compare repeated offline resolutions after verifying the binaries",
+    )
     parser.add_argument(
         "--pgo",
         action="store_true",
@@ -554,7 +630,7 @@ def main():
             "scope": "Native release profile, fat LTO, self-update, cargo-auditable; optional release PGO training; no manylinux container or release signing",
         }
         build(output, report, tools, system, host)
-    verify(output, report, tools, system)
+    verify(output, report, tools, system, benchmark=args.benchmark)
 
 
 if __name__ == "__main__":

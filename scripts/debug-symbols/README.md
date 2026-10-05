@@ -126,6 +126,15 @@ Both modes start with empty build and training directories. This requires four o
 platform, so PGO workflow jobs have a three-hour timeout. Build durations are observations of the
 entire experiment, not application performance benchmarks.
 
+Run with Python 3.12 and pass `--benchmark`, or enable the workflow's `benchmark` input, for a small
+runtime comparison of the verified binaries. It resolves the existing Jupyter and Trio requirements
+against one primed cache, with two warmups and twenty timed offline resolutions per build. Build
+order alternates; output files are deleted between runs to avoid reusing their pins. Both builds
+must produce identical resolutions. The report retains every timing and median ratio. These
+single-runner measurements cover two warm resolver workloads, not overall application performance.
+This option also works with `--verify-only` / `verify-run`, so retained PGO binaries can be
+benchmarked without compiling again.
+
 ### Native uv measurements
 
 Single cold comparisons of uv 0.12.23 with Rust 1.99.0 and Maturin 1.15.0 produced the following
