@@ -4965,9 +4965,9 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 
 [[package]]
 name = "serc"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29ef3086709b7f9d33f0e5718a454ac7c934ed41e5fd31329e9be6e7ca52fae1"
+checksum = "fa78fd7a77784d9a2e880d83c1f9a7946720c0aaaa27418fe028a10df9ef6200"
 dependencies = [
  "encoding_rs",
  "hashbrown 0.17.1",
