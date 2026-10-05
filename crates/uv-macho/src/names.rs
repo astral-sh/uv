@@ -21,6 +21,26 @@ impl<'a> InstallName<'a> {
     }
 }
 
+/// A nonempty code-signing identifier without interior NUL bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SigningIdentifier(CString);
+
+impl SigningIdentifier {
+    /// Validate an identifier without requiring UTF-8.
+    pub fn new(identifier: &[u8]) -> Result<Self, Error> {
+        let identifier = CString::new(identifier).map_err(|_| Error::InvalidIdentifier)?;
+        if identifier.is_empty() {
+            return Err(Error::InvalidIdentifier);
+        }
+
+        Ok(Self(identifier))
+    }
+
+    pub(crate) fn as_c_str(&self) -> &CStr {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::InstallName;

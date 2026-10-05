@@ -1,4 +1,4 @@
-//! Install-name editing for thin 64-bit macOS Mach-O dylibs.
+//! Install-name editing and ad-hoc signing for thin 64-bit macOS Mach-O dylibs.
 
 use std::num::TryFromIntError;
 
@@ -6,10 +6,12 @@ mod bytes;
 mod format;
 mod macho;
 mod names;
+mod regions;
+mod signature;
 
-pub use names::InstallName;
+pub use names::{InstallName, SigningIdentifier};
 
-/// An error reading or editing a Mach-O image.
+/// An error reading, editing, or signing a Mach-O image.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
     #[error("Malformed Mach-O: {0}")]
@@ -22,6 +24,8 @@ pub enum Error {
     InsufficientHeaderPadding,
     #[error("The install name must be nonempty and contain no NUL bytes")]
     InvalidName,
+    #[error("The signing identifier must be nonempty and contain no NUL bytes")]
+    InvalidIdentifier,
     #[error("Mach-O image exceeds the supported size")]
     TooLarge,
     #[error("Mach-O integer exceeds the supported size")]
@@ -46,6 +50,11 @@ pub struct EditedDylib {
 }
 
 impl EditedDylib {
+    /// Consume the edited image and regenerate its ad-hoc code signature.
+    pub fn adhoc_sign(self, identifier: &SigningIdentifier) -> Result<SignedDylib, Error> {
+        adhoc_sign(&self.bytes, identifier)
+    }
+
     /// Inspect the edited image without changing it.
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
@@ -55,4 +64,45 @@ impl EditedDylib {
     pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
+}
+
+/// A dylib with a completed ad-hoc signature covering its bytes.
+#[derive(Debug, PartialEq, Eq)]
+pub struct SignedDylib {
+    bytes: Vec<u8>,
+}
+
+impl SignedDylib {
+    /// Borrow the signed image without invalidating its signature.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Extract the image, discarding its signing state.
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+
+/// Generate an ad-hoc signature, retaining supported signing metadata.
+///
+/// Uses `identifier` when the image has no signing identifier. Existing requirements,
+/// entitlements, and runtime metadata are retained; certificate identity is removed.
+/// Unsupported signing metadata produces an error. The input is never modified.
+pub fn adhoc_sign(image: &[u8], identifier: &SigningIdentifier) -> Result<SignedDylib, Error> {
+    Ok(SignedDylib {
+        bytes: macho::Layout::parse(image)?.adhoc_sign(identifier)?,
+    })
+}
+
+/// Replace a dylib's install name and generate an ad-hoc signature.
+///
+/// The intermediate [`EditedDylib`] is consumed by signing. The input is never modified,
+/// including when editing or signing fails.
+pub fn set_install_name(
+    image: &[u8],
+    name: &InstallName,
+    identifier: &SigningIdentifier,
+) -> Result<SignedDylib, Error> {
+    replace_install_name(image, name)?.adhoc_sign(identifier)
 }
