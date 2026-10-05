@@ -1897,7 +1897,8 @@
             "frozen-lockfile",
             "minimum-libc-version",
             "build-dependency-check",
-            "build-lazy-imports"
+            "build-lazy-imports",
+            "native-macho-edit"
           ]
         },
         {
