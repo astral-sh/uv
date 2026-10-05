@@ -8,7 +8,6 @@ use thiserror::Error;
 
 use tracing::debug;
 use uv_cache::Cache;
-use uv_cli::version::ProjectVersionInfo;
 use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
@@ -46,28 +45,32 @@ use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
-/// Display version information for uv itself (`uv self version`)
-pub(crate) fn self_version(
-    short: bool,
-    output_format: VersionFormat,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    let version_info = uv_cli::version::uv_self_version();
-    match output_format {
-        VersionFormat::Text => {
-            if short {
-                writeln!(printer.stdout(), "{}", version_info.version().cyan())?;
-            } else {
-                writeln!(printer.stdout(), "uv {}", version_info.cyan())?;
-            }
-        }
-        VersionFormat::Json => {
-            let string = serde_json::to_string_pretty(&version_info)?;
-            writeln!(printer.stdout(), "{string}")?;
+/// Version information for a project (`uv version`).
+#[derive(serde::Serialize)]
+struct ProjectVersionInfo {
+    /// Name of the package.
+    package_name: Option<String>,
+    /// Version, such as "0.5.1".
+    version: String,
+    /// Always `null` for project versions, kept for backwards compatibility.
+    // TODO(zanieb): Remove this field in a breaking release.
+    commit_info: Option<()>,
+}
+
+impl ProjectVersionInfo {
+    fn new(package_name: Option<&PackageName>, version: &Version) -> Self {
+        Self {
+            package_name: package_name.map(ToString::to_string),
+            version: version.to_string(),
+            commit_info: None,
         }
     }
+}
 
-    Ok(ExitStatus::Success)
+impl std::fmt::Display for ProjectVersionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.version)
+    }
 }
 
 /// Read or update project version (`uv version`)

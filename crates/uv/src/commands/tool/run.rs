@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::Path;
@@ -14,7 +15,6 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyMode, DependencyModifiers, Excludes, GitLfsSetting,
@@ -146,7 +146,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
-    command: Option<ExternalCommand>,
+    command: Option<Vec<OsString>>,
     from: Option<String>,
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -206,7 +206,7 @@ pub(crate) async fn run(
     let env_file_environment = if no_env_file {
         Vec::new()
     } else {
-        read_env_files(env_file.iter())?
+        read_env_files(env_file.as_slice())?
     };
 
     let Some(command) = command else {
@@ -216,8 +216,7 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Error);
     };
 
-    let (target, args) = command.split();
-    let Some(target) = target else {
+    let Some((target, args)) = command.split_first() else {
         return Err(anyhow::anyhow!("No tool command provided"));
     };
 

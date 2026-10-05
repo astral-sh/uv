@@ -43,7 +43,7 @@ pub(crate) use project::run::{ParsedRunCommand, RunCommand, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
 pub(crate) use project::upgrade::upgrade;
-pub(crate) use project::version::{project_version, self_version};
+pub(crate) use project::version::project_version;
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
@@ -73,6 +73,7 @@ use uv_installer::{compile_files, compile_tree};
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
+pub(crate) use version::self_version;
 pub(crate) use workspace::dir::dir;
 pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
@@ -103,6 +104,7 @@ mod self_update;
 mod tool;
 mod update_shell;
 mod venv;
+mod version;
 mod workspace;
 
 /// The process status for a command that completed without a final error to render.
@@ -255,12 +257,10 @@ mod error_tests {
 ///
 /// These values intentionally do not mutate uv's process environment and cannot mutate
 /// the current uv process' settings.
-fn read_env_files<'a>(
-    env_file: impl DoubleEndedIterator<Item = &'a PathBuf>,
-) -> anyhow::Result<Vec<(String, String)>> {
+fn read_env_files(env_files: &[PathBuf]) -> anyhow::Result<Vec<(String, String)>> {
     let mut environment = Vec::new();
 
-    for env_file_path in env_file.rev().map(PathBuf::as_path) {
+    for env_file_path in env_files.iter().rev().map(PathBuf::as_path) {
         let iter = match dotenvy::from_path_iter(env_file_path) {
             Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 bail!(

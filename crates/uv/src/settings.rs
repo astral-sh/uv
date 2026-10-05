@@ -1,4 +1,5 @@
 use std::env::VarError;
+use std::ffi::OsString;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -968,7 +969,7 @@ impl RunSettings {
 /// The resolved settings to use for a `tool run` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct ToolRunSettings {
-    pub(crate) command: Option<ExternalCommand>,
+    pub(crate) command: Option<Vec<OsString>>,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<RequirementsInput>,
@@ -1082,7 +1083,7 @@ impl ToolRunSettings {
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
 
         Ok(Self {
-            command,
+            command: command.map(|ExternalCommand::Cmd(command)| command),
             from,
             with: with
                 .into_iter()

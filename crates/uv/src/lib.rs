@@ -69,7 +69,7 @@ pub(crate) mod printer;
 pub(crate) mod settings;
 
 /// Construct the shared HTTP client builder from the resolved global settings.
-pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
+fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
         globals.network_settings.system_certs,
@@ -166,7 +166,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }) = **command
     {
         Some(ParsedRunCommand::from_args(
-            command, module, script, gui_script,
+            command.as_slice(),
+            module,
+            script,
+            gui_script,
         )?)
     } else {
         None
@@ -350,11 +353,15 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     // If the target is a PEP 723 script, parse it.
     let (run_script, run_command) = if let Some(parsed_run_command) = parsed_run_command {
         let (script, run_command) = parsed_run_command
-            .resolve(
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            )
+            .resolve(&|| {
+                let settings = GlobalSettings::resolve(
+                    &cli.top_level.global_args,
+                    filesystem.as_ref(),
+                    &environment,
+                    None,
+                )?;
+                Ok(base_client_builder(&settings))
+            })
             .await?;
         (script, Some(run_command))
     } else {
@@ -1811,6 +1818,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &workspace_cache,
                 printer,
                 globals.preview,
+                commands::diagnostics::write_error_chain,
             ))
             .await
         }

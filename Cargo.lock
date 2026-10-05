@@ -7416,6 +7416,7 @@ dependencies = [
  "fs-err",
  "nix 0.31.3",
  "same-file",
+ "tokio",
  "temp-env",
  "tempfile",
  "tracing",
