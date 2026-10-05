@@ -41,6 +41,29 @@ impl<'a> ArtifactHashPolicy<'a> {
         Self::new(required, cache_verification)
     }
 
+    /// Return hash checks for a cached registry artifact.
+    ///
+    /// Caller hash requirements are already enforced when building the registry wheel index.
+    /// Return `None` if a proxied artifact has no matching file in the current distribution.
+    /// Direct indexes can reuse cached artifacts without one.
+    pub(crate) fn for_cached_registry(
+        is_proxy: bool,
+        file: Option<&'a RegistryFile>,
+    ) -> Option<Self> {
+        let cache_verification = if is_proxy {
+            let hashes = &file?.hashes;
+            if hashes.is_empty() {
+                ArchiveHashPolicy::None
+            } else {
+                ArchiveHashPolicy::Any(hashes.as_slice())
+            }
+        } else {
+            ArchiveHashPolicy::None
+        };
+
+        Some(Self::new(ArchiveHashPolicy::None, cache_verification))
+    }
+
     /// Apply index hashes when the route has no separate cache verification policy.
     pub(crate) fn with_index_hashes(self, hashes: &'a [HashDigest]) -> Self {
         let cache_verification = if self.cache_verification.requires_validation() {
@@ -71,7 +94,7 @@ impl<'a> ArtifactHashPolicy<'a> {
         artifact.satisfies(self.cache_verification) && artifact.has_digests(self.required)
     }
 
-    pub(crate) fn validate_download(
+    fn validate_download(
         self,
         artifact: &impl Display,
         hashes: &[HashDigest],
