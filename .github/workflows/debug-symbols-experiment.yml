@@ -110,7 +110,9 @@ jobs:
         with:
           name: uv-debug-symbols-${{ runner.os }}-${{ runner.arch }}
           path: |
-            target/uv-debug-symbols-experiment
+            target/uv-debug-symbols-experiment/report.json
+            target/uv-debug-symbols-experiment/baseline
+            target/uv-debug-symbols-experiment/symbols
             !target/uv-debug-symbols-experiment/**/*.original.whl
           if-no-files-found: error
           compression-level: 1
