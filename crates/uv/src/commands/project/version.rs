@@ -32,9 +32,8 @@ use uv_workspace::{
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::add::{AddTarget, PythonTarget};
-use crate::commands::project::edit::ProjectEdit;
-use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::edit::{ProjectEdit, PythonTarget};
+use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::sync::MalwareCheckContext;
@@ -581,8 +580,8 @@ async fn lock_and_sync(
     let extras = ExtrasSpecification::default().with_defaults(default_extras);
     let install_options = InstallOptions::default();
 
-    // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
-    let target = if no_sync {
+    // Discover the interpreter or environment used to lock and sync the project.
+    let python_target = if no_sync {
         // Discover the interpreter.
         let project_python = ProjectPythonRequest::from_request(
             python.as_deref().map(PythonRequest::parse),
@@ -608,7 +607,7 @@ async fn lock_and_sync(
         .await?
         .into_interpreter();
 
-        AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
+        PythonTarget::Interpreter(interpreter)
     } else {
         // Discover or create the virtual environment.
         let environment = ProjectEnvironment::get_or_init(
@@ -632,14 +631,14 @@ async fn lock_and_sync(
         .await?
         .into_environment()?;
 
-        AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
+        PythonTarget::Environment(environment)
     };
 
     // Determine the lock mode.
     let mode = if let LockCheck::Enabled(lock_check) = lock_check {
-        LockMode::Locked(target.interpreter(), lock_check)
+        LockMode::Locked(python_target.interpreter(), lock_check)
     } else {
-        LockMode::Write(target.interpreter())
+        LockMode::Write(python_target.interpreter())
     };
 
     // Initialize any shared state.
@@ -660,7 +659,7 @@ async fn lock_and_sync(
             printer,
             preview,
         )
-        .execute((&target).into()),
+        .execute(project.workspace().into()),
     )
     .await
     {
@@ -668,12 +667,7 @@ async fn lock_and_sync(
         Err(err) => return Err(UvError::from(err).into()),
     };
 
-    let AddTarget::Project(project, environment) = target else {
-        // If we're not adding to a project, exit early.
-        return Ok(ExitStatus::Success);
-    };
-
-    let PythonTarget::Environment(venv) = &*environment else {
+    let PythonTarget::Environment(venv) = &python_target else {
         // If we're not syncing, exit early.
         return Ok(ExitStatus::Success);
     };
@@ -681,17 +675,11 @@ async fn lock_and_sync(
     // Perform a full sync, because we don't know what exactly is affected by the version.
 
     // Identify the installation target.
-    let target = match &project {
-        VirtualProject::Project(project) => InstallTarget::Project {
-            workspace: project.workspace(),
-            name: project.project_name(),
-            lock: &lock,
-        },
-        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-            workspace,
-            lock: &lock,
-        },
-    };
+    let target = InstallTarget::from_project(
+        &project,
+        &lock,
+        PackageSelection::from_args(false, &[], project.project_name()),
+    );
 
     let state = state.fork();
 
