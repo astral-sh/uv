@@ -25,7 +25,15 @@ FIXTURE = Path(__file__).resolve().parent
 FUNCTIONS = {"rust_frame": "main.rs", "native_frame": "native.c"}
 
 
-def run(arguments, *, cwd=FIXTURE, env=None, log=None, allowed_exit_codes=(0,)):
+def run(
+    arguments,
+    *,
+    cwd=FIXTURE,
+    env=None,
+    log=None,
+    allowed_exit_codes=(0,),
+    merge_stderr=True,
+):
     print("+", " ".join(map(str, arguments)), flush=True)
     # Keep partial build logs on disk even if a large build is interrupted.
     if log:
@@ -37,7 +45,7 @@ def run(arguments, *, cwd=FIXTURE, env=None, log=None, allowed_exit_codes=(0,)):
                 env=env,
                 encoding="utf-8",
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.STDOUT if merge_stderr else None,
             ) as process,
         ):
             for line in process.stdout:
@@ -66,7 +74,7 @@ def run(arguments, *, cwd=FIXTURE, env=None, log=None, allowed_exit_codes=(0,)):
             env=env,
             encoding="utf-8",
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.STDOUT if merge_stderr else None,
             check=False,
         )
         returncode = result.returncode
@@ -179,8 +187,13 @@ def symbolize(binary, symbols, address, tools, system):
     output = run(
         [*arguments, hex(address)],
         allowed_exit_codes=(0, 1) if missing_pdb else (0,),
+        # Symbolizer diagnostics must not be parsed as part of its JSON response.
+        merge_stderr=False,
     )
-    decoded = json.loads(output)
+    try:
+        decoded = json.loads(output)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Invalid symbolizer JSON output:\n{output}") from error
     # LLVM reports a missing PDB as an error instead of returning an unknown frame.
     if missing_pdb and isinstance(decoded, dict):
         expected = f"'{symbols.name}': no such file or directory"
