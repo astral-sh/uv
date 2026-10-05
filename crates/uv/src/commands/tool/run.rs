@@ -4,6 +4,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use uv_dispatch::PlatformState;
 use uv_distribution_types::RequirementScope;
 
 use anyhow::{Context, bail};
@@ -53,9 +54,7 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
-use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
-};
+use crate::commands::project::{EnvironmentSpecification, ProjectError, resolve_names};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};

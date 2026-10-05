@@ -11,7 +11,7 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
-    ScriptInterpreter, UniversalState,
+    ScriptInterpreter,
 };
 use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
@@ -31,6 +31,7 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, KeyringProviderType, TargetTriple,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_lock::Lock;

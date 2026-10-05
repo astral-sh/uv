@@ -19,7 +19,7 @@ use uv_configuration::{
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
     InstallOptions, TargetTriple,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState, UniversalState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     Dist, IndexUrl, Name, NameRequirementSpecification, Resolution, ResolvedDist, SourceDist,
@@ -56,8 +56,8 @@ use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
-    EnvironmentUpdate, LinkErrorReporting, MalwareFindings, MissingLockfileSource, PlatformState,
-    ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ScriptEnvironment, UniversalState,
+    EnvironmentUpdate, LinkErrorReporting, MalwareFindings, MissingLockfileSource,
+    ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ScriptEnvironment,
     detect_conflicts, script_extra_build_requires, script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, UvError};

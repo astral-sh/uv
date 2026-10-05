@@ -11,6 +11,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
 use uv_lock::implicit_constraints_marker;
@@ -37,7 +38,6 @@ use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockRes
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
-    UniversalState,
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;

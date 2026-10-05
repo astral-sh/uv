@@ -17,7 +17,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
     ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
@@ -111,7 +111,7 @@ impl Hinted for NoExecutablesError {
     }
 }
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, PreferenceLocation, ProjectError, PythonRequestSource,
+    EnvironmentSpecification, PreferenceLocation, ProjectError, PythonRequestSource,
     lock::ValidatedLock,
 };
 use crate::commands::reporters::PythonDownloadReporter;

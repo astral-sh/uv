@@ -9,6 +9,7 @@ use uv_cache_info::Timestamp;
 use uv_cli::TreeFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple};
+use uv_dispatch::UniversalState;
 use uv_distribution_types::IndexCapabilities;
 use uv_lock::{PackageMap, TreeDisplay, TreeJsonTarget};
 use uv_normalize::DefaultGroups;
@@ -33,7 +34,7 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
-    ScriptInterpreter, UniversalState,
+    ScriptInterpreter,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, UvError};

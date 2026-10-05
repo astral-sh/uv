@@ -10,6 +10,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
+use uv_dispatch::UniversalState;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
@@ -33,7 +34,7 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, UniversalState,
+    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter,
 };
 use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
