@@ -6535,6 +6535,7 @@ dependencies = [
  "bitflags 2.13.1",
  "fs-err",
  "http",
+ "indoc",
  "itertools 0.14.0",
  "jiff",
  "memchr",

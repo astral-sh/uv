@@ -276,31 +276,37 @@ impl Deref for IndexUrl {
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct IndexLocations {
     indexes: Vec<Index>,
+    proxy_indexes: Vec<Index>,
+    // A proxy and an ordinary index can share a URL. URL policy lookups use the first definition
+    // in their original declaration order, even though the definitions are stored separately.
+    index_order: Vec<IndexKind>,
     flat_index: Vec<Index>,
     no_index: bool,
     pub(crate) routes: Vec<Arc<ProxyRoute>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IndexKind {
+    Index,
+    Proxy,
+}
+
 #[expect(
     clippy::missing_fields_in_debug,
-    reason = "routes are derived from the displayed index configuration"
+    reason = "routes and index ordering are internal implementation details"
 )]
 impl std::fmt::Debug for IndexLocations {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("IndexLocations")
-            .field("indexes", &self.indexes)
+        let mut debug = formatter.debug_struct("IndexLocations");
+        debug.field("indexes", &self.indexes);
+        if !self.proxy_indexes.is_empty() {
+            debug.field("proxy_indexes", &self.proxy_indexes);
+        }
+        debug
             .field("flat_index", &self.flat_index)
             .field("no_index", &self.no_index)
             .finish()
     }
-}
-
-/// Exclude proxy [`Index`] entries, preserving iteration order and duplicate definitions.
-fn non_proxy_indexes<'a>(
-    indexes: impl DoubleEndedIterator<Item = &'a Index>,
-) -> impl DoubleEndedIterator<Item = &'a Index> {
-    indexes.filter(|index| index.proxy_for.is_none())
 }
 
 impl IndexLocations {
@@ -310,14 +316,7 @@ impl IndexLocations {
         flat_index: Vec<Index>,
         no_index: bool,
     ) -> Result<Self, ProxyIndexConfigError> {
-        let mut locations = Self {
-            indexes,
-            flat_index,
-            no_index,
-            routes: Vec::new(),
-        };
-        locations.routes = crate::proxy_index::build_routes(&locations)?;
-        Ok(locations)
+        Self::default().combine(indexes, flat_index, no_index)
     }
 
     /// Return configured package indexes in declaration order, excluding proxy indexes.
@@ -325,14 +324,9 @@ impl IndexLocations {
     /// When ordinary index names repeat, the first definition wins.
     pub(crate) fn configured_indexes(&self) -> impl Iterator<Item = &Index> {
         let mut seen = FxHashSet::default();
-        non_proxy_indexes(self.configured_indexes_and_proxies())
-            .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-    }
-
-    /// Return configured package indexes and proxies in declaration order.
-    fn configured_indexes_and_proxies(&self) -> impl DoubleEndedIterator<Item = &Index> {
-        let enabled = !self.no_index;
-        self.indexes.iter().filter(move |_| enabled)
+        self.indexes.iter().filter(move |index| {
+            !self.no_index && index.name.as_ref().is_none_or(|name| seen.insert(name))
+        })
     }
 
     /// Return the configured proxy indexes in declaration order.
@@ -340,8 +334,7 @@ impl IndexLocations {
     /// Proxy indexes are not separate package sources. They provide request URLs and
     /// authentication for their original indexes.
     pub fn proxy_indexes(&self) -> impl Iterator<Item = &Index> {
-        self.configured_indexes_and_proxies()
-            .filter(|index| index.proxy_for.is_some())
+        self.proxy_indexes.iter().filter(|_| !self.no_index)
     }
 
     /// Combine a set of index locations.
@@ -351,16 +344,24 @@ impl IndexLocations {
     ///
     /// If the current index location has an `index` set, it will be preserved.
     pub fn combine(
-        self,
+        mut self,
         indexes: Vec<Index>,
         flat_index: Vec<Index>,
         no_index: bool,
     ) -> Result<Self, ProxyIndexConfigError> {
-        Self::new(
-            self.indexes.into_iter().chain(indexes).collect(),
-            self.flat_index.into_iter().chain(flat_index).collect(),
-            self.no_index || no_index,
-        )
+        for index in indexes {
+            if index.proxy_for.is_some() {
+                self.index_order.push(IndexKind::Proxy);
+                self.proxy_indexes.push(index);
+            } else {
+                self.index_order.push(IndexKind::Index);
+                self.indexes.push(index);
+            }
+        }
+        self.flat_index.extend(flat_index);
+        self.no_index |= no_index;
+        self.routes = crate::proxy_index::build_routes(&self)?;
+        Ok(self)
     }
 
     /// Returns `true` if no index configuration is set, i.e., the [`IndexLocations`] matches the
@@ -446,8 +447,10 @@ impl<'a> IndexLocations {
     }
 
     /// Return an iterator over the [`FlatIndexLocation`] entries.
-    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        non_proxy_indexes(self.flat_index.iter())
+    pub fn flat_indexes(&'a self) -> impl DoubleEndedIterator<Item = &'a Index> + 'a {
+        self.flat_index
+            .iter()
+            .filter(|index| index.proxy_for.is_none())
     }
 
     /// Return the `--no-index` flag.
@@ -463,7 +466,7 @@ impl<'a> IndexLocations {
     /// that the last-defined index is the first item in the vector.
     pub fn allowed_indexes(&'a self) -> Vec<&'a Index> {
         if self.no_index {
-            non_proxy_indexes(self.flat_index.iter()).rev().collect()
+            self.flat_indexes().rev().collect()
         } else {
             let mut indexes = vec![];
 
@@ -501,12 +504,12 @@ impl<'a> IndexLocations {
     /// that the last-defined index is the first item in the vector.
     pub fn known_indexes(&'a self) -> impl Iterator<Item = &'a Index> {
         if self.no_index {
-            Either::Left(non_proxy_indexes(self.flat_index.iter()).rev())
+            Either::Left(self.flat_indexes().rev())
         } else {
             Either::Right(
                 std::iter::once(&*DEFAULT_INDEX)
-                    .chain(non_proxy_indexes(self.flat_index.iter()).rev())
-                    .chain(non_proxy_indexes(self.indexes.iter()).rev()),
+                    .chain(self.flat_indexes().rev())
+                    .chain(self.indexes.iter().rev()),
             )
         }
     }
@@ -534,8 +537,14 @@ impl<'a> IndexLocations {
 
     /// Return the configured index matching the given URL.
     pub(crate) fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
-        self.indexes
+        let mut indexes = self.indexes.iter();
+        let mut proxy_indexes = self.proxy_indexes.iter();
+        self.index_order
             .iter()
+            .filter_map(|kind| match kind {
+                IndexKind::Index => indexes.next(),
+                IndexKind::Proxy => proxy_indexes.next(),
+            })
             .find(|index| index.url().is_same_index(url))
     }
 
@@ -711,7 +720,6 @@ mod tests {
         let locations = IndexLocations::new(vec![proxy], Vec::new(), false)?;
 
         assert_eq!(locations.configured_indexes().count(), 0);
-        assert_eq!(locations.configured_indexes_and_proxies().count(), 1);
         assert_eq!(locations.proxy_indexes().count(), 1);
         assert_eq!(
             locations.default_index().map(Index::raw_url),
@@ -755,6 +763,18 @@ mod tests {
                 .all(|index| index.url != physical_url)
         );
 
+        let ordinary = Index::from_str("https://ordinary.example.com/simple/")?;
+        let locations = locations.combine(vec![ordinary], Vec::new(), false)?;
+        assert_eq!(
+            index_urls(locations.simple_indexes()),
+            ["https://ordinary.example.com/simple/"]
+        );
+        assert_eq!(
+            index_urls(locations.proxy_indexes()),
+            [physical_url.as_str()]
+        );
+        assert_eq!(locations.proxy_routes().count(), 1);
+
         Ok(())
     }
 
@@ -765,16 +785,44 @@ mod tests {
             "https://proxy.example.com/simple/",
             "https://proxy.example.com/files/",
         )?;
-        let locations = IndexLocations::new(vec![proxy], Vec::new(), true)?;
+        let locations = IndexLocations::new(vec![proxy], Vec::new(), false)?.combine(
+            Vec::new(),
+            Vec::new(),
+            true,
+        )?;
 
         assert!(locations.default_index().is_none());
         assert_eq!(locations.configured_indexes().count(), 0);
-        assert_eq!(locations.configured_indexes_and_proxies().count(), 0);
         assert_eq!(locations.proxy_indexes().count(), 0);
         assert_eq!(locations.indexes().count(), 0);
         assert_eq!(locations.fetch_indexes().count(), 0);
         assert_eq!(locations.simple_indexes().count(), 0);
         assert!(locations.allowed_indexes().is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn url_lookup_preserves_proxy_declaration_order() -> Result<(), Box<dyn Error>> {
+        let proxy = configured_proxy_index(
+            "socket",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+        )?;
+        let ordinary = Index::from_extra_index_url(proxy.url.clone());
+
+        for (first, second) in [(proxy.clone(), ordinary.clone()), (ordinary, proxy)] {
+            for no_index in [false, true] {
+                let locations =
+                    IndexLocations::new(vec![first.clone(), second.clone()], Vec::new(), no_index)?;
+                let combined = IndexLocations::new(vec![first.clone()], Vec::new(), no_index)?
+                    .combine(vec![second.clone()], Vec::new(), false)?;
+
+                for locations in [locations, combined] {
+                    assert_eq!(locations.index_for_url(first.url()), Some(&first));
+                }
+            }
+        }
 
         Ok(())
     }

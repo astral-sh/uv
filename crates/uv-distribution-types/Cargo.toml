@@ -54,6 +54,7 @@ url = { workspace = true }
 version-ranges = { workspace = true }
 
 [dev-dependencies]
+indoc = { workspace = true }
 toml = { workspace = true }
 
 [features]

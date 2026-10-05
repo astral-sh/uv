@@ -874,6 +874,7 @@ mod tests {
 
     use super::*;
     use http::HeaderValue;
+    use indoc::formatdoc;
 
     use crate::{IndexLocations, ProxyIndexConfigError};
 
@@ -971,8 +972,13 @@ mod tests {
             "files%5cprivate/",
             "files%5Cprivate/",
         ] {
-            let configuration = format!(
-                "name = \"socket\"\nurl = \"https://proxy.example.com/simple/\"\nartifact-base-url = \"https://proxy.example.com/{path}\"\nproxy-for = \"pypi\"\n"
+            let configuration = formatdoc!(
+                r#"
+                name = "socket"
+                url = "https://proxy.example.com/simple/"
+                artifact-base-url = "https://proxy.example.com/{path}"
+                proxy-for = "pypi"
+                "#
             );
 
             let index: Index = toml::from_str(&configuration)?;

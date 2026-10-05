@@ -845,7 +845,11 @@ mod tests {
                 Some("pypi"),
             )?;
             assert!(matches!(
-                IndexLocations::new(vec![first, second], Vec::new(), false),
+                IndexLocations::new(vec![first.clone(), second.clone()], Vec::new(), false),
+                Err(ProxyIndexConfigError::DuplicateCanonicalIndex { .. })
+            ));
+            assert!(matches!(
+                pypi_locations(first)?.combine(vec![second], Vec::new(), false),
                 Err(ProxyIndexConfigError::DuplicateCanonicalIndex { .. })
             ));
         }
