@@ -108,6 +108,12 @@ Maturin build uses that mode's merged profile. Profiles are not reused between d
 Windows retains the static CRT flags when setting `RUSTFLAGS`, and macOS disables native C/C++
 profile instrumentation in both stages, matching the release workflow.
 
+The workflow also supports native Linux ARM64 on the release's 64 GB Depot runner. It uses Rust's
+bundled LLD for the instrumented build's long-range calls and sets jemalloc's page size as in the
+release workflow. Together with Linux x86-64, macOS ARM64, and Windows x86-64, this covers the four
+target triples that use PGO in releases. The Linux experiments still run outside manylinux
+containers.
+
 The experiment retains each merged profile, training log, native build-script logs, and profile
 summary under the mode's `pgo/` directory. The report separates training and final build durations,
 records profile hashes and function counts, and summarizes missing/mismatched profile warnings from

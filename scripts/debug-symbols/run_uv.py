@@ -278,6 +278,20 @@ def build(output, report, tools, system, host):
                                 "-fno-profile-generate -fno-profile-use",
                             )
                         ).strip()
+            if host == "aarch64-unknown-linux-gnu":
+                environment["JEMALLOC_SYS_WITH_LG_PAGE"] = "16"
+                if report["pgo"]:
+                    # GNU ld cannot resolve long-range calls in the instrumented
+                    # ARM64 binary; use the same bundled LLD as the release build.
+                    linker_directory = Path(tools["llvm-profdata"]).parent / "gcc-ld"
+                    if not (linker_directory / "ld.lld").is_file():
+                        raise RuntimeError("Missing bundled ARM64 LLD")
+                    environment["RUSTFLAGS"] = " ".join(
+                        (
+                            environment.get("RUSTFLAGS", ""),
+                            f"-C link-arg=-B{linker_directory} -C link-arg=-fuse-ld=lld",
+                        )
+                    ).strip()
             if report["pgo"]:
                 environment["RUSTFLAGS"] = " ".join(
                     (
@@ -323,7 +337,9 @@ def build(output, report, tools, system, host):
                     "environment": {
                         key: environment[key]
                         for key in sorted(environment)
-                        if key.startswith(("CARGO_PROFILE_", "AWS_LC_SYS_"))
+                        if key.startswith(
+                            ("CARGO_PROFILE_", "AWS_LC_SYS_", "JEMALLOC_SYS_")
+                        )
                         or key
                         in {
                             "RUSTFLAGS",
