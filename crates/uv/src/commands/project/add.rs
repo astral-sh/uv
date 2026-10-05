@@ -55,7 +55,7 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::edit::ProjectEdit;
-use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
@@ -1394,7 +1394,12 @@ impl AddTarget {
     fn first_party_exclusions(&self, install_options: &InstallOptions) -> BTreeSet<PackageName> {
         match self {
             Self::Project(project, _) => {
-                project::sync::first_party_exclusions(project, false, &[], install_options)
+                PackageSelection::from_args(false, &[], project.project_name())
+                    .first_party_exclusions(
+                        project.workspace(),
+                        project.project_name(),
+                        install_options,
+                    )
             }
             Self::Script(..) => BTreeSet::new(),
         }
