@@ -41,7 +41,7 @@ concurrency:
 jobs:
   experiment:
     name: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && 'uv' || 'fixture' }} / ${{ matrix.os }}
-    runs-on: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && matrix.uv-runner || matrix.runner }}
+    runs-on: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && (inputs.pgo && matrix.pgo-runner || matrix.uv-runner) || matrix.runner }}
     timeout-minutes: ${{ inputs.pgo && 180 || 90 }}
     env:
       CARGO_BUILD_JOBS: ${{ startsWith(matrix.os, 'Linux') && 8 || 4 }}
@@ -64,6 +64,7 @@ jobs:
             uv-checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
           - runner: windows-2022
             uv-runner: namespace-profile-windows-2022-x86-64-16x32
+            pgo-runner: nscloud-windows-2022-amd64-32x64
             os: Windows
             uv-checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
     steps:
@@ -86,6 +87,12 @@ jobs:
       - name: Install Linux symbolizer
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y llvm
+      - name: Record Windows build capacity
+        if: env.RUN_UV == 'true' && runner.os == 'Windows'
+        run: |
+          Get-CimInstance Win32_ComputerSystem | Select-Object NumberOfLogicalProcessors, TotalPhysicalMemory
+          Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, TotalVirtualMemorySize, FreeVirtualMemory
+          Get-CimInstance Win32_PageFileUsage | Select-Object Name, AllocatedBaseSize, CurrentUsage, PeakUsage
       - name: Check fixture
         run: |
           cargo fmt --manifest-path scripts/debug-symbols/Cargo.toml --check

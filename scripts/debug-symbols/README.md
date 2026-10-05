@@ -124,7 +124,9 @@ and smoke checks run on the final PGO binaries after deleting the instrumented b
 
 Both modes start with empty build and training directories. This requires four optimized builds per
 platform, so PGO workflow jobs have a three-hour timeout. Build durations are observations of the
-entire experiment, not application performance benchmarks.
+build and training pipeline, not application performance benchmarks. Windows PGO builds use a 64 GB
+Namespace runner: the instrumented build with full debug information exhausted memory on the 32 GB
+release runner. Cargo build parallelism remains four jobs for both Windows configurations.
 
 Run with Python 3.12 and pass `--benchmark`, or enable the workflow's `benchmark` input, for a small
 runtime comparison of the verified binaries. It resolves the existing Jupyter and Trio requirements
