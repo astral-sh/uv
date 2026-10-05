@@ -15,14 +15,14 @@ use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageOverride, Reinstall,
-    TargetTriple, Upgrade,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, NoSources, Override, PackageOverride,
+    Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, HashCollection, Index, IndexCredentialsError,
-    IndexUrlError, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
+    IndexLocations, IndexUrlError, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
@@ -50,7 +50,7 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::ExtraBuildDependency;
@@ -2172,7 +2172,7 @@ impl std::ops::Deref for ScriptEnvironment {
 pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
-    settings: &ResolverInstallerSettings,
+    settings: &ResolverSettings,
     build_constraints: &Constraints,
     client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
@@ -2201,32 +2201,27 @@ pub(crate) async fn resolve_names(
     }
 
     // Extract the project settings.
-    let ResolverInstallerSettings {
-        resolver:
-            ResolverSettings {
-                build_options,
-                config_setting,
-                config_settings_package,
-                dependency_metadata,
-                exclude_newer,
-                fork_strategy: _,
-                index_locations,
-                index_strategy,
-                keyring_provider,
-                link_mode,
-                build_isolation,
-                extra_build_dependencies,
-                extra_build_variables,
-                prerelease: _,
-                resolution: _,
-                sources,
-                torch_backend,
-                cuda_driver_version,
-                amd_gpu_architecture,
-                upgrade: _,
-            },
-        compile_bytecode: _,
-        reinstall: _,
+    let ResolverSettings {
+        build_options,
+        config_setting,
+        config_settings_package,
+        dependency_metadata,
+        exclude_newer,
+        fork_strategy: _,
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        link_mode,
+        build_isolation,
+        extra_build_dependencies,
+        extra_build_variables,
+        prerelease: _,
+        resolution: _,
+        sources,
+        torch_backend,
+        cuda_driver_version,
+        amd_gpu_architecture,
+        upgrade: _,
     } = settings;
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
@@ -2596,7 +2591,7 @@ pub(crate) async fn resolve_environment(
         &extras,
         &groups,
         preferences,
-        EmptyInstalledPackages,
+        None,
         &hasher,
         &reinstall,
         &upgrade,
@@ -2994,7 +2989,7 @@ pub(crate) async fn update_environment(
         &extras,
         &groups,
         preferences,
-        site_packages.clone(),
+        Some(site_packages.clone()),
         &hasher,
         reinstall,
         upgrade,
@@ -3153,7 +3148,8 @@ pub(crate) fn detect_conflicts(
 /// Determine the [`RequirementsSpecification`] for a script.
 pub(crate) async fn script_specification(
     script: Pep723ItemRef<'_>,
-    settings: &ResolverSettings,
+    sources: &NoSources,
+    index_locations: &IndexLocations,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
@@ -3164,12 +3160,12 @@ pub(crate) async fn script_specification(
 
     let script_dir = script.directory()?;
     let script_indexes = script
-        .indexes(&settings.sources)
+        .indexes(sources)
         .iter()
         .cloned()
         .map(|index| index.relative_to(&script_dir))
         .collect::<Result<Vec<_>, _>>()?;
-    let script_sources = script.sources(&settings.sources);
+    let script_sources = script.sources(sources);
 
     let mut requirements = Vec::new();
     for requirement in dependencies.iter().cloned() {
@@ -3179,7 +3175,7 @@ pub(crate) async fn script_specification(
                 script_dir.as_ref(),
                 script_sources.as_ref(),
                 &script_indexes,
-                &settings.index_locations,
+                index_locations,
                 cache,
                 workspace_cache,
                 credentials_cache,
@@ -3206,7 +3202,7 @@ pub(crate) async fn script_specification(
                 script_dir.as_ref(),
                 script_sources.as_ref(),
                 &script_indexes,
-                &settings.index_locations,
+                index_locations,
                 cache,
                 workspace_cache,
                 credentials_cache,
@@ -3236,7 +3232,7 @@ pub(crate) async fn script_specification(
                             script_dir.as_ref(),
                             script_sources.as_ref(),
                             &script_indexes,
-                            &settings.index_locations,
+                            index_locations,
                             cache,
                             workspace_cache,
                             credentials_cache,
@@ -3256,7 +3252,7 @@ pub(crate) async fn script_specification(
                                 script_dir.as_ref(),
                                 script_sources.as_ref(),
                                 &script_indexes,
-                                &settings.index_locations,
+                                index_locations,
                                 cache,
                                 workspace_cache,
                                 credentials_cache,
@@ -3296,19 +3292,20 @@ pub(crate) async fn script_specification(
 /// Determine the extra build requires for a script.
 pub(crate) async fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
-    settings: &ResolverSettings,
+    sources: &NoSources,
+    index_locations: &IndexLocations,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
     let script_indexes = script
-        .indexes(&settings.sources)
+        .indexes(sources)
         .iter()
         .cloned()
         .map(|index| index.relative_to(&script_dir))
         .collect::<Result<Vec<_>, _>>()?;
-    let script_sources = script.sources(&settings.sources);
+    let script_sources = script.sources(sources);
 
     // Collect any `tool.uv.extra-build-dependencies` from the script.
     let empty = BTreeMap::default();
@@ -3335,7 +3332,7 @@ pub(crate) async fn script_extra_build_requires(
                     script_dir.as_ref(),
                     script_sources.as_ref(),
                     &script_indexes,
-                    &settings.index_locations,
+                    index_locations,
                     cache,
                     workspace_cache,
                     credentials_cache,

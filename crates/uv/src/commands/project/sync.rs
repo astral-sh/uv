@@ -17,7 +17,7 @@ use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
-    InstallOptions, InstallTarget as InstallOptionTarget, TargetTriple, Upgrade,
+    InstallOptions, InstallTarget as InstallOptionTarget, TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -36,7 +36,7 @@ use uv_python::{
     PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{FlatIndex, ForkStrategy, Prerelease, ResolutionMode};
+use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -64,7 +64,6 @@ use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockedSource, ResolverInstallerSettings,
-    ResolverSettings,
 };
 
 /// Sync the project environment.
@@ -340,7 +339,8 @@ pub(crate) async fn sync(
             // Parse the requirements from the script.
             let spec = script_specification(
                 script.into(),
-                &settings.resolver,
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
@@ -349,7 +349,8 @@ pub(crate) async fn sync(
             .unwrap_or_default();
             let script_extra_build_requires = script_extra_build_requires(
                 script.into(),
-                &settings.resolver,
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
@@ -411,19 +412,19 @@ pub(crate) async fn sync(
                     )?;
                     return Ok(ExitStatus::Success);
                 }
-                Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
-                    write_sync_report(
-                        &target,
-                        &environment,
-                        &changelog,
-                        None,
-                        dry_run,
-                        output_format,
-                        printer,
-                    )?;
-                    return Err(
-                        UvError::from(operations::Error::OutdatedEnvironment(changelog)).into(),
-                    );
+                Err(ProjectError::Operation(error)) => {
+                    if let Some(changelog) = error.outdated_environment() {
+                        write_sync_report(
+                            &target,
+                            &environment,
+                            changelog,
+                            None,
+                            dry_run,
+                            output_format,
+                            printer,
+                        )?;
+                    }
+                    return Err(UvError::from(error).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
             }
@@ -554,22 +555,24 @@ pub(crate) async fn sync(
         dry_run,
         printer,
         preview,
-        &malware_settings,
+        MalwareCheckContext::from(&malware_settings),
     )
     .await
     {
         Ok(changelog) => changelog,
-        Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
-            write_sync_report(
-                &target,
-                &environment,
-                &changelog,
-                Some(lock_report),
-                dry_run,
-                output_format,
-                printer,
-            )?;
-            return Err(UvError::from(operations::Error::OutdatedEnvironment(changelog)).into());
+        Err(ProjectError::Operation(error)) => {
+            if let Some(changelog) = error.outdated_environment() {
+                write_sync_report(
+                    &target,
+                    &environment,
+                    changelog,
+                    Some(lock_report),
+                    dry_run,
+                    output_format,
+                    printer,
+                )?;
+            }
+            return Err(UvError::from(error).into());
         }
         Err(err) => return Err(UvError::from(err).into()),
     };
@@ -839,7 +842,7 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-pub(crate) async fn do_sync<'a>(
+pub(crate) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
@@ -859,10 +862,8 @@ pub(crate) async fn do_sync<'a>(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
-    malware_settings: impl Into<MalwareCheckContext<'a>>,
+    malware_context: MalwareCheckContext<'_>,
 ) -> Result<Changelog, ProjectError> {
-    let malware_context = malware_settings.into();
-
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -938,31 +939,10 @@ pub(crate) async fn do_sync<'a>(
         }
         InstallTarget::Script { script, .. } => {
             // Try to get extra build dependencies from the script metadata
-            let resolver_settings = ResolverSettings {
-                build_options: build_options.clone(),
-                config_setting: config_setting.clone(),
-                config_settings_package: config_settings_package.clone(),
-                dependency_metadata: dependency_metadata.clone(),
-                exclude_newer: exclude_newer.clone(),
-                fork_strategy: ForkStrategy::default(),
-                index_locations: index_locations.clone(),
-                index_strategy,
-                keyring_provider,
-                link_mode,
-                build_isolation: build_isolation.clone(),
-                extra_build_dependencies: extra_build_dependencies.clone(),
-                extra_build_variables: extra_build_variables.clone(),
-                prerelease: Prerelease::default(),
-                resolution: ResolutionMode::default(),
-                sources: sources.clone(),
-                torch_backend: None,
-                cuda_driver_version: None,
-                amd_gpu_architecture: None,
-                upgrade: Upgrade::default(),
-            };
             script_extra_build_requires(
                 (*script).into(),
-                &resolver_settings,
+                &sources,
+                index_locations,
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),

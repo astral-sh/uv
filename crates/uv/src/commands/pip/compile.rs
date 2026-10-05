@@ -49,7 +49,7 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
-use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -583,7 +583,7 @@ pub(crate) async fn pip_compile(
         &extras,
         &groups,
         preferences,
-        EmptyInstalledPackages,
+        None,
         &hasher,
         &Reinstall::None,
         &upgrade,

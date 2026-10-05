@@ -33,6 +33,7 @@ use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectError, ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, UniversalState,
@@ -405,7 +406,7 @@ pub(crate) async fn remove(
         DryRun::Disabled,
         printer,
         preview,
-        &malware_settings,
+        MalwareCheckContext::from(&malware_settings),
     )
     .await
     {

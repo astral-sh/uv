@@ -650,10 +650,8 @@ pub(crate) async fn refine_interpreter(
     python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
-) -> anyhow::Result<Option<Interpreter>, ProjectError> {
-    let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
-        err
-    else {
+) -> Result<Option<Interpreter>, uv_python::Error> {
+    let Some(no_solution_err) = err.as_no_solution() else {
         return Ok(None);
     };
 

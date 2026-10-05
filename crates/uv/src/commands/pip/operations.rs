@@ -50,7 +50,7 @@ use uv_resolver::{
     ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
 use uv_tool::InstalledTools;
-use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
+use uv_types::{BuildContext, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -102,7 +102,7 @@ pub(crate) async fn read_constraints(
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
-pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
+pub(crate) async fn resolve(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
@@ -114,7 +114,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     extras: &ExtrasSpecification,
     groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,
-    installed_packages: InstalledPackages,
+    installed_packages: Option<SitePackages>,
     hasher: &HashStrategy,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
@@ -1172,7 +1172,7 @@ pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
     printer: Printer,
-) -> Result<(), Error> {
+) -> std::fmt::Result {
     let managed = python.source().is_managed();
     let implementation = python.implementation();
     let interpreter = python.interpreter();
@@ -1233,7 +1233,7 @@ pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
     printer: Printer,
-) -> Result<(), Error> {
+) -> std::fmt::Result {
     // Resolve minor-version link directories (e.g., `cpython-3.12` → `cpython-3.12.12`).
     // On Windows, junction points aren't resolved by the interpreter's `sys.prefix`, so we
     // use the target directory from the minor-version link to display the actual installation.
@@ -1280,7 +1280,7 @@ pub(crate) fn report_target_environment(
         }
     }
 
-    Ok(writeln!(printer.stderr(), "{}", message.dimmed())?)
+    writeln!(printer.stderr(), "{}", message.dimmed())
 }
 
 /// Report on the results of a dry-run installation.
@@ -1446,6 +1446,42 @@ pub(crate) enum Error {
 }
 
 impl Error {
+    /// Return the solver failure for an unsatisfiable resolution.
+    pub(crate) fn as_no_solution(&self) -> Option<&NoSolutionError> {
+        match self {
+            Self::NoSolution { source, .. } | Self::Resolve(ResolveError::NoSolution(source)) => {
+                Some(source)
+            }
+            Self::Resolve(_)
+            | Self::Prepare(_)
+            | Self::Uninstall(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Requirements(_)
+            | Self::RequirementsWithContext { .. }
+            | Self::Anyhow(_)
+            | Self::OutdatedEnvironment(_) => None,
+        }
+    }
+
+    /// Return the changes required by an environment that failed an up-to-date check.
+    pub(crate) fn outdated_environment(&self) -> Option<&Changelog> {
+        match self {
+            Self::OutdatedEnvironment(changelog) => Some(changelog),
+            Self::NoSolution { .. }
+            | Self::Resolve(_)
+            | Self::Prepare(_)
+            | Self::Uninstall(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Requirements(_)
+            | Self::RequirementsWithContext { .. }
+            | Self::Anyhow(_) => None,
+        }
+    }
+
     /// Add the default heading when this operation is the final command error.
     ///
     /// Nested operation errors may already have a more specific heading from their caller.

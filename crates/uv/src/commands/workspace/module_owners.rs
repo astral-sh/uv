@@ -23,6 +23,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::UniversalState;
 use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::sync::do_sync;
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverSettings};
@@ -92,7 +93,7 @@ pub(crate) async fn collect_module_owners(
             DryRun::Disabled,
             Printer::Silent,
             preview,
-            malware_settings,
+            MalwareCheckContext::from(malware_settings),
         )
         .await?;
     }

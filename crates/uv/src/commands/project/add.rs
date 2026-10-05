@@ -58,6 +58,7 @@ use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectEnvironmentPolicy,
     ProjectEnvironmentTarget, ProjectError, ProjectInterpreter, ProjectPythonRequest,
@@ -839,12 +840,7 @@ fn standard_library_package(
     edits: &[DependencyEdit],
     python_minor: u8,
 ) -> Option<PackageName> {
-    let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
-        no_solution_error,
-    )) = operation_error
-    else {
-        return None;
-    };
+    let no_solution_error = operation_error.as_no_solution()?;
 
     edits.iter().find_map(|edit| {
         if edit
@@ -1304,7 +1300,7 @@ async fn lock_and_sync(
         DryRun::Disabled,
         printer,
         preview,
-        malware_settings,
+        MalwareCheckContext::from(malware_settings),
     )
     .await?;
 

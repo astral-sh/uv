@@ -39,9 +39,7 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{
-    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
-};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
@@ -942,7 +940,8 @@ async fn do_lock(
             // Try to get extra build dependencies from the script metadata
             script_extra_build_requires(
                 (*script).into(),
-                settings,
+                sources,
+                index_locations,
                 cache,
                 workspace_cache,
                 client.credentials_cache(),
@@ -1163,7 +1162,7 @@ async fn do_lock(
                 &extras,
                 &groups,
                 preferences,
-                EmptyInstalledPackages,
+                None,
                 &hasher,
                 &Reinstall::default(),
                 upgrade,
@@ -1268,7 +1267,7 @@ pub(crate) enum ValidatedLock {
 
 impl ValidatedLock {
     /// Validate a [`Lock`] against the workspace requirements.
-    pub(crate) async fn validate<Context: BuildContext>(
+    pub(crate) async fn validate(
         lock: Lock,
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
@@ -1294,7 +1293,7 @@ impl ValidatedLock {
         options: &Options,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
-        database: &DistributionDatabase<'_, Context>,
+        database: &DistributionDatabase<'_, BuildDispatch<'_>>,
         preview: Preview,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
