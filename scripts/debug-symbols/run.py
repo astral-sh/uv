@@ -177,7 +177,8 @@ def separate_symbols(binary, built, tools, system):
     if system == "Linux":
         symbols = binary.with_name(binary.name + ".debug")
         run([tools["llvm-objcopy"], "--only-keep-debug", binary, symbols])
-        run([tools["llvm-strip"], "--strip-all", binary])
+        # GNU semantics retain non-debug metadata, including cargo-auditable's SBOM.
+        run([tools["llvm-strip"], "--strip-all-gnu", binary])
         run([tools["llvm-objcopy"], f"--add-gnu-debuglink={symbols}", binary])
         identities = [
             run([tools["llvm-readobj"], "--notes", path]) for path in (binary, symbols)

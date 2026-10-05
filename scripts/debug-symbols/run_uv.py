@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import time
+import zlib
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -21,6 +22,27 @@ ROOT = Path(__file__).resolve().parents[2]
 def digest(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def sbom_digest(binary, tools, system):
+    sections = run([tools["llvm-readobj"], "--sections", binary])
+    for section in sections.split("Section {")[1:]:
+        if not re.search(r"Name: \.dep-v0(?:\s|$)", section):
+            continue
+        offset_field, size_field = (
+            ("PointerToRawData", "RawDataSize")
+            if system == "Windows"
+            else ("Offset", "Size")
+        )
+        (offset,) = re.findall(rf"\b{offset_field}: (0x[0-9A-Fa-f]+|\d+)", section)
+        (size,) = re.findall(rf"\b{size_field}: (0x[0-9A-Fa-f]+|\d+)", section)
+        with binary.open("rb") as stream:
+            stream.seek(int(offset, 0))
+            data = stream.read(int(size, 0))
+        # Validate the embedded JSON as well as recording its exact section bytes.
+        json.loads(zlib.decompress(data))
+        return hashlib.sha256(data).hexdigest()
+    raise RuntimeError(f"Missing embedded SBOM in {binary}")
 
 
 def symbol_candidates(binary, symbols, tools, system):
@@ -213,7 +235,10 @@ def build(output, report, tools, system, host):
                     ):
                         shutil.copyfileobj(source, destination)
                     binary.chmod(0o755)
-                    record = {"executable_bytes": binary.stat().st_size}
+                    record = {
+                        "executable_bytes": binary.stat().st_size,
+                        "sbom_sha256": sbom_digest(binary, tools, system),
+                    }
                     measured["executables"][name] = record
                     if mode == "symbols":
                         built = Path(temporary) / host / "release" / name
@@ -234,6 +259,8 @@ def build(output, report, tools, system, host):
                         )
                     elif system == "Darwin":
                         run(["codesign", "--force", "--sign", "-", binary])
+                    if sbom_digest(binary, tools, system) != record["sbom_sha256"]:
+                        raise RuntimeError(f"Processing changed the SBOM in {name}")
                     record["stripped_executable_bytes"] = binary.stat().st_size
                     record["sha256"] = digest(binary)
             original = wheel.with_suffix(".original.whl")
@@ -247,6 +274,13 @@ def build(output, report, tools, system, host):
 def verify(output, report, tools, system):
     directory = output / "symbols"
     names = report["executables"]
+    for mode, measured in report["builds"].items():
+        for name, record in measured["executables"].items():
+            if (
+                sbom_digest(output / mode / name, tools, system)
+                != record["sbom_sha256"]
+            ):
+                raise RuntimeError(f"The SBOM changed in {mode}/{name}")
     for name in names:
         binary = directory / name
         record = report["builds"]["symbols"]["executables"][name]
@@ -341,7 +375,7 @@ def main():
             "llvm-objcopy",
             "llvm-strip",
         },
-        "Darwin": {"llvm-nm", "llvm-dwarfdump"},
+        "Darwin": {"llvm-nm", "llvm-dwarfdump", "llvm-readobj"},
         "Windows": {"llvm-pdbutil", "llvm-symbolizer", "llvm-readobj"},
     }
     tools = {name: tool(name, sysroot, host) for name in required[system]}

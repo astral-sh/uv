@@ -79,7 +79,8 @@ temporarily hiding the companion symbols.
 Both builds run help/version commands and create a working Python environment offline. The processed
 wheel is then installed into a separate environment; all installed executable hashes must match the
 verified files. Windows additionally checks static CRT linkage, and macOS verifies ad hoc
-signatures.
+signatures. Every executable must retain its embedded SBOM unchanged through processing. Linux
+uses LLVM's GNU-compatible strip mode to retain non-debug metadata sections.
 
 Outputs default to `target/uv-debug-symbols-experiment`. Both builds use separate, empty Cargo
 target directories. The report includes build times, wheel and executable sizes, symbol sizes,
