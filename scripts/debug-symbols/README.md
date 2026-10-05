@@ -95,9 +95,30 @@ Namespace macOS/Windows runners to provide headroom for full debug information a
 `verify-run` to a completed run ID to download its uv artifacts and repeat verification without
 compiling again. Enable `uv` and select the platform whose artifacts were retained.
 
-This comparison uses native runners without PGO, manylinux containers, cross compilation, or
-production signing. It measures the effect of enabling symbols on the uv dependency graph; its
-baseline is not a byte-for-byte reproduction of published release artifacts.
+This comparison uses native runners without manylinux containers, cross compilation, or production
+signing. It measures the effect of enabling symbols on the uv dependency graph; its baseline is not
+a byte-for-byte reproduction of published release artifacts.
+
+### PGO comparison
+
+Pass `--pgo`, or enable the workflow's `pgo` input together with `uv`, to compare optimized builds
+using the release PGO training corpus. Each mode runs `scripts/build_uv_pgo.py --train-only` with
+the same debug, stripping, native compiler, and linker settings as its final build. Each final
+Maturin build uses that mode's merged profile. Profiles are not reused between debug settings.
+Windows retains the static CRT flags when setting `RUSTFLAGS`, and macOS disables native C/C++
+profile instrumentation in both stages, matching the release workflow.
+
+The experiment retains each merged profile, training log, native build-script logs, and profile
+summary under the mode's `pgo/` directory. The report separates training and final build durations,
+records profile hashes and function counts, and summarizes missing/mismatched profile warnings from
+the final compilation. Full diagnostics remain in `build.log`. Training must produce executed
+functions; missing-profile warnings are recorded for review because untrained functions and
+launchers can legitimately have no profile data. The usual source lookup, stripping, SBOM, wheel,
+and smoke checks run on the final PGO binaries after deleting the instrumented build directories.
+
+Both modes start with empty build and training directories. This requires four optimized builds per
+platform, so PGO workflow jobs have a three-hour timeout. Build durations are observations of the
+entire experiment, not application performance benchmarks.
 
 ### Native uv measurements
 

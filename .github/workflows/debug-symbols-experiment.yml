@@ -1,5 +1,5 @@
 name: Debug symbols experiment
-run-name: ${{ inputs.uv && format(inputs.verify-run && 'uv symbol verification ({0})' || 'uv debug symbols ({0})', inputs.platform) || 'Rust+C debug symbol fixture' }}
+run-name: ${{ inputs.uv && format(inputs.verify-run && 'uv symbol verification ({0})' || inputs.pgo && 'uv PGO debug symbols ({0})' || 'uv debug symbols ({0})', inputs.platform) || 'Rust+C debug symbol fixture' }}
 
 on:
   push:
@@ -10,6 +10,10 @@ on:
     inputs:
       uv:
         description: Also compare real uv builds (slow)
+        type: boolean
+        default: false
+      pgo:
+        description: Train separate PGO profiles for both uv builds (slower)
         type: boolean
         default: false
       platform:
@@ -27,14 +31,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.platform }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.platform }}-${{ inputs.pgo }}
   cancel-in-progress: true
 
 jobs:
   experiment:
     name: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && 'uv' || 'fixture' }} / ${{ matrix.os }}
     runs-on: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && matrix.uv-runner || matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ inputs.pgo && 180 || 90 }}
     env:
       CARGO_BUILD_JOBS: ${{ matrix.os == 'Linux' && 8 || 4 }}
       RUN_UV: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) }}
@@ -100,7 +104,7 @@ jobs:
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Run uv experiment
         if: env.RUN_UV == 'true' && inputs.verify-run == ''
-        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run_uv.py
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run_uv.py ${{ inputs.pgo && '--pgo' || '' }}
       - name: Download retained uv outputs
         if: env.RUN_UV == 'true' && inputs.verify-run != ''
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

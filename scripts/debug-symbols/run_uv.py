@@ -162,6 +162,74 @@ def save_report(output, report):
     )
 
 
+def train_pgo(temporary, directory, environment, tools, host):
+    training = Path(temporary) / "pgo"
+    retained = directory / "pgo"
+    retained.mkdir()
+    started = time.monotonic()
+    try:
+        run(
+            [
+                sys.executable,
+                ROOT / "scripts" / "build_uv_pgo.py",
+                "--target",
+                host,
+                "--target-dir",
+                training,
+                "--llvm-profdata",
+                tools["llvm-profdata"],
+                "--train-only",
+            ],
+            cwd=ROOT,
+            env=environment,
+            log=retained / "training.log",
+        )
+    finally:
+        save_build_script_logs(training / "instrumented", retained)
+    seconds = time.monotonic() - started
+    profile = retained / "uv.profdata"
+    shutil.copyfile(training / "uv.profdata", profile)
+    summary = run(
+        [tools["llvm-profdata"], "show", "--detailed-summary", profile],
+        log=retained / "profile-summary.log",
+    )
+    (functions,) = re.findall(r"Total functions: (\d+)", summary)
+    (maximum_count,) = re.findall(r"Maximum internal block count: (\d+)", summary)
+    (total_count,) = re.findall(r"Total count: (\d+)", summary)
+    if not int(functions) or not int(total_count):
+        raise RuntimeError("PGO training produced no executed functions")
+    profiles = list((training / "profiles").glob("uv-*.profraw"))
+    measured = {
+        "training_seconds": seconds,
+        "profile": str(profile.relative_to(directory)),
+        "profile_sha256": digest(profile),
+        "profile_bytes": profile.stat().st_size,
+        "raw_profiles": len(profiles),
+        "raw_profile_bytes": sum(path.stat().st_size for path in profiles),
+        "functions": int(functions),
+        "maximum_internal_block_count": int(maximum_count),
+        "total_count": int(total_count),
+    }
+    # Only the merged profile is needed by the final build. Remove the instrumented
+    # binaries and training corpus before compiling again to limit disk usage.
+    shutil.rmtree(training)
+    return profile, measured
+
+
+def profile_diagnostics(log):
+    diagnostics = [
+        line
+        for line in log.splitlines()
+        if "warning:" in line and re.search(r"profile|pgo", line, re.IGNORECASE)
+    ]
+    return {
+        "warnings": len(diagnostics),
+        "missing": sum("no profile data available" in line for line in diagnostics),
+        "mismatch": sum("mismatch" in line for line in diagnostics),
+        "examples": diagnostics[:20],
+    }
+
+
 def build(output, report, tools, system, host):
     names = ["uv.exe", "uvx.exe", "uvw.exe"] if system == "Windows" else ["uv", "uvx"]
     report["executables"] = names
@@ -194,16 +262,43 @@ def build(output, report, tools, system, host):
             }
             if system == "Windows":
                 environment["AWS_LC_SYS_PREBUILT_NASM"] = "0"
+                if report["pgo"]:
+                    # Setting RUSTFLAGS overrides the target's Cargo configuration.
+                    environment["RUSTFLAGS"] = "-C target-feature=+crt-static"
             if system == "Darwin":
                 environment["RUSTFLAGS"] = (
                     "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
                 )
                 environment["MACOSX_DEPLOYMENT_TARGET"] = "11.0"
+                if report["pgo"]:
+                    for variable in ("CFLAGS", "CXXFLAGS"):
+                        environment[variable] = " ".join(
+                            (
+                                environment.get(variable, ""),
+                                "-fno-profile-generate -fno-profile-use",
+                            )
+                        ).strip()
+            if report["pgo"]:
+                environment["RUSTFLAGS"] = " ".join(
+                    (
+                        environment.get("RUSTFLAGS", ""),
+                        "-Cllvm-args=-pgo-warn-missing-function",
+                    )
+                ).strip()
+            measured = {"executables": {}}
+            report["builds"][mode] = measured
+            save_report(output, report)
+            if report["pgo"]:
+                profile, measured["pgo"] = train_pgo(
+                    temporary, directory, environment, tools, host
+                )
+                environment["RUSTFLAGS"] += f" -Cprofile-use={profile}"
+                save_report(output, report)
             features = (
                 "self-update,windows-gui-bin" if system == "Windows" else "self-update"
             )
             started = time.monotonic()
-            run(
+            build_log = run(
                 [
                     "maturin",
                     "build",
@@ -222,18 +317,29 @@ def build(output, report, tools, system, host):
                 env=environment,
                 log=directory / "build.log",
             )
-            measured = {
-                "seconds": time.monotonic() - started,
-                "environment": {
-                    key: environment[key]
-                    for key in sorted(environment)
-                    if key.startswith(("CARGO_PROFILE_", "AWS_LC_SYS_"))
-                    or key
-                    in {"RUSTFLAGS", "MACOSX_DEPLOYMENT_TARGET", "CARGO_BUILD_JOBS"}
-                },
-                "executables": {},
-            }
-            report["builds"][mode] = measured
+            measured.update(
+                {
+                    "seconds": time.monotonic() - started,
+                    "environment": {
+                        key: environment[key]
+                        for key in sorted(environment)
+                        if key.startswith(("CARGO_PROFILE_", "AWS_LC_SYS_"))
+                        or key
+                        in {
+                            "RUSTFLAGS",
+                            "MACOSX_DEPLOYMENT_TARGET",
+                            "CARGO_BUILD_JOBS",
+                            "CFLAGS",
+                            "CXXFLAGS",
+                        }
+                    },
+                }
+            )
+            if report["pgo"]:
+                measured["pgo"]["diagnostics"] = profile_diagnostics(build_log)
+                measured["total_seconds"] = (
+                    measured["seconds"] + measured["pgo"]["training_seconds"]
+                )
             save_build_script_logs(Path(temporary), directory)
             (wheel,) = directory.glob("*.whl")
             measured["wheel_bytes"] = wheel.stat().st_size
@@ -365,6 +471,11 @@ def verify(output, report, tools, system):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--pgo",
+        action="store_true",
+        help="Train separate release PGO profiles for the baseline and symbols builds",
+    )
+    parser.add_argument(
         "--output", type=Path, default=ROOT / "target" / "uv-debug-symbols-experiment"
     )
     parser.add_argument(
@@ -396,6 +507,19 @@ def main():
         "Windows": {"llvm-pdbutil", "llvm-symbolizer", "llvm-readobj"},
     }
     tools = {name: tool(name, sysroot, host) for name in required[system]}
+    if args.pgo:
+        # Profiles must be read by the same LLVM version that wrote them.
+        profiler = (
+            sysroot
+            / "lib"
+            / "rustlib"
+            / host
+            / "bin"
+            / ("llvm-profdata.exe" if system == "Windows" else "llvm-profdata")
+        )
+        if not profiler.is_file():
+            raise RuntimeError("Install llvm-tools-preview for PGO training")
+        tools["llvm-profdata"] = str(profiler)
     if args.verify_only:
         report = json.loads((output / "report.json").read_text(encoding="utf-8"))
         if report["target"] != host:
@@ -410,7 +534,8 @@ def main():
             "commit": run(["git", "rev-parse", "HEAD"], cwd=ROOT).strip(),
             "tools": tools,
             "builds": {},
-            "scope": "Native release profile, fat LTO, self-update, cargo-auditable; no PGO, manylinux container, or release signing",
+            "pgo": args.pgo,
+            "scope": "Native release profile, fat LTO, self-update, cargo-auditable; optional release PGO training; no manylinux container or release signing",
         }
         build(output, report, tools, system, host)
     verify(output, report, tools, system)

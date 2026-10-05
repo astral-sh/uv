@@ -43,7 +43,18 @@ def run(arguments, *, cwd=FIXTURE, env=None, log=None, allowed_exit_codes=(0,)):
             for line in process.stdout:
                 stream.write(line)
                 if line.lstrip().startswith(
-                    ("Compiling ", "Finished ", "error:", "warning:")
+                    (
+                        "Compiling ",
+                        "Finished ",
+                        "error:",
+                        "warning:",
+                        "Prepared ",
+                        "Preparing training ",
+                        "Building instrumented ",
+                        "Training uv workload:",
+                        "Profiled ",
+                        "Merged ",
+                    )
                 ):
                     print(line.rstrip(), flush=True)
             returncode = process.wait()
