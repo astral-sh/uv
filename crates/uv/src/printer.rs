@@ -227,6 +227,10 @@ mod tests {
     #[test]
     #[cfg(unix)]
     #[allow(unsafe_code)]
+    #[expect(
+        clippy::disallowed_types,
+        reason = "fs_err does not implement FromRawFd for socketpair"
+    )]
     fn non_blocking_write_resilient() {
         use std::io::Read;
         use std::os::fd::{AsRawFd, FromRawFd};
@@ -288,6 +292,10 @@ mod tests {
     #[test]
     #[cfg(unix)]
     #[allow(unsafe_code)]
+    #[expect(
+        clippy::disallowed_types,
+        reason = "fs_err does not implement FromRawFd for socketpair"
+    )]
     fn non_blocking_broken_pipe_resilient() {
         use std::os::fd::{AsRawFd, FromRawFd};
 
