@@ -1,0 +1,17 @@
+[package]
+name = "symbol_fixture"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Keep the experiment independent of uv's dependency graph.
+[workspace]
+
+[build-dependencies]
+cc = "=1.2.57"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+panic = "abort"
+strip = true
