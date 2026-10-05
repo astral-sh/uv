@@ -360,7 +360,7 @@ windows = { version = "0.61.0", default-features = false, features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 windows-registry = { version = "0.5.0", default-features = false, features = ["std"] }
-windows-version = { version = "0.1.6", default-features = false }
+windows-version = { version = "0.100.0", default-features = false }
 wiremock = { version = "0.6.4", default-features = false }
 zeroize = { version = "1.8.1", default-features = false, features = ["alloc"] }
 zstd = { version = "0.13.3", default-features = false }
