@@ -6,6 +6,7 @@ Only this standalone fixture is compiled; the uv workspace is not built.
 
 import argparse
 import base64
+import contextlib
 import csv
 import hashlib
 import io
@@ -27,20 +28,22 @@ FUNCTIONS = {"rust_frame": "main.rs", "native_frame": "native.c"}
 
 def run(arguments, *, cwd=FIXTURE, env=None, log=None, allowed_exit_codes=(0,)):
     print("+", " ".join(map(str, arguments)), flush=True)
-    result = subprocess.run(
-        list(map(str, arguments)),
-        cwd=cwd,
-        env=env,
-        encoding="utf-8",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
-    )
-    if log:
-        log.write_text(result.stdout, encoding="utf-8")
+    # Keep partial build logs on disk even if a large build is interrupted.
+    with log.open("w", encoding="utf-8") if log else contextlib.nullcontext() as stream:
+        result = subprocess.run(
+            list(map(str, arguments)),
+            cwd=cwd,
+            env=env,
+            encoding="utf-8",
+            stdout=stream if log else subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+    output = log.read_text(encoding="utf-8") if log else result.stdout
     if result.returncode not in allowed_exit_codes:
-        raise RuntimeError(f"Command failed ({result.returncode}):\n{result.stdout}")
-    return result.stdout
+        tail = "\n".join(output.splitlines()[-80:])
+        raise RuntimeError(f"Command failed ({result.returncode}):\n{tail}")
+    return output
 
 
 def tool(name, sysroot, host):
@@ -93,12 +96,13 @@ def repack_wheel(source, destination, binaries):
             if entry.filename.endswith("/RECORD"):
                 record_entry = entry
                 continue
-            data = original.read(entry)
+            replacement = None
             if ".data/scripts/" in entry.filename:
                 name = entry.filename.rsplit("/", 1)[-1]
                 if name in replacements:
-                    data = replacements[name].read_bytes()
+                    replacement = replacements[name]
                     replaced.add(name)
+            data = replacement.read_bytes() if replacement else original.read(entry)
             digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(
                 b"="
             )

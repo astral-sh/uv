@@ -55,3 +55,39 @@ compiler flags, including frame pointers; the build logs capture the compiler in
 Maturin wheel sizes are also recorded separately. This fixture does not exercise uv's dependency
 graph, PGO, cross compilation, release signing, or publication. Those require verification with the
 actual release artifacts.
+
+## uv experiment
+
+Build the repository's uv package using the same baseline/symbols comparison:
+
+```sh
+cargo install cargo-auditable --locked --version 0.7.6
+uv run --no-project --with maturin==1.15.0 python scripts/debug-symbols/run_uv.py
+```
+
+This builds `uv` and `uvx`, plus `uvw` on Windows, with the release profile, fat LTO, `self-update`,
+and the release SBOM wrapper. macOS uses the release LLD/ICF flags and Windows retains the static
+CRT configuration. AWS-LC is built from the locked sources; Windows also requires NASM and disables
+prebuilt NASM objects. Windows needs `llvm-pdbutil` in addition to `llvm-symbolizer`.
+
+The runner processes all executables in the wheel and validates a Rust source location in each. For
+`uv`, it additionally requires an AWS-LC `RAND_bytes` source location and checks `jent_read_entropy`
+when linked. Function addresses come from the symbols; the executable source and export lists are
+not modified. Source lookups run after deleting the original compiler outputs and must fail after
+temporarily hiding the companion symbols.
+
+Both builds run help/version commands and create a working Python environment offline. The processed
+wheel is then installed into a separate environment; all installed executable hashes must match the
+verified files. Windows additionally checks static CRT linkage, and macOS verifies ad hoc
+signatures.
+
+Outputs default to `target/uv-debug-symbols-experiment`. Both builds use separate, empty Cargo
+target directories. The report includes build times, wheel and executable sizes, symbol sizes,
+source lookups, tool versions, and the source commit. Build logs are retained even if compilation
+fails. Use `--verify-only --output <directory>` to repeat validation of retained outputs without
+rebuilding. CI uploads the reports, logs, wheels, and symbols for seven days, excluding the large
+unprocessed wheels.
+
+This comparison uses native runners without PGO, manylinux containers, cross compilation, or
+production signing. It measures the effect of enabling symbols on the uv dependency graph; its
+baseline is not a byte-for-byte reproduction of published release artifacts.
