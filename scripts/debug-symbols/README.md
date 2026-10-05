@@ -98,3 +98,40 @@ compiling again. Enable `uv` and select the platform whose artifacts were retain
 This comparison uses native runners without PGO, manylinux containers, cross compilation, or
 production signing. It measures the effect of enabling symbols on the uv dependency graph; its
 baseline is not a byte-for-byte reproduction of published release artifacts.
+
+### Native uv measurements
+
+Single cold comparisons of uv 0.12.23 with Rust 1.99.0 and Maturin 1.15.0 produced the following
+results. All sizes are bytes; companion symbol sizes are uncompressed and excluded from the wheels.
+
+| Native target            | Baseline `uv` | Stripped `uv` with symbols | Executable growth |    Wheel growth | `uv` companion symbols |
+| ------------------------ | ------------: | -------------------------: | ----------------: | --------------: | ---------------------: |
+| x86_64-unknown-linux-gnu |    55,947,144 |                 56,223,600 |   276,456 (0.49%) |  64,566 (0.28%) |            778,511,400 |
+| aarch64-apple-darwin     |    41,023,728 |                 41,192,848 |   169,120 (0.41%) | 111,554 (0.59%) |            793,413,808 |
+| x86_64-pc-windows-msvc   |    47,971,328 |                 48,211,456 |   240,128 (0.50%) |  89,133 (0.43%) |            585,371,648 |
+
+`uvx` grew by 200 bytes on Linux and 176 bytes on macOS. Windows `uvx.exe` and `uvw.exe` had no size
+change. Separate symbols keep the installed artifacts close to the baseline size, but do not
+guarantee identical executable sizes.
+
+| Native target            | Baseline build | Build with symbols |
+| ------------------------ | -------------: | -----------------: |
+| x86_64-unknown-linux-gnu |         6m 17s |            10m 29s |
+| aarch64-apple-darwin     |         5m 33s |            16m 13s |
+| x86_64-pc-windows-msvc   |        10m 29s |            20m 22s |
+
+Each target passed source lookups for its Rust entry points, AWS-LC's `RAND_bytes`, and
+`jent_read_entropy`. Removing the companion files prevented those source lookups. Embedded SBOM
+checks, wheel installation and executable hashes, help/version commands, and offline environment
+creation also passed, along with macOS signature and Windows static CRT checks.
+
+Build times are single observations on the configured runners, not performance benchmarks. These
+native samples do not establish sizes or coverage for the complete release target matrix, PGO, or
+production signing.
+
+Reports and logs:
+
+- [Linux build and verification](https://github.com/astral-sh/uv/actions/runs/37329101850)
+- [macOS build and verification](https://github.com/astral-sh/uv/actions/runs/37332499963)
+- Windows [build](https://github.com/astral-sh/uv/actions/runs/37330457108) and
+  [artifact verification](https://github.com/astral-sh/uv/actions/runs/37335292541)
