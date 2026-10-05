@@ -1,4 +1,4 @@
-//! Benchmark managed Python dylib patching on macOS.
+//! Benchmark macOS Python dylib patching with `install_name_tool` and `native-macho-edit`.
 //!
 //! `cargo bench -p uv-bench --bench macos_dylib --profile profiling`
 
@@ -19,7 +19,7 @@ mod macos {
     use tempfile::TempDir;
 
     use uv_client::BaseClientBuilder;
-    use uv_preview::Preview;
+    use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
     use uv_python_managed::ManagedPythonInstallation;
     use uv_python_managed::downloads::{
         DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
@@ -103,36 +103,58 @@ mod macos {
             .expect("Missing Python download metadata");
         let fixture = DylibFixture::download(download);
 
-        // Check the operation before timing it so a skipped edit cannot appear fast.
-        let (directory, installation) = fixture.prepare();
-        installation
-            .ensure_dylib_patched()
-            .expect("Failed to patch dylib");
-        let dylib = installation.path().join(DYLIB);
-        let output = Command::new("/usr/bin/otool")
-            .arg("-D")
-            .arg(&dylib)
-            .output()
-            .expect("Failed to inspect patched dylib");
-        assert!(output.status.success(), "otool failed: {output:?}");
-        let stdout = String::from_utf8(output.stdout).expect("otool output is not UTF-8");
-        assert_eq!(stdout.lines().nth(1), dylib.to_str());
-        drop((directory, installation));
+        for (name, preview) in [
+            ("install_name_tool", Preview::default()),
+            (
+                "native_macho_edit",
+                Preview::from_feature_names(&[MaybePreviewFeature::Known(
+                    PreviewFeature::NativeMachoEdit,
+                )]),
+            ),
+        ] {
+            uv_preview::set(preview).expect("Failed to configure preview features");
 
-        criterion.bench_function(
-            &format!("patch_dylib/install_name_tool/{}", download.key()),
-            |benchmark| {
-                benchmark.iter_batched_ref(
-                    || fixture.prepare(),
-                    |(_, installation)| {
-                        black_box(installation)
-                            .ensure_dylib_patched()
-                            .expect("Failed to patch dylib");
-                    },
-                    BatchSize::PerIteration,
-                );
-            },
-        );
+            // Check the operation before timing it so a skipped edit cannot appear fast.
+            let (directory, installation) = fixture.prepare();
+            installation
+                .ensure_dylib_patched()
+                .expect("Failed to patch dylib");
+            let dylib = installation.path().join(DYLIB);
+            let output = Command::new("/usr/bin/otool")
+                .arg("-D")
+                .arg(&dylib)
+                .output()
+                .expect("Failed to inspect patched dylib");
+            assert!(output.status.success(), "otool failed: {output:?}");
+            let stdout = String::from_utf8(output.stdout).expect("otool output is not UTF-8");
+            assert_eq!(stdout.lines().nth(1), dylib.to_str());
+
+            if preview.is_enabled(PreviewFeature::NativeMachoEdit) {
+                let output = Command::new("/usr/bin/codesign")
+                    .args(["--verify", "--strict"])
+                    .arg(&dylib)
+                    .output()
+                    .expect("Failed to verify dylib signature");
+                assert!(output.status.success(), "codesign failed: {output:?}");
+            }
+
+            drop((directory, installation));
+
+            criterion.bench_function(
+                &format!("patch_dylib/{name}/{}", download.key()),
+                |benchmark| {
+                    benchmark.iter_batched_ref(
+                        || fixture.prepare(),
+                        |(_, installation)| {
+                            black_box(installation)
+                                .ensure_dylib_patched()
+                                .expect("Failed to patch dylib");
+                        },
+                        BatchSize::PerIteration,
+                    );
+                },
+            );
+        }
     }
 }
 
