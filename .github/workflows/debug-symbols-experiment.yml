@@ -1,4 +1,5 @@
 name: Debug symbols experiment
+run-name: ${{ inputs.uv && format('uv debug symbols ({0})', inputs.platform) || 'Rust+C debug symbol fixture' }}
 
 on:
   push:
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   experiment:
-    name: ${{ matrix.runner }}
+    name: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && 'uv' || 'fixture' }} / ${{ matrix.runner }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     env:
