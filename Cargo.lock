@@ -231,7 +231,7 @@ dependencies = [
 [[package]]
 name = "astral-html"
 version = "0.0.1"
-source = "git+https://github.com/astral-sh/astral-html?rev=7361241bc4bc0bafb43a901288a1536896b9fb4c#7361241bc4bc0bafb43a901288a1536896b9fb4c"
+source = "git+https://github.com/astral-sh/astral-html?rev=a205e15d60271d21c8dc4e56c872cb27af9f9321#a205e15d60271d21c8dc4e56c872cb27af9f9321"
 dependencies = [
  "memchr",
 ]

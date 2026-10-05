@@ -115,14 +115,4 @@ allow = [
     "Unicode-3.0",
     "Zlib",
 ]
-exceptions = [{ crate = "astral-html", allow = ["Python-2.0.1"] }]
-
-# The generated character-reference data retains the CPython license.
-[[licenses.clarify]]
-crate = "astral-html"
-expression = "(MIT OR Apache-2.0) AND Python-2.0.1"
-license-files = [
-    { path = "LICENSE-MIT", hash = 0x61517a59 },
-    { path = "LICENSE-APACHE", hash = 0x3e961b13 },
-    { path = "licenses/CPython.txt", hash = 0x89e6df3c },
-]
+exceptions = []
