@@ -812,6 +812,22 @@ impl MarkerTree {
         Self(INTERNER.lock().expression(expr))
     }
 
+    /// Return a PEP 751 marker that selects an extra.
+    pub fn extra_in_pep751(extra: ExtraName) -> Self {
+        Self::expression(MarkerExpression::List {
+            pair: CanonicalMarkerListPair::Extras(extra),
+            operator: ContainerOperator::In,
+        })
+    }
+
+    /// Return a PEP 751 marker that selects a dependency group.
+    pub fn dependency_group_in_pep751(group: GroupName) -> Self {
+        Self::expression(MarkerExpression::List {
+            pair: CanonicalMarkerListPair::DependencyGroup(group),
+            operator: ContainerOperator::In,
+        })
+    }
+
     /// Whether the marker always evaluates to `true`.
     ///
     /// If this method returns `true`, it is definitively known that the marker will
