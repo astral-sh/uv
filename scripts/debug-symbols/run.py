@@ -83,8 +83,10 @@ def addresses(binary, tools, system):
     return {name: found[name] for name in FUNCTIONS}
 
 
-def repack_wheel(source, destination, binary):
-    """Replace the fixture executable and regenerate the wheel's RECORD."""
+def repack_wheel(source, destination, binaries):
+    """Replace executables and regenerate the wheel's RECORD."""
+    replacements = {binary.name: binary for binary in binaries}
+    replaced = set()
     with ZipFile(source) as original, ZipFile(destination, "w") as wheel:
         records = []
         for entry in original.infolist():
@@ -92,13 +94,20 @@ def repack_wheel(source, destination, binary):
                 record_entry = entry
                 continue
             data = original.read(entry)
-            if entry.filename.endswith(f".data/scripts/{binary.name}"):
-                data = binary.read_bytes()
+            if ".data/scripts/" in entry.filename:
+                name = entry.filename.rsplit("/", 1)[-1]
+                if name in replacements:
+                    data = replacements[name].read_bytes()
+                    replaced.add(name)
             digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(
                 b"="
             )
             records.append((entry.filename, f"sha256={digest.decode()}", len(data)))
             wheel.writestr(entry, data)
+        if replaced != replacements.keys():
+            raise RuntimeError(
+                f"Missing wheel executables: {replacements.keys() - replaced}"
+            )
         record = io.StringIO(newline="")
         writer = csv.writer(record, lineterminator="\n")
         writer.writerows(records)
@@ -114,7 +123,7 @@ def symbolize(binary, symbols, address, tools, system):
         else:
             source = binary
         output = run(["atos", "-o", source, hex(address)])
-        return output, bool(re.search(r"(?:main\.rs|native\.c):[1-9][0-9]*", output))
+        return output, bool(re.search(r"\([^)]*:[1-9][0-9]*\)", output))
     arguments = [
         tools["llvm-symbolizer"],
         "--output-style=JSON",
@@ -138,6 +147,66 @@ def symbolize(binary, symbols, address, tools, system):
     (result,) = decoded
     frames = result["Symbol"]
     return output, any(frame.get("Line", 0) > 0 for frame in frames)
+
+
+def separate_symbols(binary, built, tools, system):
+    if system == "Linux":
+        symbols = binary.with_name(binary.name + ".debug")
+        run([tools["llvm-objcopy"], "--only-keep-debug", binary, symbols])
+        run([tools["llvm-strip"], "--strip-all", binary])
+        run([tools["llvm-objcopy"], f"--add-gnu-debuglink={symbols}", binary])
+        identities = [
+            run([tools["llvm-readobj"], "--notes", path]) for path in (binary, symbols)
+        ]
+        build_ids = [
+            re.findall(r"Build ID: ([a-fA-F0-9]+)", identity) for identity in identities
+        ]
+        if not build_ids[0] or build_ids[0] != build_ids[1]:
+            raise RuntimeError(f"ELF build IDs differ: {build_ids}")
+        identity = build_ids[0]
+    elif system == "Darwin":
+        symbols = binary.with_suffix(".dSYM")
+        shutil.copytree(built.with_suffix(".dSYM"), symbols)
+        run(["strip", "-S", "-x", binary])
+        run(["codesign", "--force", "--sign", "-", binary])
+        identities = [
+            run([tools["llvm-dwarfdump"], "--uuid", path]) for path in (binary, symbols)
+        ]
+        identifiers = [
+            re.findall(r"UUID: ([A-Fa-f0-9-]+)", identity) for identity in identities
+        ]
+        if not identifiers[0] or identifiers[0] != identifiers[1]:
+            raise RuntimeError(f"Mach-O UUIDs differ: {identifiers}")
+        identity = identifiers[0]
+    else:
+        symbols = binary.with_suffix(".pdb")
+        shutil.copyfile(built.with_suffix(".pdb"), symbols)
+        identity = run([tools["llvm-readobj"], "--coff-debug-directory", binary])
+    return symbols, identity
+
+
+def verify_symbols(binary, symbols, function_addresses, functions, tools, system):
+    lookups = {}
+    for name, address in function_addresses.items():
+        lookup, resolved = symbolize(binary, symbols, address, tools, system)
+        if not resolved or functions[name] not in lookup:
+            raise RuntimeError(f"Cannot resolve {name} to {functions[name]}:\n{lookup}")
+        lookups[name] = lookup
+    hidden = symbols.with_name(symbols.name + ".hidden")
+    symbols.rename(hidden)
+    negative_lookups = {}
+    try:
+        for name, address in function_addresses.items():
+            lookup, resolved = symbolize(binary, symbols, address, tools, system)
+            if resolved:
+                raise RuntimeError(
+                    f"{name} still resolves without companion symbols:\n{lookup}"
+                )
+            negative_lookups[name] = lookup
+    finally:
+        hidden.rename(symbols)
+
+    return lookups, negative_lookups
 
 
 def main():
@@ -238,7 +307,7 @@ def main():
                     run(["codesign", "--force", "--sign", "-", binary])
                 original = wheel.with_suffix(".original.whl")
                 wheel.rename(original)
-                repack_wheel(original, wheel, binary)
+                repack_wheel(original, wheel, [binary])
                 report["builds"][mode].update(
                     {
                         "stripped_executable_bytes": binary.stat().st_size,
@@ -250,47 +319,10 @@ def main():
             built = target / host / "release" / binary_name
             if binary.read_bytes() != built.read_bytes():
                 raise RuntimeError("Maturin changed the linked fixture executable")
-            if system == "Linux":
-                symbols = directory / f"{binary_name}.debug"
-                run([tools["llvm-objcopy"], "--only-keep-debug", binary, symbols])
-                run([tools["llvm-strip"], "--strip-all", binary])
-                run([tools["llvm-objcopy"], f"--add-gnu-debuglink={symbols}", binary])
-                identities = [
-                    run([tools["llvm-readobj"], "--notes", path])
-                    for path in (binary, symbols)
-                ]
-                build_ids = [
-                    re.findall(r"Build ID: ([a-fA-F0-9]+)", identity)
-                    for identity in identities
-                ]
-                if not build_ids[0] or build_ids[0] != build_ids[1]:
-                    raise RuntimeError(f"ELF build IDs differ: {build_ids}")
-                report["identity"] = build_ids[0]
-            elif system == "Darwin":
-                symbols = directory / f"{binary_name}.dSYM"
-                shutil.copytree(built.with_suffix(".dSYM"), symbols)
-                run(["strip", "-S", "-x", binary])
-                run(["codesign", "--force", "--sign", "-", binary])
-                identities = [
-                    run([tools["llvm-dwarfdump"], "--uuid", path])
-                    for path in (binary, symbols)
-                ]
-                identifiers = [
-                    re.findall(r"UUID: ([A-Fa-f0-9-]+)", identity)
-                    for identity in identities
-                ]
-                if not identifiers[0] or identifiers[0] != identifiers[1]:
-                    raise RuntimeError(f"Mach-O UUIDs differ: {identifiers}")
-                report["identity"] = identifiers[0]
-            else:
-                symbols = directory / "symbol_fixture.pdb"
-                shutil.copyfile(built.with_suffix(".pdb"), symbols)
-                report["identity"] = run(
-                    [tools["llvm-readobj"], "--coff-debug-directory", binary]
-                )
+            symbols, report["identity"] = separate_symbols(binary, built, tools, system)
             unprocessed_wheel = wheel.with_suffix(".original.whl")
             wheel.rename(unprocessed_wheel)
-            repack_wheel(unprocessed_wheel, wheel, binary)
+            repack_wheel(unprocessed_wheel, wheel, [binary])
             report["builds"][mode].update(
                 {
                     "stripped_executable_bytes": binary.stat().st_size,
@@ -305,25 +337,9 @@ def main():
                 }
             )
 
-    lookups = {}
-    for name, address in function_addresses.items():
-        lookup, resolved = symbolize(binary, symbols, address, tools, system)
-        if not resolved or FUNCTIONS[name] not in lookup:
-            raise RuntimeError(f"Cannot resolve {name} to {FUNCTIONS[name]}:\n{lookup}")
-        lookups[name] = lookup
-    hidden = symbols.with_name(symbols.name + ".hidden")
-    symbols.rename(hidden)
-    negative_lookups = {}
-    try:
-        for name, address in function_addresses.items():
-            lookup, resolved = symbolize(binary, symbols, address, tools, system)
-            if resolved:
-                raise RuntimeError(
-                    f"{name} still resolves without companion symbols:\n{lookup}"
-                )
-            negative_lookups[name] = lookup
-    finally:
-        hidden.rename(symbols)
+    lookups, negative_lookups = verify_symbols(
+        binary, symbols, function_addresses, FUNCTIONS, tools, system
+    )
 
     with tempfile.TemporaryDirectory(prefix="uv-symbol-wheel-") as temporary:
         environment = Path(temporary) / "venv"
