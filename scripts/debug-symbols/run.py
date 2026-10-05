@@ -269,6 +269,12 @@ def verify_symbols(binary, symbols, function_addresses, functions, tools, system
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--debug-level",
+        choices=("full", "line-tables-only"),
+        default="full",
+        help="Cargo debug information level for the symbols build",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=FIXTURE.parents[1] / "target" / "debug-symbols-experiment",
@@ -298,6 +304,7 @@ def main():
         "maturin": run(["maturin", "--version"]).strip(),
         "tools": tools,
         "builds": {},
+        "debug_level": args.debug_level,
     }
     binary_name = "symbol_fixture.exe" if system == "Windows" else "symbol_fixture"
 
@@ -311,7 +318,7 @@ def main():
             environment.update(
                 {
                     "CARGO_TARGET_DIR": str(target),
-                    "CARGO_PROFILE_RELEASE_DEBUG": "full"
+                    "CARGO_PROFILE_RELEASE_DEBUG": args.debug_level
                     if mode == "symbols"
                     else "none",
                     "CARGO_PROFILE_RELEASE_STRIP": "none"

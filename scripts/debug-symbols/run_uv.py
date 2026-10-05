@@ -246,7 +246,9 @@ def build(output, report, tools, system, host):
                 "CARGO_TARGET_DIR": temporary,
                 "CARGO_INCREMENTAL": "0",
                 "CARGO_TERM_COLOR": "never",
-                "CARGO_PROFILE_RELEASE_DEBUG": "full" if mode == "symbols" else "none",
+                "CARGO_PROFILE_RELEASE_DEBUG": report["debug_level"]
+                if mode == "symbols"
+                else "none",
                 "CARGO_PROFILE_RELEASE_STRIP": "none"
                 if mode == "symbols"
                 else "symbols",
@@ -558,6 +560,12 @@ def verify(output, report, tools, system, *, benchmark=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--debug-level",
+        choices=("full", "line-tables-only"),
+        default="full",
+        help="Cargo debug information level for the symbols build and its PGO training",
+    )
+    parser.add_argument(
         "--benchmark",
         action="store_true",
         help="Compare repeated offline resolutions after verifying the binaries",
@@ -626,6 +634,7 @@ def main():
             "commit": run(["git", "rev-parse", "HEAD"], cwd=ROOT).strip(),
             "tools": tools,
             "builds": {},
+            "debug_level": args.debug_level,
             "pgo": args.pgo,
             "scope": "Native release profile, fat LTO, self-update, cargo-auditable; optional release PGO training; no manylinux container or release signing",
         }

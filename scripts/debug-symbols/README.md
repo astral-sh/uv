@@ -24,6 +24,14 @@ The experiment builds two Maturin wheels from identical source:
 | Baseline | None                              | Cargo and Maturin strip symbols  | Level 3, fat LTO, abort on panic |
 | Symbols  | Full Rust and C debug information | Deferred until symbols are saved | Level 3, fat LTO, abort on panic |
 
+Both scripts accept `--debug-level line-tables-only` to reduce the symbols build's debug
+information; the default is `full`. The workflow exposes the same `debug-level` choice. Line tables
+retain Rust file and line information for backtraces but omit variable and parameter information.
+The pinned `cc` crate maps this to reduced debug information for GCC/Clang, while MSVC C compilation
+still uses `/Z7`. Native build logs and Rust/C source lookups remain part of the experiment at
+either level. Reports record the selected level; measurements below use `full` unless stated
+otherwise.
+
 Linux embeds debug information during compilation, extracts a `.debug` file with `llvm-objcopy`,
 strips the executable, and adds a GNU debug link. macOS uses Cargo's packed `.dSYM` output, strips
 the executable, and applies an ad hoc signature. Windows retains Cargo's packed PDB alongside its
@@ -124,10 +132,10 @@ and smoke checks run on the final PGO binaries after deleting the instrumented b
 
 Both modes start with empty build and training directories. This requires four optimized builds per
 platform, so PGO workflow jobs have a three-hour timeout. Build durations are observations of the
-build and training pipeline, not application performance benchmarks. Windows PGO builds request a 64
-GB Namespace runner: the instrumented build with full debug information exhausted memory on the 32
-GB release runner. The larger runner still needs a completed validation run. Cargo build parallelism
-remains four jobs for both Windows configurations.
+build and training pipeline, not application performance benchmarks. Windows uses the repository's
+32 GB Namespace release runner, with Cargo build parallelism fixed at four jobs for both
+configurations. The instrumented build with full debug information exhausted memory on that runner;
+`line-tables-only` provides a lower-detail comparison with the same optimization and PGO settings.
 
 Run with Python 3.12 and pass `--benchmark`, or enable the workflow's `benchmark` input, for a small
 runtime comparison of the verified binaries. It resolves the existing Jupyter and Trio requirements
@@ -206,7 +214,8 @@ These are single cold observations, excluding symbol processing and verification
 information increases build cost substantially even though the installed files remain close in size.
 On Windows x86-64, the baseline completed in 25m 6s, but LLVM exhausted memory while compiling the
 instrumented `uv` with full debug information on the 32 GB release runner. Windows PGO symbol
-coverage and size comparisons remain unverified until the larger runner completes both builds.
+coverage and size comparisons with full debug information remain unverified. A request for a 64 GB
+runner never acquired a machine; access to that runner configuration has not been established.
 
 Neither Linux target reported profile mismatches. Each configuration reported 18 missing-profile
 warnings, all for `uvx`. macOS reported 5,888 missing-profile warning lines for the baseline and
