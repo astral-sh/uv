@@ -22,28 +22,31 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.platform }}
   cancel-in-progress: true
 
 jobs:
   experiment:
-    name: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && 'uv' || 'fixture' }} / ${{ matrix.runner }}
-    runs-on: ${{ matrix.runner }}
+    name: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && 'uv' || 'fixture' }} / ${{ matrix.os }}
+    runs-on: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) && matrix.uv-runner || matrix.runner }}
     timeout-minutes: 90
     env:
-      CARGO_BUILD_JOBS: ${{ matrix.os == 'Linux' && 8 || 2 }}
+      CARGO_BUILD_JOBS: ${{ matrix.os == 'Linux' && 8 || 4 }}
       RUN_UV: ${{ inputs.uv && (inputs.platform == 'all' || inputs.platform == matrix.os) }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: depot-ubuntu-24.04-16
+            uv-runner: depot-ubuntu-24.04-16
             os: Linux
             uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           - runner: macos-15
+            uv-runner: namespace-profile-macos-15
             os: macOS
             uv-checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
           - runner: windows-2022
+            uv-runner: namespace-profile-windows-2022-x86-64-16x32
             os: Windows
             uv-checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
     steps:

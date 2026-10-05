@@ -90,8 +90,8 @@ rebuilding. CI uploads the reports, logs, wheels, and symbols for seven days, ex
 unprocessed wheels.
 
 Pushes run the small fixture. To run the full comparison, dispatch the workflow with `uv` enabled
-and select all platforms or one platform. Linux uses the repository's larger Depot runner to provide
-headroom for full debug information and fat LTO.
+and select all platforms or one platform. Full uv builds use the repository's Depot Linux and
+Namespace macOS/Windows runners to provide headroom for full debug information and fat LTO.
 
 This comparison uses native runners without PGO, manylinux containers, cross compilation, or
 production signing. It measures the effect of enabling symbols on the uv dependency graph; its
