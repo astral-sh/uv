@@ -56,6 +56,7 @@ uv-keyring = { version = "0.0.90", path = "crates/uv-keyring" }
 uv-lock = { version = "0.0.90", path = "crates/uv-lock" }
 uv-lock-operations = { version = "0.0.90", path = "crates/uv-lock-operations" }
 uv-logging = { version = "0.0.90", path = "crates/uv-logging" }
+uv-macho = { version = "0.0.90", path = "crates/uv-macho" }
 uv-macros = { version = "0.0.90", path = "crates/uv-macros" }
 uv-metadata = { version = "0.0.90", path = "crates/uv-metadata" }
 uv-netrc = { version = "0.0.90", path = "crates/uv-netrc" }
@@ -281,6 +282,7 @@ rustix = { version = "1.0.0", default-features = false, features = [
 ] }
 same-file = { version = "1.0.6", default-features = false }
 schemars = { version = "1.0.0", default-features = false, features = ["derive", "std", "url2"] }
+scroll = { version = "0.13.0", default-features = false }
 seahash = { version = "4.1.0", default-features = false }
 secret-service = { version = "5.0.0", default-features = false, features = [
   "rt-tokio-crypto-rust",
