@@ -64,7 +64,7 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
-use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::sync::MalwareCheckContext;
@@ -781,50 +781,15 @@ pub(crate) async fn run(
                 };
 
                 // Identify the installation target.
-                let target = match &project {
-                    VirtualProject::Project(project) => {
-                        if all_packages {
-                            InstallTarget::Workspace {
-                                workspace: project.workspace(),
-                                project_name: Some(project.project_name()),
-                                lock: result.lock(),
-                            }
-                        } else if let Some(package) = package.as_ref() {
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: package,
-                                lock: result.lock(),
-                            }
-                        } else {
-                            // By default, install the root package.
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: project.project_name(),
-                                lock: result.lock(),
-                            }
-                        }
-                    }
-                    VirtualProject::NonProject(workspace) => {
-                        if all_packages {
-                            InstallTarget::NonProjectWorkspace {
-                                workspace,
-                                lock: result.lock(),
-                            }
-                        } else if let Some(package) = package.as_ref() {
-                            InstallTarget::Project {
-                                workspace,
-                                name: package,
-                                lock: result.lock(),
-                            }
-                        } else {
-                            // By default, install the entire workspace.
-                            InstallTarget::NonProjectWorkspace {
-                                workspace,
-                                lock: result.lock(),
-                            }
-                        }
-                    }
-                };
+                let target = InstallTarget::from_project(
+                    &project,
+                    result.lock(),
+                    PackageSelection::from_args(
+                        all_packages,
+                        package.as_slice(),
+                        project.project_name(),
+                    ),
+                );
 
                 let install_options = InstallOptions::default();
                 // Validate that the set of requested extras and development groups are defined in the lockfile.

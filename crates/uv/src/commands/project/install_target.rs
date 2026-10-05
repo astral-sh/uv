@@ -8,7 +8,7 @@ use rustc_hash::FxHashSet;
 
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecification,
-    ExtrasSpecificationWithDefaults, InstallOptions,
+    ExtrasSpecificationWithDefaults, InstallOptions, InstallTarget as InstallOptionTarget,
 };
 use uv_distribution_types::{Index, Resolution};
 use uv_lock::{Installable, InstallableRootKind, Lock, LockError, Package};
@@ -19,8 +19,8 @@ use uv_pypi_types::{
     VerbatimParsedUrl,
 };
 use uv_scripts::Pep723Script;
-use uv_workspace::Workspace;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
+use uv_workspace::{VirtualProject, Workspace};
 
 use crate::commands::project::ProjectError;
 
@@ -88,6 +88,39 @@ impl<'lock> PackageSelection<'lock> {
         } else {
             Self::NonProjectWorkspace
         }
+    }
+
+    /// Identify workspace members excluded from installation before a lockfile is available.
+    pub(crate) fn first_party_exclusions(
+        self,
+        workspace: &Workspace,
+        project_name: Option<&PackageName>,
+        install_options: &InstallOptions,
+    ) -> BTreeSet<PackageName> {
+        let members = workspace
+            .packages()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let project_name = match self {
+            Self::Projects([name]) => Some(name),
+            Self::Projects(_) => None,
+            Self::Workspace | Self::NonProjectWorkspace => project_name,
+        };
+        members
+            .iter()
+            .filter(|name| {
+                !install_options.include_package(
+                    InstallOptionTarget {
+                        name,
+                        is_local: true,
+                    },
+                    project_name,
+                    &members,
+                )
+            })
+            .cloned()
+            .collect()
     }
 }
 
@@ -251,6 +284,39 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
 }
 
 impl<'lock> InstallTarget<'lock> {
+    /// Select installation roots from a project and its workspace.
+    pub(crate) fn from_project(
+        project: &'lock VirtualProject,
+        lock: &'lock Lock,
+        selection: PackageSelection<'lock>,
+    ) -> Self {
+        let workspace = project.workspace();
+        match selection {
+            PackageSelection::Projects([name]) => Self::Project {
+                workspace,
+                name,
+                lock,
+            },
+            PackageSelection::Projects(names) => Self::Projects {
+                workspace,
+                names,
+                lock,
+            },
+            PackageSelection::Workspace => {
+                if let Some(project_name) = project.project_name() {
+                    Self::Workspace {
+                        workspace,
+                        project_name: Some(project_name),
+                        lock,
+                    }
+                } else {
+                    Self::NonProjectWorkspace { workspace, lock }
+                }
+            }
+            PackageSelection::NonProjectWorkspace => Self::NonProjectWorkspace { workspace, lock },
+        }
+    }
+
     /// Normalize project and lockfile selections before choosing installation roots.
     fn package_selection(&self) -> Option<PackageSelection<'lock>> {
         match self {
