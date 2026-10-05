@@ -519,7 +519,7 @@ fn conflict_marker_reachability<'lock>(
                     // the dependency marker as redundant when the lockfile is written.
                     let active_marker = if let Node::Package(parent) = graph[parent_index] {
                         let item = ConflictItem::from((parent.name().clone(), (*extra).clone()));
-                        *parent_map.entry(item).or_insert(parent_marker)
+                        *parent_map.entry(item).or_insert(MarkerTree::FALSE)
                     } else {
                         parent_marker
                     };
