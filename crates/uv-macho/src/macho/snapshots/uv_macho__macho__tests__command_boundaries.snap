@@ -1,0 +1,11 @@
+---
+source: crates/uv-macho/src/macho/tests.rs
+expression: "failures.join(\"\\n\")"
+---
+string inside command header: Malformed Mach-O: invalid load-command string offset
+string outside command: Malformed Mach-O: unterminated string
+tool count: Malformed Mach-O: range extends past its containing data
+symbol count: Malformed Mach-O: range extends past its containing data
+symbol offset: Malformed Mach-O: file data overlaps load commands or the signature
+unterminated string: Malformed Mach-O: unterminated string
+virtual address overflow: Mach-O image exceeds the supported size
