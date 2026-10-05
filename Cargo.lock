@@ -229,6 +229,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-html"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff63706e5b5a70969c3c4b0a759634304fe219dcbbf9364e7320c1441def346e"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "astral-pubgrub"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -276,15 +285,6 @@ dependencies = [
  "tokio",
  "tracing",
  "wasmtimer",
-]
-
-[[package]]
-name = "astral-tl"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04d4bb5df351abb6758a04240b0193794ddaf34a7c0b9452fab3c25dcce39e88"
-dependencies = [
- "memchr",
 ]
 
 [[package]]
@@ -2105,12 +2105,6 @@ dependencies = [
  "widestring",
  "windows",
 ]
-
-[[package]]
-name = "html-escape"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9356095b4b41197bba32173600e1582792cda618f65d12f68e2e77d273413c5"
 
 [[package]]
 name = "http"
@@ -6232,9 +6226,9 @@ name = "uv-client"
 version = "0.0.90"
 dependencies = [
  "anyhow",
+ "astral-html",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
- "astral-tl",
  "astral_async_http_range_reader",
  "astral_async_zip",
  "async-trait",
@@ -6243,7 +6237,6 @@ dependencies = [
  "futures",
  "h2",
  "hex",
- "html-escape",
  "http",
  "http-body-util",
  "hyper",

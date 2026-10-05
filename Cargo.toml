@@ -103,6 +103,7 @@ anstream = { version = "1.0.0", default-features = false, features = ["auto", "w
 anyhow = { version = "1.0.89", default-features = false, features = ["std"] }
 arcstr = { version = "1.2.0", default-features = false }
 arrayvec = { version = "0.7.6", default-features = false }
+astral-html = { version = "0.0.3", default-features = false }
 astral-tokio-tar = { version = "0.7.0", default-features = false }
 async-channel = { version = "2.3.1", default-features = false, features = ["std"] }
 async-compression = { version = "0.4.12", default-features = false, features = [
@@ -181,7 +182,6 @@ hashbrown = { version = "0.17.0", default-features = false, features = [
   "inline-more",
 ] }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
-html-escape = { version = "0.2.13", default-features = false }
 http = { version = "1.1.0", default-features = false, features = ["std"] }
 http-content-range = { version = "0.2.4", default-features = false }
 indexmap = { version = "2.5.0", default-features = false, features = ["std"] }
@@ -295,7 +295,6 @@ tempfile = { version = "3.14.0", default-features = false, features = ["getrando
 terminal_size = { version = "0.4.2", default-features = false }
 textwrap = { version = "0.16.1", default-features = false, features = ["smawk", "unicode-width"] }
 thiserror = { version = "2.0.0", default-features = false, features = ["std"] }
-astral-tl = { version = "0.8.0", default-features = false }
 tokio = { version = "1.40.0", default-features = false, features = [
   "fs",
   "io-util",
