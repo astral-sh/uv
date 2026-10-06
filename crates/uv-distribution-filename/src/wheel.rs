@@ -101,7 +101,7 @@ impl WheelFilename {
 
     /// Returns `true` if the wheel is compatible with the given tags.
     pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
-        compatible_tags.is_compatible(self.python_tags(), self.abi_tags(), self.platform_tags())
+        compatible_tags.is_compatible(self.tags.compressed_tags())
     }
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
