@@ -3,7 +3,6 @@ use std::fmt::{self, Write};
 use std::ops::Deref;
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
@@ -547,32 +546,6 @@ impl uv_publish::Reporter for PublishReporter {
 
     fn on_hash_complete(&self, id: usize) {
         self.reporter.on_hash_complete(id);
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct AuditReporter {
-    progress: ProgressBar,
-}
-
-impl From<Printer> for AuditReporter {
-    fn from(printer: Printer) -> Self {
-        let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.enable_steady_tick(Duration::from_millis(200));
-        progress.set_style(
-            ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-        );
-        progress.set_message("Auditing dependencies...");
-        Self { progress }
-    }
-}
-
-impl AuditReporter {
-    pub(crate) fn on_audit_complete(&self) {
-        self.progress.set_message("");
-        self.progress.finish_and_clear();
     }
 }
 

@@ -19,7 +19,7 @@ use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
-use crate::commands::project::audit::{
+use crate::commands::audit::{
     AuditResults, artifact_uri, audit_lock, json, sarif, warn_unmatched_ignores,
 };
 use crate::printer::Printer;
