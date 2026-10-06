@@ -5,12 +5,11 @@ use uv_distribution_types::Resolution;
 use uv_lock::{Lock, SelectedDependency};
 use uv_normalize::{GroupName, PackageName};
 use uv_python::Interpreter;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_workspace::VirtualProject;
 
-use uv_resolve_operations::{resolution_markers, resolution_tags};
-
 /// A locked package selected for use as a project tool.
-pub(crate) struct LockedTool<'lock> {
+pub(super) struct LockedTool<'lock> {
     dependency: SelectedDependency<'lock>,
     requires_separate_environment: bool,
 }
@@ -21,14 +20,14 @@ impl<'lock> LockedTool<'lock> {
     }
 
     /// Returns `true` if the tool must be installed outside the selected project environment.
-    pub(crate) fn requires_separate_environment(&self) -> bool {
+    pub(super) fn requires_separate_environment(&self) -> bool {
         self.requires_separate_environment
     }
 }
 
 /// Find a tool in a dependency group, falling back to the current project's production
 /// dependencies.
-pub(crate) fn find_locked_tool<'lock>(
+pub(super) fn find_locked_tool<'lock>(
     project: &VirtualProject,
     lock: &'lock Lock,
     interpreter: &Interpreter,
@@ -59,7 +58,7 @@ pub(crate) fn find_locked_tool<'lock>(
 }
 
 /// Materialize the exact dependency subgraph for a locked tool selection.
-pub(crate) fn resolution_from_lock(
+pub(super) fn resolution_from_lock(
     project: &VirtualProject,
     lock: &Lock,
     tool: &LockedTool<'_>,

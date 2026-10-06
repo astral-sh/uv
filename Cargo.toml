@@ -28,8 +28,8 @@ uv-cache-info = { version = "0.0.90", path = "crates/uv-cache-info" }
 uv-cache-key = { version = "0.0.90", path = "crates/uv-cache-key" }
 uv-cli = { version = "0.0.90", path = "crates/uv-cli" }
 uv-client = { version = "0.0.90", path = "crates/uv-client" }
-uv-configuration = { version = "0.0.90", path = "crates/uv-configuration" }
 uv-command-support = { version = "0.0.90", path = "crates/uv-command-support" }
+uv-configuration = { version = "0.0.90", path = "crates/uv-configuration" }
 uv-console = { version = "0.0.90", path = "crates/uv-console" }
 uv-dirs = { version = "0.0.90", path = "crates/uv-dirs" }
 uv-dispatch = { version = "0.0.90", path = "crates/uv-dispatch" }
@@ -48,8 +48,8 @@ uv-fs = { version = "0.0.90", path = "crates/uv-fs", features = [
 uv-git = { version = "0.0.90", path = "crates/uv-git" }
 uv-git-types = { version = "0.0.90", path = "crates/uv-git-types" }
 uv-globfilter = { version = "0.0.90", path = "crates/uv-globfilter" }
-uv-install-wheel = { version = "0.0.90", path = "crates/uv-install-wheel", default-features = false }
 uv-install-operations = { version = "0.0.90", path = "crates/uv-install-operations" }
+uv-install-wheel = { version = "0.0.90", path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { version = "0.0.90", path = "crates/uv-installer" }
 uv-keyring = { version = "0.0.90", path = "crates/uv-keyring" }
 uv-lock = { version = "0.0.90", path = "crates/uv-lock" }
@@ -61,7 +61,6 @@ uv-netrc = { version = "0.0.90", path = "crates/uv-netrc" }
 uv-normalize = { version = "0.0.90", path = "crates/uv-normalize" }
 uv-once-map = { version = "0.0.90", path = "crates/uv-once-map" }
 uv-options-metadata = { version = "0.0.90", path = "crates/uv-options-metadata" }
-uv-performance-memory-allocator = { version = "0.0.90", path = "crates/uv-performance-memory-allocator" }
 uv-pep440 = { version = "0.0.90", path = "crates/uv-pep440", features = [
   "tracing",
   "rkyv",
@@ -70,10 +69,12 @@ uv-pep440 = { version = "0.0.90", path = "crates/uv-pep440", features = [
 uv-pep508 = { version = "0.0.90", path = "crates/uv-pep508", features = [
   "non-pep508-extensions",
 ] }
-uv-platform = { version = "0.0.90", path = "crates/uv-platform" }
+uv-performance-memory-allocator = { version = "0.0.90", path = "crates/uv-performance-memory-allocator" }
 uv-pip-commands = { version = "0.0.90", path = "crates/uv-pip-commands" }
+uv-platform = { version = "0.0.90", path = "crates/uv-platform" }
 uv-platform-tags = { version = "0.0.90", path = "crates/uv-platform-tags" }
 uv-preview = { version = "0.0.90", path = "crates/uv-preview" }
+uv-project-commands = { version = "0.0.90", path = "crates/uv-project-commands" }
 uv-publish = { version = "0.0.90", path = "crates/uv-publish" }
 uv-pypi-types = { version = "0.0.90", path = "crates/uv-pypi-types" }
 uv-python = { version = "0.0.90", path = "crates/uv-python" }

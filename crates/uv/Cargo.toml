@@ -15,19 +15,16 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
-uv-audit = { workspace = true }
-uv-audit-operations = { workspace = true }
 uv-auth = { workspace = true }
 uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
-uv-cache-key = { workspace = true }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
-uv-configuration = { workspace = true }
 uv-command-support = { workspace = true }
+uv-configuration = { workspace = true }
 uv-console = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
@@ -38,10 +35,8 @@ uv-errors = { workspace = true }
 uv-extract = { workspace = true }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true }
-uv-git = { workspace = true }
-uv-git-types = { workspace = true }
-uv-install-wheel = { workspace = true, default-features = false }
 uv-install-operations = { workspace = true }
+uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
 uv-lock-operations = { workspace = true }
@@ -52,6 +47,7 @@ uv-pep508 = { workspace = true }
 uv-performance-memory-allocator = { workspace = true, optional = true }
 uv-pip-commands = { workspace = true }
 uv-preview = { workspace = true }
+uv-project-commands = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
@@ -66,10 +62,9 @@ uv-scripts = { workspace = true }
 uv-settings = { workspace = true }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
-uv-threads = { workspace = true }
 uv-test = { workspace = true, optional = true }
+uv-threads = { workspace = true }
 uv-tool-commands = { workspace = true }
-uv-trampoline-builder = { workspace = true }
 uv-types = { workspace = true }
 uv-version = { workspace = true }
 uv-virtualenv = { workspace = true }
@@ -79,25 +74,20 @@ uv-workspace-commands = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
-async_zip = { workspace = true, features = ["zstd"] }
 axoupdater = { workspace = true, features = [
   "github_releases",
   "tokio",
 ], optional = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
-ctrlc = { workspace = true }
 diskus = { workspace = true }
 etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
-jiff = { workspace = true }
 indicatif = { workspace = true }
-indoc = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
-rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tar-codec = { workspace = true }
@@ -105,8 +95,6 @@ tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-toml = { workspace = true }
-toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
@@ -126,12 +114,15 @@ uv-version = { workspace = true }
 embed-manifest = { workspace = true }
 
 [dev-dependencies]
+uv-cache-key = { workspace = true }
 uv-platform = { workspace = true }
 uv-publish = { workspace = true, features = ["test"] }
 uv-test = { workspace = true }
+uv-trampoline-builder = { workspace = true }
 
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 backon = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
@@ -151,6 +142,8 @@ sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
 wiremock = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

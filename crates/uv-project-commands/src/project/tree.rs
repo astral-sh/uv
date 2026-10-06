@@ -4,43 +4,38 @@ use std::path::Path;
 use anstream::print;
 use anyhow::{Error, Result, bail};
 use futures::StreamExt;
+
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_command_support::{ExitStatus, Printer, UvError};
-use uv_configuration::TreeFormat;
-use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple};
+use uv_configuration::{
+    ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple, TreeFormat,
+};
+use uv_dispatch::UniversalState;
 use uv_distribution_types::IndexCapabilities;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
+    EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
+};
 use uv_lock::{PackageMap, TreeDisplay, TreeJsonTarget};
-use uv_normalize::DefaultGroups;
-use uv_normalize::PackageName;
+use uv_lock_operations::{DiscoveredProject, FrozenWorkspace, LockMode, LockOperation, LockTarget};
+use uv_normalize::{DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
     PythonVersion,
 };
-use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
-use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, WorkspaceCache};
-
-use uv_dispatch::UniversalState;
-use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
-use uv_environment_operations::{
-    EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
-};
-use uv_lock_operations::DiscoveredProject;
-use uv_lock_operations::FrozenWorkspace;
-use uv_lock_operations::LockTarget;
-use uv_lock_operations::{LockMode, LockOperation};
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_resolve_operations::latest::LatestClient;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
-use uv_resolve_operations::reporters::LatestVersionReporter;
 use uv_resolve_operations::resolution_markers;
-use uv_settings::FrozenSource;
-use uv_settings::LockCheck;
-use uv_settings::ResolverSettings;
+use uv_scripts::Pep723Script;
+use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
+use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, WorkspaceCache};
+
+use uv_resolve_operations::reporters::LatestVersionReporter;
 
 /// A tree reads an existing workspace lock or resolves a project or script manifest.
 #[derive(Clone, Copy)]
@@ -51,7 +46,7 @@ enum TreeSource<'a> {
 
 /// Display the dependency tree for a project, script, or frozen workspace.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn tree(
+pub async fn tree(
     project_dir: &Path,
     groups: DependencyGroups,
     lock_check: LockCheck,

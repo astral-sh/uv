@@ -6,15 +6,21 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow, bail};
 use itertools::Itertools;
+
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
+use uv_environment_operations::{
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
+};
 use uv_lock::implicit_constraints_marker;
+use uv_lock_operations::{LockMode, LockOperation, LockResult, LockTarget};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
@@ -23,26 +29,19 @@ use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, Ve
 use uv_python::{
     ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonPreference,
 };
+use uv_python_context::ProjectPythonRequest;
 use uv_redacted::DisplaySafeUrl;
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolver::MetadataResponse;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{PythonInstallMirrors, ResolverSettings};
 use uv_workspace::pyproject::{DependencyType, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{
     DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
 };
 
-use crate::commands::project::edit::ProjectEdit;
-use crate::commands::project::lock::LockEvent;
-use uv_dispatch::UniversalState;
-use uv_environment_operations::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
-};
-use uv_lock_operations::LockTarget;
-use uv_lock_operations::{LockMode, LockOperation, LockResult};
-use uv_python_context::ProjectPythonRequest;
-use uv_resolve_operations::loggers::DefaultResolveLogger;
-use uv_settings::ResolverSettings;
+use crate::project::edit::ProjectEdit;
+use crate::project::lock::LockEvent;
 
 /// A dependency requirement selected for upgrading.
 struct UpgradableRequirement {
@@ -163,7 +162,7 @@ impl UpgradableRequirement {
     }
 }
 
-pub(crate) async fn upgrade(
+pub async fn upgrade(
     project_dir: &Path,
     packages: Vec<PackageName>,
     exclude: Vec<PackageName>,

@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 pub(crate) use auth::dir::dir as auth_dir;
 pub(crate) use auth::helper::helper as auth_helper;
 pub(crate) use auth::login::login as auth_login;
@@ -54,7 +52,6 @@ pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 pub use uv_command_support::ExitStatus;
 pub(crate) use uv_console::human_readable_bytes;
-use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
 pub(crate) use version::self_version;
 pub(crate) use workspace::dir::dir;
@@ -71,7 +68,7 @@ mod cache_size;
 pub(crate) mod diagnostics;
 mod help;
 pub(crate) use uv_pip_commands as pip;
-mod project;
+pub(crate) use uv_project_commands::project;
 mod publish;
 pub(crate) use uv_python_commands as python;
 pub(crate) mod reporters;
@@ -82,6 +79,8 @@ mod venv;
 mod version;
 pub(crate) use uv_workspace_commands as workspace;
 
+pub(crate) use uv_project_commands::ScriptPath;
+
 #[cfg(test)]
 mod error_tests {
     use std::io::{Error, ErrorKind};
@@ -91,9 +90,8 @@ mod error_tests {
 
     use uv_command_support::UvError;
     use uv_environment_operations::EnvironmentError;
+    use uv_project_commands::project::ProjectError;
     use uv_resolve_operations::Error as ResolveError;
-
-    use crate::commands::project::ProjectError;
 
     #[test]
     fn resolution_context_missing_requirements() -> anyhow::Result<()> {
@@ -178,14 +176,4 @@ mod error_tests {
 
         Ok(())
     }
-}
-
-/// A Python file that may or may not include an existing PEP 723 script tag.
-#[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
-pub(crate) enum ScriptPath {
-    /// The Python file already includes a PEP 723 script tag.
-    Script(Pep723Script),
-    /// The Python file does not include a PEP 723 script tag.
-    Path(PathBuf),
 }
