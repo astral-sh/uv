@@ -8,7 +8,6 @@ use std::process::Command;
 use anyhow::{Context, Result};
 #[cfg(target_os = "macos")]
 use assert_cmd::assert::OutputAssertExt;
-use scroll::{BE, LE, Pread};
 use sha2::{Digest, Sha256};
 
 use common::{commands, install_name, name_capacity, sections};
@@ -24,18 +23,19 @@ fn signature(image: &[u8]) -> Result<(usize, BTreeMap<u32, &[u8]>)> {
         .into_iter()
         .find(|command| command.kind == 0x1d)
         .context("LC_CODE_SIGNATURE")?;
-    let offset = command.data.pread_with::<u32>(8, LE)? as usize;
-    let size = command.data.pread_with::<u32>(12, LE)? as usize;
+    let offset = u32::from_le_bytes(command.data[8..12].try_into()?) as usize;
+    let size = u32::from_le_bytes(command.data[12..16].try_into()?) as usize;
     let data = image.get(offset..offset + size).context("signature data")?;
-    assert_eq!(data.pread_with::<u32>(0, BE)?, 0xfade_0cc0);
+    assert_eq!(u32::from_be_bytes(data[..4].try_into()?), 0xfade_0cc0);
 
-    let count = data.pread_with::<u32>(8, BE)? as usize;
+    let count = u32::from_be_bytes(data[8..12].try_into()?) as usize;
     let mut blobs = BTreeMap::new();
 
     for index in 0..count {
-        let slot = data.pread_with::<u32>(12 + index * 8, BE)?;
-        let offset = data.pread_with::<u32>(16 + index * 8, BE)? as usize;
-        let length = data.pread_with::<u32>(offset + 4, BE)? as usize;
+        let entry = &data[12 + index * 8..20 + index * 8];
+        let slot = u32::from_be_bytes(entry[..4].try_into()?);
+        let offset = u32::from_be_bytes(entry[4..8].try_into()?) as usize;
+        let length = u32::from_be_bytes(data[offset + 4..offset + 8].try_into()?) as usize;
         blobs.insert(slot, &data[offset..offset + length]);
     }
 
@@ -54,9 +54,12 @@ fn verify_hashes(image: &[u8]) -> Result<()> {
     assert_eq!(directory[36], 32);
     assert_eq!(directory[37], 2);
 
-    let offset = directory.pread_with::<u32>(16, BE)? as usize;
-    let count = directory.pread_with::<u32>(28, BE)? as usize;
-    assert_eq!(directory.pread_with::<u32>(32, BE)? as usize, limit);
+    let offset = u32::from_be_bytes(directory[16..20].try_into()?) as usize;
+    let count = u32::from_be_bytes(directory[28..32].try_into()?) as usize;
+    assert_eq!(
+        u32::from_be_bytes(directory[32..36].try_into()?) as usize,
+        limit
+    );
     assert_eq!(count, limit.div_ceil(4096));
     assert_eq!(directory.len(), offset + count * 32);
 
@@ -67,7 +70,7 @@ fn verify_hashes(image: &[u8]) -> Result<()> {
         );
     }
 
-    let specials = directory.pread_with::<u32>(24, BE)? as usize;
+    let specials = u32::from_be_bytes(directory[24..28].try_into()?) as usize;
 
     for special in 1..=specials {
         let actual = &directory[offset - special * 32..][..32];
@@ -156,15 +159,15 @@ fn preserve_metadata() -> Result<()> {
     let original = before.get(&0).context("original directory")?;
     let directory = after.get(&0).context("new directory")?;
     assert_eq!(
-        directory.pread_with::<u32>(12, BE)?,
-        original.pread_with::<u32>(12, BE)?
+        u32::from_be_bytes(directory[12..16].try_into()?),
+        u32::from_be_bytes(original[12..16].try_into()?)
     );
     assert_eq!(
-        directory.pread_with::<u32>(88, BE)?,
-        original.pread_with::<u32>(88, BE)?
+        u32::from_be_bytes(directory[88..92].try_into()?),
+        u32::from_be_bytes(original[88..92].try_into()?)
     );
 
-    let identifier_offset = directory.pread_with::<u32>(20, BE)? as usize;
+    let identifier_offset = u32::from_be_bytes(directory[20..24].try_into()?) as usize;
     assert_eq!(
         CStr::from_bytes_until_nul(&directory[identifier_offset..])?,
         c"org.astral.uv.fixture"
@@ -176,8 +179,9 @@ fn preserve_metadata() -> Result<()> {
 #[test]
 fn malformed_signatures() -> Result<()> {
     let (signature_offset, _) = signature(SIGNED)?;
-    let directory_offset =
-        signature_offset + SIGNED.pread_with::<u32>(signature_offset + 16, BE)? as usize;
+    let directory_offset = signature_offset
+        + u32::from_be_bytes(SIGNED[signature_offset + 16..signature_offset + 20].try_into()?)
+            as usize;
     for (description, offset, value, expected) in [
         (
             "blob count",
@@ -224,7 +228,7 @@ fn malformed_signatures() -> Result<()> {
         (
             "truncated code hashes",
             directory_offset + 4,
-            SIGNED.pread_with::<u32>(directory_offset + 4, BE)? - 1,
+            u32::from_be_bytes(SIGNED[directory_offset + 4..directory_offset + 8].try_into()?) - 1,
             Error::Malformed("range extends past its containing data"),
         ),
         (
@@ -289,7 +293,8 @@ fn malformed_signatures() -> Result<()> {
         .context("__LINKEDIT")?;
 
     let mut trailing = SIGNED.to_vec();
-    let filesize = trailing.pread_with::<u64>(linkedit.offset + 48, LE)? + 1;
+    let filesize =
+        u64::from_le_bytes(trailing[linkedit.offset + 48..linkedit.offset + 56].try_into()?) + 1;
     trailing[linkedit.offset + 48..linkedit.offset + 56].copy_from_slice(&filesize.to_le_bytes());
     trailing.push(1);
     assert_eq!(
@@ -341,7 +346,7 @@ fn resign_legacy_hashes() -> Result<()> {
     let (_, after) = signature(output.as_bytes())?;
     assert_eq!(before.get(&2), after.get(&2));
     let directory = after.get(&0).context("new CodeDirectory")?;
-    let identifier_offset = directory.pread_with::<u32>(20, BE)? as usize;
+    let identifier_offset = u32::from_be_bytes(directory[20..24].try_into()?) as usize;
     assert_eq!(
         CStr::from_bytes_until_nul(&directory[identifier_offset..])?,
         c"org.astral.uv.fixture"
@@ -364,7 +369,7 @@ fn non_utf8_identifier() -> Result<()> {
 
     let (_, blobs) = signature(output.as_bytes())?;
     let directory = blobs.get(&0).context("primary CodeDirectory")?;
-    let offset = directory.pread_with::<u32>(20, BE)? as usize;
+    let offset = u32::from_be_bytes(directory[20..24].try_into()?) as usize;
     assert_eq!(
         CStr::from_bytes_until_nul(&directory[offset..])?,
         identifier
