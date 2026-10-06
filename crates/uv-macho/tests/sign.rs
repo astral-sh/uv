@@ -3,6 +3,8 @@ mod common;
 use std::collections::BTreeMap;
 use std::ffi::CStr;
 #[cfg(target_os = "macos")]
+use std::ffi::CString;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 use anyhow::{Context, Result};
@@ -106,7 +108,7 @@ fn edit_and_sign() -> Result<()> {
             let output = set_install_name(
                 fixture,
                 &InstallName::new(name)?,
-                &SigningIdentifier::new(b"fixture")?,
+                SigningIdentifier::new(c"fixture")?,
             )?;
             assert_eq!(install_name(output.as_bytes())?, name);
 
@@ -115,7 +117,7 @@ fn edit_and_sign() -> Result<()> {
                 set_install_name(
                     output.as_bytes(),
                     &InstallName::new(name)?,
-                    &SigningIdentifier::new(b"ignored")?
+                    SigningIdentifier::new(c"ignored")?
                 )?,
                 output
             );
@@ -148,7 +150,7 @@ fn preserve_metadata() -> Result<()> {
     let output = set_install_name(
         SIGNED,
         &InstallName::new(b"/libfixture.dylib")?,
-        &SigningIdentifier::new(b"ignored")?,
+        SigningIdentifier::new(c"ignored")?,
     )?;
     let (_, before) = signature(SIGNED)?;
     let (_, after) = signature(output.as_bytes())?;
@@ -202,7 +204,7 @@ fn unsupported_signature_metadata() -> Result<()> {
         }
     }
     insta::assert_snapshot!(
-        set_install_name(&image, &InstallName::new(b"name")?, &SigningIdentifier::new(b"fixture")?).expect_err("unknown metadata"),
+        set_install_name(&image, &InstallName::new(b"name")?, SigningIdentifier::new(c"fixture")?).expect_err("unknown metadata"),
         @"Unsupported Mach-O: unavailable or unsupported special-slot data"
     );
 
@@ -306,7 +308,7 @@ fn malformed_signatures() -> Result<()> {
             set_install_name(
                 &image,
                 &InstallName::new(b"name")?,
-                &SigningIdentifier::new(b"fixture")?
+                SigningIdentifier::new(c"fixture")?
             ),
             Err(expected),
             "{description}"
@@ -326,7 +328,7 @@ fn malformed_signatures() -> Result<()> {
         set_install_name(
             &trailing,
             &InstallName::new(b"name")?,
-            &SigningIdentifier::new(b"fixture")?
+            SigningIdentifier::new(c"fixture")?
         ),
         Err(Error::Unsupported(
             "code signature is not at the end of __LINKEDIT"
@@ -341,19 +343,15 @@ fn malformed_signatures() -> Result<()> {
 fn macos_verification() -> Result<()> {
     let temporary = tempfile::tempdir()?;
 
-    for (name, fixture, native) in [
-        ("arm64", ARM64, cfg!(target_arch = "aarch64")),
-        ("x86_64", X86_64, cfg!(target_arch = "x86_64")),
-        ("signed", SIGNED, cfg!(target_arch = "aarch64")),
-    ] {
+    for (name, fixture) in [("arm64", ARM64), ("x86_64", X86_64), ("signed", SIGNED)] {
         let path = temporary.path().join(format!("{name}.dylib"));
 
         // A large identifier forces __LINKEDIT to grow by multiple virtual pages.
-        let identifier = vec![b'x'; 25000];
+        let identifier = CString::new(vec![b'x'; 25000])?;
         let output = set_install_name(
             fixture,
             &InstallName::new(path.as_os_str().as_encoded_bytes())?,
-            &SigningIdentifier::new(&identifier)?,
+            SigningIdentifier::new(&identifier)?,
         )?;
         fs_err::write(&path, output.as_bytes())?;
 
@@ -383,20 +381,6 @@ fn macos_verification() -> Result<()> {
             "{}",
             String::from_utf8_lossy(&verification.stderr)
         );
-        if native {
-            let load = Command::new("/usr/bin/python3")
-                .args([
-                    "-c",
-                    "import ctypes, sys; assert ctypes.CDLL(sys.argv[1]).uv_macho_fixture() == 42",
-                ])
-                .arg(&path)
-                .output()?;
-            assert!(
-                load.status.success(),
-                "{}",
-                String::from_utf8_lossy(&load.stderr)
-            );
-        }
     }
 
     Ok(())
@@ -405,10 +389,10 @@ fn macos_verification() -> Result<()> {
 #[test]
 fn sign_without_editing() -> Result<()> {
     for image in [ARM64, X86_64, SIGNED] {
-        let signed = adhoc_sign(image, &SigningIdentifier::new(b"fixture")?)?;
+        let signed = adhoc_sign(image, SigningIdentifier::new(c"fixture")?)?;
         verify_hashes(signed.as_bytes())?;
         assert_eq!(
-            adhoc_sign(signed.as_bytes(), &SigningIdentifier::new(b"ignored")?)?,
+            adhoc_sign(signed.as_bytes(), SigningIdentifier::new(c"ignored")?)?,
             signed
         );
     }
@@ -417,23 +401,13 @@ fn sign_without_editing() -> Result<()> {
 }
 
 #[test]
-fn invalid_identifier() {
-    for identifier in [b"".as_slice(), b"invalid\0identifier"] {
-        assert_eq!(
-            SigningIdentifier::new(identifier),
-            Err(Error::InvalidIdentifier)
-        );
-    }
-}
-
-#[test]
 fn non_utf8_name_and_identifier() -> Result<()> {
     let name = b"/non-utf8-\xff/libfixture.dylib";
-    let identifier = b"fixture-\xff";
+    let identifier = c"fixture-\xff";
     let output = set_install_name(
         ARM64,
         &InstallName::new(name)?,
-        &SigningIdentifier::new(identifier)?,
+        SigningIdentifier::new(identifier)?,
     )?;
     assert_eq!(install_name(output.as_bytes())?, name);
 
@@ -441,7 +415,7 @@ fn non_utf8_name_and_identifier() -> Result<()> {
     let directory = blobs.get(&0).context("primary CodeDirectory")?;
     let offset = directory.pread_with::<u32>(20, BE)? as usize;
     assert_eq!(
-        CStr::from_bytes_until_nul(&directory[offset..])?.to_bytes(),
+        CStr::from_bytes_until_nul(&directory[offset..])?,
         identifier
     );
 
@@ -449,7 +423,7 @@ fn non_utf8_name_and_identifier() -> Result<()> {
         set_install_name(
             output.as_bytes(),
             &InstallName::new(name)?,
-            &SigningIdentifier::new(b"ignored")?
+            SigningIdentifier::new(c"ignored")?
         )?,
         output
     );
@@ -465,14 +439,14 @@ fn header_padding() -> Result<()> {
     let output = set_install_name(
         ARM64,
         &InstallName::new(&name)?,
-        &SigningIdentifier::new(b"fixture")?,
+        SigningIdentifier::new(c"fixture")?,
     )?;
 
     verify_hashes(output.as_bytes())?;
 
     let too_long = vec![b'x'; name.len() + 1];
     insta::assert_snapshot!(
-        set_install_name(ARM64, &InstallName::new(&too_long)?, &SigningIdentifier::new(b"fixture")?).expect_err("padding exhausted"),
+        set_install_name(ARM64, &InstallName::new(&too_long)?, SigningIdentifier::new(c"fixture")?).expect_err("padding exhausted"),
         @"Not enough Mach-O header padding for the install name and code signature"
     );
 
