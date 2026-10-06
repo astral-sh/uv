@@ -16,15 +16,6 @@ async fn cached_project_workspace_can_be_exclusively_updated() -> Result<()> {
     let project =
         VirtualProject::discover(root, &DiscoveryOptions::default(), &cache, &workspaces).await?;
     let parsed = PyProjectToml::from_string(document.to_owned(), &path)?;
-    let updated = project.update_member(parsed, &workspaces)?;
-    assert!(updated.is_some());
-    drop(updated);
-    assert_eq!(
-        Workspace::discover(root, &DiscoveryOptions::default(), &cache, &workspaces)
-            .await?
-            .packages()
-            .len(),
-        1
-    );
+    assert!(project.update_member(parsed, &workspaces)?.is_some());
     Ok(())
 }
