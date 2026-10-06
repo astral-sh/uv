@@ -282,7 +282,6 @@ rustix = { version = "1.0.0", default-features = false, features = [
 ] }
 same-file = { version = "1.0.6", default-features = false }
 schemars = { version = "1.0.0", default-features = false, features = ["derive", "std", "url2"] }
-scroll = { version = "0.13.0", default-features = false }
 seahash = { version = "4.1.0", default-features = false }
 secret-service = { version = "5.0.0", default-features = false, features = [
   "rt-tokio-crypto-rust",
