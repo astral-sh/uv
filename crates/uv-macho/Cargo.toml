@@ -20,4 +20,3 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-scroll = "0.13.0"
