@@ -6,7 +6,7 @@
 //! <https://github.com/Homebrew/ruby-macho/blob/e106f7782df467357d0273c17aacd40df953de66/lib/macho/load_commands.rb>.
 
 use crate::Error;
-use crate::bytes::{array, c_string, le32, le64, range};
+use crate::bytes::{array, c_string, le32, le64, slice};
 
 pub(crate) const HEADER_SIZE: usize = 32;
 pub(crate) const SEGMENT_SIZE: usize = 72;
@@ -61,7 +61,7 @@ pub(crate) struct Header {
 
 impl Header {
     pub(crate) fn parse(data: &[u8]) -> Result<Self, Error> {
-        range(0, HEADER_SIZE, data.len())?;
+        let data = &array::<HEADER_SIZE>(data, 0)?;
 
         Ok(Self {
             magic: le32(data, 0)?,
@@ -103,24 +103,25 @@ impl<'a> Command<'a> {
             LC_RPATH | LC_SUB_FRAMEWORK | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY => 12,
             _ => return Err(Error::Unsupported("load command")),
         };
-        range(0, size, data.len())?;
+        let header = slice(data, 0, size)?;
 
         match kind {
             LC_SEGMENT_64 => {
                 // The section table is checked while reading the segment's sections.
             }
             LC_BUILD_VERSION => {
-                let tools_size = (le32(data, 20)? as usize)
+                let tools_size = (le32(header, 20)? as usize)
                     .checked_mul(8)
                     .ok_or(Error::TooLarge)?;
-                if range(size, tools_size, data.len())?.end != data.len() {
+                let tools = slice(data, size, tools_size)?;
+                if header.len() + tools.len() != data.len() {
                     return Err(Error::Malformed("invalid build-tool table"));
                 }
             }
             LC_ID_DYLIB | LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB
             | LC_LOAD_UPWARD_DYLIB | LC_LAZY_LOAD_DYLIB | LC_RPATH | LC_SUB_FRAMEWORK
             | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY => {
-                let offset = le32(data, 8)? as usize;
+                let offset = le32(header, 8)? as usize;
                 if offset < size {
                     return Err(Error::Malformed("invalid load-command string offset"));
                 }
@@ -137,28 +138,34 @@ impl<'a> Command<'a> {
     }
 }
 
-/// Fields used from `segment_command_64`.
+/// A segment header and its complete table of fixed-size section records.
 #[derive(Clone, Copy)]
-pub(crate) struct Segment {
+pub(crate) struct Segment<'a> {
     pub(crate) segname: [u8; 16],
     pub(crate) vmaddr: u64,
     pub(crate) vmsize: u64,
     pub(crate) fileoff: u64,
     pub(crate) filesize: u64,
-    pub(crate) nsects: u32,
+    pub(crate) sections: &'a [[u8; SECTION_SIZE]],
 }
 
-impl Segment {
-    pub(crate) fn parse(data: &[u8]) -> Result<Self, Error> {
-        range(0, SEGMENT_SIZE, data.len())?;
+impl<'a> Segment<'a> {
+    pub(crate) fn parse(data: &'a [u8]) -> Result<Self, Error> {
+        let (header, sections) = data
+            .split_at_checked(SEGMENT_SIZE)
+            .ok_or(Error::Malformed("range extends past its containing data"))?;
+        let (sections, trailing) = sections.as_chunks::<SECTION_SIZE>();
+        if !trailing.is_empty() || sections.len() != le32(header, 64)? as usize {
+            return Err(Error::Malformed("invalid segment section table"));
+        }
 
         Ok(Self {
-            segname: array(data, 8)?,
-            vmaddr: le64(data, 24)?,
-            vmsize: le64(data, 32)?,
-            fileoff: le64(data, 40)?,
-            filesize: le64(data, 48)?,
-            nsects: le32(data, 64)?,
+            segname: array(header, 8)?,
+            vmaddr: le64(header, 24)?,
+            vmsize: le64(header, 32)?,
+            fileoff: le64(header, 40)?,
+            filesize: le64(header, 48)?,
+            sections,
         })
     }
 }
@@ -176,9 +183,7 @@ pub(crate) struct Section {
 }
 
 impl Section {
-    pub(crate) fn parse(data: &[u8]) -> Result<Self, Error> {
-        range(0, SECTION_SIZE, data.len())?;
-
+    pub(crate) fn parse(data: &[u8; SECTION_SIZE]) -> Result<Self, Error> {
         Ok(Self {
             sectname: array(data, 0)?,
             segname: array(data, 16)?,
