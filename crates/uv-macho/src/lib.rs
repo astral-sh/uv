@@ -1,5 +1,7 @@
 //! Editing support for thin 64-bit macOS Mach-O dylibs.
 
+use std::num::TryFromIntError;
+
 #[cfg(test)]
 mod bytes;
 #[cfg(test)]
@@ -16,4 +18,6 @@ pub enum Error {
     Unsupported(&'static str),
     #[error("Mach-O image exceeds the supported size")]
     TooLarge,
+    #[error("Mach-O integer exceeds the supported size")]
+    IntegerConversion(#[from] TryFromIntError),
 }

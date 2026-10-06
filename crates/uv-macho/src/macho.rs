@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::Error;
-use crate::bytes::{le32, range, usize_size};
+use crate::bytes::{le32, range};
 use crate::format::{
     CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, HEADER_SIZE, Header, LC_BUILD_VERSION,
     LC_CODE_SIGNATURE, LC_DATA_IN_CODE, LC_DYLD_CHAINED_FIXUPS, LC_DYLD_EXPORTS_TRIE, LC_DYLD_INFO,
@@ -107,8 +107,8 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
             LC_SEGMENT_64 => {
                 let segment = Segment::parse(command.data)?;
                 let segment_range = range(
-                    usize_size(segment.fileoff)?,
-                    usize_size(segment.filesize)?,
+                    usize::try_from(segment.fileoff)?,
+                    usize::try_from(segment.filesize)?,
                     image.len(),
                 )?;
                 if segment.filesize > segment.vmsize {
@@ -175,7 +175,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
 
                     let section_range = range(
                         section.offset as usize,
-                        usize_size(section.size)?,
+                        usize::try_from(section.size)?,
                         image.len(),
                     )?;
                     if !section_range.is_empty() {
@@ -222,14 +222,14 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
         ));
     }
 
-    if usize_size(linkedit.fileoff + linkedit.filesize)? != image.len() {
+    if usize::try_from(linkedit.fileoff + linkedit.filesize)? != image.len() {
         return Err(Error::Unsupported(
             "__LINKEDIT is not the final file segment",
         ));
     }
 
     let code_limit = if let Some(signature) = &signature {
-        if signature.start < usize_size(linkedit.fileoff)?
+        if signature.start < usize::try_from(linkedit.fileoff)?
             || !signature.start.is_multiple_of(16)
             || image.len() - signature.end > 15
             || image[signature.end..].iter().any(|byte| *byte != 0)
@@ -250,7 +250,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
             continue;
         }
 
-        let reference = range(offset as usize, usize_size(size)?, image.len())?;
+        let reference = range(offset as usize, usize::try_from(size)?, image.len())?;
         if reference.start < command_end || reference.end > code_limit {
             return Err(Error::Malformed(
                 "file data overlaps load commands or the signature",
