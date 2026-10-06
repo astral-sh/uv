@@ -52,6 +52,7 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::child::run_to_completion;
+use crate::commands::operations::sync::sync_from_lock;
 
 /// GitHub Gist API response structure
 #[derive(serde::Deserialize)]
@@ -67,6 +68,7 @@ use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::loggers::{
     DefaultInstallLogger, SummaryInstallLogger,
 };
+use crate::commands::operations::malware::MalwareCheckContext;
 use crate::commands::operations::resolution::loggers::{
     DefaultResolveLogger, SummaryResolveLogger,
 };
@@ -74,7 +76,6 @@ use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironm
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
     ProjectEnvironmentTarget, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter,
@@ -284,7 +285,7 @@ pub(crate) async fn run(
 
             let install_options = InstallOptions::default();
 
-            match project::sync::do_sync(
+            match sync_from_lock(
                 target,
                 &environment,
                 &extras.with_defaults(DefaultExtras::default()),
@@ -804,7 +805,7 @@ pub(crate) async fn run(
                 target.validate_extras(&extras)?;
                 target.validate_groups(&groups)?;
 
-                match project::sync::do_sync(
+                match sync_from_lock(
                     target,
                     &venv,
                     &extras,

@@ -21,10 +21,10 @@ use uv_workspace::WorkspaceCache;
 
 use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::loggers::DefaultInstallLogger;
+use crate::commands::operations::malware::MalwareCheckContext;
 use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
+use crate::commands::operations::sync::sync_from_lock;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::sync::MalwareCheckContext;
-use crate::commands::project::sync::do_sync;
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverSettings};
 
@@ -73,7 +73,7 @@ pub(crate) async fn collect_module_owners(
             sources: settings.sources.clone(),
         };
 
-        do_sync(
+        sync_from_lock(
             target,
             venv,
             &extras,

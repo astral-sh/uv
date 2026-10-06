@@ -27,12 +27,13 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::loggers::DefaultInstallLogger;
+use crate::commands::operations::malware::MalwareCheckContext;
 use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
+use crate::commands::operations::sync::sync_from_lock;
 use crate::commands::project::edit::{EditTarget, ProjectEdit, PythonTarget};
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter,
@@ -380,7 +381,7 @@ pub(crate) async fn remove(
 
     let state = state.fork();
 
-    match project::sync::do_sync(
+    match sync_from_lock(
         target,
         venv,
         &extras,
