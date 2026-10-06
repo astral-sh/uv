@@ -72,10 +72,11 @@ pub struct BuildBackendSettings {
     /// Exclude files matching `.gitignore` rules when building source distributions and wheels.
     ///
     /// Rules are read from `.gitignore` files in the project directory and its subdirectories.
-    /// Parent directories, global Git configuration, and `.git/info/exclude` are not used, and
-    /// neither Git nor a Git repository is required. Explicit includes do not override these rules.
+    /// In a Git repository, ancestor `.gitignore` files up to the repository root are also used.
+    /// Global Git configuration and `.git/info/exclude` are not used, and neither Git nor a Git
+    /// repository is required. Explicit includes do not override these rules.
     ///
-    /// Ignoring required package files, such as `pyproject.toml`, the readme, license files, or
+    /// Ignoring required package files, such as `pyproject.toml`, the README, license files, or
     /// a module's `__init__.py` or `__init__.pyi`, is an error. Editable installs apply these rules
     /// to copied data files, but the linked Python source tree remains unfiltered.
     ///

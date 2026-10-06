@@ -232,7 +232,7 @@ fn write_source_dist(
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     pyproject_toml.warn_build_system(uv_version, BuildKind::Sdist);
     let settings = pyproject_toml.settings();
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore)?;
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
