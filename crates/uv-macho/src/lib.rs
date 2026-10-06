@@ -84,7 +84,7 @@ impl SignedDylib {
     }
 }
 
-/// Generate an ad-hoc signature, retaining supported signing metadata.
+/// Generate a SHA-256 ad-hoc signature, retaining supported signing metadata.
 ///
 /// Uses `identifier` when the image has no signing identifier. Existing requirements,
 /// entitlements, and runtime metadata are retained; certificate identity is removed.

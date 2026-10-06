@@ -11,7 +11,7 @@ use crate::format::{
     SEG_LINKEDIT, SEG_TEXT, Section, Segment,
 };
 use crate::regions::FileRegions;
-use crate::signature::{Metadata, SigningAlgorithms};
+use crate::signature::Metadata;
 use crate::{Error, InstallName, SigningIdentifier};
 
 /// A validated dylib layout tied to the image from which it was parsed.
@@ -28,7 +28,6 @@ pub(crate) struct Layout<'a> {
     linkedit: Segment<'a>,
     linkedit_index: usize,
     info_plist: Option<&'a [u8]>,
-    minimum_version: Option<u32>,
     architecture: Architecture,
 }
 
@@ -304,7 +303,6 @@ impl<'a> Layout<'a> {
             linkedit,
             linkedit_index,
             info_plist,
-            minimum_version,
             architecture,
         })
     }
@@ -392,19 +390,10 @@ impl<'a> Layout<'a> {
             .ok_or(Error::TooLarge)?;
         output.resize(signature_start, 0);
 
-        let algorithms = if self
-            .minimum_version
-            .is_some_and(|version| version < 0x000a_0b04)
-        {
-            SigningAlgorithms::Sha1AndSha256
-        } else {
-            SigningAlgorithms::Sha256
-        };
         let signature = metadata.prepare(
             signature_start,
             (self.text.fileoff, self.text.filesize),
             self.info_plist,
-            algorithms,
         )?;
         let signature_size = signature
             .size()

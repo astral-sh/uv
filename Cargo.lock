@@ -7140,7 +7140,6 @@ dependencies = [
  "anyhow",
  "fs-err",
  "insta",
- "sha1",
  "sha2 0.11.0",
  "tempfile",
  "thiserror",
