@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::Error;
@@ -58,155 +59,156 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
     let mut linkedit = None;
     let mut info_plist = None;
     let mut minimum_version = None;
-    let mut segments = Vec::new();
+    let mut segments = FileRegions::default();
     let mut virtual_segments = Vec::new();
-    let mut sections = Vec::new();
+    let mut sections = FileRegions::default();
     let mut references = Vec::new();
 
     for (index, command) in commands.iter().enumerate() {
-        if command.kind == LC_ID_DYLIB {
-            if install_id.replace(index).is_some() {
-                return Err(Error::Malformed("invalid or duplicate LC_ID_DYLIB"));
-            }
-        }
-
-        if command.kind == LC_CODE_SIGNATURE {
-            let data_offset = le32(command.data, 8)?;
-            let data_size = le32(command.data, 12)?;
-            if signature_command.replace(index).is_some() {
-                return Err(Error::Malformed("invalid or duplicate LC_CODE_SIGNATURE"));
+        match command.kind {
+            LC_ID_DYLIB => {
+                if install_id.replace(index).is_some() {
+                    return Err(Error::Malformed("invalid or duplicate LC_ID_DYLIB"));
+                }
             }
 
-            if data_size > 0 {
-                signature = Some(range(
-                    data_offset as usize,
-                    data_size as usize,
+            LC_CODE_SIGNATURE => {
+                let data_offset = le32(command.data, 8)?;
+                let data_size = le32(command.data, 12)?;
+                if signature_command.replace(index).is_some() {
+                    return Err(Error::Malformed("invalid or duplicate LC_CODE_SIGNATURE"));
+                }
+
+                if data_size > 0 {
+                    signature = Some(range(
+                        data_offset as usize,
+                        data_size as usize,
+                        image.len(),
+                    )?);
+                }
+            }
+
+            LC_VERSION_MIN_MACOSX => {
+                if minimum_version.replace(le32(command.data, 8)?).is_some() {
+                    return Err(Error::Malformed("multiple deployment targets"));
+                }
+            }
+
+            LC_BUILD_VERSION => {
+                if le32(command.data, 8)? != 1 {
+                    return Err(Error::Unsupported("non-macOS build platform"));
+                }
+
+                if minimum_version.replace(le32(command.data, 12)?).is_some() {
+                    return Err(Error::Malformed("multiple deployment targets"));
+                }
+            }
+
+            LC_SEGMENT_64 => {
+                let segment = Segment::parse(command.data)?;
+                let segment_range = range(
+                    usize_size(segment.fileoff)?,
+                    usize_size(segment.filesize)?,
                     image.len(),
-                )?);
-            }
-        }
-
-        if command.kind == LC_VERSION_MIN_MACOSX {
-            if minimum_version.replace(le32(command.data, 8)?).is_some() {
-                return Err(Error::Malformed("multiple deployment targets"));
-            }
-        }
-
-        if command.kind == LC_BUILD_VERSION {
-            if le32(command.data, 8)? != 1 {
-                return Err(Error::Unsupported("non-macOS build platform"));
-            }
-
-            if minimum_version.replace(le32(command.data, 12)?).is_some() {
-                return Err(Error::Malformed("multiple deployment targets"));
-            }
-        }
-
-        if command.kind == LC_SEGMENT_64 {
-            let segment = Segment::parse(command.data)?;
-            let segment_range = range(
-                usize_size(segment.fileoff)?,
-                usize_size(segment.filesize)?,
-                image.len(),
-            )?;
-            if segment.filesize > segment.vmsize {
-                return Err(Error::Malformed("segment filesize exceeds vmsize"));
-            }
-
-            let virtual_end = segment
-                .vmaddr
-                .checked_add(segment.vmsize)
-                .ok_or(Error::TooLarge)?;
-            if segment.vmsize > 0 {
-                virtual_segments.push((segment.vmaddr, virtual_end));
-            }
-
-            if !segment_range.is_empty() {
-                segments.push(segment_range.clone());
-            }
-
-            if segment.segname == *b"__TEXT\0\0\0\0\0\0\0\0\0\0" {
-                if text.replace(segment).is_some()
-                    || segment.fileoff != 0
-                    || segment_range.end < command_end
-                {
-                    return Err(Error::Malformed("invalid or duplicate __TEXT segment"));
+                )?;
+                if segment.filesize > segment.vmsize {
+                    return Err(Error::Malformed("segment filesize exceeds vmsize"));
                 }
-            }
 
-            if segment.segname == *b"__LINKEDIT\0\0\0\0\0\0" {
-                if linkedit.replace((index, segment)).is_some() || segment.nsects != 0 {
-                    return Err(Error::Malformed("invalid or duplicate __LINKEDIT segment"));
-                }
-            }
-
-            let section_bytes = (segment.nsects as usize)
-                .checked_mul(SECTION_SIZE)
-                .ok_or(Error::TooLarge)?;
-            if range(SEGMENT_SIZE, section_bytes, command.data.len())?.end != command.data.len() {
-                return Err(Error::Malformed("invalid segment section table"));
-            }
-
-            for section_index in 0..segment.nsects as usize {
-                let offset = SEGMENT_SIZE + section_index * SECTION_SIZE;
-                let section = Section::parse(&command.data[offset..offset + SECTION_SIZE])?;
-                let section_end = section
-                    .addr
-                    .checked_add(section.size)
+                let virtual_end = segment
+                    .vmaddr
+                    .checked_add(segment.vmsize)
                     .ok_or(Error::TooLarge)?;
-                if section.addr < segment.vmaddr || section_end > virtual_end {
-                    return Err(Error::Malformed(
-                        "section exceeds its segment's virtual address range",
-                    ));
+                if segment.vmsize > 0 {
+                    virtual_segments.push((segment.vmaddr, virtual_end));
                 }
 
-                add_reference(
-                    &mut references,
-                    section.reloff,
-                    u64::from(section.nreloc) * 8,
-                    image.len(),
-                )?;
-
-                let section_type = section.flags & SECTION_TYPE;
-                if section_type == S_ZEROFILL
-                    || section_type == S_GB_ZEROFILL
-                    || section_type == S_THREAD_LOCAL_ZEROFILL
-                {
-                    continue;
+                if !segment_range.is_empty() {
+                    segments.insert(segment_range.clone())?;
                 }
 
-                let section_range = range(
-                    section.offset as usize,
-                    usize_size(section.size)?,
-                    image.len(),
-                )?;
-                if !section_range.is_empty() {
-                    if section_range.start < command_end
-                        || section_range.start < segment_range.start
-                        || section_range.end > segment_range.end
+                if segment.segname == *b"__TEXT\0\0\0\0\0\0\0\0\0\0" {
+                    if text.replace(segment).is_some()
+                        || segment.fileoff != 0
+                        || segment_range.end < command_end
                     {
+                        return Err(Error::Malformed("invalid or duplicate __TEXT segment"));
+                    }
+                }
+
+                if segment.segname == *b"__LINKEDIT\0\0\0\0\0\0" {
+                    if linkedit.replace((index, segment)).is_some() || segment.nsects != 0 {
+                        return Err(Error::Malformed("invalid or duplicate __LINKEDIT segment"));
+                    }
+                }
+
+                let section_bytes = (segment.nsects as usize)
+                    .checked_mul(SECTION_SIZE)
+                    .ok_or(Error::TooLarge)?;
+                if range(SEGMENT_SIZE, section_bytes, command.data.len())?.end != command.data.len()
+                {
+                    return Err(Error::Malformed("invalid segment section table"));
+                }
+
+                for section_index in 0..segment.nsects as usize {
+                    let offset = SEGMENT_SIZE + section_index * SECTION_SIZE;
+                    let section = Section::parse(&command.data[offset..offset + SECTION_SIZE])?;
+                    let section_end = section
+                        .addr
+                        .checked_add(section.size)
+                        .ok_or(Error::TooLarge)?;
+                    if section.addr < segment.vmaddr || section_end > virtual_end {
                         return Err(Error::Malformed(
-                            "section is outside its segment or overlaps load commands",
+                            "section exceeds its segment's virtual address range",
                         ));
                     }
-                    sections.push(section_range.clone());
-                }
 
-                if section.segname == *b"__TEXT\0\0\0\0\0\0\0\0\0\0"
-                    && section.sectname == *b"__info_plist\0\0\0\0"
-                {
-                    if info_plist.replace(&image[section_range]).is_some() {
-                        return Err(Error::Malformed("duplicate embedded Info.plist"));
+                    add_reference(
+                        &mut references,
+                        section.reloff,
+                        u64::from(section.nreloc) * 8,
+                        image.len(),
+                    )?;
+
+                    let section_type = section.flags & SECTION_TYPE;
+                    if section_type == S_ZEROFILL
+                        || section_type == S_GB_ZEROFILL
+                        || section_type == S_THREAD_LOCAL_ZEROFILL
+                    {
+                        continue;
+                    }
+
+                    let section_range = range(
+                        section.offset as usize,
+                        usize_size(section.size)?,
+                        image.len(),
+                    )?;
+                    if !section_range.is_empty() {
+                        if section_range.start < command_end
+                            || section_range.start < segment_range.start
+                            || section_range.end > segment_range.end
+                        {
+                            return Err(Error::Malformed(
+                                "section is outside its segment or overlaps load commands",
+                            ));
+                        }
+                        sections.insert(section_range.clone())?;
+                    }
+
+                    if section.segname == *b"__TEXT\0\0\0\0\0\0\0\0\0\0"
+                        && section.sectname == *b"__info_plist\0\0\0\0"
+                    {
+                        if info_plist.replace(&image[section_range]).is_some() {
+                            return Err(Error::Malformed("duplicate embedded Info.plist"));
+                        }
                     }
                 }
             }
+            _ => {}
         }
 
         file_references(command, &mut references, image.len())?;
     }
-
-    check_overlaps(&mut segments)?;
-    check_overlaps(&mut sections)?;
 
     install_id.ok_or(Error::Malformed("missing LC_ID_DYLIB"))?;
     text.ok_or(Error::Malformed("missing __TEXT segment"))?;
@@ -255,20 +257,47 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
         }
     }
 
-    if sections.iter().any(|section| section.end > code_limit) {
+    if sections.end().is_some_and(|end| end > code_limit) {
         return Err(Error::Malformed("section overlaps the code signature"));
     }
 
     Ok(())
 }
 
-fn check_overlaps(regions: &mut [Range<usize>]) -> Result<(), Error> {
-    regions.sort_unstable_by_key(|region| region.start);
-    if regions.windows(2).any(|pair| pair[0].end > pair[1].start) {
-        return Err(Error::Malformed("overlapping file regions"));
+/// Nonempty file regions that cannot overlap, regardless of insertion order.
+#[derive(Default)]
+struct FileRegions {
+    /// Each start offset maps to the corresponding exclusive end offset.
+    by_start: BTreeMap<usize, usize>,
+}
+
+impl FileRegions {
+    fn insert(&mut self, region: Range<usize>) -> Result<(), Error> {
+        if region.is_empty() {
+            return Ok(());
+        }
+
+        let overlaps_previous = self
+            .by_start
+            .range(..=region.start)
+            .next_back()
+            .is_some_and(|(_, end)| *end > region.start);
+        let overlaps_next = self
+            .by_start
+            .range(region.start..)
+            .next()
+            .is_some_and(|(start, _)| *start < region.end);
+        if overlaps_previous || overlaps_next {
+            return Err(Error::Malformed("overlapping file regions"));
+        }
+
+        self.by_start.insert(region.start, region.end);
+        Ok(())
     }
 
-    Ok(())
+    fn end(&self) -> Option<usize> {
+        self.by_start.last_key_value().map(|(_, end)| *end)
+    }
 }
 
 fn add_reference(

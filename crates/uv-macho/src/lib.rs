@@ -8,7 +8,7 @@ mod format;
 mod macho;
 
 /// An error validating a Mach-O image.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
     #[error("Malformed Mach-O: {0}")]
     Malformed(&'static str),
