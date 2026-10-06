@@ -3,7 +3,7 @@ mod metadata;
 mod serde_verbatim;
 mod settings;
 mod source_dist;
-mod walk;
+mod vcs_ignore;
 mod wheel;
 
 pub(crate) use metadata::PyProjectToml;
@@ -29,7 +29,7 @@ use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
 use crate::settings::ModuleName;
-use crate::walk::require_included;
+use crate::vcs_ignore::VcsIgnore;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -69,12 +69,6 @@ pub enum Error {
         root: PathBuf,
         #[source]
         err: walkdir::Error,
-    },
-    #[error("Failed to walk source tree: {}", root.user_display())]
-    IgnoreWalk {
-        root: PathBuf,
-        #[source]
-        err: ignore::Error,
     },
     #[error("Failed to write wheel zip archive")]
     AsyncZip(#[from] async_zip::error::ZipError),
@@ -373,9 +367,12 @@ fn find_roots(
             pyproject_toml.name(),
         )?]
     };
-    let respect_gitignore = pyproject_toml
-        .settings()
-        .is_some_and(|settings| settings.respect_gitignore);
+    let mut vcs_ignore = VcsIgnore::new(
+        source_tree,
+        pyproject_toml
+            .settings()
+            .is_some_and(|settings| settings.respect_gitignore),
+    );
     for module_relative in &modules_relative {
         debug!("Module path: {}", module_relative.user_display());
         let stubs = module_relative
@@ -383,11 +380,7 @@ fn find_roots(
             .next()
             .is_some_and(|component| component.as_os_str().to_string_lossy().ends_with("-stubs"));
         let init = if stubs { "__init__.pyi" } else { "__init__.py" };
-        require_included(
-            source_tree,
-            &relative_module_root.join(module_relative).join(init),
-            respect_gitignore,
-        )?;
+        vcs_ignore.require(&relative_module_root.join(module_relative).join(init))?;
     }
     Ok((src_root, modules_relative))
 }
@@ -1282,10 +1275,13 @@ mod tests {
         )?;
         fs_err::remove_dir_all(source.path().join("src/example"))?;
         let error = build(source.path(), dist.path()).expect_err("missing namespace root");
-        let Error::Io(error) = error else {
+        let Error::WalkDir { err: error, .. } = error else {
             return Err(error);
         };
-        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert_eq!(
+            error.io_error().map(io::Error::kind),
+            Some(io::ErrorKind::NotFound)
+        );
         Ok(())
     }
 

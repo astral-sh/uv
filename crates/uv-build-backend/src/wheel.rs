@@ -13,10 +13,10 @@ use std::fmt::{Display, Formatter};
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::{io, mem};
 use tracing::{debug, trace};
+use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::{Simplified, normalize_path};
@@ -27,7 +27,7 @@ use uv_pypi_types::BuildKind;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
-use crate::walk::walk_tree;
+use crate::vcs_ignore::VcsIgnore;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
     error_on_venv, find_roots, write_directory_once, write_file_with_directories,
@@ -143,6 +143,7 @@ fn write_wheel(
         .unwrap_or_else(BuildBackendSettings::default);
 
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_gitignore);
 
     debug!("Adding content files to wheel");
     let (src_root, module_relative) = find_roots(
@@ -157,16 +158,21 @@ fn write_wheel(
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
     for module_relative in module_relative {
-        let directory_excludes = exclude_matcher.clone();
-        let module_root = src_root.join(module_relative);
-        let entries = walk_tree(
-            source_tree,
-            &module_root,
-            settings.respect_gitignore,
-            move |path| !directory_excludes.is_match(path),
-        )?;
-        for entry in entries {
-            let entry = entry?;
+        let mut entries = WalkDir::new(src_root.join(module_relative))
+            .sort_by_file_name()
+            .into_iter();
+        while let Some(entry) = entries.next() {
+            let entry = entry.map_err(|err| Error::WalkDir {
+                root: source_tree.to_path_buf(),
+                err,
+            })?;
+
+            if exclude_matcher.is_match(entry.path()) {
+                if entry.file_type().is_dir() {
+                    entries.skip_current_dir();
+                }
+                continue;
+            }
 
             files_visited += 1;
             if files_visited > 10000 {
@@ -190,12 +196,17 @@ fn write_wheel(
                 trace!("Excluding from module: {}", match_path.user_display());
                 continue;
             }
+            if vcs_ignore.is_ignored(entry.path(), entry.file_type().is_dir())? {
+                trace!("Excluding from module: {}", match_path.user_display());
+                if entry.file_type().is_dir() {
+                    entries.skip_current_dir();
+                }
+                continue;
+            }
+
             error_on_venv(entry.file_name(), entry.path())?;
 
-            if entry
-                .file_type()
-                .is_some_and(|file_type| file_type.is_dir())
-            {
+            if entry.file_type().is_dir() {
                 continue;
             }
 
@@ -227,7 +238,7 @@ fn write_wheel(
             &mut wheel_writer,
             "project.license-files",
             None,
-            false,
+            None,
         )?;
     }
 
@@ -236,7 +247,7 @@ fn write_wheel(
         pyproject_toml,
         settings.data.iter(),
         &exclude_matcher,
-        settings.respect_gitignore,
+        &mut vcs_ignore,
         &mut wheel_writer,
     )?;
 
@@ -270,6 +281,7 @@ pub fn build_editable(
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_gitignore);
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
@@ -315,7 +327,7 @@ pub fn build_editable(
         &pyproject_toml,
         settings.data.iter(),
         &exclude_matcher,
-        settings.respect_gitignore,
+        &mut vcs_ignore,
         &mut wheel_writer,
     )?;
 
@@ -342,7 +354,7 @@ fn write_data_files<'data>(
     pyproject_toml: &PyProjectToml,
     data: impl Iterator<Item = (&'static str, &'data Path)>,
     exclude_matcher: &GlobSet,
-    respect_gitignore: bool,
+    vcs_ignore: &mut VcsIgnore,
     wheel_writer: &mut impl DirectoryWriter,
 ) -> Result<(), Error> {
     let canonical_source_tree = source_tree.simple_canonicalize()?;
@@ -387,7 +399,7 @@ fn write_data_files<'data>(
             wheel_writer,
             &format!("tool.uv.build-backend.data.{name}"),
             Some((exclude_matcher, source_tree)),
-            respect_gitignore,
+            Some(vcs_ignore),
         )?;
     }
 
@@ -573,7 +585,7 @@ fn wheel_subdir_from_globs(
     // For error messages
     globs_field: &str,
     exclude_matcher: Option<(&GlobSet, &Path)>,
-    respect_gitignore: bool,
+    mut vcs_ignore: Option<&mut VcsIgnore>,
 ) -> Result<(), Error> {
     let license_files_globs: Vec<_> = globs
         .into_iter()
@@ -600,28 +612,42 @@ fn wheel_subdir_from_globs(
 
     let mut written_directories = FxHashSet::<PathBuf>::default();
     let target = Path::new(target);
-    let source_tree = exclude_matcher.map_or(src, |(_, source_tree)| source_tree);
-    let exclude_matcher =
-        exclude_matcher.map(|(matcher, root)| (matcher.clone(), root.to_path_buf()));
-    let matcher = Arc::new(matcher);
-    let directory_matcher = Arc::clone(&matcher);
-    let root = src.to_path_buf();
-    let entries = walk_tree(source_tree, src, respect_gitignore, move |path| {
-        let relative = path.strip_prefix(&root).expect("walk starts with root");
-        // Fast path: Don't descend into a directory that can't be included.
-        directory_matcher.match_directory(relative)
-            && !exclude_matcher.as_ref().is_some_and(|(matcher, root)| {
-                path.strip_prefix(root)
-                    .map_or(true, |relative| matcher.is_match(relative))
-            })
-    })?;
-    for entry in entries {
-        let entry = entry?;
+    let is_excluded = |path: &Path| {
+        exclude_matcher.is_some_and(|(exclude_matcher, source_tree)| {
+            if let Ok(relative) = path.strip_prefix(source_tree) {
+                exclude_matcher.is_match(relative)
+            } else {
+                true
+            }
+        })
+    };
+
+    let mut entries = WalkDir::new(src).sort_by_file_name().into_iter();
+    while let Some(entry) = entries.next() {
+        let entry = entry.map_err(|err| Error::WalkDir {
+            root: src.to_path_buf(),
+            err,
+        })?;
 
         let relative = entry
             .path()
             .strip_prefix(src)
             .expect("walkdir starts with root");
+        // Fast path: Don't descend into a directory that can't be included.
+        if !matcher.match_directory(relative)
+            || is_excluded(entry.path())
+            || if let Some(vcs_ignore) = &mut vcs_ignore {
+                vcs_ignore.is_ignored(entry.path(), entry.file_type().is_dir())?
+            } else {
+                false
+            }
+        {
+            if entry.file_type().is_dir() {
+                entries.skip_current_dir();
+            }
+            continue;
+        }
+
         // Skip the root path, which is already included as `target` prior to the loop.
         // (If `entry.path() == src`, then `relative` is empty, and `relative_licenses` is
         // `target`.)
@@ -636,10 +662,7 @@ fn wheel_subdir_from_globs(
 
         error_on_venv(entry.file_name(), entry.path())?;
 
-        if entry
-            .file_type()
-            .is_some_and(|file_type| file_type.is_dir())
-        {
+        if entry.file_type().is_dir() {
             continue;
         }
 
