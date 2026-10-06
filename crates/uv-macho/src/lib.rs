@@ -101,7 +101,7 @@ pub fn adhoc_sign(image: &[u8], identifier: SigningIdentifier<'_>) -> Result<Sig
 /// including when editing or signing fails.
 pub fn set_install_name(
     image: &[u8],
-    name: &InstallName,
+    name: InstallName<'_>,
     identifier: SigningIdentifier<'_>,
 ) -> Result<SignedDylib, Error> {
     replace_install_name(image, name)?.adhoc_sign(identifier)
