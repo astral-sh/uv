@@ -56,6 +56,36 @@ By default, `uv run` and `uv sync` operates on the workspace root. For example, 
 example, `uv run` and `uv run --package albatross` would be equivalent, while
 `uv run --package bird-feeder` would run the command in the `bird-feeder` package.
 
+## Installing Dependencies for the Entire Workspace or Specific Packages
+
+To install the dependencies for the entire workspace and its sub-workspaces, you can run:
+
+```shell
+uv sync --all-packages
+```
+
+This will install the dependencies for the root workspace as well as all the packages defined within
+your workspace.
+
+If you want to install dependencies for the root workspace and a specific sub-workspace only, follow
+these steps:
+
+1. First, install the dependencies for the root workspace by running:
+
+```shell
+uv sync
+```
+
+2. Then, install the dependencies for the specific sub-workspace (for example, bird-feeder) by
+   running:
+
+```shell
+uv sync --inexact --package bird-feeder
+```
+
+The --inexact flag ensures that only the specified package and its dependencies are installed,
+without impacting the rest of the workspace.
+
 ## Workspace sources
 
 Within a workspace, dependencies on workspace members are facilitated via
