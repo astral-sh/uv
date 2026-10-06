@@ -1010,7 +1010,7 @@ fn python_install_preview_upgrade() {
 }
 
 #[test]
-fn python_install_freethreaded() {
+fn python_install_freethreaded() -> anyhow::Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_latest_python_versions()
@@ -1037,6 +1037,9 @@ fn python_install_freethreaded() {
     // On Unix, it should be a link
     #[cfg(unix)]
     bin_python.assert(predicate::path::is_symlink());
+
+    #[cfg(target_os = "macos")]
+    assert_macos_dylib(&context, bin_python.path(), "libpython3.13t.dylib")?;
 
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
@@ -1153,6 +1156,8 @@ fn python_install_freethreaded() {
      - cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
      - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
+
+    Ok(())
 }
 
 /// Test that installing both GIL and free-threaded variants of the same Python version
@@ -1311,7 +1316,7 @@ fn python_upgrade_not_allowed() {
 // We only support debug builds on Unix
 #[cfg(unix)]
 #[test]
-fn python_install_debug() {
+fn python_install_debug() -> anyhow::Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -1336,6 +1341,9 @@ fn python_install_debug() {
     // On Unix, it should be a link
     #[cfg(unix)]
     bin_python.assert(predicate::path::is_symlink());
+
+    #[cfg(target_os = "macos")]
+    assert_macos_dylib(&context, bin_python.path(), "libpython3.13d.dylib")?;
 
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
@@ -1405,12 +1413,14 @@ fn python_install_debug() {
      - cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
      - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
+
+    Ok(())
 }
 
 // We only support debug builds on Unix
 #[cfg(unix)]
 #[test]
-fn python_install_debug_freethreaded() {
+fn python_install_debug_freethreaded() -> anyhow::Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -1435,6 +1445,9 @@ fn python_install_debug_freethreaded() {
     // On Unix, it should be a link
     #[cfg(unix)]
     bin_python.assert(predicate::path::is_symlink());
+
+    #[cfg(target_os = "macos")]
+    assert_macos_dylib(&context, bin_python.path(), "libpython3.13td.dylib")?;
 
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
@@ -1519,6 +1532,8 @@ fn python_install_debug_freethreaded() {
      - cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
      - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
+
+    Ok(())
 }
 
 #[test]
@@ -2406,6 +2421,42 @@ fn python_install_default_from_env() {
 
     For more information, try '--help'.
     ");
+}
+
+#[cfg(target_os = "macos")]
+fn assert_macos_dylib(
+    context: &uv_test::TestContext,
+    executable: &Path,
+    name: &str,
+) -> anyhow::Result<()> {
+    let executable = fs_err::canonicalize(executable)?;
+    let python_dir = executable
+        .parent()
+        .and_then(Path::parent)
+        .context("Python executable must be inside its installation's bin directory")?;
+    let dylib = python_dir.join("lib").join(name);
+    // Match the complete expected filename before the general path and version filters.
+    let pattern = regex::escape(&dylib.user_display().to_string());
+    let mut filters = vec![(pattern.as_str(), "[DYLIB]")];
+    filters.extend(context.filters());
+
+    let mut command = Command::new("/usr/bin/otool");
+    command.arg("-D").arg(&dylib);
+    allow_duplicates! {
+        uv_snapshot!(filters, command, @"
+        exit_code: 0 (success)
+        ----- stdout -----
+        [DYLIB]:
+        [DYLIB]
+        ");
+    }
+
+    let mut command = Command::new("/usr/bin/codesign");
+    command.args(["--verify", "--strict"]).arg(&dylib);
+    allow_duplicates! {
+        uv_snapshot!(context.filters(), command, @"exit_code: 0 (success)");
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

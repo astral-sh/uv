@@ -12,7 +12,10 @@ use crate::managed::ManagedPythonInstallation;
 
 pub(crate) fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
     if uv_preview::is_enabled(PreviewFeature::NativeMachoEdit) {
-        return NativeDylib::read(dylib)?.patch()?.persist();
+        if let Some(dylib) = NativeDylib::read(dylib)?.patch()? {
+            dylib.persist()?;
+        }
+        return Ok(());
     }
 
     let output = match std::process::Command::new("install_name_tool")
@@ -62,7 +65,7 @@ impl NativeDylib<Vec<u8>> {
         })
     }
 
-    fn patch(self) -> Result<NativeDylib<SignedDylib>, Error> {
+    fn patch(self) -> Result<Option<NativeDylib<SignedDylib>>, Error> {
         let filename = self.dylib.file_name().ok_or_else(|| {
             std::io::Error::new(ErrorKind::InvalidInput, "Missing dylib filename")
         })?;
@@ -80,12 +83,18 @@ impl NativeDylib<Vec<u8>> {
                 source,
             })?;
 
-        Ok(NativeDylib {
+        // An existing installation may already have the right name but an invalid signature.
+        // Only skip replacement when re-signing produces exactly the original image.
+        if image.as_bytes() == self.image {
+            return Ok(None);
+        }
+
+        Ok(Some(NativeDylib {
             dylib: self.dylib,
             resolved: self.resolved,
             permissions: self.permissions,
             image,
-        })
+        }))
     }
 }
 
@@ -143,7 +152,7 @@ impl Error {
 mod tests {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-    use anyhow::Result;
+    use anyhow::{Context, Result};
 
     use super::NativeDylib;
 
@@ -160,12 +169,30 @@ mod tests {
         fs_err::os::unix::fs::symlink(&dylib, &link)?;
         let before = fs_err::metadata(&dylib)?;
 
-        NativeDylib::read(link.clone())?.patch()?.persist()?;
+        NativeDylib::read(link.clone())?
+            .patch()?
+            .context("the unsigned fixture needs patching")?
+            .persist()?;
 
         let after = fs_err::metadata(&dylib)?;
         assert_eq!(fs_err::read_link(&link)?, dylib);
         assert_eq!(after.permissions().mode(), before.permissions().mode());
         assert_ne!(after.ino(), before.ino());
+
+        assert!(NativeDylib::read(link.clone())?.patch()?.is_none());
+        let unchanged = fs_err::metadata(&dylib)?;
+        assert_eq!(unchanged.ino(), after.ino());
+        assert_eq!(unchanged.modified()?, after.modified()?);
+
+        // Changing a Mach-O header flag invalidates the signature without changing the name.
+        let mut bytes = fs_err::read(&dylib)?;
+        bytes[24] ^= 1;
+        fs_err::write(&dylib, bytes)?;
+        NativeDylib::read(link)?
+            .patch()?
+            .context("a matching name with an invalid signature still needs patching")?
+            .persist()?;
+        assert_ne!(fs_err::metadata(&dylib)?.ino(), unchanged.ino());
 
         Ok(())
     }
