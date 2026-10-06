@@ -27,9 +27,10 @@ The experiment builds two Maturin wheels from identical source:
 Both scripts accept `--debug-level line-tables-only` to reduce the symbols build's debug
 information; the default is `full`. The workflow exposes the same `debug-level` choice. Line tables
 retain Rust file and line information for backtraces but omit variable and parameter information.
-The pinned `cc` crate maps this to reduced debug information for GCC/Clang, while MSVC C compilation
-still uses `/Z7`. Native build logs and Rust/C source lookups remain part of the experiment at
-either level. Reports record the selected level; measurements below use `full` unless stated
+Cargo exposes debug information to build scripts through the boolean `DEBUG` environment variable,
+so the pinned `cc` crate still uses full C debug information by default (`-g` for GCC/Clang and
+`/Z7` for MSVC). Native build logs and Rust/C source lookups remain part of the experiment at either
+level. Reports record the selected Rust debug level; measurements below use `full` unless stated
 otherwise.
 
 Linux embeds debug information during compilation, extracts a `.debug` file with `llvm-objcopy`,
@@ -287,7 +288,68 @@ no profile mismatches.
 
 The cached resolver comparisons produced identical resolutions. Median baseline/line-table times
 were 26.176/26.121 ms for Jupyter and 16.976/16.957 ms for Trio. These short workloads do not
-establish overall runtime equivalence. Full uv comparisons of `line-tables-only` versus `full` on
-Linux and macOS have not been run; their line-table checks cover only the small Rust+C fixture.
+establish overall runtime equivalence.
 
 [Windows line-table PGO build, verification, and timings](https://github.com/astral-sh/uv/actions/runs/37352288394)
+
+### Linux and macOS PGO with line tables
+
+Full uv comparisons with `line-tables-only` completed on the same runner profiles as the earlier
+`full` experiments, with the same Rust toolchain, dependencies, optimization settings, and training
+corpus. The uv source was unchanged; the intervening commits updated the experiment tooling and
+documentation. Each run built a fresh no-debug baseline and trained independent PGO profiles.
+
+Combined instrumented build, training, and final build times were:
+
+| Native target             | Full debug info | Line tables | Time reduction |
+| ------------------------- | --------------: | ----------: | -------------: |
+| x86_64-unknown-linux-gnu  |         26m 38s |     19m 19s |          27.5% |
+| aarch64-unknown-linux-gnu |         32m 38s |      26m 6s |          20.0% |
+| aarch64-apple-darwin      |         50m 31s |     16m 39s |          67.0% |
+
+The fresh baselines help account for differences between runners and runs:
+
+| Native target             | No-debug baseline in full run | No-debug baseline in line-table run | Full overhead over its baseline | Line-table overhead over its baseline |
+| ------------------------- | ----------------------------: | ----------------------------------: | ------------------------------: | ------------------------------------: |
+| x86_64-unknown-linux-gnu  |                       17m 22s |                             17m 24s |                           53.3% |                                 11.0% |
+| aarch64-unknown-linux-gnu |                       22m 53s |                             23m 57s |                           42.6% |                                  9.0% |
+| aarch64-apple-darwin      |                        15m 1s |                              15m 1s |                          236.5% |                                 10.8% |
+
+Together with Windows's 8.8% overhead, line tables added roughly 9–11% to the measured PGO build and
+training pipeline on each native target. These are single cold observations, not repeated benchmarks
+or timings of the production release workflow. They exclude runner queueing, setup, symbol
+processing, verification, and artifact upload. The Linux runs do not use manylinux containers, and
+production signing is not exercised.
+
+The uncompressed `uv` companions were also substantially smaller:
+
+| Native target             | Full symbol bytes | Line-table symbol bytes | Size reduction |
+| ------------------------- | ----------------: | ----------------------: | -------------: |
+| x86_64-unknown-linux-gnu  |       681,367,000 |             197,367,616 |          71.0% |
+| aarch64-unknown-linux-gnu |       700,826,864 |             210,404,032 |          70.0% |
+| aarch64-apple-darwin      |       696,890,788 |             225,785,082 |          67.6% |
+
+Each target passed Rust entry-point, AWS-LC, and jitterentropy source lookups; removing the
+companion symbols prevented those lookups. Embedded SBOM validation, wheel installation with exact
+executable hashes, smoke checks, and macOS ad hoc signature verification passed. Relative to their
+fresh baselines, `uv` changed by -14,328 bytes on Linux x86-64, -11,856 bytes on Linux ARM64, and
++36,400 bytes on macOS. Wheel size changes were -13,299, -30,649, and +9,450 bytes respectively.
+
+Neither debug setting reported PGO profile mismatches. The Linux configurations each reported 18
+missing-profile warnings. macOS reported 5,888 for the no-debug baseline and 5,883 for line tables;
+the earlier full-debug build reported 6,000. These warnings still require the coverage caveats
+described above.
+
+Cached Jupyter and Trio resolutions were identical between each baseline and line-table binary. All
+six median timing differences were below 0.14 ms; these limited workloads do not establish overall
+runtime equivalence.
+
+Completed uv jobs:
+
+- [Linux x86-64](https://github.com/astral-sh/uv/actions/runs/37365248373/job/111948713197)
+- [Linux ARM64](https://github.com/astral-sh/uv/actions/runs/37365250301/job/111948718615)
+- [macOS ARM64](https://github.com/astral-sh/uv/actions/runs/37365252485/job/111948724584)
+
+The Linux x86-64 workflow is marked failed because an auxiliary macOS fixture job never acquired a
+GitHub-hosted runner and was canceled. Its full uv job passed; the macOS full uv experiment passed
+in its separate run.
