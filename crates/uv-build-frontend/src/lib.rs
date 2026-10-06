@@ -44,7 +44,8 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, ResolvedRequirements, SourceBuildTrait,
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildRequirementPhase, BuildStack,
+    ResolvedRequirements, SourceBuildTrait,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
@@ -496,7 +497,9 @@ impl SourceBuild {
                 let resolution = build_context
                     .resolve(
                         &requirements,
-                        Some(resolved_requirements.hasher()),
+                        BuildRequirementPhase::Backend {
+                            hashes: resolved_requirements.hasher(),
+                        },
                         build_stack,
                     )
                     .await
@@ -632,7 +635,11 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, None, build_stack)
+                        .resolve(
+                            &DEFAULT_BACKEND.requirements,
+                            BuildRequirementPhase::Initial,
+                            build_stack,
+                        )
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -657,7 +664,7 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, None, build_stack)
+                    .resolve(&requirements, BuildRequirementPhase::Initial, build_stack)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },

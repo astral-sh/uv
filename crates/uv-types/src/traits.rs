@@ -51,6 +51,17 @@ impl SourceTreeEditablePolicy {
     }
 }
 
+/// The phase of build requirement resolution and its source of trusted hashes.
+#[derive(Debug, Clone, Copy)]
+pub enum BuildRequirementPhase<'a> {
+    /// Resolve declared requirements, such as `build-system.requires`, which can contribute hashes.
+    Initial,
+    /// Resolve additional requirements returned by the build backend using the previous hashes.
+    ///
+    /// When build dependency hashes are required, backend output cannot add trusted hashes.
+    Backend { hashes: &'a HashStrategy },
+}
+
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
 /// To resolve the dependencies of a packages, we may need to build one or more source
@@ -147,14 +158,13 @@ pub trait BuildContext {
 
     /// Resolve build requirements.
     ///
-    /// Pass `None` for the initial requirements, such as `build-system.requires`. When adding
-    /// requirements returned by a build backend, pass the previous resolution's [`HashStrategy`]
-    /// to preserve the hashes already collected. When build dependency hashes are required,
-    /// backend output cannot add hashes to this set.
+    /// Use [`BuildRequirementPhase::Initial`] for declared requirements. When adding requirements
+    /// returned by a build backend, use [`BuildRequirementPhase::Backend`] with the previous
+    /// resolution's [`HashStrategy`].
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-        hash_override: Option<&'a HashStrategy>,
+        phase: BuildRequirementPhase<'a>,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
