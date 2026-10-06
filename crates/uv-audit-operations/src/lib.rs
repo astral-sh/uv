@@ -15,9 +15,9 @@ use uv_audit::{
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_command_support::{ExitStatus, Printer};
-use uv_configuration::{AuditOutputFormat, KeyringProviderType};
 use uv_configuration::{
-    Concurrency, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
+    AuditOutputFormat, Concurrency, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
+    KeyringProviderType,
 };
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
@@ -25,21 +25,20 @@ use uv_lock::Lock;
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
-use reporter::AuditReporter;
-
-pub(crate) mod json;
 mod reporter;
-pub(crate) mod sarif;
+use reporter::AuditReporter;
+pub mod json;
+pub mod sarif;
 
 /// Audit findings and ignore-rule matches for one lockfile.
-pub(crate) struct AuditOutcome {
-    pub(crate) n_packages: usize,
-    pub(crate) findings: Vec<Finding>,
-    pub(crate) matched_ignores: FxHashSet<VulnerabilityID>,
+pub struct AuditOutcome {
+    pub n_packages: usize,
+    pub findings: Vec<Finding>,
+    pub matched_ignores: FxHashSet<VulnerabilityID>,
 }
 
 /// Audit the dependency graph reachable from a project, script, or tool lockfile.
-pub(crate) async fn audit_lock(
+pub async fn audit_lock(
     lock: &Lock,
     root: &Path,
     extras: &ExtrasSpecificationWithDefaults,
@@ -138,7 +137,7 @@ pub(crate) async fn audit_lock(
 }
 
 /// Warn once for each ignore rule that did not match an audited vulnerability.
-pub(crate) fn warn_unmatched_ignores(
+pub fn warn_unmatched_ignores(
     ignore: &[VulnerabilityID],
     ignore_until_fixed: &[VulnerabilityID],
     matched_ignores: &FxHashSet<VulnerabilityID>,
@@ -155,7 +154,7 @@ pub(crate) fn warn_unmatched_ignores(
 }
 
 /// Resolve a lockfile path into the URI used by SARIF consumers.
-pub(crate) fn artifact_uri(path: &Path) -> String {
+pub fn artifact_uri(path: &Path) -> String {
     let path = if let Some(repository_root) = find_git_repository_root(path)
         && let Ok(relative) = relative_to(path, repository_root)
     {
@@ -168,16 +167,16 @@ pub(crate) fn artifact_uri(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-pub(crate) struct AuditResults {
-    pub(crate) printer: Printer,
-    pub(crate) n_packages: usize,
-    pub(crate) output_format: AuditOutputFormat,
-    pub(crate) findings: Vec<Finding>,
-    pub(crate) artifact_uri: String,
+pub struct AuditResults {
+    pub printer: Printer,
+    pub n_packages: usize,
+    pub output_format: AuditOutputFormat,
+    pub findings: Vec<Finding>,
+    pub artifact_uri: String,
 }
 
 impl AuditResults {
-    pub(crate) fn render(&self) -> Result<ExitStatus> {
+    pub fn render(&self) -> Result<ExitStatus> {
         match self.output_format {
             AuditOutputFormat::Text => self.render_text(),
             AuditOutputFormat::Json => self.render_json(),
@@ -194,7 +193,7 @@ impl AuditResults {
         })
     }
 
-    pub(crate) fn exit_status(&self) -> ExitStatus {
+    pub fn exit_status(&self) -> ExitStatus {
         // NOTE: intentional: we don't currently fail if there are any adverse statuses,
         // only when there are vulnerabilities. We will likely change this once we allow users
         // to ignore adverse statuses and configure policies.

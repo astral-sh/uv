@@ -10,12 +10,13 @@ use serde::Serialize;
 use serde_json::Value;
 use uv_audit::{AdverseStatus, ProjectStatus, Vulnerability};
 use uv_normalize::PackageName;
+use uv_version::version;
 
 use super::AuditResults;
 
 /// Top-level SARIF log object (SARIF §3.13).
 #[derive(Debug, Serialize)]
-pub(crate) struct Report {
+pub struct Report {
     #[serde(rename = "$schema")]
     schema: String,
     runs: Vec<Run>,
@@ -23,7 +24,7 @@ pub(crate) struct Report {
 }
 
 impl Report {
-    pub(crate) fn from_findings(
+    pub(super) fn from_findings(
         vulnerabilities: &[&Vulnerability],
         statuses: &[&ProjectStatus],
         artifact_uri: &str,
@@ -81,10 +82,10 @@ impl Report {
                     driver: ToolComponent {
                         download_uri: Some(env!("CARGO_PKG_REPOSITORY").to_string()),
                         information_uri: Some(env!("CARGO_PKG_HOMEPAGE").to_string()),
-                        name: env!("CARGO_PKG_NAME").to_string(),
+                        name: "uv".to_string(),
                         rules: rules.into_values().collect(),
-                        semantic_version: Some(env!("CARGO_PKG_VERSION").to_string()),
-                        version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                        semantic_version: Some(version().to_string()),
+                        version: Some(version().to_string()),
                     },
                 },
             }],
@@ -93,7 +94,7 @@ impl Report {
     }
 
     /// Combine tool findings into one SARIF document, retaining a run for each tool.
-    pub(crate) fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
+    pub fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
         let mut report = Self::from_findings(&[], &[], "");
         report.runs.clear();
 

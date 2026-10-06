@@ -7,7 +7,6 @@ use rustc_hash::FxHashSet;
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::AuditOutputFormat;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, ExtrasSpecification};
 use uv_fs::Simplified;
@@ -19,9 +18,11 @@ use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
-use crate::commands::audit::{
+use uv_audit_operations::{
     AuditResults, artifact_uri, audit_lock, json, sarif, warn_unmatched_ignores,
 };
+use uv_command_support::ExitStatus;
+use uv_command_support::Printer;
 use uv_settings::ResolverInstallerSettings;
 
 /// Audit selected installed tools, or every installed tool if no names are provided.

@@ -5823,6 +5823,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "uv-audit",
+ "uv-audit-operations",
  "uv-auth",
  "uv-bin-install",
  "uv-build-backend",
@@ -5918,6 +5919,33 @@ dependencies = [
  "uv-redacted",
  "uv-small-str",
  "wiremock",
+]
+
+[[package]]
+name = "uv-audit-operations"
+version = "0.0.90"
+dependencies = [
+ "anyhow",
+ "indicatif",
+ "itertools 0.14.0",
+ "owo-colors",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uv-audit",
+ "uv-cache",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-lock",
+ "uv-normalize",
+ "uv-redacted",
+ "uv-version",
+ "uv-warnings",
 ]
 
 [[package]]

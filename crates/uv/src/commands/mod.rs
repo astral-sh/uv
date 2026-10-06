@@ -61,7 +61,6 @@ pub(crate) use workspace::dir::dir;
 pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
 
-mod audit;
 mod auth;
 pub(crate) mod build_backend;
 mod build_frontend;
