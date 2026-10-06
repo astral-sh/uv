@@ -759,6 +759,11 @@
           "type": "boolean",
           "default": false
         },
+        "respect-vcs-ignore": {
+          "description": "Exclude files matching `.gitignore` rules when building source distributions and wheels.\n\nRules are read from `.gitignore` files in the project directory and its subdirectories.\nParent directories, global Git configuration, and `.git/info/exclude` are not used, and\nneither Git nor a Git repository is required. Explicit includes do not override these rules.\n\nIgnoring required package files, such as `pyproject.toml`, the readme, license files, or\na module's `__init__.py` or `__init__.pyi`, is an error. Editable installs apply these rules\nto copied data files, but the linked Python source tree remains unfiltered.\n\nSource distributions disable this setting in their generated `pyproject.toml`, since their\nfiles have already been filtered and may not contain all of the original ignore rules.",
+          "type": "boolean",
+          "default": false
+        },
         "source-exclude": {
           "description": "Glob expressions which files and directories to exclude from the source distribution.\n\nThese exclusions are also applied to wheels to ensure that a wheel built from a source tree\nis consistent with a wheel built from a source distribution.",
           "type": "array",

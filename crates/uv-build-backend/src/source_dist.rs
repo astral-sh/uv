@@ -1,4 +1,5 @@
 use crate::metadata::DEFAULT_EXCLUDES;
+use crate::vcs_ignore::VcsIgnore;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
@@ -88,9 +89,10 @@ fn source_dist_matcher(
     pyproject_toml: &PyProjectToml,
     settings: BuildBackendSettings,
     show_warnings: bool,
-) -> Result<(GlobDirFilter, GlobSet), Error> {
+) -> Result<(GlobDirFilter, GlobSet, Vec<PathBuf>), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
+    let mut required_directories = Vec::new();
     let mut includes: Vec<String> = settings.source_include;
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
@@ -111,6 +113,9 @@ fn source_dist_matcher(
             .expect("module root is inside source tree");
         let import_path = normalize_path(path).portable_display().to_string();
         includes.push(format!("{}/**", globset::escape(&import_path)));
+        if settings.respect_vcs_ignore && settings.namespace {
+            required_directories.push(normalize_path(path).into_owned());
+        }
     }
     for include in includes {
         let glob = PortableGlobParser::Uv
@@ -161,6 +166,9 @@ fn source_dist_matcher(
                 path: directory.to_path_buf(),
             });
         }
+        if settings.respect_vcs_ignore {
+            required_directories.push(directory.to_path_buf());
+        }
         let directory = directory.portable_display().to_string();
         let glob = PortableGlobParser::Uv
             .parse(&format!("{}/**", globset::escape(&directory)))
@@ -201,7 +209,7 @@ fn source_dist_matcher(
     if exclude_matcher.is_match("pyproject.toml") {
         return Err(Error::PyprojectTomlExcluded);
     }
-    Ok((include_matcher, exclude_matcher))
+    Ok((include_matcher, exclude_matcher, required_directories))
 }
 
 /// Shared implementation for building and listing a source distribution.
@@ -219,6 +227,7 @@ fn write_source_dist(
         .settings()
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_vcs_ignore);
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -257,6 +266,12 @@ fn write_source_dist(
     let pyproject_contents = fs_err::read_to_string(&pyproject_path)?;
     let mut pyproject_value: toml::Value = toml::from_str(&pyproject_contents)
         .map_err(|err| Error::Toml(pyproject_path.clone(), err))?;
+    if settings.respect_vcs_ignore {
+        // Ignore files can themselves be excluded from the source distribution. Its contents have
+        // already been filtered, so rebuilding must not apply an incomplete set of ignore rules.
+        pyproject_value["tool"]["uv"]["build-backend"]["respect-vcs-ignore"] =
+            toml::Value::Boolean(false);
+    }
     // See https://github.com/toml-rs/toml/issues/1088 for `to_string_pretty`.
     normalize_toml10_datetimes(&mut pyproject_value);
     let pyproject_rewritten =
@@ -276,36 +291,35 @@ fn write_source_dist(
         &pyproject_path,
     )?;
 
-    let (include_matcher, exclude_matcher) =
+    let (include_matcher, exclude_matcher, required_directories) =
         source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
 
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
     let top_level_directory = PathBuf::from(&top_level).join("");
     write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
-    for entry in WalkDir::new(source_tree)
-        .sort_by_file_name()
-        .into_iter()
-        .filter_entry(|entry| {
-            // TODO(konsti): This should be prettier.
-            let relative = entry
-                .path()
-                .strip_prefix(source_tree)
-                .expect("walkdir starts with root");
-
-            // Fast path: Don't descend into a directory that can't be included. This is the most
-            // important performance optimization, it avoids descending into directories such as
-            // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
-            // directories that often exist on the top level of a project. This is especially noticeable
-            // on network file systems with high latencies per operation (while contiguous reading may
-            // still be fast).
-            include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
-        })
-    {
+    let mut entries = WalkDir::new(source_tree).sort_by_file_name().into_iter();
+    while let Some(entry) = entries.next() {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
             err,
         })?;
+
+        let relative = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+        // Avoid descending into directories that cannot be included, such as `.venv` or large
+        // data directories. Load ignore rules only after applying these inexpensive glob checks.
+        if !include_matcher.match_directory(relative)
+            || exclude_matcher.is_match(relative)
+            || vcs_ignore.is_ignored(entry.path(), entry.file_type().is_dir())?
+        {
+            if entry.file_type().is_dir() {
+                entries.skip_current_dir();
+            }
+            continue;
+        }
 
         files_visited += 1;
         if files_visited > 10000 {
@@ -314,13 +328,7 @@ fn write_source_dist(
                 Consider using more constrained includes or more excludes."
             );
         }
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-
-        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
+        if !include_matcher.match_path(relative) {
             trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }
@@ -350,6 +358,16 @@ fn write_source_dist(
         )?;
     }
     debug!("Visited {files_visited} files for source dist build");
+
+    // Configured data and namespace roots must exist when rebuilding a wheel, even if all their
+    // files were ignored. Keep their directory structure without retaining any excluded files.
+    for directory in required_directories {
+        let mut parent = PathBuf::from(&top_level);
+        for component in directory.components() {
+            parent.push(component);
+            write_directory_once(&mut writer, &mut written_directories, &parent)?;
+        }
+    }
 
     writer.close(&top_level)?;
 

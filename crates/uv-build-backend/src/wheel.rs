@@ -27,6 +27,7 @@ use uv_pypi_types::BuildKind;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
+use crate::vcs_ignore::VcsIgnore;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
     error_on_venv, find_roots, write_directory_once, write_file_with_directories,
@@ -142,6 +143,7 @@ fn write_wheel(
         .unwrap_or_else(BuildBackendSettings::default);
 
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_vcs_ignore);
 
     debug!("Adding content files to wheel");
     let (src_root, module_relative) = find_roots(
@@ -156,15 +158,21 @@ fn write_wheel(
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
     for module_relative in module_relative {
-        for entry in WalkDir::new(src_root.join(module_relative))
+        let mut entries = WalkDir::new(src_root.join(module_relative))
             .sort_by_file_name()
-            .into_iter()
-            .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
-        {
+            .into_iter();
+        while let Some(entry) = entries.next() {
             let entry = entry.map_err(|err| Error::WalkDir {
                 root: source_tree.to_path_buf(),
                 err,
             })?;
+
+            if exclude_matcher.is_match(entry.path()) {
+                if entry.file_type().is_dir() {
+                    entries.skip_current_dir();
+                }
+                continue;
+            }
 
             files_visited += 1;
             if files_visited > 10000 {
@@ -186,6 +194,13 @@ fn write_wheel(
                 .expect("walkdir starts with root");
             if exclude_matcher.is_match(match_path) {
                 trace!("Excluding from module: {}", match_path.user_display());
+                continue;
+            }
+            if vcs_ignore.is_ignored(entry.path(), entry.file_type().is_dir())? {
+                trace!("Excluding from module: {}", match_path.user_display());
+                if entry.file_type().is_dir() {
+                    entries.skip_current_dir();
+                }
                 continue;
             }
 
@@ -223,6 +238,7 @@ fn write_wheel(
             &mut wheel_writer,
             "project.license-files",
             None,
+            None,
         )?;
     }
 
@@ -231,6 +247,7 @@ fn write_wheel(
         pyproject_toml,
         settings.data.iter(),
         &exclude_matcher,
+        &mut vcs_ignore,
         &mut wheel_writer,
     )?;
 
@@ -264,6 +281,7 @@ pub fn build_editable(
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_vcs_ignore);
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
@@ -309,6 +327,7 @@ pub fn build_editable(
         &pyproject_toml,
         settings.data.iter(),
         &exclude_matcher,
+        &mut vcs_ignore,
         &mut wheel_writer,
     )?;
 
@@ -335,6 +354,7 @@ fn write_data_files<'data>(
     pyproject_toml: &PyProjectToml,
     data: impl Iterator<Item = (&'static str, &'data Path)>,
     exclude_matcher: &GlobSet,
+    vcs_ignore: &mut VcsIgnore,
     wheel_writer: &mut impl DirectoryWriter,
 ) -> Result<(), Error> {
     let canonical_source_tree = source_tree.simple_canonicalize()?;
@@ -379,6 +399,7 @@ fn write_data_files<'data>(
             wheel_writer,
             &format!("tool.uv.build-backend.data.{name}"),
             Some((exclude_matcher, source_tree)),
+            Some(vcs_ignore),
         )?;
     }
 
@@ -564,6 +585,7 @@ fn wheel_subdir_from_globs(
     // For error messages
     globs_field: &str,
     exclude_matcher: Option<(&GlobSet, &Path)>,
+    mut vcs_ignore: Option<&mut VcsIgnore>,
 ) -> Result<(), Error> {
     let license_files_globs: Vec<_> = globs
         .into_iter()
@@ -600,24 +622,31 @@ fn wheel_subdir_from_globs(
         })
     };
 
-    for entry in WalkDir::new(src)
-        .sort_by_file_name()
-        .into_iter()
-        .filter_entry(|entry| {
-            // TODO(konsti): This should be prettier.
-            let relative = entry
-                .path()
-                .strip_prefix(src)
-                .expect("walkdir starts with root");
-
-            // Fast path: Don't descend into a directory that can't be included.
-            matcher.match_directory(relative) && !is_excluded(entry.path())
-        })
-    {
+    let mut entries = WalkDir::new(src).sort_by_file_name().into_iter();
+    while let Some(entry) = entries.next() {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: src.to_path_buf(),
             err,
         })?;
+
+        let relative = entry
+            .path()
+            .strip_prefix(src)
+            .expect("walkdir starts with root");
+        // Fast path: Don't descend into a directory that can't be included.
+        if !matcher.match_directory(relative)
+            || is_excluded(entry.path())
+            || if let Some(vcs_ignore) = &mut vcs_ignore {
+                vcs_ignore.is_ignored(entry.path(), entry.file_type().is_dir())?
+            } else {
+                false
+            }
+        {
+            if entry.file_type().is_dir() {
+                entries.skip_current_dir();
+            }
+            continue;
+        }
 
         // Skip the root path, which is already included as `target` prior to the loop.
         // (If `entry.path() == src`, then `relative` is empty, and `relative_licenses` is
@@ -626,13 +655,7 @@ fn wheel_subdir_from_globs(
             continue;
         }
 
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(src)
-            .expect("walkdir starts with root");
-
-        if !matcher.match_path(relative) || is_excluded(entry.path()) {
+        if !matcher.match_path(relative) {
             trace!("Excluding {}: {}", globs_field, relative.user_display());
             continue;
         }
