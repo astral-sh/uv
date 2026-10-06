@@ -292,7 +292,7 @@ impl<'a> Layout<'a> {
         })
     }
 
-    pub(crate) fn replace_install_name(&self, name: &InstallName) -> Result<Vec<u8>, Error> {
+    pub(crate) fn replace_install_name(&self, name: InstallName<'_>) -> Result<Vec<u8>, Error> {
         let name = name.as_c_str().to_bytes_with_nul();
         let mut output = self.image[..HEADER_SIZE].to_vec();
 
