@@ -1,5 +1,7 @@
 //! Inspect fixture and output bytes independently of the editor's private parser.
 
+use std::ffi::CStr;
+
 use anyhow::{Context, Result};
 use scroll::{LE, Pread};
 
@@ -35,12 +37,7 @@ pub(crate) fn install_name(image: &[u8]) -> Result<&[u8]> {
         .context("LC_ID_DYLIB")?;
     let offset = command.data.pread_with::<u32>(8, LE)? as usize;
     let bytes = command.data.get(offset..).context("install name")?;
-    let end = bytes
-        .iter()
-        .position(|byte| *byte == 0)
-        .context("name terminator")?;
-
-    Ok(&bytes[..end])
+    Ok(CStr::from_bytes_until_nul(bytes)?.to_bytes())
 }
 
 #[derive(Debug, PartialEq, Eq)]

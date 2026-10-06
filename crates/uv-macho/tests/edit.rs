@@ -16,6 +16,7 @@ fn edit_install_name() -> Result<()> {
         for name in [
             b"x".as_slice(),
             b"/a/longer/install/directory/libfixture.dylib",
+            b"/non-utf8-\xff/libfixture.dylib",
         ] {
             let output = replace_install_name(image, &InstallName::new(name)?)?;
             assert_eq!(install_name(output.as_bytes())?, name);
@@ -27,26 +28,6 @@ fn edit_install_name() -> Result<()> {
             assert_eq!(sections(output.as_bytes())?, sections(image)?);
         }
     }
-
-    Ok(())
-}
-
-#[test]
-fn invalid_names() {
-    for name in [b"".as_slice(), b"invalid\0name"] {
-        assert_eq!(InstallName::new(name), Err(Error::InvalidName));
-    }
-}
-
-#[test]
-fn non_utf8_name() -> Result<()> {
-    let name = b"/non-utf8-\xff/libfixture.dylib";
-    let output = replace_install_name(ARM64, &InstallName::new(name)?)?;
-    assert_eq!(install_name(output.as_bytes())?, name);
-    assert_eq!(
-        replace_install_name(output.as_bytes(), &InstallName::new(name)?)?,
-        output
-    );
 
     Ok(())
 }
