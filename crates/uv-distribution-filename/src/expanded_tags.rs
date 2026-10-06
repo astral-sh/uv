@@ -169,6 +169,8 @@ mod tests {
             TagsOptions::default(),
         )
         .unwrap();
+
+        // Neither row supports CPython 3.12 on Linux; tags from separate rows cannot be combined.
         let wheel =
             ExpandedTags::parse(["cp312-cp312-win_amd64", "cp311-cp311-linux_x86_64"]).unwrap();
 
