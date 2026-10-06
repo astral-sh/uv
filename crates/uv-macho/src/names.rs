@@ -21,3 +21,16 @@ impl InstallName {
         &self.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::InstallName;
+    use crate::Error;
+
+    #[test]
+    fn invalid_names() {
+        for name in [b"".as_slice(), b"invalid\0name"] {
+            assert_eq!(InstallName::new(name), Err(Error::InvalidName));
+        }
+    }
+}
