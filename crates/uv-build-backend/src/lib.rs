@@ -1056,8 +1056,8 @@ mod tests {
             source.join("pyproject.toml"),
             format!("{pyproject}\nrespect-ignore = true\n"),
         )?;
-        let filtered = build(&source, dist.path())?;
-        assert_snapshot!(filtered.wheel_contents.join("\n"), @"
+        let filtered_wheel = build_wheel(&source, dist.path(), None, MOCK_UV_VERSION, false)?;
+        assert_snapshot!(wheel_contents(&dist.path().join(filtered_wheel.to_string())).join("\n"), @"
         example-1.0.0.data/scripts/
         example-1.0.0.data/scripts/run.py
         example-1.0.0.dist-info/
@@ -1070,7 +1070,8 @@ mod tests {
         example/nested/
         example/nested/keep.txt
         ");
-        assert_snapshot!(filtered.source_dist_contents.join("\n"), @"
+        let filtered_source_dist = build_source_dist(&source, dist.path(), MOCK_UV_VERSION, false)?;
+        assert_snapshot!(sdist_contents(&dist.path().join(filtered_source_dist.to_string())).join("\n"), @"
         example-1.0.0/
         example-1.0.0/PKG-INFO
         example-1.0.0/pyproject.toml
@@ -1087,11 +1088,11 @@ mod tests {
         example-1.0.0/tests/test_smoke.py
         ");
 
-        // The ignored nested .gitignore contains the rule that keeps keep.txt. Building the
-        // filtered source distribution must not reapply the remaining parent ignore rules.
+        // The ignored nested .gitignore contains the rule that keeps keep.txt. Rebuilding from
+        // the source distribution applies the remaining rules, which exclude keep.txt.
         let unpacked = TempDir::new()?;
         unpack_sdist(
-            &dist.path().join(filtered.source_dist_filename.to_string()),
+            &dist.path().join(filtered_source_dist.to_string()),
             unpacked.path(),
         )?;
         let source_dist = unpacked.path().join("example-1.0.0");
@@ -1107,7 +1108,7 @@ mod tests {
         [tool.uv.build-backend]
         source-include = ["tests/**"]
         source-exclude = ["src/example/explicit.json"]
-        respect-ignore = false
+        respect-ignore = true
 
         [tool.uv.build-backend.data]
         scripts = "scripts"
@@ -1116,6 +1117,19 @@ mod tests {
             fs_err::read_to_string(source_dist.join("pyproject.toml.orig"))?,
             fs_err::read_to_string(source.join("pyproject.toml"))?
         );
+
+        let rebuilt = build_wheel(&source_dist, dist.path(), None, MOCK_UV_VERSION, false)?;
+        assert_snapshot!(wheel_contents(&dist.path().join(rebuilt.to_string())).join("\n"), @"
+        example-1.0.0.data/scripts/
+        example-1.0.0.data/scripts/run.py
+        example-1.0.0.dist-info/
+        example-1.0.0.dist-info/METADATA
+        example-1.0.0.dist-info/RECORD
+        example-1.0.0.dist-info/WHEEL
+        example/
+        example/.gitignore
+        example/__init__.py
+        ");
 
         let editable = build_editable(&source, dist.path(), None, MOCK_UV_VERSION, false)?;
         assert_snapshot!(wheel_contents(&dist.path().join(editable.to_string())).join("\n"), @"

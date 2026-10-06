@@ -270,11 +270,10 @@ default excludes still take precedence over Git ignore negations. If a required 
 as a module's `__init__.py`, the README, or a license file, is ignored, the build fails with an
 error.
 
-Git ignore filtering applies when building both source distributions and wheels. The generated
-`pyproject.toml` in a source distribution disables this setting, since its contents have already
-been filtered. This ensures that building a wheel from the source distribution gives the same result
-even when some `.gitignore` files are excluded. The original configuration is preserved in
-`pyproject.toml.orig`.
+Git ignore filtering applies when building both source distributions and wheels, including wheels
+built from source distributions. Source distributions retain the `respect-ignore` setting. If some
+`.gitignore` files are omitted, the remaining rules can select different files when rebuilding a
+wheel from the source distribution.
 
 ### Include and exclude syntax
 
