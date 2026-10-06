@@ -282,7 +282,9 @@ pub(crate) async fn resolve(
     // Incorporate hashes from requirements discovered while resolving source trees and groups.
     let mut hasher = hasher
         .clone()
-        .augment_with_requirements(requirements.iter())?;
+        .augment_with_requirements(requirements.iter().filter(|requirement| {
+            requirement.evaluate_markers(resolver_env.marker_environment(), &[])
+        }))?;
 
     // Resolve the overrides from the provided sources.
     let overrides = {

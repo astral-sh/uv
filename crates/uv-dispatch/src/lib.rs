@@ -326,7 +326,9 @@ impl BuildContext for BuildDispatch<'_> {
         let hasher = self
             .hasher
             .clone()
-            .augment_with_requirements(requirements.iter())
+            .augment_with_requirements(requirements.iter().filter(|requirement| {
+                requirement.evaluate_markers(resolver_env.marker_environment(), &[])
+            }))
             .map_err(uv_requirements::Error::from)?;
         let modifiers = DependencyModifiers::default();
         let (lookaheads, hasher) = LookaheadResolver::new(

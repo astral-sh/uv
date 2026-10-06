@@ -3808,7 +3808,10 @@ fn build_require_hashes_md5_url() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["flit-core @ {url}#md5=c817750ae741d8f720b173a30f7b2085"]
+        requires = [
+            "flit-core @ {url}#md5=c817750ae741d8f720b173a30f7b2085",
+            "unused @ https://example.com/unused-1.0.0-py3-none-any.whl#md5=00000000000000000000000000000000 ; python_version < '3'",
+        ]
         build-backend = "flit_core.buildapi"
 
         [tool.uv]

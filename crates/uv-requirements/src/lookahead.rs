@@ -134,7 +134,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                                 lookahead.package(),
                                 lookahead.version(),
                                 &requirement.name,
-                            )
+                            ) && requirement
+                                .evaluate_markers(env.marker_environment(), lookahead.extras())
                         });
                     hasher = if trusted_requirements.is_some() {
                         hasher.augment_with_requirements(requirements)?
