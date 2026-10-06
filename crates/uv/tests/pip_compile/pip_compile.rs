@@ -19890,5 +19890,29 @@ fn overrides_preserve_alternative_optional_extras() -> Result<()> {
             }
         }
     }
+
+    // Lookahead must not fetch a constraint for an inactive optional dependency.
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("extra-host @ file://${PROJECT_ROOT}/wheels/extra_host-1-py3-none-any.whl")?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("extra-leaf @ file://${PROJECT_ROOT}/missing/extra_leaf-2-py3-none-any.whl")?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--constraint").arg("constraints.txt")
+        .arg("--no-index")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host @ file://${PROJECT_ROOT}/wheels/extra_host-1-py3-none-any.whl
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
     Ok(())
 }
