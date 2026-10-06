@@ -203,6 +203,13 @@ fn command_boundaries() -> Result<()> {
     image[136..144].copy_from_slice(&u64::MAX.to_le_bytes());
     assert_eq!(parse(&image).err(), Some(Error::TooLarge));
 
+    // An empty table does not reference any bytes, even with an out-of-bounds offset.
+    let mut image = ARM64.to_vec();
+    let dynamic_symbols = command_offset(ARM64, 0xb)?;
+    assert_eq!(super::le32(&image, dynamic_symbols + 36)?, 0);
+    image[dynamic_symbols + 32..dynamic_symbols + 36].copy_from_slice(&u32::MAX.to_le_bytes());
+    parse(&image)?;
+
     Ok(())
 }
 
