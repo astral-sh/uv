@@ -11,7 +11,8 @@ use crate::format::{
     LC_LOAD_WEAK_DYLIB, LC_REEXPORT_DYLIB, LC_ROUTINES_64, LC_RPATH, LC_SEGMENT_64,
     LC_SEGMENT_SPLIT_INFO, LC_SOURCE_VERSION, LC_SUB_CLIENT, LC_SUB_FRAMEWORK, LC_SUB_LIBRARY,
     LC_SUB_UMBRELLA, LC_SYMTAB, LC_UUID, LC_VERSION_MIN_MACOSX, MH_DYLIB, MH_MAGIC_64,
-    S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECTION_TYPE, Section, Segment,
+    S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECT_INFO_PLIST, SECTION_TYPE,
+    SEG_LINKEDIT, SEG_TEXT, Section, Segment,
 };
 
 pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
@@ -126,7 +127,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                     segments.insert(segment_range.clone())?;
                 }
 
-                if segment.segname == *b"__TEXT\0\0\0\0\0\0\0\0\0\0" {
+                if segment.segname == SEG_TEXT {
                     if text.replace(segment).is_some()
                         || segment.fileoff != 0
                         || segment_range.end < command_end
@@ -135,7 +136,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                     }
                 }
 
-                if segment.segname == *b"__LINKEDIT\0\0\0\0\0\0" {
+                if segment.segname == SEG_LINKEDIT {
                     if linkedit.replace((index, segment)).is_some() || !segment.sections.is_empty()
                     {
                         return Err(Error::Malformed("invalid or duplicate __LINKEDIT segment"));
@@ -180,9 +181,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                         sections.insert(section_range.clone())?;
                     }
 
-                    if section.segname == *b"__TEXT\0\0\0\0\0\0\0\0\0\0"
-                        && section.sectname == *b"__info_plist\0\0\0\0"
-                    {
+                    if section.segname == SEG_TEXT && section.sectname == SECT_INFO_PLIST {
                         if info_plist.replace(section_data).is_some() {
                             return Err(Error::Malformed("duplicate embedded Info.plist"));
                         }

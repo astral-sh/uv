@@ -22,6 +22,10 @@ pub(crate) const S_ZEROFILL: u32 = 1;
 pub(crate) const S_GB_ZEROFILL: u32 = 0xc;
 pub(crate) const S_THREAD_LOCAL_ZEROFILL: u32 = 0x12;
 
+pub(crate) const SEG_TEXT: [u8; 16] = *b"__TEXT\0\0\0\0\0\0\0\0\0\0";
+pub(crate) const SEG_LINKEDIT: [u8; 16] = *b"__LINKEDIT\0\0\0\0\0\0";
+pub(crate) const SECT_INFO_PLIST: [u8; 16] = *b"__info_plist\0\0\0\0";
+
 pub(crate) const LC_SYMTAB: u32 = 0x2;
 pub(crate) const LC_DYSYMTAB: u32 = 0xb;
 pub(crate) const LC_LOAD_DYLIB: u32 = 0xc;
