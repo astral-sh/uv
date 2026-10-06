@@ -8947,7 +8947,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
+    error: Hash-checking is required, but no trusted hash was provided for: `markupsafe`
     "
     );
 
