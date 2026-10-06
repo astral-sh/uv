@@ -39,6 +39,7 @@ use uv_cli::{
     TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{PythonUpgrade, PythonUpgradeSource, ToolRunCommand};
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
@@ -57,15 +58,12 @@ use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::{ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, UvError};
-use crate::printer::Printer;
+use crate::commands::{ParsedRunCommand, RunCommand, ScriptPath};
 
-pub(crate) mod child;
 pub mod commands;
 #[cfg(not(feature = "self-update"))]
 mod install_source;
 mod logging;
-pub(crate) mod printer;
 
 /// Construct the shared HTTP client builder from the resolved global settings.
 fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {

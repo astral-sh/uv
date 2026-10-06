@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
+use uv_command_support::{ExitStatus, Printer};
 use uv_python::downloads::ManagedPythonDownloadList;
 
 use uv_cache::Cache;
@@ -19,10 +20,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user_once, warn_user_once_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::{
-    ExitStatus, project::find_requires_python, reporters::PythonDownloadReporter,
-};
-use crate::printer::Printer;
+use crate::commands::{project::find_requires_python, reporters::PythonDownloadReporter};
 
 /// Pin to a specific Python version.
 #[expect(clippy::fn_params_excessive_bools)]

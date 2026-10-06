@@ -5,12 +5,10 @@ use anyhow::{Result, bail};
 
 use owo_colors::OwoColorize;
 use uv_cache::Cache;
+use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
-
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 /// Print the path to the workspace dir
 pub(crate) async fn dir(

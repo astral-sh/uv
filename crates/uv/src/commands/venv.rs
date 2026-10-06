@@ -10,6 +10,7 @@ use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
     IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
@@ -37,7 +38,6 @@ use uv_virtualenv::{OnExisting, RemovalReason, Seed};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::commands::ExitStatus;
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::operations::report_interpreter;
@@ -48,7 +48,6 @@ use crate::commands::project::{
     update_project_environment_link,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::printer::Printer;
 
 #[derive(Error, Debug)]
 enum VenvError {

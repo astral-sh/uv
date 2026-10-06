@@ -1,10 +1,9 @@
 use std::fmt::Write;
 
 use owo_colors::OwoColorize;
+use uv_command_support::Printer;
 use uv_fs::Simplified;
 use uv_python::PythonInstallation;
-
-use crate::printer::Printer;
 
 pub(crate) mod installation;
 pub(crate) mod malware;

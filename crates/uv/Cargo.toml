@@ -26,6 +26,7 @@ uv-cache-key = { workspace = true }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
+uv-command-support = { workspace = true }
 uv-console = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
@@ -81,7 +82,6 @@ clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
 diskus = { workspace = true }
-dotenvy = { workspace = true }
 dunce = { workspace = true }
 etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -112,7 +112,6 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
-version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 
@@ -153,7 +152,6 @@ tokio-util = { workspace = true }
 wiremock = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true }
 uv-unix = { workspace = true }
 
 [features]

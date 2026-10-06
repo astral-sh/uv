@@ -8,6 +8,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use itertools::Itertools;
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
 };
@@ -39,8 +40,6 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
 };
-use crate::commands::{ExitStatus, UvError};
-use crate::printer::Printer;
 use uv_settings::ResolverSettings;
 
 /// A dependency requirement selected for upgrading.

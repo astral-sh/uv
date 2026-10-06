@@ -11,6 +11,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
 
+use uv_command_support::{ExitStatus, Printer, elapsed};
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{
@@ -20,8 +21,6 @@ use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, Python
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
-use crate::commands::{ExitStatus, elapsed};
-use crate::printer::Printer;
 
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(

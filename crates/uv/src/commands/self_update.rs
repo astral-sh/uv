@@ -17,15 +17,13 @@ use tracing::{debug, warn};
 use url::Url;
 use uv_bin_install::{Binary, find_matching_version};
 use uv_client::{BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_with_url_fallback};
+use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_pep440::{Version as Pep440Version, VersionSpecifier, VersionSpecifiers};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::{
     EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
 };
-
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 const UV_GITHUB_RELEASES_DOWNLOAD_PREFIX: &str =
     "https://github.com/astral-sh/uv/releases/download/";

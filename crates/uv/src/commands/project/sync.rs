@@ -10,6 +10,7 @@ use serde::Serialize;
 use tracing::warn;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::SyncFormat;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode,
@@ -48,8 +49,6 @@ use crate::commands::project::{
     ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment, detect_conflicts,
     update_environment,
 };
-use crate::commands::{ExitStatus, UvError};
-use crate::printer::Printer;
 use uv_configuration::Modifications;
 use uv_settings::{FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings};
 

@@ -13,6 +13,7 @@ use unicode_width::UnicodeWidthStr;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::ListFormat;
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
@@ -29,11 +30,9 @@ use uv_python::{
 };
 use uv_resolver::{ExcludeNewer, Prerelease};
 
-use crate::commands::ExitStatus;
 use crate::commands::operations::resolution::latest::LatestClient;
 use crate::commands::operations::resolution::reporters::LatestVersionReporter;
 use crate::commands::pip::reporters::report_target_environment;
-use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) async fn pip_list(

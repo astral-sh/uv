@@ -5,12 +5,10 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint};
-
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 /// Uninstall a tool.
 pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitStatus> {

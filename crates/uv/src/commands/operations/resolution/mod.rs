@@ -10,6 +10,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_client::{BaseClientBuilder, RegistryClient};
+use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyModifiers, ExcludeDependency, Excludes,
     ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
@@ -39,7 +40,6 @@ use uv_types::{BuildContext, HashStrategy};
 
 use crate::commands::operations::resolution::loggers::ResolveLogger;
 use crate::commands::operations::resolution::reporters::ResolverReporter;
-use crate::printer::Printer;
 
 mod error;
 pub(crate) mod latest;

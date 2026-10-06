@@ -28,6 +28,7 @@ uv-cache-key = { version = "0.0.90", path = "crates/uv-cache-key" }
 uv-cli = { version = "0.0.90", path = "crates/uv-cli" }
 uv-client = { version = "0.0.90", path = "crates/uv-client" }
 uv-configuration = { version = "0.0.90", path = "crates/uv-configuration" }
+uv-command-support = { version = "0.0.90", path = "crates/uv-command-support" }
 uv-console = { version = "0.0.90", path = "crates/uv-console" }
 uv-dirs = { version = "0.0.90", path = "crates/uv-dirs" }
 uv-dispatch = { version = "0.0.90", path = "crates/uv-dispatch" }

@@ -3,6 +3,7 @@ use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, Modifications, TargetTriple,
@@ -31,7 +32,6 @@ use crate::commands::operations::malware::{MalwareCheckContext, maybe_check_malw
 use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::{EnvironmentError, detect_conflicts};
-use crate::printer::Printer;
 
 /// Sync a lockfile with an environment.
 pub(crate) async fn sync_from_lock(

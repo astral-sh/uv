@@ -2,8 +2,7 @@ use std::fmt::{self, Write};
 
 use owo_colors::OwoColorize;
 
-use crate::commands::elapsed;
-use crate::printer::Printer;
+use uv_command_support::{Printer, elapsed};
 
 /// A trait to handle logging during resolve operations.
 pub(crate) trait ResolveLogger {

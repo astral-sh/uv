@@ -8,6 +8,7 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::PipInstallFormat;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
@@ -53,8 +54,6 @@ use crate::commands::operations::resolution::{resolution_markers, resolution_tag
 use crate::commands::pip::reporters::report_target_environment;
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, UvError};
-use crate::printer::Printer;
 use uv_configuration::Modifications;
 
 /// Install a set of locked requirements into the current Python environment.

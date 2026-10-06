@@ -13,6 +13,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
@@ -61,8 +62,6 @@ use crate::commands::operations::resolution::locked_requirements::{
 use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
 use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, OutputWriter, UvError};
-use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[expect(clippy::fn_params_excessive_bools)]

@@ -16,6 +16,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer, UvError, conjunction, elapsed};
 use uv_configuration::{Concurrency, PythonUpgrade, PythonUpgradeSource};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
@@ -42,8 +43,6 @@ use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, UvError, conjunction, elapsed};
-use crate::printer::Printer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InstallRequest<'a> {

@@ -4,6 +4,7 @@ use anyhow::{Result, bail};
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::AuditOutputFormat;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple,
@@ -21,8 +22,6 @@ use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::ExitStatus;
-use crate::commands::UvError;
 use crate::commands::audit::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
 use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
 use crate::commands::operations::resolution::resolution_markers;
@@ -32,7 +31,6 @@ use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
     ScriptInterpreter,
 };
-use crate::printer::Printer;
 
 pub(crate) async fn audit(
     project_dir: &Path,

@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use crate::commands::UvError;
 use crate::commands::project::python::format_requires_python_sources;
 use uv_audit::osv;
 use uv_auth::CredentialsFromUrlError;
+use uv_command_support::UvError;
 use uv_distribution_types::{IndexCredentialsError, IndexUrlError, RequiresPython};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;

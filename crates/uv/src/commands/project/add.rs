@@ -13,6 +13,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
@@ -63,8 +64,7 @@ use crate::commands::project::{
     init_script_python_requirement,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, ScriptPath, UvError, project};
-use crate::printer::Printer;
+use crate::commands::{ScriptPath, project};
 use uv_configuration::Modifications;
 use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 

@@ -11,6 +11,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     AuthorFrom, DependencyGroupsWithDefaults, InitKind, InitProjectKind, ProjectBuildBackend,
     VersionControlError, VersionControlSystem,
@@ -35,10 +36,8 @@ use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
 };
 
-use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::printer::Printer;
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]

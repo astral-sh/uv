@@ -7,6 +7,7 @@ use futures::StreamExt;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::TreeFormat;
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple};
 use uv_dispatch::UniversalState;
@@ -37,8 +38,6 @@ use crate::commands::project::{
     EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
     ProjectPythonRequest, ScriptInterpreter,
 };
-use crate::commands::{ExitStatus, UvError};
-use crate::printer::Printer;
 use uv_settings::FrozenSource;
 use uv_settings::LockCheck;
 use uv_settings::ResolverSettings;

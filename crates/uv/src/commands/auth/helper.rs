@@ -7,11 +7,10 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use uv_auth::{AuthBackend, Credentials};
+use uv_command_support::{ExitStatus, Printer};
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
-
-use crate::{commands::ExitStatus, printer::Printer};
 
 /// Request format for the Bazel credential helper protocol.
 #[derive(Debug, Deserialize)]

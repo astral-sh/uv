@@ -56,6 +56,7 @@ reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -63,6 +64,7 @@ tokio-util = { workspace = true, features = ["compat"] }
 toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+version-ranges = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]

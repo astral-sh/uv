@@ -13,6 +13,7 @@ use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::Printer;
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
     ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
@@ -114,7 +115,6 @@ use crate::commands::project::validated_lock::ValidatedLock;
 use crate::commands::project::{EnvironmentSpecification, PreferenceLocation, PythonRequestSource};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::error::ToolLockError;
-use crate::printer::Printer;
 use uv_settings::ResolverSettings;
 
 /// Return all packages which contain an executable with the given name.

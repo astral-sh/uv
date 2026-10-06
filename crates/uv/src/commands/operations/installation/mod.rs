@@ -12,6 +12,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::RegistryClient;
+use uv_command_support::Printer;
 use uv_configuration::{BuildOptions, Concurrency, DryRun, Modifications, Reinstall};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -38,7 +39,6 @@ use crate::commands::operations::installation::bytecode::{
 };
 use crate::commands::operations::installation::loggers::InstallLogger;
 use crate::commands::operations::installation::reporters::{InstallReporter, PrepareReporter};
-use crate::printer::Printer;
 
 mod bytecode;
 pub(crate) mod editable;

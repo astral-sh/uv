@@ -14,6 +14,7 @@ use uv_audit::{
 };
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{AuditOutputFormat, KeyringProviderType};
 use uv_configuration::{
     Concurrency, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
@@ -23,9 +24,6 @@ use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_lock::Lock;
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
-
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 use reporter::AuditReporter;
 

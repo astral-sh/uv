@@ -10,6 +10,7 @@ use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
@@ -21,9 +22,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::ExitStatus;
 use crate::commands::reporters::PublishReporter;
-use crate::printer::Printer;
 
 pub(crate) async fn publish(
     paths: Vec<String>,

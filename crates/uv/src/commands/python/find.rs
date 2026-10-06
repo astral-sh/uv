@@ -4,6 +4,7 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
@@ -16,11 +17,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user, warn_user_once_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::commands::{
-    ExitStatus,
-    project::{ProjectPythonRequest, ScriptInterpreter},
-};
-use crate::printer::Printer;
+use crate::commands::project::{ProjectPythonRequest, ScriptInterpreter};
 
 /// Find a Python interpreter.
 #[expect(clippy::fn_params_excessive_bools)]

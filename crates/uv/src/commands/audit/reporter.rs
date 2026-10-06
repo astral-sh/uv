@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 use indicatif::{ProgressBar, ProgressStyle};
-
-use crate::printer::Printer;
+use uv_command_support::Printer;
 
 #[derive(Debug)]
 pub(crate) struct AuditReporter {
