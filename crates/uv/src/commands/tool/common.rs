@@ -110,7 +110,7 @@ impl Hinted for NoExecutablesError {
         hints
     }
 }
-use crate::commands::project::lock::ValidatedLock;
+use crate::commands::project::validated_lock::ValidatedLock;
 use crate::commands::project::{EnvironmentSpecification, PreferenceLocation, PythonRequestSource};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::error::ToolLockError;

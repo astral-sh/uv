@@ -97,6 +97,7 @@ pub(crate) mod sync;
 mod toolchain;
 pub(crate) mod tree;
 pub(crate) mod upgrade;
+pub(crate) mod validated_lock;
 pub(crate) mod version;
 
 /// Vulnerability identifiers grouped by dependency.
