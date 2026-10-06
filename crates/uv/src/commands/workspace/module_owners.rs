@@ -7,6 +7,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
 use uv_installer::SitePackages;
@@ -21,7 +22,6 @@ use uv_workspace::WorkspaceCache;
 use crate::commands::pip::loggers::DefaultInstallLogger;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{resolution_markers, resolution_tags};
-use crate::commands::project::UniversalState;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::sync::do_sync;
