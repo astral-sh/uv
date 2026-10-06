@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{collections::VecDeque, slice, sync::Arc};
 
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
@@ -125,6 +125,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         } else {
                             None
                         };
+                    // Extras add to the base dependencies, and each extra has its own context.
                     let requirements = trusted_requirements
                         .as_deref()
                         .unwrap_or_else(|| lookahead.requirements())
@@ -134,8 +135,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                                 lookahead.package(),
                                 lookahead.version(),
                                 &requirement.name,
-                            ) && requirement
-                                .evaluate_markers(env.marker_environment(), lookahead.extras())
+                            ) && (requirement.evaluate_markers(env.marker_environment(), &[])
+                                || lookahead.extras().iter().any(|extra| {
+                                    requirement.evaluate_markers(
+                                        env.marker_environment(),
+                                        slice::from_ref(extra),
+                                    )
+                                }))
                         });
                     hasher = if trusted_requirements.is_some() {
                         hasher.augment_with_requirements(requirements)?
