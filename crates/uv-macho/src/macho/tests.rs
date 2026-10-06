@@ -79,7 +79,13 @@ fn malformed_inputs() {
             "section count",
             96,
             u32::MAX,
-            Error::Malformed("range extends past its containing data"),
+            Error::Malformed("invalid segment section table"),
+        ),
+        (
+            "unclaimed section records",
+            96,
+            0,
+            Error::Malformed("invalid segment section table"),
         ),
         (
             "section file offset",
@@ -155,6 +161,12 @@ fn command_boundaries() -> Result<()> {
     let install_id_size = super::le32(ARM64, install_id + 4)?;
 
     for (description, offset, value, expected) in [
+        (
+            "command extends past sizeofcmds",
+            20,
+            super::le32(ARM64, 20)? - 8,
+            Error::Malformed("range extends past its containing data"),
+        ),
         (
             "string inside command header",
             install_id + 8,

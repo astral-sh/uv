@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::Error;
-use crate::bytes::{le32, range};
+use crate::bytes::{le32, slice};
 use crate::format::{
     CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, HEADER_SIZE, Header, LC_BUILD_VERSION,
     LC_CODE_SIGNATURE, LC_DATA_IN_CODE, LC_DYLD_CHAINED_FIXUPS, LC_DYLD_EXPORTS_TRIE, LC_DYLD_INFO,
@@ -11,8 +11,7 @@ use crate::format::{
     LC_LOAD_WEAK_DYLIB, LC_REEXPORT_DYLIB, LC_ROUTINES_64, LC_RPATH, LC_SEGMENT_64,
     LC_SEGMENT_SPLIT_INFO, LC_SOURCE_VERSION, LC_SUB_CLIENT, LC_SUB_FRAMEWORK, LC_SUB_LIBRARY,
     LC_SUB_UMBRELLA, LC_SYMTAB, LC_UUID, LC_VERSION_MIN_MACOSX, MH_DYLIB, MH_MAGIC_64,
-    S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECTION_SIZE, SECTION_TYPE, SEGMENT_SIZE,
-    Section, Segment,
+    S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECTION_TYPE, Section, Segment,
 };
 
 pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
@@ -28,27 +27,25 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
         _ => return Err(Error::Unsupported("CPU architecture")),
     }
 
-    let command_end = range(HEADER_SIZE, header.sizeofcmds as usize, image.len())?.end;
+    let mut command_data = slice(image, HEADER_SIZE, header.sizeofcmds as usize)?;
+    let command_end = HEADER_SIZE + command_data.len();
     if header.ncmds as usize > header.sizeofcmds as usize / 8 {
         return Err(Error::Malformed("invalid load-command count"));
     }
 
     let mut commands = Vec::new();
-    let mut offset = HEADER_SIZE;
-
     for _ in 0..header.ncmds {
-        range(offset, 8, command_end)?;
-        let size = le32(image, offset + 4)? as usize;
+        let size = le32(command_data, 4)? as usize;
         if size < 8 || !size.is_multiple_of(8) {
             return Err(Error::Malformed("invalid load-command size"));
         }
 
-        let data = &image[range(offset, size, command_end)?];
+        let data = slice(command_data, 0, size)?;
         commands.push(Command::parse(data)?);
-        offset += size;
+        command_data = &command_data[data.len()..];
     }
 
-    if offset != command_end {
+    if !command_data.is_empty() {
         return Err(Error::Malformed("load commands do not fill sizeofcmds"));
     }
 
@@ -80,11 +77,8 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                 }
 
                 if data_size > 0 {
-                    signature = Some(range(
-                        data_offset as usize,
-                        data_size as usize,
-                        image.len(),
-                    )?);
+                    let offset = data_offset as usize;
+                    signature = Some((offset, slice(image, offset, data_size as usize)?));
                 }
             }
 
@@ -106,11 +100,10 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
 
             LC_SEGMENT_64 => {
                 let segment = Segment::parse(command.data)?;
-                let segment_range = range(
-                    usize::try_from(segment.fileoff)?,
-                    usize::try_from(segment.filesize)?,
-                    image.len(),
-                )?;
+                let segment_offset = usize::try_from(segment.fileoff)?;
+                let segment_data =
+                    slice(image, segment_offset, usize::try_from(segment.filesize)?)?;
+                let segment_range = segment_offset..segment_offset + segment_data.len();
                 if segment.filesize > segment.vmsize {
                     return Err(Error::Malformed("segment filesize exceeds vmsize"));
                 }
@@ -137,22 +130,14 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                 }
 
                 if segment.segname == *b"__LINKEDIT\0\0\0\0\0\0" {
-                    if linkedit.replace((index, segment)).is_some() || segment.nsects != 0 {
+                    if linkedit.replace((index, segment)).is_some() || !segment.sections.is_empty()
+                    {
                         return Err(Error::Malformed("invalid or duplicate __LINKEDIT segment"));
                     }
                 }
 
-                let section_bytes = (segment.nsects as usize)
-                    .checked_mul(SECTION_SIZE)
-                    .ok_or(Error::TooLarge)?;
-                if range(SEGMENT_SIZE, section_bytes, command.data.len())?.end != command.data.len()
-                {
-                    return Err(Error::Malformed("invalid segment section table"));
-                }
-
-                for section_index in 0..segment.nsects as usize {
-                    let offset = SEGMENT_SIZE + section_index * SECTION_SIZE;
-                    let section = Section::parse(&command.data[offset..offset + SECTION_SIZE])?;
+                for data in segment.sections {
+                    let section = Section::parse(data)?;
                     let section_end = section
                         .addr
                         .checked_add(section.size)
@@ -173,11 +158,10 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                         continue;
                     }
 
-                    let section_range = range(
-                        section.offset as usize,
-                        usize::try_from(section.size)?,
-                        image.len(),
-                    )?;
+                    let section_offset = section.offset as usize;
+                    let section_data =
+                        slice(image, section_offset, usize::try_from(section.size)?)?;
+                    let section_range = section_offset..section_offset + section_data.len();
                     if !section_range.is_empty() {
                         if section_range.start < command_end
                             || section_range.start < segment_range.start
@@ -193,7 +177,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                     if section.segname == *b"__TEXT\0\0\0\0\0\0\0\0\0\0"
                         && section.sectname == *b"__info_plist\0\0\0\0"
                     {
-                        if info_plist.replace(&image[section_range]).is_some() {
+                        if info_plist.replace(section_data).is_some() {
                             return Err(Error::Malformed("duplicate embedded Info.plist"));
                         }
                     }
@@ -228,18 +212,19 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
         ));
     }
 
-    let code_limit = if let Some(signature) = &signature {
-        if signature.start < usize::try_from(linkedit.fileoff)?
-            || !signature.start.is_multiple_of(16)
-            || image.len() - signature.end > 15
-            || image[signature.end..].iter().any(|byte| *byte != 0)
+    let code_limit = if let Some((offset, data)) = signature {
+        let padding = &image[offset + data.len()..];
+        if offset < usize::try_from(linkedit.fileoff)?
+            || !offset.is_multiple_of(16)
+            || padding.len() > 15
+            || padding.iter().any(|byte| *byte != 0)
         {
             return Err(Error::Unsupported(
                 "code signature is not at the end of __LINKEDIT",
             ));
         }
 
-        signature.start
+        offset
     } else {
         image.len()
     };
@@ -250,8 +235,9 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
             continue;
         }
 
-        let reference = range(offset as usize, usize::try_from(size)?, image.len())?;
-        if reference.start < command_end || reference.end > code_limit {
+        let offset = offset as usize;
+        let data = slice(image, offset, usize::try_from(size)?)?;
+        if offset < command_end || offset + data.len() > code_limit {
             return Err(Error::Malformed(
                 "file data overlaps load commands or the signature",
             ));
