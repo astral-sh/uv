@@ -6,10 +6,12 @@ use anyhow::{Context, Result};
 use tokio::process::Command;
 use tracing::debug;
 
-use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
+use uv_bin_install::{BinVersion, ty as ty_download};
 use uv_cache::Cache;
 use uv_cli::ColorChoice;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{Concurrency, ExcludeNewer, IndexStrategy};
+use uv_distribution_types::IndexLocations;
 use uv_fs::Simplified;
 use uv_pep440::Version;
 use uv_scripts::{ScriptDiscoveryError, find_scripts};
@@ -37,7 +39,8 @@ pub(super) async fn run(
     explicit_targets: bool,
     venv_path: Option<&Path>,
     python_version: Option<&Version>,
-    exclude_newer: Option<jiff::Timestamp>,
+    exclude_newer: &ExcludeNewer,
+    concurrency: &Concurrency,
     show_version: bool,
     show_command: bool,
     client_builder: &BaseClientBuilder<'_>,
@@ -69,7 +72,12 @@ pub(super) async fn run(
         (ty_path, ty_version)
     } else {
         let retry_policy = client_builder.retry_policy();
-        let ty_client = client_builder.clone().retries(0).build()?;
+        // Standalone ty comes from public PyPI, independently of project dependency sources.
+        // Use the same fixed indexes for metadata requests and wheel selection.
+        let ty_indexes = IndexLocations::default();
+        let ty_client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+            .index_locations(ty_indexes.clone())
+            .build()?;
 
         let reporter = BinaryDownloadReporter::single(printer);
         let bin_version = version
@@ -78,73 +86,37 @@ pub(super) async fn run(
             .transpose()?
             .unwrap_or(BinVersion::Default);
 
-        let resolved = match bin_version {
-            BinVersion::Default => {
-                let constraints = Binary::Ty.default_constraints();
-                let resolved = find_matching_version(
-                    Binary::Ty,
-                    Some(&constraints),
-                    exclude_newer,
-                    &ty_client,
-                    &retry_policy,
-                )
-                .await
-                .with_context(|| {
-                    format!("Failed to find ty version matching default constraints: {constraints}")
-                })?;
-                debug!("Resolved `ty@{constraints}` to `ty=={}`", resolved.version);
-                resolved
-            }
-            BinVersion::Pinned(version) => {
-                if exclude_newer.is_some() {
-                    debug!("`--exclude-newer` is ignored for pinned version `{version}`");
-                }
-                let resolved = ResolvedVersion::from_version(Binary::Ty, version)?;
-                debug!("Using `ty=={}`", resolved.version);
-                resolved
-            }
-            BinVersion::Latest => {
-                let resolved = find_matching_version(
-                    Binary::Ty,
-                    None,
-                    exclude_newer,
-                    &ty_client,
-                    &retry_policy,
-                )
-                .await
-                .with_context(|| "Failed to find latest ty version")?;
-                debug!("Resolved `ty@latest` to `ty=={}`", resolved.version);
-                resolved
-            }
-            BinVersion::Constraint(constraints) => {
-                let resolved = find_matching_version(
-                    Binary::Ty,
-                    Some(&constraints),
-                    exclude_newer,
-                    &ty_client,
-                    &retry_policy,
-                )
-                .await
-                .with_context(|| format!("Failed to find ty version matching: {constraints}"))?;
-                debug!("Resolved `ty@{constraints}` to `ty=={}`", resolved.version);
-                resolved
-            }
-        };
+        let resolved = ty_download::resolve(
+            &bin_version,
+            &ty_client,
+            &ty_indexes,
+            IndexStrategy::default(),
+            exclude_newer,
+            cache,
+            &concurrency.downloads_semaphore,
+        )
+        .await
+        .with_context(|| format!("Failed to find ty version matching: {bin_version}"))?;
+        debug!("Resolved `ty@{bin_version}` to `ty=={}`", resolved.version);
 
         if show_version {
             writeln!(printer.stderr(), "Using ty {}", resolved.version)?;
         }
 
-        let ty_path = bin_install(
-            Binary::Ty,
-            &resolved,
-            &ty_client,
-            &retry_policy,
-            cache,
-            &reporter,
-        )
-        .await
-        .with_context(|| format!("Failed to install ty {}", resolved.version))?;
+        // The installer retries the full download, including interrupted response bodies.
+        let download_client =
+            RegistryClientBuilder::new(client_builder.clone().retries(0), cache.clone())
+                .index_locations(ty_indexes)
+                .wrap_existing(ty_client.cached_client().uncached())?;
+        let ty_path = resolved
+            .install(
+                download_client.cached_client().uncached(),
+                &retry_policy,
+                cache,
+                &reporter,
+            )
+            .await
+            .with_context(|| format!("Failed to install ty {}", resolved.version))?;
 
         (ty_path, resolved.version)
     };
