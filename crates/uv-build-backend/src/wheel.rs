@@ -137,7 +137,7 @@ fn write_wheel(
     let settings = pyproject_toml.settings();
 
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_gitignore);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore);
 
     debug!("Adding content files to wheel");
     let (src_root, module_relative) = find_roots(
@@ -274,7 +274,7 @@ pub fn build_editable(
     pyproject_toml.warn_build_system(uv_version, BuildKind::Editable);
     let settings = pyproject_toml.settings();
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_gitignore);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore);
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 

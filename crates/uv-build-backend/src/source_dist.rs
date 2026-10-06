@@ -119,7 +119,7 @@ fn source_dist_matcher(
             .expect("module root is inside source tree");
         let import_path = normalize_path(path).portable_display().to_string();
         includes.push(format!("{}/**", globset::escape(&import_path)));
-        if settings.respect_gitignore && settings.namespace {
+        if settings.respect_ignore && settings.namespace {
             required_directories.push(normalize_path(path).into_owned());
         }
     }
@@ -176,7 +176,7 @@ fn source_dist_matcher(
                 path: directory.to_path_buf(),
             });
         }
-        if settings.respect_gitignore {
+        if settings.respect_ignore {
             required_directories.push(directory.to_path_buf());
         }
         let directory = directory.portable_display().to_string();
@@ -232,7 +232,7 @@ fn write_source_dist(
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     pyproject_toml.warn_build_system(uv_version, BuildKind::Sdist);
     let settings = pyproject_toml.settings();
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_gitignore);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore);
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -271,10 +271,10 @@ fn write_source_dist(
     let pyproject_contents = fs_err::read_to_string(&pyproject_path)?;
     let mut pyproject_value: toml::Value = toml::from_str(&pyproject_contents)
         .map_err(|err| Error::Toml(pyproject_path.clone(), err))?;
-    if settings.respect_gitignore {
+    if settings.respect_ignore {
         // Ignore files can themselves be excluded from the source distribution. Its contents have
         // already been filtered, so rebuilding must not apply an incomplete set of ignore rules.
-        pyproject_value["tool"]["uv"]["build-backend"]["respect-gitignore"] =
+        pyproject_value["tool"]["uv"]["build-backend"]["respect-ignore"] =
             toml::Value::Boolean(false);
     }
     // See https://github.com/toml-rs/toml/issues/1088 for `to_string_pretty`.
