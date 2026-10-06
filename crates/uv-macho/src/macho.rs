@@ -163,12 +163,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                         ));
                     }
 
-                    add_reference(
-                        &mut references,
-                        section.reloff,
-                        u64::from(section.nreloc) * 8,
-                        image.len(),
-                    )?;
+                    references.push((section.reloff, u64::from(section.nreloc) * 8));
 
                     let section_type = section.flags & SECTION_TYPE;
                     if section_type == S_ZEROFILL
@@ -207,7 +202,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
             _ => {}
         }
 
-        file_references(command, &mut references, image.len())?;
+        file_references(command, &mut references)?;
     }
 
     install_id.ok_or(Error::Malformed("missing LC_ID_DYLIB"))?;
@@ -249,7 +244,13 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
         image.len()
     };
 
-    for reference in &references {
+    for (offset, size) in references {
+        // Empty tables do not reference file data, regardless of their offset.
+        if size == 0 {
+            continue;
+        }
+
+        let reference = range(offset as usize, usize_size(size)?, image.len())?;
         if reference.start < command_end || reference.end > code_limit {
             return Err(Error::Malformed(
                 "file data overlaps load commands or the signature",
@@ -300,87 +301,29 @@ impl FileRegions {
     }
 }
 
-fn add_reference(
-    references: &mut Vec<Range<usize>>,
-    offset: u32,
-    size: u64,
-    limit: usize,
-) -> Result<(), Error> {
-    if size > 0 {
-        references.push(range(offset as usize, usize_size(size)?, limit)?);
-    }
-
-    Ok(())
-}
-
-/// Track every referenced file range so header growth and signature replacement
-/// cannot overwrite symbol tables, relocations, or dyld metadata.
-fn file_references(
-    command: &Command<'_>,
-    references: &mut Vec<Range<usize>>,
-    limit: usize,
-) -> Result<(), Error> {
-    let data = command.data;
-    match command.kind {
-        LC_SYMTAB => {
-            // symoff/nsyms (nlist_64), followed by stroff/strsize.
-            add_reference(
-                references,
-                le32(data, 8)?,
-                u64::from(le32(data, 12)?) * 16,
-                limit,
-            )?;
-            add_reference(
-                references,
-                le32(data, 16)?,
-                u64::from(le32(data, 20)?),
-                limit,
-            )?;
-        }
-        LC_DYSYMTAB => {
-            // Each table has adjacent offset/count fields. The first six fields
-            // index the symbol table; the remaining six pairs reference file data.
-            for (field, entry_size) in [
-                (32, 8),  // dylib_table_of_contents
-                (40, 56), // dylib_module_64
-                (48, 4),  // dylib_reference
-                (56, 4),  // indirect symbols
-                (64, 8),  // external relocations
-                (72, 8),  // local relocations
-            ] {
-                add_reference(
-                    references,
-                    le32(data, field)?,
-                    u64::from(le32(data, field + 4)?) * entry_size,
-                    limit,
-                )?;
-            }
-        }
-        LC_DYLD_INFO | LC_DYLD_INFO_ONLY => {
-            // Rebase, bind, weak bind, lazy bind, and export offset/size pairs.
-            for field in [8, 16, 24, 32, 40] {
-                add_reference(
-                    references,
-                    le32(data, field)?,
-                    u64::from(le32(data, field + 4)?),
-                    limit,
-                )?;
-            }
-        }
+/// Collect file offsets and byte lengths for symbol tables and dyld metadata.
+fn file_references(command: &Command<'_>, references: &mut Vec<(u32, u64)>) -> Result<(), Error> {
+    // Each table has adjacent offset/count fields. Convert entry counts to byte
+    // lengths here; the layout reader checks the resulting file ranges together.
+    let fields: &[(usize, u64)] = match command.kind {
+        LC_SYMTAB => &[(8, 16), (16, 1)], // nlist_64 entries, then string bytes
+        LC_DYSYMTAB => &[
+            (32, 8),  // dylib_table_of_contents
+            (40, 56), // dylib_module_64
+            (48, 4),  // dylib_reference
+            (56, 4),  // indirect symbols
+            (64, 8),  // external relocations
+            (72, 8),  // local relocations
+        ],
+        // Rebase, bind, weak bind, lazy bind, and export bytes.
+        LC_DYLD_INFO | LC_DYLD_INFO_ONLY => &[(8, 1), (16, 1), (24, 1), (32, 1), (40, 1)],
         LC_SEGMENT_SPLIT_INFO
         | LC_FUNCTION_STARTS
         | LC_DATA_IN_CODE
         | LC_DYLIB_CODE_SIGN_DRS
         | LC_LINKER_OPTIMIZATION_HINT
         | LC_DYLD_EXPORTS_TRIE
-        | LC_DYLD_CHAINED_FIXUPS => {
-            add_reference(
-                references,
-                le32(data, 8)?,
-                u64::from(le32(data, 12)?),
-                limit,
-            )?;
-        }
+        | LC_DYLD_CHAINED_FIXUPS => &[(8, 1)],
         LC_SEGMENT_64
         | LC_ID_DYLIB
         | LC_CODE_SIGNATURE
@@ -398,8 +341,15 @@ fn file_references(
         | LC_SUB_FRAMEWORK
         | LC_SUB_UMBRELLA
         | LC_SUB_CLIENT
-        | LC_SUB_LIBRARY => {}
+        | LC_SUB_LIBRARY => &[],
         _ => return Err(Error::Unsupported("load-command file references")),
+    };
+
+    for &(field, entry_size) in fields {
+        references.push((
+            le32(command.data, field)?,
+            u64::from(le32(command.data, field + 4)?) * entry_size,
+        ));
     }
 
     Ok(())
