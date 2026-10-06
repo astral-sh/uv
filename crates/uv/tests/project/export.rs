@@ -464,10 +464,20 @@ fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Resul
         .output()?;
     assert!(output.status.success());
     let output = String::from_utf8(output.stdout)?;
-    assert!(output.contains("shared==2.0.0 ; sys_platform != 'linux'"));
-    assert!(
-        !output.contains("leaf-c==1.0.0"),
-        "extra-only dependency leaked from an incompatible path:\n{output}"
+    let requirements: Vec<_> = output
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.trim().is_empty() && !line.starts_with(' '))
+        .collect();
+    assert_eq!(
+        requirements,
+        [
+            "bridge==1.0.0 ; sys_platform == 'linux'",
+            "leaf-a==1.0.0 ; sys_platform == 'linux'",
+            "leaf-b==1.0.0",
+            "shared==1.0.0 ; sys_platform == 'linux'",
+            "shared==2.0.0 ; sys_platform != 'linux'",
+        ],
+        "full export must retain Linux's requested extra and exclude the incompatible extra: {output}"
     );
 
     Ok(())
