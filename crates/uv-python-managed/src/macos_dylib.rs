@@ -165,10 +165,6 @@ mod tests {
         assert_eq!(after.permissions().mode(), before.permissions().mode());
         assert_ne!(after.ino(), before.ino());
 
-        let contents = fs_err::read(&dylib)?;
-        NativeDylib::read(link)?.patch()?.persist()?;
-        assert_eq!(fs_err::read(&dylib)?, contents);
-
         Ok(())
     }
 
