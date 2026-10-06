@@ -12,7 +12,9 @@ use sha2::{Digest, Sha256};
 
 use common::{commands, install_name, name_capacity, sections};
 
-use uv_macho::{Error, InstallName, SigningIdentifier, adhoc_sign, set_install_name};
+use uv_macho::{
+    Error, InstallName, SigningIdentifier, adhoc_sign, replace_install_name, set_install_name,
+};
 
 const ARM64: &[u8] = include_bytes!("fixtures/arm64.dylib");
 const X86_64: &[u8] = include_bytes!("fixtures/x86_64.dylib");
@@ -106,6 +108,11 @@ fn edit_and_sign() -> Result<()> {
         assert_eq!(install_name(output.as_bytes())?, name.as_bytes());
         assert_eq!(sections(output.as_bytes())?, sections(fixture)?);
         verify_hashes(output.as_bytes())?;
+        assert_eq!(
+            replace_install_name(fixture, InstallName::new(&name)?)?
+                .adhoc_sign(SigningIdentifier::new(&identifier)?)?,
+            output
+        );
         assert_eq!(
             adhoc_sign(output.as_bytes(), SigningIdentifier::new(c"ignored")?)?,
             output
@@ -211,7 +218,10 @@ fn malformed_signatures() -> Result<()> {
             "unsupported special slot",
             signature_offset + 20,
             8,
-            Error::Unsupported("unavailable or unsupported special-slot data"),
+            Error::UnsupportedValue {
+                field: "unavailable or unsupported CodeDirectory special slot",
+                value: 2,
+            },
         ),
         (
             "short blob header",
@@ -235,13 +245,19 @@ fn malformed_signatures() -> Result<()> {
             "version",
             directory_offset + 8,
             u32::MAX,
-            Error::Unsupported("CodeDirectory version"),
+            Error::UnsupportedValue {
+                field: "CodeDirectory version",
+                value: u64::from(u32::MAX),
+            },
         ),
         (
             "flags",
             directory_offset + 12,
             u32::MAX,
-            Error::Unsupported("CodeDirectory flags"),
+            Error::UnsupportedValue {
+                field: "CodeDirectory flags",
+                value: u64::from(u32::MAX),
+            },
         ),
         (
             "identifier",
@@ -253,7 +269,10 @@ fn malformed_signatures() -> Result<()> {
             "special slots",
             directory_offset + 24,
             u32::MAX,
-            Error::Unsupported("CodeDirectory special slots"),
+            Error::UnsupportedValue {
+                field: "CodeDirectory special-slot count",
+                value: u64::from(u32::MAX),
+            },
         ),
         (
             "page count",

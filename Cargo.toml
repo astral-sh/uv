@@ -304,7 +304,6 @@ security-framework = { version = "3", default-features = false }
 self-replace = { version = "1.5.0", default-features = false }
 serde = { version = "1.0.210", default-features = false, features = ["derive", "rc", "std"] }
 serde_json = { version = "1.0.128", default-features = false, features = ["std"] }
-sha1 = { version = "0.11.0", default-features = false }
 sha2 = { version = "0.11.0", default-features = false }
 smallvec = { version = "1.13.2", default-features = false }
 spdx = { version = "0.13.0", default-features = false }
