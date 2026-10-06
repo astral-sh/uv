@@ -4,8 +4,8 @@ use memchr::memchr;
 use thiserror::Error;
 
 use uv_platform_tags::{
-    AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, ParsePlatformTagError,
-    PlatformTag, TagCompatibility, Tags,
+    AbiTag, IncompatibleTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError,
+    ParsePlatformTagError, PlatformTag, TagCompatibility, Tags,
 };
 
 use crate::splitter::MemchrSplitter;
@@ -61,7 +61,11 @@ impl ExpandedTags {
             return tag.compatibility(compatible_tags);
         }
 
-        compatible_tags.compatibility(self.python_tags(), self.abi_tags(), self.platform_tags())
+        self.0
+            .iter()
+            .map(|tag| tag.compatibility(compatible_tags))
+            .max()
+            .unwrap_or(TagCompatibility::Incompatible(IncompatibleTag::Invalid))
     }
 }
 
@@ -145,8 +149,32 @@ fn parse_expanded_tag(tag: &str) -> Result<WheelTag, ExpandedTagError> {
 
 #[cfg(test)]
 mod tests {
+    use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
 
     use super::*;
+
+    #[test]
+    fn compatibility_does_not_combine_distinct_expanded_rows() {
+        let environment = Tags::from_env(
+            Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            (3, 12),
+            "cpython",
+            (3, 12),
+            TagsOptions::default(),
+        )
+        .unwrap();
+        let wheel =
+            ExpandedTags::parse(["cp312-cp312-win_amd64", "cp311-cp311-linux_x86_64"]).unwrap();
+
+        assert!(!wheel.is_compatible(&environment));
+        assert!(!wheel.compatibility(&environment).is_compatible());
+    }
 
     #[test]
     fn test_parse_simple_expanded_tag() {
