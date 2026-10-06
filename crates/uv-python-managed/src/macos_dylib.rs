@@ -66,12 +66,14 @@ impl NativeDylib<Vec<u8>> {
         let filename = self.dylib.file_name().ok_or_else(|| {
             std::io::Error::new(ErrorKind::InvalidInput, "Missing dylib filename")
         })?;
-        let image = InstallName::new(self.dylib.as_os_str().as_encoded_bytes())
+        let image = CString::new(self.dylib.as_os_str().as_encoded_bytes())
+            .map_err(|_| MachoError::InvalidName)
             .and_then(|name| {
+                let name = InstallName::new(&name)?;
                 let identifier = CString::new(filename.as_encoded_bytes())
                     .map_err(|_| MachoError::InvalidIdentifier)?;
                 let identifier = SigningIdentifier::new(&identifier)?;
-                uv_macho::set_install_name(&self.image, &name, identifier)
+                uv_macho::set_install_name(&self.image, name, identifier)
             })
             .map_err(|source| Error::NativeRenameError {
                 dylib: self.dylib.clone(),
