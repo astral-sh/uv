@@ -48,13 +48,13 @@ use crate::commands::install_report::write_install_report;
 use crate::commands::operations;
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::loggers::DefaultInstallLogger;
-use crate::commands::operations::report_interpreter;
 use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
 use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
 use crate::commands::pip::reporters::report_target_environment;
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
-use crate::commands::reporters::PythonDownloadReporter;
 use uv_configuration::Modifications;
+use uv_python_context::PythonDownloadReporter;
+use uv_python_context::report_interpreter;
 
 /// Install a set of locked requirements into the current Python environment.
 #[expect(clippy::fn_params_excessive_bools)]

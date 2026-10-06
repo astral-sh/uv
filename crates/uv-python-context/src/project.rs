@@ -19,8 +19,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::{RequiresPythonDeclaration, RequiresPythonSources, Workspace};
 
-use crate::commands::project::PythonContextError;
-use crate::commands::reporters::PythonDownloadReporter;
+use crate::{PythonContextError, PythonDownloadReporter};
 
 /// An interpreter that satisfies the Python requirement used to select it.
 ///
@@ -28,17 +27,17 @@ use crate::commands::reporters::PythonDownloadReporter;
 /// requirement, including the selected dependency groups. Warning-only commands and existing
 /// environments preserved by `--no-sync` do not use this type.
 #[derive(Debug)]
-pub(crate) struct CompatibleProjectPython(Interpreter);
+pub struct CompatibleProjectPython(Interpreter);
 
 impl CompatibleProjectPython {
     /// Consume the compatible interpreter for use by the environment or resolver APIs.
-    pub(super) fn into_interpreter(self) -> Interpreter {
+    pub fn into_interpreter(self) -> Interpreter {
         self.0
     }
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum PythonRequestSource {
+pub enum PythonRequestSource {
     /// The request was provided by the user.
     UserRequest,
     /// The request was inferred from a `.python-version` or `.python-versions` file.
@@ -61,27 +60,27 @@ impl std::fmt::Display for PythonRequestSource {
 
 /// A Python requirement and the source used to derive it.
 #[derive(Debug, Clone)]
-pub(super) struct ProjectPythonRequirement {
-    pub(super) requires_python: RequiresPython,
-    pub(super) source: PythonRequirementSource,
+pub struct ProjectPythonRequirement {
+    pub requires_python: RequiresPython,
+    pub source: PythonRequirementSource,
 }
 
 /// The resolved Python request and requirement for a workspace or frozen lockfile.
 #[derive(Debug, Clone)]
-pub(crate) struct ProjectPythonRequest {
+pub struct ProjectPythonRequest {
     /// The source of the Python request.
     source: PythonRequestSource,
     /// The resolved Python request, computed by considering (1) any explicit request from the user
     /// via `--python`, (2) any implicit request from the user via `.python-version`, and (3) the
     /// workspace or lockfile's `Requires-Python` specifier.
-    pub(crate) python_request: Option<PythonRequest>,
+    pub python_request: Option<PythonRequest>,
     /// The resolved Python requirement for the project and its source.
     requirement: Option<ProjectPythonRequirement>,
 }
 
 impl ProjectPythonRequest {
     /// Determine the [`ProjectPythonRequest`] for the current [`Workspace`].
-    pub(crate) async fn from_request(
+    pub async fn from_request(
         python_request: Option<PythonRequest>,
         workspace: Option<&Workspace>,
         groups: &DependencyGroupsWithDefaults,
@@ -104,7 +103,7 @@ impl ProjectPythonRequest {
     }
 
     /// Select a Python request using a project's root and Python requirement.
-    pub(super) async fn from_requirements(
+    pub async fn from_requirements(
         python_request: Option<PythonRequest>,
         workspace_root: Option<&Path>,
         requirement: Option<ProjectPythonRequirement>,
@@ -162,7 +161,7 @@ impl ProjectPythonRequest {
         })
     }
 
-    pub(super) fn requires_python(&self) -> Option<&RequiresPython> {
+    pub fn requires_python(&self) -> Option<&RequiresPython> {
         self.requirement
             .as_ref()
             .map(|requirement| &requirement.requires_python)
@@ -172,7 +171,7 @@ impl ProjectPythonRequest {
     ///
     /// Unlike [`Self::validate`], this borrows the interpreter so warning-only commands can
     /// continue using it after an incompatibility.
-    pub(crate) fn check(&self, interpreter: &Interpreter) -> Result<(), PythonContextError> {
+    pub fn check(&self, interpreter: &Interpreter) -> Result<(), PythonContextError> {
         let Some(requirement) = &self.requirement else {
             return Ok(());
         };
@@ -188,7 +187,7 @@ impl ProjectPythonRequest {
     ///
     /// Discovery is responsible for matching the Python request; this checks the project and
     /// selected group requirements.
-    pub(super) fn validate(
+    pub fn validate(
         &self,
         interpreter: Interpreter,
     ) -> Result<CompatibleProjectPython, PythonContextError> {
@@ -199,7 +198,7 @@ impl ProjectPythonRequest {
     /// Find or download an interpreter for the resolved request, then check project compatibility.
     ///
     /// Rejects an incompatible selection instead of searching for another interpreter.
-    pub(super) async fn find_or_download(
+    pub async fn find_or_download(
         &self,
         environment_preference: EnvironmentPreference,
         python_preference: PythonPreference,
@@ -232,7 +231,7 @@ impl ProjectPythonRequest {
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-pub(crate) fn find_requires_python(
+pub fn find_requires_python(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<RequiresPython>, PythonContextError> {
@@ -287,7 +286,7 @@ fn find_workspace_python_requirement(
 ///
 /// Formats as an optional suffix to a Python incompatibility diagnostic.
 #[derive(Debug)]
-pub(crate) enum PythonRequirementConflicts {
+pub enum PythonRequirementConflicts {
     Workspace {
         sources: RequiresPythonSources,
         /// Whether the workspace has multiple members, so a single-conflict diagnostic names the member.
@@ -372,7 +371,7 @@ impl std::fmt::Display for PythonRequirementConflicts {
 
 /// The declarations used to compute a project's Python requirement.
 #[derive(Debug, Clone)]
-pub(super) enum PythonRequirementSource {
+pub enum PythonRequirementSource {
     /// The requirement was derived from the workspace manifests.
     Workspace {
         sources: RequiresPythonSources,
@@ -388,7 +387,7 @@ pub(super) enum PythonRequirementSource {
 /// Returns an error if the [`Interpreter`] does not satisfy `requires_python`.
 ///
 /// The requirement source determines which conflicting declarations are included in the diagnostic.
-pub(super) fn validate_python_requirement(
+fn validate_python_requirement(
     interpreter: &Interpreter,
     requires_python: &RequiresPython,
     source: &PythonRequestSource,
@@ -453,7 +452,7 @@ pub(super) fn validate_python_requirement(
     }
 }
 
-pub(super) fn format_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
+pub fn format_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
     conflicts
         .iter()
         .map(|(source, specifiers)| format!("- {source}: {specifiers}"))

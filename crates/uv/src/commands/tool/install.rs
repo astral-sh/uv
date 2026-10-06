@@ -47,7 +47,6 @@ use crate::commands::project::{
     EnvironmentError, EnvironmentResolution, EnvironmentSpecification, LockValidationError,
     resolve_environment, resolve_names, sync_environment, update_environment,
 };
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
     tool_environment_spec,
@@ -55,6 +54,7 @@ use crate::commands::tool::common::{
 use crate::commands::tool::error::ToolLockError;
 use crate::commands::tool::{Target, ToolRequest};
 use uv_configuration::Modifications;
+use uv_python_context::PythonDownloadReporter;
 use uv_settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.

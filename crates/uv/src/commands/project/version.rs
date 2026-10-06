@@ -43,9 +43,10 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectError, ProjectInterpreter, ProjectPythonRequest,
+    ProjectError, ProjectInterpreter,
 };
 use uv_configuration::Modifications;
+use uv_python_context::ProjectPythonRequest;
 use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Version information for a project (`uv version`).

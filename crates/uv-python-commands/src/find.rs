@@ -4,7 +4,6 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
@@ -17,11 +16,13 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user, warn_user_once_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::commands::project::{ProjectPythonRequest, ScriptInterpreter};
+use uv_command_support::ExitStatus;
+use uv_command_support::Printer;
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 
 /// Find a Python interpreter.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn find(
+pub async fn find(
     project_dir: &Path,
     request: Option<String>,
     show_version: bool,
@@ -124,7 +125,7 @@ pub(crate) async fn find(
     Ok(ExitStatus::Success)
 }
 
-pub(crate) async fn find_script(
+pub async fn find_script(
     script: Pep723ItemRef<'_>,
     show_version: bool,
     resolve_links: bool,

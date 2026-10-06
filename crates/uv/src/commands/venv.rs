@@ -40,14 +40,14 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::operations::report_interpreter;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironmentTarget, ProjectPythonRequest,
-    centralized_environment_root, centralized_environments_enabled,
-    is_centralized_environment_reference, lock_project_environment,
-    update_project_environment_link,
+    LinkErrorReporting, ProjectEnvironmentTarget, centralized_environment_root,
+    centralized_environments_enabled, is_centralized_environment_reference,
+    lock_project_environment, update_project_environment_link,
 };
-use crate::commands::reporters::PythonDownloadReporter;
+use uv_python_context::ProjectPythonRequest;
+use uv_python_context::PythonDownloadReporter;
+use uv_python_context::report_interpreter;
 
 #[derive(Error, Debug)]
 enum VenvError {

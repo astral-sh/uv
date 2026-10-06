@@ -112,9 +112,10 @@ impl Hinted for NoExecutablesError {
     }
 }
 use crate::commands::project::validated_lock::ValidatedLock;
-use crate::commands::project::{EnvironmentSpecification, PreferenceLocation, PythonRequestSource};
-use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::project::{EnvironmentSpecification, PreferenceLocation};
 use crate::commands::tool::error::ToolLockError;
+use uv_python_context::PythonDownloadReporter;
+use uv_python_context::PythonRequestSource;
 use uv_settings::ResolverSettings;
 
 /// Return all packages which contain an executable with the given name.

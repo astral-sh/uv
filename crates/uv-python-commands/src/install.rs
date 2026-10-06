@@ -16,7 +16,6 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::{ExitStatus, Printer, UvError, conjunction, elapsed};
 use uv_configuration::{Concurrency, PythonUpgrade, PythonUpgradeSource};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
@@ -41,8 +40,9 @@ use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
 use uv_warnings::warn_user;
 
-use crate::commands::python::{ChangeEvent, ChangeEventKind};
-use crate::commands::reporters::PythonDownloadReporter;
+use crate::{ChangeEvent, ChangeEventKind};
+use uv_command_support::{ExitStatus, Printer, UvError, conjunction, elapsed};
+use uv_python_context::PythonDownloadReporter;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InstallRequest<'a> {
@@ -160,7 +160,7 @@ enum InstallErrorKind {
 
 #[derive(Debug, thiserror::Error)]
 #[error("`{command}` only accepts minor versions, got: {request}")]
-pub(crate) struct InvalidUpgradeRequestError {
+pub struct InvalidUpgradeRequestError {
     command: PythonUpgradeSource,
     request: String,
     from_version_file: bool,
@@ -180,7 +180,7 @@ impl uv_errors::Hinted for InvalidUpgradeRequestError {
 
 /// Download and install Python versions.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn install(
+pub async fn install(
     project_dir: &Path,
     install_dir: Option<PathBuf>,
     targets: Vec<String>,

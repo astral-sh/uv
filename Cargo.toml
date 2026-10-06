@@ -72,6 +72,8 @@ uv-preview = { version = "0.0.90", path = "crates/uv-preview" }
 uv-publish = { version = "0.0.90", path = "crates/uv-publish" }
 uv-pypi-types = { version = "0.0.90", path = "crates/uv-pypi-types" }
 uv-python = { version = "0.0.90", path = "crates/uv-python" }
+uv-python-commands = { version = "0.0.90", path = "crates/uv-python-commands" }
+uv-python-context = { version = "0.0.90", path = "crates/uv-python-context" }
 uv-redacted = { version = "0.0.90", path = "crates/uv-redacted" }
 uv-requirements = { version = "0.0.90", path = "crates/uv-requirements" }
 uv-requirements-txt = { version = "0.0.90", path = "crates/uv-requirements-txt" }

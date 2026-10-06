@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use crate::commands::project::python::format_requires_python_sources;
 use uv_audit::osv;
 use uv_auth::CredentialsFromUrlError;
 use uv_command_support::UvError;
 use uv_distribution_types::{IndexCredentialsError, IndexUrlError, RequiresPython};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
+use uv_python_context::format_requires_python_sources;
 use uv_requirements::ScriptRequirementsError;
 use uv_workspace::RequiresPythonSources;
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -100,7 +100,7 @@ pub(crate) enum EnvironmentError {
     Python(#[from] Box<uv_python::Error>),
 
     #[error(transparent)]
-    PythonContext(#[from] Box<crate::commands::project::PythonContextError>),
+    PythonContext(#[from] Box<uv_python_context::PythonContextError>),
 
     #[error(transparent)]
     Virtualenv(#[from] uv_virtualenv::Error),
@@ -172,8 +172,8 @@ impl From<uv_python::Error> for EnvironmentError {
     }
 }
 
-impl From<crate::commands::project::PythonContextError> for EnvironmentError {
-    fn from(error: crate::commands::project::PythonContextError) -> Self {
+impl From<uv_python_context::PythonContextError> for EnvironmentError {
+    fn from(error: uv_python_context::PythonContextError) -> Self {
         Self::PythonContext(Box::new(error))
     }
 }
