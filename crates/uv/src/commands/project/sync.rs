@@ -36,6 +36,7 @@ use uv_python::{
     PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
+use uv_requirements::{script_extra_build_requires, script_specification};
 use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -58,7 +59,7 @@ use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
     EnvironmentUpdate, LinkErrorReporting, MalwareFindings, MissingLockfileSource,
     ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ScriptEnvironment,
-    detect_conflicts, script_extra_build_requires, script_specification, update_environment,
+    detect_conflicts, update_environment,
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
