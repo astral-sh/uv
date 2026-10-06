@@ -157,17 +157,16 @@ jobs:
           merge-multiple: true
 
       - name: "Sign and notarize macOS executables"
-        uses: astral-sh/github-actions/sign-macos@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
+        uses: astral-sh/github-actions/sign-macos@bf151908d0fe75fc4d53303a73caaaad8092048a # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
+          arm64-16k-code-pages: "true"
           azure-client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
           azure-tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
           azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
           storage-account: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
           storage-container: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
-          component-rcodesign-blob: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_BLOB }}
-          component-rcodesign-sha256: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_SHA256 }}
           component-pkcs11-blob: ${{ secrets.CODESIGN_COMPONENT_PKCS11_BLOB }}
           component-pkcs11-sha256: ${{ secrets.CODESIGN_COMPONENT_PKCS11_SHA256 }}
           azure-keyvault-name: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
