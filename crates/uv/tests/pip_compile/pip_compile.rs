@@ -19826,7 +19826,6 @@ fn overrides_preserve_alternative_optional_extras() -> Result<()> {
             vec!["extra-leaf==1; extra == 'a' or extra == 'b'"],
             vec!["a", "b", "unrelated"],
         ),
-        ("extra-leaf", "1", vec![], vec![]),
         ("extra-leaf", "2", vec![], vec![]),
     ] {
         let requires = requires
