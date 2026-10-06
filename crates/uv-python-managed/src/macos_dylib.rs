@@ -1,9 +1,10 @@
+use std::ffi::CString;
 use std::fs::Permissions;
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 
 use uv_fs::Simplified as _;
-use uv_macho::{InstallName, SignedDylib, SigningIdentifier};
+use uv_macho::{Error as MachoError, InstallName, SignedDylib, SigningIdentifier};
 use uv_preview::PreviewFeature;
 use uv_warnings::warn_user;
 
@@ -67,8 +68,10 @@ impl NativeDylib<Vec<u8>> {
         })?;
         let image = InstallName::new(self.dylib.as_os_str().as_encoded_bytes())
             .and_then(|name| {
-                let identifier = SigningIdentifier::new(filename.as_encoded_bytes())?;
-                uv_macho::set_install_name(&self.image, &name, &identifier)
+                let identifier = CString::new(filename.as_encoded_bytes())
+                    .map_err(|_| MachoError::InvalidIdentifier)?;
+                let identifier = SigningIdentifier::new(&identifier)?;
+                uv_macho::set_install_name(&self.image, &name, identifier)
             })
             .map_err(|source| Error::NativeRenameError {
                 dylib: self.dylib.clone(),
@@ -115,10 +118,7 @@ For more information, see: https://developer.apple.com/xcode/")]
     #[error("Failed to update the install name of the Python dynamic library located at `{}`", dylib.user_display())]
     RenameError { dylib: PathBuf, stderr: String },
     #[error("Failed to update the install name of the Python dynamic library located at `{}`: {source}", dylib.user_display())]
-    NativeRenameError {
-        dylib: PathBuf,
-        source: uv_macho::Error,
-    },
+    NativeRenameError { dylib: PathBuf, source: MachoError },
 }
 
 impl Error {
