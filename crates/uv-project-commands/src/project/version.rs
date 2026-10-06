@@ -43,8 +43,8 @@ use uv_workspace::{
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
-use crate::commands::project::ProjectError;
-use crate::commands::project::edit::{ProjectEdit, PythonTarget};
+use crate::project::ProjectError;
+use crate::project::edit::{ProjectEdit, PythonTarget};
 
 /// Version information for a project (`uv version`).
 #[derive(serde::Serialize)]
@@ -76,7 +76,7 @@ impl std::fmt::Display for ProjectVersionInfo {
 
 /// Read or update project version (`uv version`)
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn project_version(
+pub async fn project_version(
     value: Option<String>,
     mut bump: Vec<VersionBumpSpec>,
     short: bool,
@@ -127,20 +127,14 @@ pub(crate) async fn project_version(
     let is_read_only = value.is_none() && bump.is_empty();
     if let Some(frozen_source) = frozen {
         if is_read_only {
-            return Box::pin(print_frozen_version(
+            return print_frozen_version(
                 project,
                 &name,
                 frozen_source,
-                &settings,
-                client_builder,
-                &concurrency,
-                cache,
-                workspace_cache,
                 short,
                 output_format,
                 printer,
-                preview,
-            ))
+            )
             .await;
         }
     }
@@ -394,7 +388,7 @@ pub(crate) async fn project_version(
 /// A [`WorkspaceError`] that may carry a hint to use `uv self version`.
 #[derive(Debug, Error)]
 #[error("{err}")]
-pub(crate) struct MissingProjectVersionError {
+pub struct MissingProjectVersionError {
     err: WorkspaceError,
 }
 
@@ -481,47 +475,20 @@ fn update_project(
     Ok(project)
 }
 
-/// Do the minimal work to try to find the package in the lockfile and print its version
+/// Print the project's version from its existing lockfile.
 async fn print_frozen_version(
     project: VirtualProject,
     name: &PackageName,
     frozen_source: FrozenSource,
-    settings: &ResolverInstallerSettings,
-    client_builder: BaseClientBuilder<'_>,
-    concurrency: &Concurrency,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
     short: bool,
     output_format: VersionFormat,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let target = LockTarget::Workspace(project.workspace());
-
-    // Initialize any shared state.
-    let state = UniversalState::default();
-
-    // Lock and sync the environment, if necessary.
-    let lock = match Box::pin(
-        LockOperation::new(
-            LockMode::Frozen(frozen_source.into()),
-            &settings.resolver,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            concurrency,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .execute(target),
-    )
-    .await
-    {
-        Ok(result) => result.into_lock(),
-        Err(err) => return Err(UvError::from(err).into()),
-    };
+    let lock = target
+        .read_frozen(frozen_source.into())
+        .await
+        .map_err(UvError::from)?;
 
     // Try to find the package of interest in the lock
     let Some(package) = lock

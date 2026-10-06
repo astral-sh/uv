@@ -17,32 +17,27 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution_types::Verbatim;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, detect_conflicts,
+};
 use uv_fs::CWD;
 use uv_lock::{Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
+use uv_lock_operations::{DiscoveredProject, FrozenWorkspace, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_requirements::is_pylock_toml;
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
-
-use uv_dispatch::UniversalState;
-use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
-use uv_environment_operations::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, detect_conflicts,
-};
-use uv_lock_operations::DiscoveredProject;
-use uv_lock_operations::FrozenWorkspace;
-use uv_lock_operations::LockTarget;
-use uv_lock_operations::{LockMode, LockOperation};
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
-use uv_resolve_operations::loggers::DefaultResolveLogger;
-use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]
@@ -157,7 +152,7 @@ fn resolve_lockfile_groups(
 
 /// Export the project's `uv.lock` in an alternate format.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn export(
+pub async fn export(
     project_dir: &Path,
     format: Option<ExportFormat>,
     all_packages: bool,

@@ -38,10 +38,10 @@ use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::project::edit::{EditTarget, ProjectEdit, PythonTarget};
+use crate::project::edit::{EditTarget, ProjectEdit, PythonTarget};
 
 /// Remove one or more packages from the project requirements.
-pub(crate) async fn remove(
+pub async fn remove(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
@@ -414,7 +414,7 @@ pub(crate) async fn remove(
 /// A dependency was not found in the expected dependency type, but may exist elsewhere.
 #[derive(Debug, thiserror::Error)]
 #[error("The dependency `{package}` could not be found in {}", dependency_type.toml_table_name())]
-pub(crate) struct DependencyNotFoundError {
+pub struct DependencyNotFoundError {
     package: PackageName,
     dependency_type: DependencyType,
     /// Other dependency types where this package was found.

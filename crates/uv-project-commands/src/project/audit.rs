@@ -30,7 +30,7 @@ use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSetting
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-pub(crate) async fn audit(
+pub async fn audit(
     project_dir: &Path,
     extras: ExtrasSpecification,
     groups: DependencyGroups,

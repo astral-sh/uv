@@ -27,6 +27,9 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
+use uv_python_context::{
+    PythonDownloadReporter, find_requires_python, init_script_python_requirement,
+};
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
@@ -36,12 +39,9 @@ use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
 };
 
-use uv_python_context::PythonDownloadReporter;
-use uv_python_context::{find_requires_python, init_script_python_requirement};
-
 /// Add one or more packages to the project requirements.
 #[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]
-pub(crate) async fn init(
+pub async fn init(
     project_dir: &Path,
     explicit_path: Option<PathBuf>,
     name: Option<PackageName>,

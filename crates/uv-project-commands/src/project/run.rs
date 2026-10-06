@@ -16,25 +16,33 @@ use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, trace, warn};
 use url::Url;
-use uv_environment_operations::EnvironmentError;
-use uv_environment_operations::malware::MalwareCheckContext;
-use uv_environment_operations::sync_from_lock;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::child::read_env_files;
-use uv_command_support::child::run_to_completion;
-use uv_command_support::{ExitStatus, Printer, UvError};
+use uv_command_support::{
+    ExitStatus, Printer, UvError, child::read_env_files, child::run_to_completion,
+};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
+    ExtrasSpecification, InstallOptions, Modifications, RequirementsInput, TargetTriple,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
+use uv_environment_operations::environment::CachedEnvironment;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::malware::MalwareCheckContext;
+use uv_environment_operations::{
+    EnvironmentError, EnvironmentSpecification, LinkErrorReporting, PreferenceLocation,
+    ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment, sync_from_lock,
+    update_environment,
+};
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
+use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_lock::{Installable, Lock};
+use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
@@ -42,11 +50,19 @@ use uv_python::{
     PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionFileDiscoveryOptions,
 };
+use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{
+    RequirementsSource, RequirementsSpecification, script_extra_build_requires,
+    script_specification,
+};
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_settings::{
+    FrozenSource, LockCheck, LockedSource, MalwareCheckSettings, PythonInstallMirrors,
+    ResolverInstallerSettings, ResolverSettings,
+};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
@@ -63,29 +79,10 @@ struct GistResponse {
 struct GistFile {
     raw_url: String,
 }
-use uv_configuration::Modifications;
-use uv_dispatch::UniversalState;
-use uv_environment_operations::environment::CachedEnvironment;
-use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
-use uv_environment_operations::{
-    EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
-    ProjectEnvironmentTarget, ScriptEnvironment, update_environment,
-};
-use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
-use uv_lock_operations::LockOperation;
-use uv_lock_operations::LockTarget;
-use uv_lock_operations::{LockError, LockMode};
-use uv_python_context::PythonDownloadReporter;
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
-use uv_requirements::{script_extra_build_requires, script_specification};
-use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
-use uv_settings::{
-    FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings, ResolverSettings,
-};
 
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn run(
+pub async fn run(
     project_dir: &Path,
     script: Option<Pep723Item>,
     command: Option<RunCommand>,
@@ -1400,7 +1397,7 @@ fn can_skip_ephemeral(
 }
 
 #[derive(Debug)]
-pub(crate) enum RunCommand {
+pub enum RunCommand {
     /// Execute `python`.
     Python(Vec<OsString>),
     /// Execute a `python` script.
@@ -1430,7 +1427,7 @@ pub(crate) enum RunCommand {
 
 /// A parsed `uv run` target before any remote script has been downloaded.
 #[derive(Debug)]
-pub(crate) enum ParsedRunCommand {
+pub enum ParsedRunCommand {
     /// A target that is already fully resolved and ready to execute.
     Ready(RunCommand),
     /// A remote target that must be downloaded before it can be inspected or executed.
@@ -1439,7 +1436,7 @@ pub(crate) enum ParsedRunCommand {
 
 /// The information needed to fetch and execute a remote `uv run` target.
 #[derive(Debug)]
-pub(crate) struct PendingRemoteRunCommand {
+pub struct PendingRemoteRunCommand {
     /// The remote URL to download.
     url: DisplaySafeUrl,
     /// The arguments to forward after the downloaded script path.
@@ -1461,7 +1458,7 @@ impl PendingRemoteRunCommand {
 
 impl ParsedRunCommand {
     /// Return the local script directory used for target workspace discovery, if any.
-    pub(crate) fn script_dir(&self) -> Option<&Path> {
+    pub fn script_dir(&self) -> Option<&Path> {
         match self {
             Self::Ready(run_command) => run_command.script_dir(),
             Self::PendingRemote(..) => None,
@@ -1472,7 +1469,7 @@ impl ParsedRunCommand {
     ///
     /// The client factory is called only for remote scripts, so local target discovery does not
     /// resolve global or network settings before reading the target's configuration.
-    pub(crate) async fn resolve(
+    pub async fn resolve(
         self,
         client_builder: &(dyn Fn() -> anyhow::Result<BaseClientBuilder<'static>> + Sync),
     ) -> anyhow::Result<(Option<Pep723Item>, RunCommand)> {
@@ -1499,7 +1496,7 @@ impl ParsedRunCommand {
     }
 
     /// Determine the [`ParsedRunCommand`] for a given set of arguments.
-    pub(crate) fn from_args(
+    pub fn from_args(
         command: &[OsString],
         module: bool,
         script: bool,
@@ -2156,7 +2153,7 @@ fn copy_entrypoint(
 /// `uv run` was invoked recursively too many times.
 #[derive(Debug, thiserror::Error)]
 #[error("`uv run` was recursively invoked {depth} times which exceeds the limit of {max}")]
-pub(crate) struct RecursionLimitError {
+pub struct RecursionLimitError {
     depth: u32,
     max: u32,
 }
