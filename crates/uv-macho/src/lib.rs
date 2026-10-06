@@ -33,7 +33,7 @@ pub enum Error {
 /// The input is never modified, and section data is never relocated. [`InstallName`]
 /// accepts non-UTF-8 Unix paths. The returned [`EditedDylib`] must be re-signed
 /// before loading it on macOS.
-pub fn replace_install_name(image: &[u8], name: &InstallName) -> Result<EditedDylib, Error> {
+pub fn replace_install_name(image: &[u8], name: InstallName<'_>) -> Result<EditedDylib, Error> {
     Ok(EditedDylib {
         bytes: macho::Layout::parse(image)?.replace_install_name(name)?,
     })

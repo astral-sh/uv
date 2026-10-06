@@ -1,15 +1,14 @@
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 
 use crate::Error;
 
-/// A nonempty Mach-O install name without interior NUL bytes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstallName(CString);
+/// A borrowed, nonempty Mach-O install name without interior NUL bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InstallName<'a>(&'a CStr);
 
-impl InstallName {
-    /// Validate a name, accepting non-UTF-8 Unix paths.
-    pub fn new(name: &[u8]) -> Result<Self, Error> {
-        let name = CString::new(name).map_err(|_| Error::InvalidName)?;
+impl<'a> InstallName<'a> {
+    /// Validate a C string without requiring UTF-8.
+    pub fn new(name: &'a CStr) -> Result<Self, Error> {
         if name.is_empty() {
             return Err(Error::InvalidName);
         }
@@ -17,8 +16,8 @@ impl InstallName {
         Ok(Self(name))
     }
 
-    pub(crate) fn as_c_str(&self) -> &CStr {
-        &self.0
+    pub(crate) fn as_c_str(self) -> &'a CStr {
+        self.0
     }
 }
 
@@ -28,9 +27,7 @@ mod tests {
     use crate::Error;
 
     #[test]
-    fn invalid_names() {
-        for name in [b"".as_slice(), b"invalid\0name"] {
-            assert_eq!(InstallName::new(name), Err(Error::InvalidName));
-        }
+    fn invalid_name() {
+        assert_eq!(InstallName::new(c""), Err(Error::InvalidName));
     }
 }
