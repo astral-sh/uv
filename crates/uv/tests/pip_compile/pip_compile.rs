@@ -19814,92 +19814,128 @@ async fn compile_missing_python_download_error_warning() {
     ");
 }
 
-/// Overriding a dependency shared by alternatives must not request either optional extra.
+/// Overrides and constraints must retain the extra conditions of optional dependencies.
 #[test]
 fn overrides_preserve_alternative_optional_extras() -> Result<()> {
     let context = uv_test::test_context!("3.13");
+
+    // The host requests the same dependency from either optional extra.
     let wheels = context.temp_dir.child("wheels");
-    for (name, version, requires, extras) in [
-        (
-            "extra-host",
-            "1",
-            vec!["extra-leaf==1; extra == 'a' or extra == 'b'"],
-            vec!["a", "b", "unrelated"],
-        ),
-        ("extra-leaf", "2", vec![], vec![]),
-    ] {
-        let requires = requires
-            .into_iter()
-            .map(str::parse)
-            .collect::<Result<Vec<_>, _>>()?;
-        let extras = extras
-            .into_iter()
-            .map(|extra| Ok((extra.parse()?, Vec::new())))
-            .collect::<Result<BTreeMap<_, _>>>()?;
-        let (filename, wheel) = generate_wheel(
-            &name.parse()?,
-            &version.parse()?,
-            &requires,
-            &extras,
-            None,
-            "py3-none-any",
-            &[],
-        );
-        wheels.child(filename).write_binary(&wheel)?;
-    }
+    let (filename, wheel) = generate_wheel(
+        &"extra-host".parse()?,
+        &"1".parse()?,
+        &["extra-leaf==1; extra == 'a' or extra == 'b'".parse()?],
+        &BTreeMap::from([
+            ("a".parse()?, Vec::new()),
+            ("b".parse()?, Vec::new()),
+            ("unrelated".parse()?, Vec::new()),
+        ]),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    wheels.child(filename).write_binary(&wheel)?;
+
+    // The override selects a different version of the optional dependency.
+    let (filename, wheel) = generate_wheel(
+        &"extra-leaf".parse()?,
+        &"2".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    wheels.child(filename).write_binary(&wheel)?;
+
     context
         .temp_dir
         .child("overrides.txt")
-        .write_str("extra-leaf==2\n")?;
-    for extra in [None, Some("a"), Some("b"), Some("unrelated")] {
-        let root = extra.map_or_else(
-            || "extra-host==1".to_owned(),
-            |extra| format!("extra-host[{extra}]==1"),
-        );
-        context.temp_dir.child("requirements.in").write_str(&root)?;
-        let mut command = context.pip_compile();
-        command
-            .arg("requirements.in")
-            .arg("--override")
-            .arg("overrides.txt")
-            .arg("--no-index")
-            .arg("--find-links")
-            .arg("wheels")
-            .arg("--no-header")
-            .arg("--no-annotate");
-        insta::allow_duplicates! {
-            if extra == Some("a") || extra == Some("b") {
-                uv_snapshot!(context.filters(), command, @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            extra-host==1
-            extra-leaf==2
+        .write_str("extra-leaf==2")?;
 
-            ----- stderr -----
-            Resolved 2 packages in [TIME]
-            ");
-            } else {
-                uv_snapshot!(context.filters(), command, @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            extra-host==1
+    // Without extras, the optional dependency remains inactive.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("extra-host==1")?;
 
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            ");
-            }
-        }
-    }
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // The first extra selects the overridden dependency.
+    requirements_in.write_str("extra-host[a]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+    extra-leaf==2
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The second extra also selects the overridden dependency.
+    requirements_in.write_str("extra-host[b]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+    extra-leaf==2
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // An unrelated extra leaves the optional dependency inactive.
+    requirements_in.write_str("extra-host[unrelated]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
 
     // Lookahead must not fetch a constraint for an inactive optional dependency.
-    context
-        .temp_dir
-        .child("requirements.in")
+    requirements_in
         .write_str("extra-host @ file://${PROJECT_ROOT}/wheels/extra_host-1-py3-none-any.whl")?;
     context
         .temp_dir
         .child("constraints.txt")
         .write_str("extra-leaf @ file://${PROJECT_ROOT}/missing/extra_leaf-2-py3-none-any.whl")?;
+
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--override").arg("overrides.txt")
@@ -19914,5 +19950,6 @@ fn overrides_preserve_alternative_optional_extras() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+
     Ok(())
 }
