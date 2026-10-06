@@ -378,7 +378,7 @@ hyper-util = { version = "0.1.8", default-features = false, features = [
   "server",
   "tokio",
 ] }
-ignore = { version = "0.4.23", default-features = false }
+ignore = { version = "0.4.33", default-features = false }
 insta = { version = "1.46.0", default-features = false, features = [
   "colors",
   "filters",

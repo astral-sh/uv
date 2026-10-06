@@ -29,7 +29,7 @@ use uv_pypi_types::{
 use uv_toml::deserialize_unique_map;
 
 use crate::serde_verbatim::SerdeVerbatim;
-use crate::vcs_ignore::VcsIgnore;
+use crate::walk::require_included;
 use crate::{BuildBackendSettings, Error, error_on_venv};
 
 /// By default, we ignore generated python files.
@@ -468,17 +468,15 @@ impl PyProjectToml {
     /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/>
     /// <https://packaging.python.org/en/latest/specifications/core-metadata/>
     pub(crate) fn to_metadata(&self, root: &Path) -> Result<Metadata23, Error> {
-        let mut vcs_ignore = VcsIgnore::new(
-            root,
-            self.settings()
-                .is_some_and(|settings| settings.respect_gitignore),
-        );
-        vcs_ignore.require(Path::new("pyproject.toml"))?;
+        let respect_gitignore = self
+            .settings()
+            .is_some_and(|settings| settings.respect_gitignore);
+        require_included(root, Path::new("pyproject.toml"), respect_gitignore)?;
         if let Some(readme) = self.readme().and_then(Readme::path) {
-            vcs_ignore.require(readme)?;
+            require_included(root, readme, respect_gitignore)?;
         }
         if let Some(license) = self.project.license.as_ref().and_then(License::file) {
-            vcs_ignore.require(Path::new(license))?;
+            require_included(root, Path::new(license), respect_gitignore)?;
         }
 
         let summary = if let Some(description) = &self.project.description {
@@ -645,7 +643,7 @@ impl PyProjectToml {
 
         let (license, license_expression, license_files) = self.license_metadata(root)?;
         for license in &license_files {
-            vcs_ignore.require(Path::new(license))?;
+            require_included(root, Path::new(license), respect_gitignore)?;
         }
 
         // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)

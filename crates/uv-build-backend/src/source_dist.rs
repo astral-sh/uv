@@ -1,5 +1,5 @@
 use crate::metadata::DEFAULT_EXCLUDES;
-use crate::vcs_ignore::VcsIgnore;
+use crate::walk::walk_tree;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
@@ -18,6 +18,7 @@ use std::io::{BufReader, Cursor, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use tar_codec::{ArchiveBuilder as _, Builder, EntryMetadata, FilePayload, TarEncoder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -29,7 +30,6 @@ use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::BuildKind;
 use uv_warnings::warn_user_once;
-use walkdir::WalkDir;
 
 /// Build a source distribution from the source tree and place it in the output directory.
 pub fn build_source_dist(
@@ -227,7 +227,7 @@ fn write_source_dist(
         .settings()
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_gitignore);
+    let respect_gitignore = settings.respect_gitignore;
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -298,29 +298,22 @@ fn write_source_dist(
     let mut written_directories = FxHashSet::<PathBuf>::default();
     let top_level_directory = PathBuf::from(&top_level).join("");
     write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
-    let mut entries = WalkDir::new(source_tree).sort_by_file_name().into_iter();
-    while let Some(entry) = entries.next() {
-        let entry = entry.map_err(|err| Error::WalkDir {
-            root: source_tree.to_path_buf(),
-            err,
-        })?;
+    let include_matcher = Arc::new(include_matcher);
+    let directory_matcher = Arc::clone(&include_matcher);
+    let root = source_tree.to_path_buf();
+    let entries = walk_tree(source_tree, source_tree, respect_gitignore, move |path| {
+        let relative = path.strip_prefix(&root).expect("walk starts with root");
+        // Avoid descending into directories that cannot be included, such as `.venv` or large
+        // data directories.
+        directory_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
+    })?;
+    for entry in entries {
+        let entry = entry?;
 
         let relative = entry
             .path()
             .strip_prefix(source_tree)
             .expect("walkdir starts with root");
-        // Avoid descending into directories that cannot be included, such as `.venv` or large
-        // data directories. Load ignore rules only after applying these inexpensive glob checks.
-        if !include_matcher.match_directory(relative)
-            || exclude_matcher.is_match(relative)
-            || vcs_ignore.is_ignored(entry.path(), entry.file_type().is_dir())?
-        {
-            if entry.file_type().is_dir() {
-                entries.skip_current_dir();
-            }
-            continue;
-        }
-
         files_visited += 1;
         if files_visited > 10000 {
             warn_user_once!(
@@ -344,7 +337,10 @@ fn write_source_dist(
 
         error_on_venv(entry.file_name(), entry.path())?;
 
-        if entry.file_type().is_dir() {
+        if entry
+            .file_type()
+            .is_some_and(|file_type| file_type.is_dir())
+        {
             continue;
         }
 

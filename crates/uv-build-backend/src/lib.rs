@@ -3,7 +3,7 @@ mod metadata;
 mod serde_verbatim;
 mod settings;
 mod source_dist;
-mod vcs_ignore;
+mod walk;
 mod wheel;
 
 pub(crate) use metadata::PyProjectToml;
@@ -29,7 +29,7 @@ use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
 use crate::settings::ModuleName;
-use crate::vcs_ignore::VcsIgnore;
+use crate::walk::require_included;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -60,8 +60,8 @@ pub enum Error {
     },
     #[error("`pyproject.toml` must not be excluded from source distribution build")]
     PyprojectTomlExcluded,
-    #[error("Failed to read Git ignore rules from: {}", _0.user_display())]
-    VcsIgnore(PathBuf, #[source] ignore::Error),
+    #[error("Failed to read Git ignore rules")]
+    VcsIgnore(#[source] ignore::Error),
     #[error("Required package file is excluded by Git ignore rules: {}", _0.user_display())]
     RequiredFileVcsIgnored(PathBuf),
     #[error("Failed to walk source tree: {}", root.user_display())]
@@ -69,6 +69,12 @@ pub enum Error {
         root: PathBuf,
         #[source]
         err: walkdir::Error,
+    },
+    #[error("Failed to walk source tree: {}", root.user_display())]
+    IgnoreWalk {
+        root: PathBuf,
+        #[source]
+        err: ignore::Error,
     },
     #[error("Failed to write wheel zip archive")]
     AsyncZip(#[from] async_zip::error::ZipError),
@@ -367,12 +373,9 @@ fn find_roots(
             pyproject_toml.name(),
         )?]
     };
-    let mut vcs_ignore = VcsIgnore::new(
-        source_tree,
-        pyproject_toml
-            .settings()
-            .is_some_and(|settings| settings.respect_gitignore),
-    );
+    let respect_gitignore = pyproject_toml
+        .settings()
+        .is_some_and(|settings| settings.respect_gitignore);
     for module_relative in &modules_relative {
         debug!("Module path: {}", module_relative.user_display());
         let stubs = module_relative
@@ -380,7 +383,11 @@ fn find_roots(
             .next()
             .is_some_and(|component| component.as_os_str().to_string_lossy().ends_with("-stubs"));
         let init = if stubs { "__init__.pyi" } else { "__init__.py" };
-        vcs_ignore.require(&relative_module_root.join(module_relative).join(init))?;
+        require_included(
+            source_tree,
+            &relative_module_root.join(module_relative).join(init),
+            respect_gitignore,
+        )?;
     }
     Ok((src_root, modules_relative))
 }
@@ -977,7 +984,7 @@ mod tests {
         let _preview = uv_preview::test::with_features(&[]);
         let parent = TempDir::new()?;
         // Rules above the source tree do not affect a build, even without a Git checkout.
-        fs_err::write(parent.path().join(".gitignore"), "*\n")?;
+        fs_err::write(parent.path().join(".gitignore"), "*\n[z-a]\n")?;
         let source = parent.path().join("project");
         for directory in [
             "src/example/nested",
@@ -1002,6 +1009,8 @@ mod tests {
             data = { scripts = "scripts" }
         "#};
         fs_err::write(source.join("pyproject.toml"), pyproject)?;
+        // Other ignore-file formats do not affect package contents.
+        fs_err::write(source.join(".ignore"), "*\n")?;
         fs_err::write(
             source.join(".gitignore"),
             "*.json\nsrc/example/ignored/\nsrc/example/nested/.gitignore\n!src/example/explicit.json\n",
@@ -1205,14 +1214,14 @@ mod tests {
 
         fs_err::write(source.path().join(".gitignore"), "[z-a]\n")?;
         assert_snapshot!(build_err(source.path()), @"
-        Failed to read Git ignore rules from: [TEMP_PATH]/.gitignore
+        Failed to read Git ignore rules
           Caused by: [TEMP_PATH]/.gitignore: line 1: error parsing glob '[z-a]': invalid range; 'z' > 'a'
         ");
         Ok(())
     }
 
     #[test]
-    fn respect_gitignore_empty_data_directory() -> Result<(), Error> {
+    fn respect_gitignore_empty_directories() -> Result<(), Error> {
         let _preview = uv_preview::test::with_features(&[]);
         let source = TempDir::new()?;
         fs_err::create_dir_all(source.path().join("src/example"))?;
@@ -1261,6 +1270,22 @@ mod tests {
         example/
         example/__init__.py
         ");
+
+        // A missing namespace root must still fail instead of producing an empty wheel.
+        let pyproject = source.path().join("pyproject.toml");
+        fs_err::write(
+            &pyproject,
+            format!(
+                "{}\nnamespace = true\n",
+                fs_err::read_to_string(&pyproject)?
+            ),
+        )?;
+        fs_err::remove_dir_all(source.path().join("src/example"))?;
+        let error = build(source.path(), dist.path()).expect_err("missing namespace root");
+        let Error::Io(error) = error else {
+            return Err(error);
+        };
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
         Ok(())
     }
 
