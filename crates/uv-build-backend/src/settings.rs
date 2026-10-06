@@ -80,8 +80,8 @@ pub struct BuildBackendSettings {
     /// a module's `__init__.py` or `__init__.pyi`, is an error. Editable installs apply these rules
     /// to copied data files, but the linked Python source tree remains unfiltered.
     ///
-    /// Source distributions disable this setting in their generated `pyproject.toml`, since their
-    /// files have already been filtered and may not contain all of the original ignore rules.
+    /// Ignore rules are reapplied when building from a source distribution. If ignore files are
+    /// omitted from the source distribution, its wheel may differ from a directly built wheel.
     #[option(
         default = r#"false"#,
         value_type = "bool",
