@@ -330,7 +330,7 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
-        previous_hasher: Option<&'data HashStrategy>,
+        hash_override: Option<&'data HashStrategy>,
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
@@ -341,6 +341,7 @@ impl BuildContext for BuildDispatch<'_> {
         let active_requirements = requirements.iter().filter(|requirement| {
             requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
         });
+        let previous_hasher = hash_override;
         let hasher = match previous_hasher {
             Some(hasher) if self.require_build_hashes() => hasher
                 .clone()

@@ -154,7 +154,7 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-        previous_hasher: Option<&'a HashStrategy>,
+        hash_override: Option<&'a HashStrategy>,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
