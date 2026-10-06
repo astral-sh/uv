@@ -439,7 +439,7 @@ impl HashStrategy {
 
     /// Collect hashes from [`Constraints`] using the same handling as regular constraints in
     /// [`Self::from_requirements`], preserving declaration order.
-    pub fn from_constraints(
+    fn from_constraints(
         constraints: &Constraints,
         marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
