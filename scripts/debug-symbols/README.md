@@ -299,13 +299,14 @@ Full uv comparisons with `line-tables-only` completed on the same runner profile
 corpus. The uv source was unchanged; the intervening commits updated the experiment tooling and
 documentation. Each run built a fresh no-debug baseline and trained independent PGO profiles.
 
-Combined instrumented build, training, and final build times were:
+Combined instrumented build, training, and final build times were, using the no-debug baseline from
+each line-table run:
 
-| Native target             | Full debug info | Line tables | Time reduction |
-| ------------------------- | --------------: | ----------: | -------------: |
-| x86_64-unknown-linux-gnu  |         26m 38s |     19m 19s |          27.5% |
-| aarch64-unknown-linux-gnu |         32m 38s |      26m 6s |          20.0% |
-| aarch64-apple-darwin      |         50m 31s |     16m 39s |          67.0% |
+| Native target             | No debug | Full debug info | Line tables | Reduction vs. full |
+| ------------------------- | -------: | --------------: | ----------: | -----------------: |
+| x86_64-unknown-linux-gnu  |  17m 24s |         26m 38s |     19m 19s |              27.5% |
+| aarch64-unknown-linux-gnu |  23m 57s |         32m 38s |      26m 6s |              20.0% |
+| aarch64-apple-darwin      |   15m 1s |         50m 31s |     16m 39s |              67.0% |
 
 The fresh baselines help account for differences between runners and runs:
 
