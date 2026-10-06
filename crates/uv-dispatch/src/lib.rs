@@ -40,8 +40,9 @@ use uv_resolver::{
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, HashVerification, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
+    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildRequirementPhase, BuildStack,
+    EmptyInstalledPackages, HashStrategy, HashVerification, InFlight, ResolvedRequirements,
+    SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -330,7 +331,7 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
-        hash_override: Option<&'data HashStrategy>,
+        phase: BuildRequirementPhase<'data>,
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
@@ -346,12 +347,17 @@ impl BuildContext for BuildDispatch<'_> {
         let active_requirements = requirements.iter().filter(|requirement| {
             requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
         });
-        let preserve_declared_hashes = hash_override.is_some() && self.require_build_hashes();
-        let hasher = hash_override.unwrap_or(self.base_hasher).clone();
-        let hasher = if preserve_declared_hashes {
-            hasher.augment_with_metadata_requirements(active_requirements)
-        } else {
-            hasher.augment_with_requirements(active_requirements)
+        let hasher = match phase {
+            BuildRequirementPhase::Initial => self
+                .base_hasher
+                .clone()
+                .augment_with_requirements(active_requirements),
+            BuildRequirementPhase::Backend { hashes } if self.require_build_hashes() => hashes
+                .clone()
+                .augment_with_metadata_requirements(active_requirements),
+            BuildRequirementPhase::Backend { hashes } => hashes
+                .clone()
+                .augment_with_requirements(active_requirements),
         }
         .map_err(uv_requirements::Error::from)?;
         let modifiers = DependencyModifiers::default();
