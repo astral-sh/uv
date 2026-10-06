@@ -42,19 +42,13 @@ impl<'a> SigningIdentifier<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::SigningIdentifier;
+    use super::{InstallName, SigningIdentifier};
     use crate::Error;
 
     #[test]
     fn invalid_identifier() {
         assert_eq!(SigningIdentifier::new(c""), Err(Error::InvalidIdentifier));
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::InstallName;
-    use crate::Error;
 
     #[test]
     fn invalid_name() {
