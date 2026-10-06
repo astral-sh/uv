@@ -1,11 +1,14 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = []
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 """Regenerate the Mach-O fixtures with Apple's command-line tools on macOS.
 
-Run `uv run crates/uv-macho/tests/fixtures/generate.py` from the repository root.
+Run `uv run --locked scripts/generate-macho-fixtures.py` from the repository root.
 The dylibs export `uv_macho_fixture`, which returns 42, and contain no third-party code.
 
 The Intel fixture targets macOS 10.9 to exercise SHA-1 and SHA-256 CodeDirectories.
@@ -26,7 +29,9 @@ def main() -> None:
     if sys.platform != "darwin":
         sys.exit("Fixture generation requires macOS and Apple's command-line tools")
 
-    directory = Path(__file__).resolve().parent
+    directory = (
+        Path(__file__).resolve().parent.parent / "crates/uv-macho/tests/fixtures"
+    )
     for architecture, minimum_version in [("arm64", "11.0"), ("x86_64", "10.9")]:
         command = [
             "xcrun",
