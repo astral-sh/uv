@@ -51,7 +51,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
 use crate::commands::operations;
-use crate::commands::project::{ProjectError, find_requires_python};
+use crate::commands::project::{PythonContextError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
@@ -87,7 +87,7 @@ pub(crate) enum Error {
     #[error("Build requirement is not satisfied: `{0}`")]
     UnsatisfiedBuildRequirement(Box<Requirement>),
     #[error(transparent)]
-    Project(#[from] Box<ProjectError>),
+    PythonContext(#[from] Box<PythonContextError>),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -111,9 +111,9 @@ pub(crate) enum Error {
     VersionMismatch(Version, Version),
 }
 
-impl From<ProjectError> for Error {
-    fn from(error: ProjectError) -> Self {
-        Self::Project(Box::new(error))
+impl From<PythonContextError> for Error {
+    fn from(error: PythonContextError) -> Self {
+        Self::PythonContext(Box::new(error))
     }
 }
 
@@ -123,7 +123,7 @@ impl Hinted for Error {
             Self::BuildBackend(err) => err.hints(),
             Self::BuildFrontend(err) => err.hints(),
             Self::BuildDispatch(err) => err.hints(),
-            Self::Project(err) => err.hints(),
+            Self::PythonContext(err) => err.hints(),
             Self::Operations(err) => err.hints(),
             Self::Extract(uv_extract::Error::Tar(err)) => {
                 // TODO(konsti): astral-tokio-tar should use a proper error instead of

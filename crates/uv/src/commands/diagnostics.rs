@@ -13,11 +13,11 @@ use uv_pep440::{Version, strip_local_version_sentinels};
 use crate::commands::operations;
 use crate::commands::operations::resolution::ExtrasWithoutSourceError;
 use crate::commands::pip::install::ExternallyManagedError;
-use crate::commands::project::ProjectError;
 use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
+use crate::commands::project::{EnvironmentError, LockError, ProjectError, PythonContextError};
 use crate::commands::python::install::InvalidUpgradeRequestError;
 use crate::commands::tool::common::NoExecutablesError;
 use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
@@ -60,6 +60,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
         collect_hint::<uv_lock::LockError>(cause, &mut hints);
+        collect_hint::<LockError>(cause, &mut hints);
         collect_hint::<operations::resolution::Error>(cause, &mut hints);
         collect_hint::<operations::installation::Error>(cause, &mut hints);
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
@@ -67,6 +68,8 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<DependencyNotFoundError>(cause, &mut hints);
         collect_hint::<ExtrasWithoutSourceError>(cause, &mut hints);
         collect_hint::<ProjectError>(cause, &mut hints);
+        collect_hint::<EnvironmentError>(cause, &mut hints);
+        collect_hint::<PythonContextError>(cause, &mut hints);
         collect_hint::<NoExecutablesError>(cause, &mut hints);
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
@@ -248,6 +251,9 @@ mod tests {
 
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
+    use crate::commands::project::{LockError, ProjectError};
+    use crate::settings::{LockedFlag, LockedSource};
+
     use super::hints_for_error;
 
     #[test]
@@ -262,6 +268,39 @@ mod tests {
         assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
         [
             "replace `python_version == '3.12'` with `python_version != '3.12'`",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn collects_lock_hints_through_context() {
+        let error =
+            LockError::LockFormat("uv.lock".into(), 3, LockedSource::Cli(LockedFlag::Check));
+
+        // Command context retains the lockfile's regeneration hint.
+        let error = anyhow::Error::new(error).context("Failed to check the lockfile");
+
+        let hints = hints_for_error(&error);
+        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+        [
+            "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn collects_lock_hints_through_project_errors() {
+        let error =
+            LockError::LockFormat("uv.lock".into(), 3, LockedSource::Cli(LockedFlag::Check));
+
+        // Project and command context retain the lockfile's regeneration hint.
+        let error =
+            anyhow::Error::new(ProjectError::from(error)).context("Failed to check the lockfile");
+
+        let hints = hints_for_error(&error);
+        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+        [
+            "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
         ]
         "#);
     }

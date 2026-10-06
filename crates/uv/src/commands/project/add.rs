@@ -827,12 +827,15 @@ pub(crate) async fn add(
         }
         Err(err) => {
             let (err, standard_library_package) = match err {
-                ProjectError::Resolve(err) => {
+                ProjectError::Environment(project::EnvironmentError::Resolve(err))
+                | ProjectError::Lock(project::LockError::Resolve(err)) => {
                     let standard_library_package =
                         standard_library_package(&err, &edits, python_minor);
-                    (UvError::from(err), standard_library_package)
+                    (UvError::from(*err), standard_library_package)
                 }
-                ProjectError::Install(err) => (UvError::from(err), None),
+                ProjectError::Environment(project::EnvironmentError::Install(err)) => {
+                    (UvError::from(*err), None)
+                }
                 err => return Err(UvError::from(err).into()),
             };
             Err(err

@@ -110,11 +110,10 @@ impl Hinted for NoExecutablesError {
         hints
     }
 }
-use crate::commands::project::{
-    EnvironmentSpecification, PreferenceLocation, ProjectError, PythonRequestSource,
-    lock::ValidatedLock,
-};
+use crate::commands::project::lock::ValidatedLock;
+use crate::commands::project::{EnvironmentSpecification, PreferenceLocation, PythonRequestSource};
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::tool::error::ToolLockError;
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -182,7 +181,7 @@ impl ToolPython {
         git_resolver: &GitResolver,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, io::Error> {
         let requires_python = if python_request.is_none() {
             match requirement {
                 Some(requirement) => {
@@ -414,7 +413,7 @@ impl ToolLock {
         workspace_cache: &WorkspaceCache,
         printer: Printer,
         preview: Preview,
-    ) -> Result<ValidatedToolLock, ProjectError> {
+    ) -> Result<ValidatedToolLock, ToolLockError> {
         let ResolverSettings {
             index_locations,
             index_strategy,

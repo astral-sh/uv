@@ -24,8 +24,9 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectError, ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter,
+    LinkErrorReporting, LockError, ProjectEnvironment, ProjectEnvironmentPolicy,
+    ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment,
+    ScriptInterpreter,
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::{Printer, Stdout};
@@ -183,7 +184,7 @@ pub(crate) async fn metadata(
             .await
             {
                 Ok(lock) => lock.into_lock(),
-                Err(err @ ProjectError::LockMismatch(..)) => return Err(UvError::user(err).into()),
+                Err(err @ LockError::LockMismatch(..)) => return Err(UvError::user(err).into()),
                 Err(err) => return Err(UvError::from(err).into()),
             };
             &resolved_lock

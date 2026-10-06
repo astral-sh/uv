@@ -54,8 +54,9 @@ use crate::commands::operations::resolution::loggers::{
 use crate::commands::operations::resolution::reporters::ResolverReporter;
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
-    MissingLockfileSource, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError,
-    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, init_script_python_requirement,
+    LockError, LockValidationError, MissingLockfileSource, ProjectEnvironmentPolicy,
+    ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter,
+    init_script_python_requirement,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, ScriptPath, UvError, operations};
@@ -274,7 +275,7 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Success)
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
-        Err(err @ (ProjectError::LockMismatch(..) | ProjectError::LockFormat(..))) => {
+        Err(err @ (LockError::LockMismatch(..) | LockError::LockFormat(..))) => {
             Err(UvError::user(err).into())
         }
         Err(err) => Err(UvError::from(err).into()),
@@ -375,7 +376,7 @@ impl<'env> LockOperation<'env> {
     }
 
     /// Perform a [`LockOperation`].
-    pub(crate) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
+    pub(crate) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, LockError> {
         if !matches!(&self.mode, LockMode::Frozen(_)) {
             target.validate_upgrade_groups(&self.settings.upgrade)?;
         }
@@ -389,7 +390,7 @@ impl<'env> LockOperation<'env> {
                 // Read the existing lockfile.
                 let lock_filename = target.lock_filename();
                 let Some((existing, existing_contents)) = target.read_with_contents().await? else {
-                    return Err(ProjectError::MissingLockfile(
+                    return Err(LockError::MissingLockfile(
                         lock_source.into(),
                         lock_filename,
                     ));
@@ -398,7 +399,7 @@ impl<'env> LockOperation<'env> {
                 if self.preview.is_enabled(PreviewFeature::LockfileFormatCheck)
                     && let Some(line) = find_lock_format_error(&existing_contents)
                 {
-                    return Err(ProjectError::LockFormat(lock_filename, line, lock_source));
+                    return Err(LockError::LockFormat(lock_filename, line, lock_source));
                 }
 
                 let check_lockfile_contents = if self.check_lockfile_contents {
@@ -431,7 +432,7 @@ impl<'env> LockOperation<'env> {
 
                 // If the lockfile changed, return an error.
                 if let LockResult::Changed(prev, cur) = result {
-                    return Err(ProjectError::LockMismatch(
+                    return Err(LockError::LockMismatch(
                         prev.map(Box::new),
                         Box::new(cur),
                         lock_source,
@@ -447,7 +448,7 @@ impl<'env> LockOperation<'env> {
                         (Some(existing), Some(existing_contents))
                     }
                     Ok(None) => (None, None),
-                    Err(ProjectError::Lock(err)) => {
+                    Err(LockError::Lock(err)) => {
                         warn_user!(
                             "Failed to read existing lockfile; ignoring locked requirements: {err}"
                         );
@@ -516,7 +517,7 @@ async fn do_lock(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-) -> Result<LockResult, ProjectError> {
+) -> Result<LockResult, LockError> {
     let start = std::time::Instant::now();
 
     // Extract the project settings.
@@ -722,7 +723,7 @@ async fn do_lock(
                         .map(|contents| contents.to_string())
                         .unwrap_or_else(|| "true".to_string());
 
-                    return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
+                    return Err(LockError::OverlappingMarkers(lhs, rhs, hint));
                 }
             }
         }
@@ -751,7 +752,7 @@ async fn do_lock(
                     .map(|contents| contents.to_string())
                     .unwrap_or_else(|| "true".to_string());
 
-                return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
+                return Err(LockError::OverlappingMarkers(lhs, rhs, hint));
             }
         }
 
@@ -803,12 +804,12 @@ async fn do_lock(
     {
         if requires_python.to_marker_tree().is_disjoint(environment) {
             return if let Some(contents) = environment.contents() {
-                Err(ProjectError::DisjointEnvironment(
+                Err(LockError::DisjointEnvironment(
                     contents,
                     requires_python.specifiers().clone(),
                 ))
             } else {
-                Err(ProjectError::EmptyEnvironment)
+                Err(LockError::EmptyEnvironment)
             };
         }
     }
@@ -1024,19 +1025,19 @@ async fn do_lock(
         .await
         {
             Ok(result) => Some(result),
-            Err(ProjectError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
+            Err(LockValidationError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
                 // Resolver errors are not recoverable, as such errors can leave the resolver in a
                 // broken state. Specifically, tasks that fail with an error can be left as pending.
                 //
                 // Disabled builds are user policy errors. Static local projects are validated
                 // before this point, so reaching this case means validation genuinely needs
                 // metadata that cannot be obtained under `--no-build`.
-                return Err(ProjectError::Lock(err));
+                return Err(err.into());
             }
-            Err(ProjectError::Lock(err)) if err.is_not_pep625() => {
+            Err(LockValidationError::Lock(err)) if err.is_not_pep625() => {
                 // A non-PEP 625-compliant sdist in the lockfile will also be rejected by a fresh
                 // resolve, so short-circuit rather than doing the extra work.
-                return Err(ProjectError::Lock(err));
+                return Err(err.into());
             }
             Err(err) => {
                 warn_user_with_chain!(
@@ -1131,7 +1132,7 @@ async fn do_lock(
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(target.members_requirements())
                 .await
-                .map_err(|err| ProjectError::Resolve(err.into()))?;
+                .map_err(operations::resolution::Error::from)?;
             let workspace_members = member_requirements
                 .iter()
                 .map(|requirement| (requirement.name.clone(), requirement.source.clone()))
@@ -1300,7 +1301,7 @@ impl ValidatedLock {
         database: &DistributionDatabase<'_, BuildDispatch<'_>>,
         preview: Preview,
         printer: Printer,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, LockValidationError> {
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
         // first (i.e., every check that returns `Self::Unusable`, followed by every check that
         // returns `Self::Versions`, followed by every check that returns `Self::Preferable`, and
