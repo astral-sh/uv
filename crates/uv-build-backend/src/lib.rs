@@ -371,7 +371,7 @@ fn find_roots(
         source_tree,
         pyproject_toml
             .settings()
-            .is_some_and(|settings| settings.respect_vcs_ignore),
+            .is_some_and(|settings| settings.respect_gitignore),
     );
     for module_relative in &modules_relative {
         debug!("Module path: {}", module_relative.user_display());
@@ -973,7 +973,7 @@ mod tests {
     }
 
     #[test]
-    fn respect_vcs_ignore() -> Result<(), Error> {
+    fn respect_gitignore() -> Result<(), Error> {
         let _preview = uv_preview::test::with_features(&[]);
         let parent = TempDir::new()?;
         // Rules above the source tree do not affect a build, even without a Git checkout.
@@ -1052,7 +1052,7 @@ mod tests {
 
         fs_err::write(
             source.join("pyproject.toml"),
-            format!("{pyproject}\nrespect-vcs-ignore = true\n"),
+            format!("{pyproject}\nrespect-gitignore = true\n"),
         )?;
         let filtered = build(&source, dist.path())?;
         assert_snapshot!(filtered.wheel_contents.join("\n"), @"
@@ -1105,7 +1105,7 @@ mod tests {
         [tool.uv.build-backend]
         source-include = ["tests/**"]
         source-exclude = ["src/example/explicit.json"]
-        respect-vcs-ignore = false
+        respect-gitignore = false
 
         [tool.uv.build-backend.data]
         scripts = "scripts"
@@ -1129,7 +1129,7 @@ mod tests {
     }
 
     #[test]
-    fn respect_vcs_ignore_ignored_module_root() -> Result<(), Error> {
+    fn respect_gitignore_ignored_module_root() -> Result<(), Error> {
         let _preview = uv_preview::test::with_features(&[]);
         let source = TempDir::new()?;
         fs_err::create_dir_all(source.path().join("src/example"))?;
@@ -1151,7 +1151,7 @@ mod tests {
                 build-backend = "uv_build"
 
                 [tool.uv.build-backend]
-                respect-vcs-ignore = true
+                respect-gitignore = true
             "#},
         )?;
         assert_snapshot!(build_err(source.path()), @"Required package file is excluded by Git ignore rules: src/example/__init__.py");
@@ -1159,7 +1159,7 @@ mod tests {
     }
 
     #[test]
-    fn respect_vcs_ignore_required_files() -> Result<(), Error> {
+    fn respect_gitignore_required_files() -> Result<(), Error> {
         let _preview = uv_preview::test::with_features(&[]);
         let source = TempDir::new()?;
         fs_err::create_dir_all(source.path().join("src/example"))?;
@@ -1180,7 +1180,7 @@ mod tests {
                 build-backend = "uv_build"
 
                 [tool.uv.build-backend]
-                respect-vcs-ignore = true
+                respect-gitignore = true
             "#},
         )?;
         let mut errors = Vec::new();
@@ -1212,7 +1212,7 @@ mod tests {
     }
 
     #[test]
-    fn respect_vcs_ignore_empty_data_directory() -> Result<(), Error> {
+    fn respect_gitignore_empty_data_directory() -> Result<(), Error> {
         let _preview = uv_preview::test::with_features(&[]);
         let source = TempDir::new()?;
         fs_err::create_dir_all(source.path().join("src/example"))?;
@@ -1236,7 +1236,7 @@ mod tests {
                 build-backend = "uv_build"
 
                 [tool.uv.build-backend]
-                respect-vcs-ignore = true
+                respect-gitignore = true
                 data = { scripts = "artifacts/scripts" }
             "#},
         )?;

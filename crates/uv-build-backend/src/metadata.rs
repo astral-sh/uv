@@ -471,7 +471,7 @@ impl PyProjectToml {
         let mut vcs_ignore = VcsIgnore::new(
             root,
             self.settings()
-                .is_some_and(|settings| settings.respect_vcs_ignore),
+                .is_some_and(|settings| settings.respect_gitignore),
         );
         vcs_ignore.require(Path::new("pyproject.toml"))?;
         if let Some(readme) = self.readme().and_then(Readme::path) {

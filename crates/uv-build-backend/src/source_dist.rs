@@ -113,7 +113,7 @@ fn source_dist_matcher(
             .expect("module root is inside source tree");
         let import_path = normalize_path(path).portable_display().to_string();
         includes.push(format!("{}/**", globset::escape(&import_path)));
-        if settings.respect_vcs_ignore && settings.namespace {
+        if settings.respect_gitignore && settings.namespace {
             required_directories.push(normalize_path(path).into_owned());
         }
     }
@@ -166,7 +166,7 @@ fn source_dist_matcher(
                 path: directory.to_path_buf(),
             });
         }
-        if settings.respect_vcs_ignore {
+        if settings.respect_gitignore {
             required_directories.push(directory.to_path_buf());
         }
         let directory = directory.portable_display().to_string();
@@ -227,7 +227,7 @@ fn write_source_dist(
         .settings()
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_vcs_ignore);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_gitignore);
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -266,10 +266,10 @@ fn write_source_dist(
     let pyproject_contents = fs_err::read_to_string(&pyproject_path)?;
     let mut pyproject_value: toml::Value = toml::from_str(&pyproject_contents)
         .map_err(|err| Error::Toml(pyproject_path.clone(), err))?;
-    if settings.respect_vcs_ignore {
+    if settings.respect_gitignore {
         // Ignore files can themselves be excluded from the source distribution. Its contents have
         // already been filtered, so rebuilding must not apply an incomplete set of ignore rules.
-        pyproject_value["tool"]["uv"]["build-backend"]["respect-vcs-ignore"] =
+        pyproject_value["tool"]["uv"]["build-backend"]["respect-gitignore"] =
             toml::Value::Boolean(false);
     }
     // See https://github.com/toml-rs/toml/issues/1088 for `to_string_pretty`.
