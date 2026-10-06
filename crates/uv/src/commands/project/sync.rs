@@ -9,8 +9,8 @@ use rustc_hash::FxHashSet;
 use serde::Serialize;
 use tracing::warn;
 use uv_cache::Cache;
-use uv_cli::SyncFormat;
 use uv_client::BaseClientBuilder;
+use uv_configuration::SyncFormat;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode,
     ExtrasSpecification, InstallOptions, TargetTriple,
@@ -32,7 +32,6 @@ use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
-use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::loggers::DefaultInstallLogger;
 use crate::commands::operations::installation::report::{PackageChangesReport, SchemaReport};
@@ -51,7 +50,8 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings};
+use uv_configuration::Modifications;
+use uv_settings::{FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings};
 
 /// Sync the project environment.
 pub(crate) async fn sync(

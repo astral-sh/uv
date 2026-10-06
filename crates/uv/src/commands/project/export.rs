@@ -43,7 +43,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
+use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]

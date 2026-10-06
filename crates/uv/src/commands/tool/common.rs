@@ -115,7 +115,7 @@ use crate::commands::project::{EnvironmentSpecification, PreferenceLocation, Pyt
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::error::ToolLockError;
 use crate::printer::Printer;
-use crate::settings::ResolverSettings;
+use uv_settings::ResolverSettings;
 
 /// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {

@@ -16,7 +16,6 @@ use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Error, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
-use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
 
@@ -24,6 +23,13 @@ use tracing::{debug, instrument, trace};
 use crate::install_source::InstallSource;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
+use uv_cli::settings;
+use uv_cli::settings::{
+    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
+    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipTreeSettings,
+    PipUninstallSettings, PublishSettings, resolve_color,
+};
+
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
@@ -33,6 +39,7 @@ use uv_cli::{
     TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
 use uv_client::BaseClientBuilder;
+use uv_configuration::{PythonUpgrade, PythonUpgradeSource, ToolRunCommand};
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
@@ -50,15 +57,8 @@ use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::{
-    ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand, UvError,
-};
+use crate::commands::{ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, UvError};
 use crate::printer::Printer;
-use crate::settings::{
-    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
-    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings, resolve_color,
-};
 
 pub(crate) mod child;
 pub mod commands;
@@ -66,7 +66,6 @@ pub mod commands;
 mod install_source;
 mod logging;
 pub(crate) mod printer;
-pub(crate) mod settings;
 
 /// Construct the shared HTTP client builder from the resolved global settings.
 fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
@@ -1914,7 +1913,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
-            let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
+            let upgrade = PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade);
 
             // Initialize the cache.
             let cache = cache.init().await?;

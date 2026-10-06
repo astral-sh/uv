@@ -9,8 +9,8 @@ use tracing::{Level, debug, enabled, warn};
 use uv_errors::{Hinted, Hints};
 
 use uv_cache::Cache;
-use uv_cli::PipInstallFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::PipInstallFormat;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
     ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
@@ -48,7 +48,6 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::install_report::write_install_report;
 use crate::commands::operations;
-use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::editable::apply_editable_mode;
 use crate::commands::operations::installation::loggers::{DefaultInstallLogger, InstallLogger};
@@ -60,6 +59,7 @@ use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
+use uv_configuration::Modifications;
 
 /// The interpreter is externally managed and cannot be modified.
 #[derive(Debug, Error)]

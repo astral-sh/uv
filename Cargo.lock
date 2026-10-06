@@ -6192,21 +6192,24 @@ dependencies = [
 name = "uv-cli"
 version = "0.0.90"
 dependencies = [
- "anstream",
  "anyhow",
  "clap",
  "clap_complete_command",
  "fs-err",
  "insta",
+ "jiff",
+ "rustc-hash",
  "serde",
  "url",
  "uv-audit",
  "uv-auth",
  "uv-cache",
+ "uv-client",
  "uv-configuration",
  "uv-distribution-types",
  "uv-install-wheel",
  "uv-normalize",
+ "uv-pep440",
  "uv-pep508",
  "uv-preview",
  "uv-pypi-types",
@@ -6300,6 +6303,7 @@ dependencies = [
 name = "uv-configuration"
 version = "0.0.90"
 dependencies = [
+ "anstream",
  "anyhow",
  "astral-version-ranges",
  "clap",

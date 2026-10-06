@@ -3,8 +3,8 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_cache::Cache;
-use uv_cli::AuditOutputFormat;
 use uv_client::BaseClientBuilder;
+use uv_configuration::AuditOutputFormat;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple,
 };
@@ -17,6 +17,7 @@ use uv_python::{
 use uv_redacted::DisplaySafeUrl;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
+use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -32,7 +33,6 @@ use crate::commands::project::{
     ScriptInterpreter,
 };
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 pub(crate) async fn audit(
     project_dir: &Path,

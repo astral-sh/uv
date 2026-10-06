@@ -249,10 +249,10 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
 mod tests {
     use insta::assert_debug_snapshot;
 
+    use uv_settings::{LockedFlag, LockedSource};
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
     use crate::commands::project::{LockError, ProjectError};
-    use crate::settings::{LockedFlag, LockedSource};
 
     use super::hints_for_error;
 

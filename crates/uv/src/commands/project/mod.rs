@@ -53,7 +53,6 @@ pub(crate) use self::environment_error::EnvironmentError;
 pub(crate) use self::error::ProjectError;
 pub(crate) use self::lock_error::{LockError, LockValidationError, MissingLockfileSource};
 pub(crate) use self::python_error::PythonContextError;
-use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::loggers::InstallLogger;
 use crate::commands::operations::resolution::locked_requirements::{
@@ -71,7 +70,8 @@ pub(crate) use crate::commands::project::python::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{capitalize, conjunction, operations};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
+use uv_configuration::Modifications;
+use uv_settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
 
 pub(crate) mod add;
 pub(crate) mod audit;

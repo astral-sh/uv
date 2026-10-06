@@ -6,8 +6,8 @@ use rustc_hash::FxHashSet;
 
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_cache::Cache;
-use uv_cli::AuditOutputFormat;
 use uv_client::BaseClientBuilder;
+use uv_configuration::AuditOutputFormat;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, ExtrasSpecification};
 use uv_fs::Simplified;
 use uv_lock::{Lock, LockParseError};
@@ -23,7 +23,7 @@ use crate::commands::audit::{
     AuditResults, artifact_uri, audit_lock, json, sarif, warn_unmatched_ignores,
 };
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use uv_settings::ResolverInstallerSettings;
 
 /// Audit selected installed tools, or every installed tool if no names are provided.
 pub(crate) async fn audit(

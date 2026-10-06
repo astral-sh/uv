@@ -6,8 +6,8 @@ use anyhow::{Error, Result, bail};
 use futures::StreamExt;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_cli::TreeFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::TreeFormat;
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple};
 use uv_dispatch::UniversalState;
 use uv_distribution_types::IndexCapabilities;
@@ -39,9 +39,9 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
-use crate::settings::FrozenSource;
-use crate::settings::LockCheck;
-use crate::settings::ResolverSettings;
+use uv_settings::FrozenSource;
+use uv_settings::LockCheck;
+use uv_settings::ResolverSettings;
 
 /// A tree reads an existing workspace lock or resolves a project or script manifest.
 #[derive(Clone, Copy)]

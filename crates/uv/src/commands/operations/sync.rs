@@ -5,7 +5,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, TargetTriple,
+    ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, Modifications, TargetTriple,
 };
 use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -18,12 +18,12 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, P
 use uv_python::PythonEnvironment;
 use uv_requirements::script_extra_build_requires;
 use uv_resolver::FlatIndex;
+use uv_settings::InstallerSettingsRef;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache};
 
 use crate::commands::operations;
-use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::editable::apply_editable_mode;
 use crate::commands::operations::installation::loggers::InstallLogger;
@@ -32,7 +32,6 @@ use crate::commands::operations::resolution::{resolution_markers, resolution_tag
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::{EnvironmentError, detect_conflicts};
 use crate::printer::Printer;
-use crate::settings::InstallerSettingsRef;
 
 /// Sync a lockfile with an environment.
 pub(crate) async fn sync_from_lock(

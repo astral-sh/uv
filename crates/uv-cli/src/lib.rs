@@ -1,12 +1,11 @@
 use std::ffi::OsString;
-use std::fmt::{self, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
 use clap::builder::styling::{AnsiColor, Effects, Style};
-use clap::builder::{PossibleValue, Styles, TypedValueParser, ValueParserFactory};
+use clap::builder::{PossibleValue, Styles, TypedValueParser};
 use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
@@ -16,10 +15,12 @@ use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::RequirementsInput;
 use uv_configuration::{
-    AnnotationStyle, ExcludeNewerPackageEntry, ExportFormat, ForkStrategy, IndexStrategy,
-    KeyringProviderType, PackageNameSpecifier, PipCompileFormat, PrereleaseMode,
-    PrereleasePackageEntry, ProjectBuildBackend, ResolutionMode, TargetTriple, TrustedHost,
-    TrustedPublishing, VersionControlSystem,
+    AnnotationStyle, AuditOutputFormat, AuthorFrom, ColorChoice, ExcludeNewerPackageEntry,
+    ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType, ListFormat,
+    PackageNameSpecifier, PipCompileFormat, PipInstallFormat, PrereleaseMode,
+    PrereleasePackageEntry, ProjectBuildBackend, PythonListFormat, ResolutionMode, SyncFormat,
+    TargetTriple, TreeFormat, TrustedHost, TrustedPublishing, VersionBump, VersionBumpSpec,
+    VersionControlSystem, VersionFormat,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, ExcludeNewerOverride, Index, IndexName,
@@ -40,53 +41,8 @@ use uv_workspace::pyproject_mut::AddBoundsKind;
 pub mod comma;
 pub mod compat;
 pub mod options;
+pub mod settings;
 pub mod version;
-
-#[derive(Debug, Clone, Copy, clap::ValueEnum)]
-pub enum VersionFormat {
-    /// Display the version as plain text.
-    Text,
-    /// Display the version as JSON.
-    Json,
-}
-
-#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
-pub enum PythonListFormat {
-    /// Plain text (for humans).
-    #[default]
-    Text,
-    /// JSON (for computers).
-    Json,
-}
-
-#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
-pub enum SyncFormat {
-    /// Display the result in a human-readable format.
-    #[default]
-    Text,
-    /// Display the result in JSON format.
-    Json,
-}
-
-#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
-pub enum PipInstallFormat {
-    /// Display the result in a human-readable format.
-    #[default]
-    Text,
-    /// Display the result in JSON format.
-    Json,
-}
-
-#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
-pub enum AuditOutputFormat {
-    /// Display the result in a human-readable format.
-    #[default]
-    Text,
-    /// Display the result in JSON format.
-    Json,
-    /// Display the result in SARIF format.
-    Sarif,
-}
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum CacheSizeOutputFormat {
@@ -97,27 +53,6 @@ pub enum CacheSizeOutputFormat {
     Human,
     /// Display the cache size in raw bytes.
     Machine,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum TreeFormat {
-    /// Display the dependency graph as a human-readable tree.
-    #[default]
-    Text,
-    /// Display the dependency graph as JSON.
-    Json,
-}
-
-#[derive(Debug, Default, Clone, clap::ValueEnum)]
-pub enum ListFormat {
-    /// Display the list of packages in a human-readable table.
-    #[default]
-    Columns,
-    /// Display the list of packages in a `pip freeze`-like format, with one package per line
-    /// alongside its version.
-    Freeze,
-    /// Display the list of packages in a machine-readable JSON format.
-    Json,
 }
 
 fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
@@ -407,56 +342,6 @@ pub struct GlobalArgs {
     pub project: Option<PathBuf>,
 }
 
-#[derive(Debug, Copy, Clone, clap::ValueEnum)]
-pub enum ColorChoice {
-    /// Enables colored output only when the output is going to a terminal or TTY with support.
-    Auto,
-
-    /// Enables colored output regardless of the detected environment.
-    Always,
-
-    /// Disables colored output.
-    Never,
-}
-
-impl ColorChoice {
-    /// Return the command-line representation of this color choice.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Always => "always",
-            Self::Never => "never",
-        }
-    }
-
-    /// Combine self (higher priority) with an [`anstream::ColorChoice`] (lower priority).
-    ///
-    /// This method allows prioritizing the user choice, while using the inferred choice for a
-    /// stream as default.
-    #[must_use]
-    pub fn and_colorchoice(self, next: anstream::ColorChoice) -> Self {
-        match self {
-            Self::Auto => match next {
-                anstream::ColorChoice::Auto => Self::Auto,
-                anstream::ColorChoice::Always | anstream::ColorChoice::AlwaysAnsi => Self::Always,
-                anstream::ColorChoice::Never => Self::Never,
-            },
-            Self::Always | Self::Never => self,
-        }
-    }
-}
-
-impl From<ColorChoice> for anstream::ColorChoice {
-    fn from(value: ColorChoice) -> Self {
-        match value {
-            ColorChoice::Auto => Self::Auto,
-            ColorChoice::Always => Self::Always,
-            ColorChoice::Never => Self::Never,
-        }
-    }
-}
-
 #[derive(Subcommand)]
 pub enum Commands {
     /// Manage authentication.
@@ -640,80 +525,80 @@ pub struct VersionArgs {
     ///
     /// To update the project using semantic versioning components instead, use `--bump`.
     #[arg(group = "operation", value_hint = ValueHint::Other)]
-    pub value: Option<String>,
+    value: Option<String>,
 
     /// Update the project version using the given semantics
     ///
     /// This flag can be passed multiple times.
-    #[arg(group = "operation", long, value_name = "BUMP[=VALUE]")]
-    pub bump: Vec<VersionBumpSpec>,
+    #[arg(group = "operation", long, value_name = "BUMP[=VALUE]", value_parser = VersionBumpSpecValueParser)]
+    bump: Vec<VersionBumpSpec>,
 
     /// Don't write a new version to the `pyproject.toml`
     ///
     /// Instead, the version will be displayed.
     #[arg(long)]
-    pub dry_run: bool,
+    dry_run: bool,
 
     /// Only show the version
     ///
     /// By default, uv will show the project name before the version.
     #[arg(long)]
-    pub short: bool,
+    short: bool,
 
     /// The format of the output
     #[arg(long, value_enum, default_value = "text")]
-    pub output_format: VersionFormat,
+    output_format: VersionFormat,
 
     /// Avoid syncing the virtual environment after re-locking the project [env: UV_NO_SYNC=]
     #[arg(long)]
-    pub no_sync: bool,
+    no_sync: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.
     #[arg(long, overrides_with = "no_active")]
-    pub active: bool,
+    active: bool,
 
     /// Prefer project's virtual environment over an active environment.
     ///
     /// This is the default behavior.
     #[arg(long, overrides_with = "active", hide = true)]
-    pub no_active: bool,
+    no_active: bool,
 
     /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
     #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
-    pub locked: bool,
+    locked: bool,
 
     /// Disable locked mode, overriding `UV_LOCKED`.
     #[arg(long, overrides_with = "locked", hide = true)]
-    pub no_locked: bool,
+    no_locked: bool,
 
     /// Update the version without re-locking the project [env: UV_FROZEN=]
     ///
     /// The project environment will not be synced.
     #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
-    pub frozen: bool,
+    frozen: bool,
 
     /// Disable frozen mode, overriding `UV_FROZEN`.
     #[arg(long, overrides_with = "frozen", hide = true)]
-    pub no_frozen: bool,
+    no_frozen: bool,
 
     #[command(flatten)]
-    pub installer: ResolverInstallerArgs,
+    installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildOptionsArgs,
+    build: BuildOptionsArgs,
 
     #[command(flatten)]
-    pub refresh: RefreshArgs,
+    refresh: RefreshArgs,
 
     /// Update the version of a specific package in the workspace.
     #[arg(long, conflicts_with = "isolated", value_hint = ValueHint::Other)]
-    pub package: Option<PackageName>,
+    package: Option<PackageName>,
 
     /// The Python interpreter to use for resolving and syncing.
     ///
@@ -726,135 +611,11 @@ pub struct VersionArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
-}
-
-// Note that the ordering of the variants is significant, as when given a list of operations
-// to perform, we sort them and apply them in order, so users don't have to think too hard about it.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
-pub enum VersionBump {
-    /// Increase the major version (e.g., 1.2.3 => 2.0.0)
-    Major,
-    /// Increase the minor version (e.g., 1.2.3 => 1.3.0)
-    Minor,
-    /// Increase the patch version (e.g., 1.2.3 => 1.2.4)
-    Patch,
-    /// Move from a pre-release to stable version (e.g., 1.2.3b4.post5.dev6 => 1.2.3)
-    ///
-    /// Removes all pre-release components, but will not remove "local" components.
-    Stable,
-    /// Increase the alpha version (e.g., 1.2.3a4 => 1.2.3a5)
-    ///
-    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
-    /// for 1.2.3 => 2.0.0a1, you'd also include [`VersionBump::Major`].
-    Alpha,
-    /// Increase the beta version (e.g., 1.2.3b4 => 1.2.3b5)
-    ///
-    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
-    /// for 1.2.3 => 2.0.0b1, you'd also include [`VersionBump::Major`].
-    Beta,
-    /// Increase the rc version (e.g., 1.2.3rc4 => 1.2.3rc5)
-    ///
-    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
-    /// for 1.2.3 => 2.0.0rc1, you'd also include [`VersionBump::Major`].]
-    Rc,
-    /// Increase the post version (e.g., 1.2.3.post5 => 1.2.3.post6)
-    Post,
-    /// Increase the dev version (e.g., 1.2.3a4.dev6 => 1.2.3.dev7)
-    Dev,
-}
-
-impl Display for VersionBump {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let string = match self {
-            Self::Major => "major",
-            Self::Minor => "minor",
-            Self::Patch => "patch",
-            Self::Stable => "stable",
-            Self::Alpha => "alpha",
-            Self::Beta => "beta",
-            Self::Rc => "rc",
-            Self::Post => "post",
-            Self::Dev => "dev",
-        };
-        string.fmt(f)
-    }
-}
-
-impl FromStr for VersionBump {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "major" => Ok(Self::Major),
-            "minor" => Ok(Self::Minor),
-            "patch" => Ok(Self::Patch),
-            "stable" => Ok(Self::Stable),
-            "alpha" => Ok(Self::Alpha),
-            "beta" => Ok(Self::Beta),
-            "rc" => Ok(Self::Rc),
-            "post" => Ok(Self::Post),
-            "dev" => Ok(Self::Dev),
-            _ => Err(format!("invalid bump component `{value}`")),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct VersionBumpSpec {
-    pub bump: VersionBump,
-    pub value: Option<u64>,
-}
-
-impl Display for VersionBumpSpec {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self.value {
-            Some(value) => write!(f, "{}={value}", self.bump),
-            None => self.bump.fmt(f),
-        }
-    }
-}
-
-impl FromStr for VersionBumpSpec {
-    type Err = String;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let (name, value) = match input.split_once('=') {
-            Some((name, value)) => (name, Some(value)),
-            None => (input, None),
-        };
-
-        let bump = name.parse::<VersionBump>()?;
-
-        if bump == VersionBump::Stable && value.is_some() {
-            return Err("`--bump stable` does not accept a value".to_string());
-        }
-
-        let value = match value {
-            Some("") => {
-                return Err("`--bump` values cannot be empty".to_string());
-            }
-            Some(raw) => Some(
-                raw.parse::<u64>()
-                    .map_err(|_| format!("invalid numeric value `{raw}` for `--bump {name}`"))?,
-            ),
-            None => None,
-        };
-
-        Ok(Self { bump, value })
-    }
-}
-
-impl ValueParserFactory for VersionBumpSpec {
-    type Parser = VersionBumpSpecValueParser;
-
-    fn value_parser() -> Self::Parser {
-        VersionBumpSpecValueParser
-    }
+    python: Option<Maybe<String>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct VersionBumpSpecValueParser;
+struct VersionBumpSpecValueParser;
 
 impl TypedValueParser for VersionBumpSpecValueParser {
     type Value = VersionBumpSpec;
@@ -1301,14 +1062,14 @@ pub enum Maybe<T> {
 }
 
 impl<T> Maybe<T> {
-    pub fn into_option(self) -> Option<T> {
+    fn into_option(self) -> Option<T> {
         match self {
             Self::Some(value) => Some(value),
             Self::None => None,
         }
     }
 
-    pub fn is_some(&self) -> bool {
+    fn is_some(&self) -> bool {
         matches!(self, Self::Some(_))
     }
 }
@@ -2677,19 +2438,19 @@ pub struct PipUninstallArgs {
 pub struct PipFreezeArgs {
     /// Exclude any editable packages from output.
     #[arg(long)]
-    pub exclude_editable: bool,
+    exclude_editable: bool,
 
     /// Exclude the specified package(s) from the output.
     #[arg(long)]
-    pub r#exclude: Vec<PackageName>,
+    r#exclude: Vec<PackageName>,
 
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]
-    pub strict: bool,
+    strict: bool,
 
     #[arg(long, overrides_with("strict"), hide = true)]
-    pub no_strict: bool,
+    no_strict: bool,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -2705,11 +2466,11 @@ pub struct PipFreezeArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
+    python: Option<Maybe<String>>,
 
     /// Restrict to the specified installation path for listing packages (can be used multiple times).
     #[arg(long("path"), value_parser = parse_file_path, value_hint = ValueHint::DirPath)]
-    pub paths: Option<Vec<PathBuf>>,
+    paths: Option<Vec<PathBuf>>,
 
     /// List packages in the system Python environment.
     ///
@@ -2722,21 +2483,21 @@ pub struct PipFreezeArgs {
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("no_system")
     )]
-    pub system: bool,
+    system: bool,
 
     #[arg(long, overrides_with("system"), hide = true)]
-    pub no_system: bool,
+    no_system: bool,
 
     /// List packages from the specified `--target` directory.
     #[arg(short = 't', long, conflicts_with_all = ["prefix", "paths"], value_hint = ValueHint::DirPath)]
-    pub target: Option<PathBuf>,
+    target: Option<PathBuf>,
 
     /// List packages from the specified `--prefix` directory.
     #[arg(long, conflicts_with_all = ["target", "paths"], value_hint = ValueHint::DirPath)]
-    pub prefix: Option<PathBuf>,
+    prefix: Option<PathBuf>,
 
     #[command(flatten)]
-    pub compat_args: compat::PipGlobalCompatArgs,
+    compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -2838,7 +2599,7 @@ pub struct PipCheckArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
+    python: Option<Maybe<String>>,
 
     /// Check packages in the system Python environment.
     ///
@@ -2851,17 +2612,17 @@ pub struct PipCheckArgs {
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("no_system")
     )]
-    pub system: bool,
+    system: bool,
 
     #[arg(long, overrides_with("system"), hide = true)]
-    pub no_system: bool,
+    no_system: bool,
 
     /// The Python version against which packages should be checked.
     ///
     /// By default, the installed packages are checked against the version of the current
     /// interpreter.
     #[arg(long)]
-    pub python_version: Option<PythonVersion>,
+    python_version: Option<PythonVersion>,
 
     /// The platform for which packages should be checked.
     ///
@@ -2881,26 +2642,26 @@ pub struct PipCheckArgs {
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
     #[arg(long)]
-    pub python_platform: Option<TargetTriple>,
+    python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]
 pub struct PipShowArgs {
     /// The package(s) to display.
     #[arg(value_hint = ValueHint::Other)]
-    pub package: Vec<PackageName>,
+    package: Vec<PackageName>,
 
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]
-    pub strict: bool,
+    strict: bool,
 
     #[arg(long, overrides_with("strict"), hide = true)]
-    pub no_strict: bool,
+    no_strict: bool,
 
     /// Show the full list of installed files for each package.
     #[arg(short, long)]
-    pub files: bool,
+    files: bool,
 
     /// The Python interpreter to find the package in.
     ///
@@ -2916,7 +2677,7 @@ pub struct PipShowArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
+    python: Option<Maybe<String>>,
 
     /// Show a package in the system Python environment.
     ///
@@ -2929,42 +2690,42 @@ pub struct PipShowArgs {
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("no_system")
     )]
-    pub system: bool,
+    system: bool,
 
     #[arg(long, overrides_with("system"), hide = true)]
-    pub no_system: bool,
+    no_system: bool,
 
     /// Show a package from the specified `--target` directory.
     #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
-    pub target: Option<PathBuf>,
+    target: Option<PathBuf>,
 
     /// Show a package from the specified `--prefix` directory.
     #[arg(long, conflicts_with = "target", value_hint = ValueHint::DirPath)]
-    pub prefix: Option<PathBuf>,
+    prefix: Option<PathBuf>,
 
     #[command(flatten)]
-    pub compat_args: compat::PipGlobalCompatArgs,
+    compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
 pub struct PipTreeArgs {
     /// Show the version constraint(s) imposed on each package.
     #[arg(long)]
-    pub show_version_specifiers: bool,
+    show_version_specifiers: bool,
 
     #[command(flatten)]
-    pub tree: DisplayTreeArgs,
+    tree: DisplayTreeArgs,
 
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]
-    pub strict: bool,
+    strict: bool,
 
     #[arg(long, overrides_with("strict"), hide = true)]
-    pub no_strict: bool,
+    no_strict: bool,
 
     #[command(flatten)]
-    pub fetch: FetchArgs,
+    fetch: FetchArgs,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -2980,7 +2741,7 @@ pub struct PipTreeArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
+    python: Option<Maybe<String>>,
 
     /// List packages in the system Python environment.
     ///
@@ -2993,13 +2754,13 @@ pub struct PipTreeArgs {
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("no_system")
     )]
-    pub system: bool,
+    system: bool,
 
     #[arg(long, overrides_with("system"), hide = true)]
-    pub no_system: bool,
+    no_system: bool,
 
     #[command(flatten)]
-    pub compat_args: compat::PipGlobalCompatArgs,
+    compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -3025,14 +2786,14 @@ pub struct BuildArgs {
     /// default, that feature checks declared, backend-reported, and transitive build requirements
     /// in the selected environment before building. Isolated builds install their requirements.
     #[arg(long, hide = true)]
-    pub skip_dependency_check: bool,
+    skip_dependency_check: bool,
 
     /// The directory from which distributions should be built, or a source
     /// distribution archive to build into a wheel.
     ///
     /// Defaults to the current working directory.
     #[arg(value_parser = parse_file_path, value_hint = ValueHint::DirPath)]
-    pub src: Option<PathBuf>,
+    src: Option<PathBuf>,
 
     /// Build a specific package in the workspace.
     ///
@@ -3041,7 +2802,7 @@ pub struct BuildArgs {
     ///
     /// If the workspace member does not exist, uv will exit with an error.
     #[arg(long, conflicts_with("all_packages"), value_hint = ValueHint::Other)]
-    pub package: Option<PackageName>,
+    package: Option<PackageName>,
 
     /// Builds all packages in the workspace.
     ///
@@ -3050,22 +2811,22 @@ pub struct BuildArgs {
     ///
     /// If the workspace member does not exist, uv will exit with an error.
     #[arg(long, alias = "all", conflicts_with("package"))]
-    pub all_packages: bool,
+    all_packages: bool,
 
     /// The output directory to which distributions should be written.
     ///
     /// Defaults to the `dist` subdirectory within the source directory, or the
     /// directory containing the source distribution archive.
     #[arg(long, short, value_parser = parse_file_path, value_hint = ValueHint::DirPath)]
-    pub out_dir: Option<PathBuf>,
+    out_dir: Option<PathBuf>,
 
     /// Build a source distribution ("sdist") from the given directory.
     #[arg(long)]
-    pub sdist: bool,
+    sdist: bool,
 
     /// Build a binary distribution ("wheel") from the given directory.
     #[arg(long)]
-    pub wheel: bool,
+    wheel: bool,
 
     /// When using the uv build backend, list the files that would be included when building.
     ///
@@ -3077,14 +2838,14 @@ pub struct BuildArgs {
     /// paths.
     // Hidden while in preview.
     #[arg(long, hide = true)]
-    pub list: bool,
+    list: bool,
 
     #[arg(long, overrides_with("no_build_logs"), hide = true)]
-    pub build_logs: bool,
+    build_logs: bool,
 
     /// Hide logs from the build backend.
     #[arg(long, overrides_with("build_logs"))]
-    pub no_build_logs: bool,
+    no_build_logs: bool,
 
     /// Always build through PEP 517, don't use the fast path for the uv build backend.
     ///
@@ -3092,21 +2853,21 @@ pub struct BuildArgs {
     /// backend, but use a fast path that calls into the build backend directly. This option forces
     /// always using PEP 517.
     #[arg(long, conflicts_with = "list")]
-    pub force_pep517: bool,
+    force_pep517: bool,
 
     /// Clear the output directory before the build, removing stale artifacts.
     #[arg(long)]
-    pub clear: bool,
+    clear: bool,
 
     #[arg(long, overrides_with("no_create_gitignore"), hide = true)]
-    pub create_gitignore: bool,
+    create_gitignore: bool,
 
     /// Do not create a `.gitignore` file in the output directory.
     ///
     /// By default, uv creates a `.gitignore` file in the output directory to exclude build
     /// artifacts from version control. When this flag is used, the file will be omitted.
     #[arg(long, overrides_with("create_gitignore"))]
-    pub no_create_gitignore: bool,
+    no_create_gitignore: bool,
 
     /// Constrain build dependencies using the given requirements files when building distributions.
     ///
@@ -3121,10 +2882,10 @@ pub struct BuildArgs {
         value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
-    pub build_constraints: Vec<Maybe<RequirementsInput>>,
+    build_constraints: Vec<Maybe<RequirementsInput>>,
 
     #[command(flatten)]
-    pub hash_checking: HashCheckingArgs,
+    hash_checking: HashCheckingArgs,
 
     /// The Python interpreter to use for the build environment.
     ///
@@ -3141,16 +2902,16 @@ pub struct BuildArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
+    python: Option<Maybe<String>>,
 
     #[command(flatten)]
-    pub resolver: ResolverArgs,
+    resolver: ResolverArgs,
 
     #[command(flatten)]
-    pub build: BuildOptionsArgs,
+    build: BuildOptionsArgs,
 
     #[command(flatten)]
-    pub refresh: RefreshArgs,
+    refresh: RefreshArgs,
 }
 
 #[derive(Args)]
@@ -3354,17 +3115,6 @@ impl DerefMut for ExternalCommand {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, clap::ValueEnum)]
-pub enum AuthorFrom {
-    /// Fetch the author information from some sources (e.g., Git) automatically.
-    #[default]
-    Auto,
-    /// Fetch the author information from Git configuration only.
-    Git,
-    /// Do not infer the author information.
-    None,
-}
-
 #[derive(Args)]
 pub struct InitArgs {
     /// The path to use for the project/script.
@@ -3376,13 +3126,13 @@ pub struct InitArgs {
     /// project will be added as a workspace member of the parent, unless `--no-workspace` is
     /// provided.
     #[arg(required_if_eq("script", "true"), value_hint = ValueHint::DirPath)]
-    pub path: Option<PathBuf>,
+    path: Option<PathBuf>,
 
     /// The name of the project.
     ///
     /// Defaults to the name of the directory.
     #[arg(long, conflicts_with = "script", value_hint = ValueHint::Other)]
-    pub name: Option<PackageName>,
+    name: Option<PackageName>,
 
     /// Only create a `pyproject.toml`.
     ///
@@ -3393,13 +3143,13 @@ pub struct InitArgs {
     ///
     /// When combined with `--script`, the script will only contain the inline metadata header.
     #[arg(long)]
-    pub bare: bool,
+    bare: bool,
 
     /// Create a virtual project, rather than a package.
     ///
     /// This option is deprecated and will be removed in a future release.
     #[arg(long, hide = true, conflicts_with = "package")]
-    pub r#virtual: bool,
+    r#virtual: bool,
 
     /// Set up the project to be built as a Python package.
     ///
@@ -3407,7 +3157,7 @@ pub struct InitArgs {
     ///
     /// This is the default behavior.
     #[arg(long, overrides_with = "no_package")]
-    pub r#package: bool,
+    r#package: bool,
 
     /// Do not set up the project to be built as a Python package.
     ///
@@ -3415,7 +3165,7 @@ pub struct InitArgs {
     /// module and has no `[build-system]` entry. It can be used for applications that are not
     /// expected to be distributed as a package.
     #[arg(long, overrides_with = "package", conflicts_with_all = ["lib", "build_backend"])]
-    pub r#no_package: bool,
+    r#no_package: bool,
 
     /// Create a project for an application.
     ///
@@ -3423,13 +3173,13 @@ pub struct InitArgs {
     ///
     /// Applications are packaged by default. Use `--no-package` to create an unpackaged application.
     #[arg(long, alias = "application", conflicts_with_all = ["lib", "script"])]
-    pub r#app: bool,
+    r#app: bool,
 
     /// Create a project for a library.
     ///
     /// A library is a project that is intended to be built and distributed as a Python package.
     #[arg(long, alias = "library", conflicts_with_all=["app", "script"])]
-    pub r#lib: bool,
+    r#lib: bool,
 
     /// Create a script.
     ///
@@ -3441,28 +3191,28 @@ pub struct InitArgs {
     /// By default, adds a requirement on the system Python version; use `--python` to specify an
     /// alternative Python version requirement.
     #[arg(long, conflicts_with_all=["app", "lib", "package", "build_backend", "description"])]
-    pub r#script: bool,
+    r#script: bool,
 
     /// Set the project description.
     #[arg(long, conflicts_with = "script", overrides_with = "no_description", value_hint = ValueHint::Other)]
-    pub description: Option<String>,
+    description: Option<String>,
 
     /// Disable the description for the project.
     #[arg(long, conflicts_with = "script", overrides_with = "description")]
-    pub no_description: bool,
+    no_description: bool,
 
     /// Initialize a version control system for the project.
     ///
     /// By default, uv will initialize a Git repository (`git`). Use `--vcs none` to explicitly
     /// avoid initializing a version control system.
     #[arg(long, value_enum, conflicts_with = "script")]
-    pub vcs: Option<VersionControlSystem>,
+    vcs: Option<VersionControlSystem>,
 
     /// Initialize a build-backend of choice for the project.
     ///
     /// Implicitly sets `--package`.
     #[arg(long, value_enum, conflicts_with_all=["script", "no_package"], env = EnvVars::UV_INIT_BUILD_BACKEND)]
-    pub build_backend: Option<ProjectBuildBackend>,
+    build_backend: Option<ProjectBuildBackend>,
 
     /// Invalid option name for build backend.
     #[arg(
@@ -3476,7 +3226,7 @@ pub struct InitArgs {
 
     /// Do not create a `README.md` file.
     #[arg(long)]
-    pub no_readme: bool,
+    no_readme: bool,
 
     /// Fill in the `authors` field in the `pyproject.toml`.
     ///
@@ -3484,26 +3234,26 @@ pub struct InitArgs {
     /// (`auto`). Use `--author-from git` to only infer from Git configuration. Use `--author-from
     /// none` to avoid inferring the author information.
     #[arg(long, value_enum)]
-    pub author_from: Option<AuthorFrom>,
+    author_from: Option<AuthorFrom>,
 
     /// Do not create a `.python-version` file for the project.
     ///
     /// By default, uv will create a `.python-version` file containing the minor version of the
     /// discovered Python interpreter, which will cause subsequent uv commands to use that version.
     #[arg(long)]
-    pub no_pin_python: bool,
+    no_pin_python: bool,
 
     /// Create a `.python-version` file for the project.
     ///
     /// This is the default.
     #[arg(long, hide = true)]
-    pub pin_python: bool,
+    pin_python: bool,
 
     /// Avoid discovering a workspace and create a standalone project.
     ///
     /// By default, uv searches for workspaces in the current directory or any parent directory.
     #[arg(long, alias = "no-project")]
-    pub no_workspace: bool,
+    no_workspace: bool,
 
     /// The Python interpreter to use to determine the minimum supported Python version.
     ///
@@ -3516,7 +3266,7 @@ pub struct InitArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
+    python: Option<Maybe<String>>,
 }
 
 #[derive(Args)]
@@ -4178,17 +3928,17 @@ pub struct LockArgs {
 pub struct UpgradeArgs {
     /// The packages to upgrade.
     #[arg(value_hint = ValueHint::Other)]
-    pub packages: Vec<PackageName>,
+    packages: Vec<PackageName>,
 
     /// Exclude the named package from upgrades.
     #[arg(long, value_hint = ValueHint::Other)]
-    pub exclude: Vec<PackageName>,
+    exclude: Vec<PackageName>,
 
     #[command(flatten)]
-    pub index_args: IndexArgs,
+    index_args: IndexArgs,
 
     #[command(flatten)]
-    pub registry_client: RegistryClientArgs,
+    registry_client: RegistryClientArgs,
 }
 
 #[derive(Args)]
@@ -5025,13 +4775,13 @@ pub struct ExportArgs {
 pub struct FormatArgs {
     /// Check if files are formatted without applying changes.
     #[arg(long)]
-    pub check: bool,
+    check: bool,
 
     /// Show a diff of formatting changes without applying them.
     ///
     /// Implies `--check`.
     #[arg(long)]
-    pub diff: bool,
+    diff: bool,
 
     /// The version of Ruff to use for formatting.
     ///
@@ -5040,7 +4790,7 @@ pub struct FormatArgs {
     ///
     /// By default, a constrained version range of Ruff will be used (e.g., `>=0.15,<0.16`).
     #[arg(long, value_hint = ValueHint::Other)]
-    pub version: Option<String>,
+    version: Option<String>,
 
     /// Limit candidate Ruff versions to those released prior to the given date.
     ///
@@ -5050,14 +4800,14 @@ pub struct FormatArgs {
     ///
     /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, value_hint = ValueHint::Other)]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Additional arguments to pass to Ruff.
     ///
     /// For example, use `uv format -- --line-length 100` to set the line length or
     /// `uv format -- src/module/foo.py` to format a specific file.
     #[arg(last = true, value_hint = ValueHint::Other)]
-    pub extra_args: Vec<String>,
+    extra_args: Vec<String>,
 
     /// Avoid discovering a project or workspace.
     ///
@@ -5069,14 +4819,14 @@ pub struct FormatArgs {
         env = EnvVars::UV_NO_PROJECT,
         value_parser = clap::builder::BoolishValueParser::new()
     )]
-    pub no_project: bool,
+    no_project: bool,
 
     /// Display the version of Ruff that will be used for formatting.
     ///
     /// This is useful for verifying which version was resolved when using version constraints
     /// (e.g., `--version ">=0.8.0"`) or `--version latest`.
     #[arg(long, hide = true)]
-    pub show_version: bool,
+    show_version: bool,
 }
 
 #[derive(Args)]
@@ -5273,11 +5023,11 @@ pub struct CheckArgs {
 pub struct AuditCommonArgs {
     // Hide the unsupported global offline option.
     #[arg(long, hide = true, overrides_with("no_offline"))]
-    pub offline: bool,
+    offline: bool,
 
     /// Select the output format.
     #[arg(long, value_enum, default_value_t = AuditOutputFormat::default())]
-    pub output_format: AuditOutputFormat,
+    output_format: AuditOutputFormat,
 
     /// Ignore a vulnerability by ID.
     ///
@@ -5286,7 +5036,7 @@ pub struct AuditCommonArgs {
     ///
     /// May be provided multiple times.
     #[arg(long)]
-    pub ignore: Vec<String>,
+    ignore: Vec<String>,
 
     /// Ignore a vulnerability by ID, but only while no fix is available.
     ///
@@ -5296,7 +5046,7 @@ pub struct AuditCommonArgs {
     ///
     /// May be provided multiple times.
     #[arg(long)]
-    pub ignore_until_fixed: Vec<String>,
+    ignore_until_fixed: Vec<String>,
 
     /// The service format to use for vulnerability lookups.
     ///
@@ -5305,7 +5055,7 @@ pub struct AuditCommonArgs {
     ///
     /// * OSV: <https://api.osv.dev/>
     #[arg(long, value_enum, default_value = "osv")]
-    pub service_format: VulnerabilityServiceFormat,
+    service_format: VulnerabilityServiceFormat,
 
     /// The URL to vulnerability service API endpoint.
     ///
@@ -5314,7 +5064,7 @@ pub struct AuditCommonArgs {
     /// The service needs to use the OSV protocol, unless a different
     /// format was requested by `--service-format`.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub service_url: Option<DisplaySafeUrl>,
+    service_url: Option<DisplaySafeUrl>,
 }
 
 #[derive(Args)]
@@ -5746,37 +5496,37 @@ pub struct UvxArgs {
 pub struct ToolInstallArgs {
     /// The package to install commands from.
     #[arg(value_hint = ValueHint::Other)]
-    pub package: String,
+    package: String,
 
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
     #[arg(long, hide = true, value_hint = ValueHint::Other)]
-    pub from: Option<String>,
+    from: Option<String>,
 
     /// Include the following additional requirements.
     #[arg(short = 'w', long, value_hint = ValueHint::Other)]
-    pub with: Vec<comma::CommaSeparatedRequirements>,
+    with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the packages listed in the given files.
     ///
     /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
     /// and `pylock.toml`.
     #[arg(long, value_delimiter = ',', value_hint = ValueHint::FilePath)]
-    pub with_requirements: Vec<Maybe<RequirementsInput>>,
+    with_requirements: Vec<Maybe<RequirementsInput>>,
 
     /// Install the target package in editable mode, such that changes in the package's source
     /// directory are reflected without reinstallation.
     #[arg(short, long)]
-    pub editable: bool,
+    editable: bool,
 
     /// Include the given packages in editable mode.
     #[arg(long, value_hint = ValueHint::DirPath)]
-    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
+    with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Install executables from the following packages.
     #[arg(long, value_hint = ValueHint::Other)]
-    pub with_executables_from: Vec<comma::CommaSeparatedRequirements>,
+    with_executables_from: Vec<comma::CommaSeparatedRequirements>,
 
     /// Constrain versions using the given requirements files.
     ///
@@ -5793,7 +5543,7 @@ pub struct ToolInstallArgs {
         value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
-    pub constraints: Vec<Maybe<RequirementsInput>>,
+    constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -5811,7 +5561,7 @@ pub struct ToolInstallArgs {
         value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
-    pub overrides: Vec<Maybe<RequirementsInput>>,
+    overrides: Vec<Maybe<RequirementsInput>>,
 
     /// Exclude packages from resolution using the given requirements files.
     ///
@@ -5827,7 +5577,7 @@ pub struct ToolInstallArgs {
         value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
-    pub excludes: Vec<Maybe<RequirementsInput>>,
+    excludes: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -5843,27 +5593,27 @@ pub struct ToolInstallArgs {
         value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
-    pub build_constraints: Vec<Maybe<RequirementsInput>>,
+    build_constraints: Vec<Maybe<RequirementsInput>>,
 
     #[command(flatten)]
-    pub installer: ResolverInstallerArgs,
+    installer: ResolverInstallerArgs,
 
     #[command(flatten)]
-    pub build: BuildOptionsArgs,
+    build: BuildOptionsArgs,
 
     #[command(flatten)]
-    pub refresh: RefreshArgs,
+    refresh: RefreshArgs,
 
     /// Force installation of the tool.
     ///
     /// Will recreate any existing environment for the tool and replace any existing entry points
     /// with the same name in the executable directory.
     #[arg(long)]
-    pub force: bool,
+    force: bool,
 
     /// Whether to use Git LFS when adding a dependency from Git.
     #[arg(long)]
-    pub lfs: bool,
+    lfs: bool,
 
     /// The Python interpreter to use to build the tool environment.
     ///
@@ -5876,7 +5626,7 @@ pub struct ToolInstallArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
+    python: Option<Maybe<String>>,
 
     /// The platform for which requirements should be installed.
     ///
@@ -5899,7 +5649,7 @@ pub struct ToolInstallArgs {
     /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
-    pub python_platform: Option<TargetTriple>,
+    python_platform: Option<TargetTriple>,
 
     /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
     ///
@@ -5914,64 +5664,64 @@ pub struct ToolInstallArgs {
     ///
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
-    pub torch_backend: Option<TorchMode>,
+    torch_backend: Option<TorchMode>,
 }
 
 #[derive(Args)]
 pub struct ToolListArgs {
     /// Whether to display the path to each tool environment and installed executable.
     #[arg(long)]
-    pub show_paths: bool,
+    show_paths: bool,
 
     /// Whether to display the version specifier(s) used to install each tool.
     #[arg(long)]
-    pub show_version_specifiers: bool,
+    show_version_specifiers: bool,
 
     /// Whether to display the additional requirements installed with each tool.
     #[arg(long)]
-    pub show_with: bool,
+    show_with: bool,
 
     /// Whether to display the extra requirements installed with each tool.
     #[arg(long)]
-    pub show_extras: bool,
+    show_extras: bool,
 
     /// Whether to display the Python version associated with each tool.
     #[arg(long)]
-    pub show_python: bool,
+    show_python: bool,
 
     /// List outdated tools.
     ///
     /// The latest version of each tool will be shown alongside the installed version. Up-to-date
     /// tools will be omitted from the output.
     #[arg(long, overrides_with("no_outdated"))]
-    pub outdated: bool,
+    outdated: bool,
 
     #[arg(long, overrides_with("outdated"), hide = true)]
-    pub no_outdated: bool,
+    no_outdated: bool,
 
     #[command(flatten)]
-    pub exclude_newer: PackageExcludeNewerArgs,
+    exclude_newer: PackageExcludeNewerArgs,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
-    pub python_preference: Option<PythonPreference>,
+    python_preference: Option<PythonPreference>,
 
     #[arg(long, hide = true)]
-    pub no_python_downloads: bool,
+    no_python_downloads: bool,
 }
 
 #[derive(Args)]
 pub struct ToolAuditArgs {
     /// The names of the installed tools to audit.
     #[arg(required = true, value_hint = ValueHint::Other)]
-    pub name: Vec<PackageName>,
+    name: Vec<PackageName>,
 
     /// Audit all installed tools.
     #[arg(long, conflicts_with("name"))]
-    pub all: bool,
+    all: bool,
 
     #[command(flatten)]
-    pub audit: AuditCommonArgs,
+    audit: AuditCommonArgs,
 }
 
 #[derive(Args)]
@@ -5989,29 +5739,29 @@ pub struct ToolDirArgs {
     /// - `$XDG_DATA_HOME/../bin`
     /// - `$HOME/.local/bin`
     #[arg(long, verbatim_doc_comment)]
-    pub bin: bool,
+    bin: bool,
 }
 
 #[derive(Args)]
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
     #[arg(required = true, value_hint = ValueHint::Other)]
-    pub name: Vec<PackageName>,
+    name: Vec<PackageName>,
 
     /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]
-    pub all: bool,
+    all: bool,
 }
 
 #[derive(Args)]
 pub struct ToolUpgradeArgs {
     /// The name of the tool to upgrade, along with an optional version specifier.
     #[arg(required = true, value_hint = ValueHint::Other)]
-    pub name: Vec<String>,
+    name: Vec<String>,
 
     /// Upgrade all tools.
     #[arg(long, conflicts_with("name"))]
-    pub all: bool,
+    all: bool,
 
     /// Upgrade a tool, and specify it to use the given Python interpreter to build its environment.
     /// Use with `--all` to apply to all tools.
@@ -6025,7 +5775,7 @@ pub struct ToolUpgradeArgs {
         help_heading = "Python options",
         value_hint = ValueHint::Other,
     )]
-    pub python: Option<Maybe<String>>,
+    python: Option<Maybe<String>>,
 
     /// The platform for which requirements should be installed.
     ///
@@ -6048,7 +5798,7 @@ pub struct ToolUpgradeArgs {
     /// the _target_ platform, as they will be built for the _current_ platform. The
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
-    pub python_platform: Option<TargetTriple>,
+    python_platform: Option<TargetTriple>,
 
     // The following is equivalent to flattening `ResolverInstallerArgs`, with the `--upgrade`,
     // `--upgrade-package`, and `--upgrade-group` options hidden, and the `--no-upgrade` option
@@ -6056,29 +5806,29 @@ pub struct ToolUpgradeArgs {
     /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
     /// `--refresh`.
     #[arg(hide = true, long, short = 'U', help_heading = "Resolver options")]
-    pub upgrade: bool,
+    upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file. Implies `--refresh-package`.
     #[arg(hide = true, long, short = 'P', help_heading = "Resolver options")]
-    pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+    upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
     /// existing output file.
     #[arg(hide = true, long, help_heading = "Resolver options")]
-    pub upgrade_group: Vec<GroupName>,
+    upgrade_group: Vec<GroupName>,
 
     #[command(flatten)]
-    pub index_args: IndexArgs,
+    index_args: IndexArgs,
 
     #[command(flatten)]
-    pub reinstall: ReinstallArgs,
+    reinstall: ReinstallArgs,
 
     #[command(flatten)]
-    pub registry_client: RegistryClientArgs,
+    registry_client: RegistryClientArgs,
 
     #[command(flatten)]
-    pub version_selection: VersionSelectionArgs,
+    version_selection: VersionSelectionArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -6087,7 +5837,7 @@ pub struct ToolUpgradeArgs {
         alias = "config-settings",
         help_heading = "Build options"
     )]
-    pub config_setting: Option<Vec<ConfigSettingEntry>>,
+    config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
     #[arg(
@@ -6095,13 +5845,13 @@ pub struct ToolUpgradeArgs {
         alias = "config-settings-package",
         help_heading = "Build options"
     )]
-    pub config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
+    config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
 
     #[command(flatten)]
-    pub build_isolation: PackageBuildIsolationArgs,
+    build_isolation: PackageBuildIsolationArgs,
 
     #[command(flatten)]
-    pub exclude_newer: PackageExcludeNewerArgs,
+    exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -6118,16 +5868,16 @@ pub struct ToolUpgradeArgs {
         env = EnvVars::UV_LINK_MODE,
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<uv_install_wheel::LinkMode>,
+    link_mode: Option<uv_install_wheel::LinkMode>,
 
     #[command(flatten)]
-    pub compile_bytecode: CompileBytecodeArgs,
+    compile_bytecode: CompileBytecodeArgs,
 
     #[command(flatten)]
-    pub sources: SourcesArgs,
+    sources: SourcesArgs,
 
     #[command(flatten)]
-    pub build: BuildOptionsArgs,
+    build: BuildOptionsArgs,
 }
 
 #[derive(Args)]
@@ -6244,51 +5994,51 @@ pub struct PythonListArgs {
     /// A Python request to filter by.
     ///
     /// See `uv help python` to view supported request formats.
-    pub request: Option<String>,
+    request: Option<String>,
 
     /// List all Python versions, including old patch versions.
     ///
     /// By default, only the latest patch version is shown for each minor version.
     #[arg(long)]
-    pub all_versions: bool,
+    all_versions: bool,
 
     /// List Python downloads for all platforms.
     ///
     /// By default, only downloads for the current platform are shown.
     #[arg(long)]
-    pub all_platforms: bool,
+    all_platforms: bool,
 
     /// List Python downloads for all architectures.
     ///
     /// By default, only downloads for the current architecture are shown.
     #[arg(long, alias = "all_architectures")]
-    pub all_arches: bool,
+    all_arches: bool,
 
     /// Only show installed Python versions.
     ///
     /// By default, installed distributions and available downloads for the current platform are shown.
     #[arg(long, conflicts_with("only_downloads"))]
-    pub only_installed: bool,
+    only_installed: bool,
 
     /// Only show available Python downloads.
     ///
     /// By default, installed distributions and available downloads for the current platform are shown.
     #[arg(long, conflicts_with("only_installed"))]
-    pub only_downloads: bool,
+    only_downloads: bool,
 
     /// Show the URLs of available Python downloads.
     ///
     /// By default, these display as `<download available>`.
     #[arg(long)]
-    pub show_urls: bool,
+    show_urls: bool,
 
     /// Select the output format.
     #[arg(long, value_enum, default_value_t = PythonListFormat::default())]
-    pub output_format: PythonListFormat,
+    output_format: PythonListFormat,
 
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
-    pub python_downloads_json_url: Option<String>,
+    python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]
@@ -6303,7 +6053,7 @@ pub struct PythonDirArgs {
     /// - `$XDG_DATA_HOME/../bin`
     /// - `$HOME/.local/bin`
     #[arg(long, verbatim_doc_comment)]
-    pub bin: bool,
+    bin: bool,
 }
 
 #[derive(Args)]
@@ -6325,7 +6075,7 @@ pub struct PythonInstallCompileBytecodeArgs {
         env = EnvVars::UV_COMPILE_BYTECODE,
         value_parser = clap::builder::BoolishValueParser::new(),
     )]
-    pub compile_bytecode: bool,
+    compile_bytecode: bool,
 
     #[arg(
         long,
@@ -6333,7 +6083,7 @@ pub struct PythonInstallCompileBytecodeArgs {
         overrides_with("compile_bytecode"),
         hide = true
     )]
-    pub no_compile_bytecode: bool,
+    no_compile_bytecode: bool,
 }
 
 #[derive(Args)]
@@ -6346,7 +6096,7 @@ pub struct PythonInstallArgs {
     /// See `uv python dir` to view the current Python installation directory. Defaults to
     /// `~/.local/share/uv/python`.
     #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR, value_hint = ValueHint::DirPath)]
-    pub install_dir: Option<PathBuf>,
+    install_dir: Option<PathBuf>,
 
     /// Install a Python executable into the `bin` directory.
     ///
@@ -6357,13 +6107,13 @@ pub struct PythonInstallArgs {
     ///
     /// See `UV_PYTHON_BIN_DIR` to customize the target directory.
     #[arg(long, overrides_with("no_bin"), hide = true)]
-    pub bin: bool,
+    bin: bool,
 
     /// Do not install a Python executable into the `bin` directory.
     ///
     /// This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
     #[arg(long, overrides_with("bin"), conflicts_with("default"))]
-    pub no_bin: bool,
+    no_bin: bool,
 
     /// Register the Python installation in the Windows registry.
     ///
@@ -6372,13 +6122,13 @@ pub struct PythonInstallArgs {
     ///
     /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=1`.
     #[arg(long, overrides_with("no_registry"), hide = true)]
-    pub registry: bool,
+    registry: bool,
 
     /// Do not register the Python installation in the Windows registry.
     ///
     /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
     #[arg(long, overrides_with("registry"))]
-    pub no_registry: bool,
+    no_registry: bool,
 
     /// The Python version(s) to install.
     ///
@@ -6389,7 +6139,7 @@ pub struct PythonInstallArgs {
     ///
     /// See `uv help python` to view supported request formats.
     #[arg(env = EnvVars::UV_PYTHON)]
-    pub targets: Vec<String>,
+    targets: Vec<String>,
 
     /// Set the URL to use as the source for downloading Python installations.
     ///
@@ -6399,7 +6149,7 @@ pub struct PythonInstallArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub mirror: Option<String>,
+    mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
     ///
@@ -6408,7 +6158,7 @@ pub struct PythonInstallArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub pypy_mirror: Option<String>,
+    pypy_mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading GraalPy installations.
     ///
@@ -6417,11 +6167,11 @@ pub struct PythonInstallArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub graalpy_mirror: Option<String>,
+    graalpy_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
-    pub python_downloads_json_url: Option<String>,
+    python_downloads_json_url: Option<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
     ///
@@ -6430,7 +6180,7 @@ pub struct PythonInstallArgs {
     /// By default, uv will exit successfully if the version is already
     /// installed.
     #[arg(long, short)]
-    pub reinstall: bool,
+    reinstall: bool,
 
     /// Replace existing Python executables during installation.
     ///
@@ -6438,7 +6188,7 @@ pub struct PythonInstallArgs {
     ///
     /// Implies `--reinstall`.
     #[arg(long, short)]
-    pub force: bool,
+    force: bool,
 
     /// Upgrade existing Python installations to the latest patch version.
     ///
@@ -6451,7 +6201,7 @@ pub struct PythonInstallArgs {
     /// This option is only supported for minor version requests, e.g., `3.12`; uv will exit with an
     /// error if a patch version, e.g., `3.12.2`, is requested.
     #[arg(long, short = 'U')]
-    pub upgrade: bool,
+    upgrade: bool,
 
     /// Use as the default Python version.
     ///
@@ -6465,15 +6215,15 @@ pub struct PythonInstallArgs {
     ///
     /// If multiple Python versions are requested, uv will exit with an error.
     #[arg(long, conflicts_with("no_bin"))]
-    pub default: bool,
+    default: bool,
 
     #[command(flatten)]
-    pub compile_bytecode: PythonInstallCompileBytecodeArgs,
+    compile_bytecode: PythonInstallCompileBytecodeArgs,
 }
 
 impl PythonInstallArgs {
     #[must_use]
-    pub fn install_mirrors(&self) -> PythonInstallMirrors {
+    fn install_mirrors(&self) -> PythonInstallMirrors {
         PythonInstallMirrors {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
@@ -6493,13 +6243,13 @@ pub struct PythonUpgradeArgs {
     /// See `uv python dir` to view the current Python installation directory. Defaults to
     /// `~/.local/share/uv/python`.
     #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR, value_hint = ValueHint::DirPath)]
-    pub install_dir: Option<PathBuf>,
+    install_dir: Option<PathBuf>,
 
     /// The Python minor version(s) to upgrade.
     ///
     /// If no target version is provided, then uv will upgrade all managed CPython versions.
     #[arg(env = EnvVars::UV_PYTHON)]
-    pub targets: Vec<String>,
+    targets: Vec<String>,
 
     /// Set the URL to use as the source for downloading Python installations.
     ///
@@ -6509,7 +6259,7 @@ pub struct PythonUpgradeArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub mirror: Option<String>,
+    mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
     ///
@@ -6518,7 +6268,7 @@ pub struct PythonUpgradeArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub pypy_mirror: Option<String>,
+    pypy_mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading GraalPy installations.
     ///
@@ -6527,26 +6277,26 @@ pub struct PythonUpgradeArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub graalpy_mirror: Option<String>,
+    graalpy_mirror: Option<String>,
 
     /// Reinstall the latest Python patch, if it's already installed.
     ///
     /// By default, uv will exit successfully if the latest patch is already
     /// installed.
     #[arg(long, short)]
-    pub reinstall: bool,
+    reinstall: bool,
 
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
-    pub python_downloads_json_url: Option<String>,
+    python_downloads_json_url: Option<String>,
 
     #[command(flatten)]
-    pub compile_bytecode: PythonInstallCompileBytecodeArgs,
+    compile_bytecode: PythonInstallCompileBytecodeArgs,
 }
 
 impl PythonUpgradeArgs {
     #[must_use]
-    pub fn install_mirrors(&self) -> PythonInstallMirrors {
+    fn install_mirrors(&self) -> PythonInstallMirrors {
         PythonInstallMirrors {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
@@ -6560,17 +6310,17 @@ impl PythonUpgradeArgs {
 pub struct PythonUninstallArgs {
     /// The directory where the Python was installed.
     #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR, value_hint = ValueHint::DirPath)]
-    pub install_dir: Option<PathBuf>,
+    install_dir: Option<PathBuf>,
 
     /// The Python version(s) to uninstall.
     ///
     /// See `uv help python` to view supported request formats.
     #[arg(required = true)]
-    pub targets: Vec<String>,
+    targets: Vec<String>,
 
     /// Uninstall all managed Python versions.
     #[arg(long, conflicts_with("targets"))]
-    pub all: bool,
+    all: bool,
 }
 
 #[derive(Args)]
@@ -6648,7 +6398,7 @@ pub struct PythonPinArgs {
     /// If no request is provided, the currently pinned version will be shown.
     ///
     /// See `uv help python` to view supported request formats.
-    pub request: Option<String>,
+    request: Option<String>,
 
     /// Write the resolved Python interpreter path instead of the request.
     ///
@@ -6657,10 +6407,10 @@ pub struct PythonPinArgs {
     /// This option is usually not safe to use when committing the `.python-version` file to version
     /// control.
     #[arg(long, overrides_with("resolved"))]
-    pub resolved: bool,
+    resolved: bool,
 
     #[arg(long, overrides_with("no_resolved"), hide = true)]
-    pub no_resolved: bool,
+    no_resolved: bool,
 
     /// Avoid validating the Python pin is compatible with the project or workspace.
     ///
@@ -6673,7 +6423,7 @@ pub struct PythonPinArgs {
         env = EnvVars::UV_NO_PROJECT,
         value_parser = clap::builder::BoolishValueParser::new()
     )]
-    pub no_project: bool,
+    no_project: bool,
 
     /// Update the global Python version pin.
     ///
@@ -6683,25 +6433,25 @@ pub struct PythonPinArgs {
     /// When a local Python version pin is not found in the working directory or an ancestor
     /// directory, this version will be used instead.
     #[arg(long)]
-    pub global: bool,
+    global: bool,
 
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
-    pub rm: bool,
+    rm: bool,
 
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
-    pub python_downloads_json_url: Option<String>,
+    python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]
 pub struct AuthLogoutArgs {
     /// The domain or URL of the service to logout from.
-    pub service: Service,
+    service: Service,
 
     /// The username to logout.
     #[arg(long, short, value_hint = ValueHint::Other)]
-    pub username: Option<String>,
+    username: Option<String>,
 
     #[arg(
         long,
@@ -6709,24 +6459,24 @@ pub struct AuthLogoutArgs {
         env = EnvVars::UV_KEYRING_PROVIDER,
         hide = true,
     )]
-    pub keyring_provider: Option<KeyringProviderType>,
+    keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]
 pub struct AuthLoginArgs {
     /// The domain or URL of the service to log into.
     #[arg(value_hint = ValueHint::Url)]
-    pub service: Service,
+    service: Service,
 
     /// The username to use for the service.
     #[arg(long, short, conflicts_with = "token", value_hint = ValueHint::Other)]
-    pub username: Option<String>,
+    username: Option<String>,
 
     /// The password to use for the service.
     ///
     /// Use `-` to read the password from stdin.
     #[arg(long, conflicts_with = "token", value_hint = ValueHint::Other)]
-    pub password: Option<String>,
+    password: Option<String>,
 
     /// The token to use for the service.
     ///
@@ -6734,7 +6484,7 @@ pub struct AuthLoginArgs {
     ///
     /// Use `-` to read the token from stdin.
     #[arg(long, short, conflicts_with = "username", conflicts_with = "password", value_hint = ValueHint::Other)]
-    pub token: Option<String>,
+    token: Option<String>,
 
     #[arg(
         long,
@@ -6742,18 +6492,18 @@ pub struct AuthLoginArgs {
         env = EnvVars::UV_KEYRING_PROVIDER,
         hide = true,
     )]
-    pub keyring_provider: Option<KeyringProviderType>,
+    keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]
 pub struct AuthTokenArgs {
     /// The domain or URL of the service to lookup.
     #[arg(value_hint = ValueHint::Url)]
-    pub service: Service,
+    service: Service,
 
     /// The username to lookup.
     #[arg(long, short, value_hint = ValueHint::Other)]
-    pub username: Option<String>,
+    username: Option<String>,
 
     #[arg(
         long,
@@ -6761,7 +6511,7 @@ pub struct AuthTokenArgs {
         env = EnvVars::UV_KEYRING_PROVIDER,
         hide = true,
     )]
-    pub keyring_provider: Option<KeyringProviderType>,
+    keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]
@@ -6853,7 +6603,7 @@ pub struct IndexArgs {
         value_parser = parse_indices,
         help_heading = "Index options"
     )]
-    pub index: Option<Vec<Vec<Maybe<IndexArg>>>>,
+    index: Option<Vec<Vec<Maybe<IndexArg>>>>,
 
     /// The default package index (by default: <https://pypi.org/simple>).
     ///
@@ -6872,7 +6622,7 @@ pub struct IndexArgs {
         value_parser = parse_default_index,
         help_heading = "Index options"
     )]
-    pub default_index: Option<Maybe<IndexArg>>,
+    default_index: Option<Maybe<IndexArg>>,
 
     /// (Deprecated: use `--default-index` instead) The URL of the Python package index (by default:
     /// <https://pypi.org/simple>).
@@ -6890,7 +6640,7 @@ pub struct IndexArgs {
         value_parser = parse_index_url,
         help_heading = "Index options"
     )]
-    pub index_url: Option<Maybe<PipIndex>>,
+    index_url: Option<Maybe<PipIndex>>,
 
     /// (Deprecated: use `--index` instead) Extra URLs of package indexes to use, in addition to
     /// `--index-url`.
@@ -6909,7 +6659,7 @@ pub struct IndexArgs {
         value_parser = parse_extra_index_url,
         help_heading = "Index options"
     )]
-    pub extra_index_url: Option<Vec<Maybe<PipExtraIndex>>>,
+    extra_index_url: Option<Vec<Maybe<PipExtraIndex>>>,
 
     /// Locations to search for candidate distributions, in addition to those found in the registry
     /// indexes.
@@ -6928,12 +6678,12 @@ pub struct IndexArgs {
         value_parser = parse_find_links,
         help_heading = "Index options"
     )]
-    pub find_links: Option<Vec<Maybe<PipFindLinks>>>,
+    find_links: Option<Vec<Maybe<PipFindLinks>>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// provided via `--find-links`.
     #[arg(long, help_heading = "Index options")]
-    pub no_index: bool,
+    no_index: bool,
 }
 
 /// Arguments that configure the package registry client.
@@ -6952,7 +6702,7 @@ pub struct RegistryClientArgs {
         env = EnvVars::UV_INDEX_STRATEGY,
         help_heading = "Index options"
     )]
-    pub index_strategy: Option<IndexStrategy>,
+    index_strategy: Option<IndexStrategy>,
 
     /// Attempt to use `keyring` for authentication for index URLs.
     ///
@@ -6966,7 +6716,7 @@ pub struct RegistryClientArgs {
         env = EnvVars::UV_KEYRING_PROVIDER,
         help_heading = "Index options"
     )]
-    pub keyring_provider: Option<KeyringProviderType>,
+    keyring_provider: Option<KeyringProviderType>,
 }
 
 /// Arguments that control dependency sources.
@@ -7062,7 +6812,7 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
-    pub dev: bool,
+    dev: bool,
 
     /// Disable the development dependency group [env: UV_NO_DEV=]
     ///
@@ -7071,7 +6821,7 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_dev: bool,
+    no_dev: bool,
 
     /// Only include the development dependency group.
     ///
@@ -7079,7 +6829,7 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     ///
     /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
-    pub only_dev: bool,
+    only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
     ///
@@ -7102,7 +6852,7 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
             )
         }
     )]
-    pub group: Vec<GroupName>,
+    group: Vec<GroupName>,
 
     /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
     ///
@@ -7111,14 +6861,14 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     ///
     /// May be provided multiple times.
     #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
-    pub no_group: Vec<GroupName>,
+    no_group: Vec<GroupName>,
 
     /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
-    pub no_default_groups: bool,
+    no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
@@ -7126,13 +6876,13 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
-    pub only_group: Vec<GroupName>,
+    only_group: Vec<GroupName>,
 
     /// Include dependencies from all dependency groups.
     ///
     /// `--no-group` can be used to exclude specific groups.
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
-    pub all_groups: bool,
+    all_groups: bool,
 }
 
 /// Dependency-group arguments for commands that reject conflicting extras or groups.
@@ -7163,13 +6913,13 @@ pub struct HashCheckingArgs {
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("no_require_hashes"),
     )]
-    pub require_hashes: bool,
+    require_hashes: bool,
 
     #[arg(long, overrides_with("require_hashes"), hide = true)]
-    pub no_require_hashes: bool,
+    no_require_hashes: bool,
 
     #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
-    pub verify_hashes: bool,
+    verify_hashes: bool,
 
     /// Disable validation of hashes in the requirements file.
     ///
@@ -7182,7 +6932,7 @@ pub struct HashCheckingArgs {
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("verify_hashes"),
     )]
-    pub no_verify_hashes: bool,
+    no_verify_hashes: bool,
 }
 
 /// Arguments that filter packages by upload date.
@@ -7211,7 +6961,7 @@ pub struct ExcludeNewerArgs {
         help_heading = "Resolver options",
         value_hint = ValueHint::Other,
     )]
-    pub exclude_newer: Option<ExcludeNewerOverride>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 }
 
 /// Arguments that filter packages by global and package-specific upload dates.
@@ -7219,7 +6969,7 @@ pub struct ExcludeNewerArgs {
 #[group(skip)]
 pub struct PackageExcludeNewerArgs {
     #[command(flatten)]
-    pub exclude_newer: ExcludeNewerArgs,
+    exclude_newer: ExcludeNewerArgs,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7236,7 +6986,7 @@ pub struct PackageExcludeNewerArgs {
     ///
     /// Can be provided multiple times for different packages.
     #[arg(long, help_heading = "Resolver options", value_hint = ValueHint::Other)]
-    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
+    exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 }
 
 #[derive(Args)]
@@ -7375,7 +7125,7 @@ pub struct ReinstallArgs {
         overrides_with("no_reinstall"),
         help_heading = "Installer options"
     )]
-    pub reinstall: bool,
+    reinstall: bool,
 
     #[arg(
         long,
@@ -7383,12 +7133,12 @@ pub struct ReinstallArgs {
         hide = true,
         help_heading = "Installer options"
     )]
-    pub no_reinstall: bool,
+    no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed. Implies
     /// `--refresh-package`.
     #[arg(long, help_heading = "Installer options", value_hint = ValueHint::Other)]
-    pub reinstall_package: Vec<PackageName>,
+    reinstall_package: Vec<PackageName>,
 }
 
 #[derive(Args)]
@@ -7574,7 +7324,7 @@ pub struct ResolverArgs {
 #[derive(Args)]
 pub struct ResolverInstallerArgs {
     #[command(flatten)]
-    pub index_args: IndexArgs,
+    index_args: IndexArgs,
 
     /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
     /// `--refresh`.
@@ -7584,7 +7334,7 @@ pub struct ResolverInstallerArgs {
         overrides_with("no_upgrade"),
         help_heading = "Resolver options"
     )]
-    pub upgrade: bool,
+    upgrade: bool,
 
     #[arg(
         long,
@@ -7592,26 +7342,26 @@ pub struct ResolverInstallerArgs {
         hide = true,
         help_heading = "Resolver options"
     )]
-    pub no_upgrade: bool,
+    no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output file.
     /// Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options", value_hint = ValueHint::Other)]
-    pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+    upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// Allow upgrades for all packages in a dependency group, ignoring pinned versions in any
     /// existing output file.
     #[arg(long, help_heading = "Resolver options")]
-    pub upgrade_group: Vec<GroupName>,
+    upgrade_group: Vec<GroupName>,
 
     #[command(flatten)]
-    pub reinstall: ReinstallArgs,
+    reinstall: ReinstallArgs,
 
     #[command(flatten)]
-    pub registry_client: RegistryClientArgs,
+    registry_client: RegistryClientArgs,
 
     #[command(flatten)]
-    pub version_selection: VersionSelectionArgs,
+    version_selection: VersionSelectionArgs,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
@@ -7621,7 +7371,7 @@ pub struct ResolverInstallerArgs {
         help_heading = "Build options",
         value_hint = ValueHint::Other,
     )]
-    pub config_setting: Option<Vec<ConfigSettingEntry>>,
+    config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
     #[arg(
@@ -7630,13 +7380,13 @@ pub struct ResolverInstallerArgs {
         help_heading = "Build options",
         value_hint = ValueHint::Other,
     )]
-    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
+    config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
     #[command(flatten)]
-    pub build_isolation: PackageBuildIsolationArgs,
+    build_isolation: PackageBuildIsolationArgs,
 
     #[command(flatten)]
-    pub exclude_newer: PackageExcludeNewerArgs,
+    exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -7653,13 +7403,13 @@ pub struct ResolverInstallerArgs {
         env = EnvVars::UV_LINK_MODE,
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<uv_install_wheel::LinkMode>,
+    link_mode: Option<uv_install_wheel::LinkMode>,
 
     #[command(flatten)]
-    pub compile_bytecode: CompileBytecodeArgs,
+    compile_bytecode: CompileBytecodeArgs,
 
     #[command(flatten)]
-    pub sources: SourcesArgs,
+    sources: SourcesArgs,
 }
 
 /// Arguments that are used by commands that need to fetch from the Simple API.
@@ -7679,35 +7429,35 @@ pub struct FetchArgs {
 pub struct DisplayTreeArgs {
     /// Maximum display depth of the dependency tree
     #[arg(long, short, default_value_t = 255)]
-    pub depth: u8,
+    depth: u8,
 
     /// Prune the given package from the display of the dependency tree.
     #[arg(long, value_hint = ValueHint::Other)]
-    pub prune: Vec<PackageName>,
+    prune: Vec<PackageName>,
 
     /// Display only the specified packages.
     #[arg(long, value_hint = ValueHint::Other)]
-    pub package: Vec<PackageName>,
+    package: Vec<PackageName>,
 
     /// Do not de-duplicate repeated dependencies. Usually, when a package has already displayed its
     /// dependencies, further occurrences will not re-display its dependencies, and will include a
     /// (*) to indicate it has already been shown. This flag will cause those duplicates to be
     /// repeated.
     #[arg(long)]
-    pub no_dedupe: bool,
+    no_dedupe: bool,
 
     /// Show the reverse dependencies for the given package. This flag will invert the tree and
     /// display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
-    pub invert: bool,
+    invert: bool,
 
     /// Show the latest available version of each package in the tree.
     #[arg(long)]
-    pub outdated: bool,
+    outdated: bool,
 
     /// Show compressed wheel sizes for packages in the tree.
     #[arg(long)]
-    pub show_sizes: bool,
+    show_sizes: bool,
 }
 
 #[derive(Args, Debug)]
