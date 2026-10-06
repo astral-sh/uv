@@ -23,23 +23,23 @@ const CS_LINKER_SIGNED: u32 = 0x20000;
 const PAGE_SIZE: usize = 4096;
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Metadata {
-    identifier: SigningIdentifier,
+pub(crate) struct Metadata<'image> {
+    identifier: SigningIdentifier<'image>,
     flags: u32,
     runtime: u32,
     exec_flags: u64,
     components: BTreeMap<ComponentSlot, Vec<u8>>,
 }
 
-impl Metadata {
+impl<'image> Metadata<'image> {
     pub(crate) fn read(
-        signature: Option<&[u8]>,
-        identifier: &SigningIdentifier,
+        signature: Option<&'image [u8]>,
+        identifier: SigningIdentifier<'image>,
         code_limit: usize,
         info_plist: Option<&[u8]>,
     ) -> Result<Self, Error> {
         let mut metadata = Self {
-            identifier: identifier.clone(),
+            identifier,
             flags: CS_ADHOC,
             runtime: 0,
             exec_flags: 0,
@@ -136,7 +136,7 @@ impl Metadata {
     }
 
     fn directory(
-        data: Blob<'_, CODE_DIRECTORY>,
+        data: Blob<'image, CODE_DIRECTORY>,
         code_limit: usize,
         info_plist: Option<&[u8]>,
         entries: &BTreeMap<u32, &[u8]>,
@@ -179,11 +179,10 @@ impl Metadata {
                 .ok_or(Error::Malformed("invalid string offset"))?,
         )
         .map_err(|_| Error::Malformed("unterminated string"))?;
-        if identifier.is_empty() {
-            return Err(Error::Malformed("empty signing identifier"));
-        }
+        let identifier = SigningIdentifier::new(identifier)
+            .map_err(|_| Error::Malformed("empty signing identifier"))?;
 
-        let mut strings_end = identifier_offset + identifier.to_bytes_with_nul().len();
+        let mut strings_end = identifier_offset + identifier.as_c_str().to_bytes_with_nul().len();
         if version >= 0x20200 {
             let team_offset = u32::from_be_bytes(array(header, 48)?) as usize;
             if team_offset != 0 {
@@ -274,7 +273,7 @@ impl Metadata {
         }
 
         Ok(Self {
-            identifier: SigningIdentifier::new(identifier.to_bytes())?,
+            identifier,
             flags: (flags & !CS_LINKER_SIGNED) | CS_ADHOC,
             runtime: if version >= 0x20500 {
                 u32::from_be_bytes(array(header, 88)?)
@@ -299,9 +298,11 @@ impl Metadata {
         info_plist: Option<&'a [u8]>,
         algorithms: SigningAlgorithms,
     ) -> Result<PreparedSignature<'a>, Error> {
-        let algorithms: &[Hash] = match algorithms {
-            SigningAlgorithms::Sha256 => &[Hash::Sha256],
-            SigningAlgorithms::Sha1AndSha256 => &[Hash::Sha1, Hash::Sha256],
+        let algorithms: &[CodeDirectoryHash] = match algorithms {
+            SigningAlgorithms::Sha256 => &[CodeDirectoryHash::Sha256],
+            SigningAlgorithms::Sha1AndSha256 => {
+                &[CodeDirectoryHash::Sha1, CodeDirectoryHash::Sha256]
+            }
         };
         let directories = algorithms
             .iter()
@@ -339,7 +340,7 @@ pub(crate) enum SigningAlgorithms {
 
 /// Allocated signature records that cannot be serialized until hashing completes.
 pub(crate) struct PreparedSignature<'a> {
-    metadata: &'a Metadata,
+    metadata: &'a Metadata<'a>,
     directories: Vec<PreparedCodeDirectory<'a>>,
     info_plist: Option<&'a [u8]>,
     code_limit: usize,
@@ -395,18 +396,18 @@ impl PreparedSignature<'_> {
 }
 
 struct PreparedCodeDirectory<'a> {
-    metadata: &'a Metadata,
+    metadata: &'a Metadata<'a>,
     bytes: Vec<u8>,
     hash_offset: usize,
-    hash: Hash,
+    hash: CodeDirectoryHash,
 }
 
 impl<'a> PreparedCodeDirectory<'a> {
     fn new(
-        metadata: &'a Metadata,
+        metadata: &'a Metadata<'a>,
         code_limit: usize,
         text: (u64, u64),
-        hash: Hash,
+        hash: CodeDirectoryHash,
     ) -> Result<Self, Error> {
         let fixed_size = if metadata.runtime == 0 { 88 } else { 96 };
         let special_count = metadata
@@ -443,12 +444,12 @@ impl<'a> PreparedCodeDirectory<'a> {
         output[32..36].copy_from_slice(&u32::to_be_bytes(u32::try_from(code_limit)?));
 
         output[36] = match hash {
-            Hash::Sha1 => 20,
-            Hash::Sha256 => 32,
+            CodeDirectoryHash::Sha1 => 20,
+            CodeDirectoryHash::Sha256 => 32,
         };
         output[37] = match hash {
-            Hash::Sha1 => 1,
-            Hash::Sha256 => 2,
+            CodeDirectoryHash::Sha1 => 1,
+            CodeDirectoryHash::Sha256 => 2,
         };
         output[39] = 12;
 
@@ -524,13 +525,14 @@ enum ComponentSlot {
     DerEntitlements = 7,
 }
 
+/// `CodeDirectory` hash formats store raw digests and include legacy SHA-1 support.
 #[derive(Clone, Copy)]
-enum Hash {
+enum CodeDirectoryHash {
     Sha1,
     Sha256,
 }
 
-impl Hash {
+impl CodeDirectoryHash {
     fn size(self) -> usize {
         match self {
             Self::Sha1 => 20,

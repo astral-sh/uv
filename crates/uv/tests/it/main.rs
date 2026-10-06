@@ -16,6 +16,9 @@ mod ecosystem;
 
 mod help;
 
+#[cfg(all(target_os = "macos", feature = "test-python-managed"))]
+mod macho;
+
 mod network;
 
 #[cfg(feature = "test-pypi")]
