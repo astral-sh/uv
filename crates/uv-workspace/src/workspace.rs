@@ -163,6 +163,10 @@ impl WorkspaceCache {
         match result {
             Ok(workspace) => {
                 for package in workspace.packages.values() {
+                    // Publish the root once below, even when it is also a project member.
+                    if package.root == workspace.install_path {
+                        continue;
+                    }
                     // Historically, upward workspace discovery stopped at an intermediate
                     // `pyproject.toml`, so don't map this member to the outer workspace in that
                     // case.
