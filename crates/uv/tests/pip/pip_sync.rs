@@ -6120,6 +6120,75 @@ fn pep_751_requires_packages() -> Result<()> {
 }
 
 #[test]
+fn pep_751_require_hashes_md5() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/single-package.toml");
+    let pylock = context.temp_dir.child("pylock.toml");
+    pylock.write_str(&formatdoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        archive = {{ url = "{wheel_url}", hashes = {{ md5 = "00000000000000000000000000000000" }} }}
+        "#,
+        wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
+    })?;
+
+    // MD5 alone cannot authorize an archive, even before downloading it.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("--require-hashes")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `md5` hashes are insecure and cannot be used with `--require-hashes` but no other hashes are available for: a
+    ");
+
+    // Verification mode still accepts an MD5 digest for checking at download time.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl
+    ");
+
+    // A secure digest authorizes the archive without also requiring the MD5 digest to match.
+    pylock.write_str(&formatdoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        archive = {{ url = "{wheel_url}", hashes = {{ md5 = "00000000000000000000000000000000", sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}
+        "#,
+        wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--require-hashes")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_empty_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("simple/single-package.toml");
