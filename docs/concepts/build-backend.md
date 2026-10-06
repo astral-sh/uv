@@ -252,11 +252,11 @@ module root alongside the source code.
 
 By default, `.gitignore` files do not affect which files are packaged. To exclude files using Git
 ignore patterns, enable
-[`tool.uv.build-backend.respect-gitignore`](../reference/settings.md#build-backend_respect-gitignore):
+[`tool.uv.build-backend.respect-ignore`](../reference/settings.md#build-backend_respect-ignore):
 
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
-respect-gitignore = true
+respect-ignore = true
 ```
 
 uv reads `.gitignore` files in the project directory (containing `pyproject.toml`) and its
