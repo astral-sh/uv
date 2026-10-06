@@ -5794,7 +5794,6 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "ignore",
  "indexmap",
  "indicatif",
  "indoc",
@@ -7347,6 +7346,7 @@ name = "uv-scripts"
 version = "0.0.90"
 dependencies = [
  "fs-err",
+ "ignore",
  "indoc",
  "memchr",
  "regex",
@@ -7357,6 +7357,7 @@ dependencies = [
  "url",
  "uv-configuration",
  "uv-distribution-types",
+ "uv-fs",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
