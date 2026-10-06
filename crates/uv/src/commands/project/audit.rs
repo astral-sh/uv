@@ -2,9 +2,6 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 
-use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
-};
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_audit_operations::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
 use uv_cache::Cache;
@@ -15,6 +12,9 @@ use uv_configuration::{
     TargetTriple,
 };
 use uv_dispatch::UniversalState;
+use uv_environment_operations::{
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
+};
 use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};

@@ -2,8 +2,8 @@
 
 use std::{fmt, io};
 
-use crate::commands::project::EnvironmentError;
 use uv_command_support::UvError;
+use uv_environment_operations::EnvironmentError;
 use uv_errors::{Hinted, Hints};
 use uv_workspace::WorkspaceError;
 

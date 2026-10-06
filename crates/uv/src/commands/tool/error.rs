@@ -1,5 +1,5 @@
-use crate::commands::project::EnvironmentError;
 use uv_command_support::UvError;
+use uv_environment_operations::EnvironmentError;
 
 /// A failure while finding or creating an environment for a tool invocation.
 #[derive(Debug, thiserror::Error)]

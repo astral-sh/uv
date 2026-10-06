@@ -71,7 +71,6 @@ mod cache_size;
 pub(crate) mod diagnostics;
 mod help;
 mod install_report;
-pub(crate) mod operations;
 pub(crate) mod pip;
 mod project;
 mod publish;
@@ -93,9 +92,10 @@ mod error_tests {
     use insta::assert_snapshot;
 
     use uv_command_support::UvError;
+    use uv_environment_operations::EnvironmentError;
     use uv_resolve_operations::Error as ResolveError;
 
-    use crate::commands::project::{EnvironmentError, ProjectError};
+    use crate::commands::project::ProjectError;
 
     #[test]
     fn resolution_context_missing_requirements() -> anyhow::Result<()> {
@@ -179,15 +179,6 @@ mod error_tests {
         };
 
         Ok(())
-    }
-}
-
-/// Capitalize the first letter of a string.
-pub(super) fn capitalize(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
     }
 }
 
