@@ -526,7 +526,7 @@ impl HashStrategy {
 
         let current = hashes.as_ref().unwrap_or(existing);
         for (id, requirement) in insecure_requirements {
-            if !current.get(&id).is_some_and(|digests| !digests.is_empty()) {
+            if current.get(&id).is_none_or(Vec::is_empty) {
                 return Err(HashStrategyError::InsecureHashAlgorithm(
                     requirement.to_string(),
                     HashAlgorithm::Md5,
