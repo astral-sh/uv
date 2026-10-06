@@ -32,64 +32,94 @@ mod macos {
 
     const DYLIB: &str = "lib/libpython3.13.dylib";
 
-    fn load_dylib(download: &ManagedPythonDownload) -> Vec<u8> {
-        let directory = tempfile::tempdir().expect("Failed to create fixture directory");
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create Tokio runtime");
-        let client_builder = BaseClientBuilder::default();
-        let retry_policy = client_builder.retry_policy();
-        let client = client_builder
-            .retries(0)
-            .build()
-            .expect("Failed to create download client");
-
-        // Download and verify the archive without running installation fixups:
-        // the input must retain its original install name and code signature.
-        let result = runtime
-            .block_on(download.fetch_with_retry(
-                &client,
-                &retry_policy,
-                directory.path(),
-                directory.path(),
-                false,
-                None,
-                None,
-                None,
-            ))
-            .expect("Failed to download Python dylib fixture");
-        let path = match result {
-            DownloadResult::AlreadyAvailable(path) | DownloadResult::Fetched(path) => path,
-        };
-
-        fs_err::read(path.join(DYLIB)).expect("Failed to read Python dylib fixture")
+    struct DylibFixture<'a> {
+        download: &'a ManagedPythonDownload,
+        bytes: Vec<u8>,
     }
 
-    fn prepare_dylib(
-        bytes: &[u8],
-        download: &ManagedPythonDownload,
-    ) -> (TempDir, ManagedPythonInstallation) {
-        let directory = tempfile::tempdir().expect("Failed to create installation directory");
-        fs_err::create_dir(directory.path().join("lib"))
-            .expect("Failed to create library directory");
-        fs_err::write(directory.path().join(DYLIB), bytes).expect("Failed to write dylib");
-        let installation = ManagedPythonInstallation::new(directory.path().to_path_buf(), download)
-            .expect("Failed to construct managed installation");
+    impl<'a> DylibFixture<'a> {
+        fn download(download: &'a ManagedPythonDownload) -> Self {
+            let directory = tempfile::tempdir().expect("Failed to create fixture directory");
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create Tokio runtime");
+            let client_builder = BaseClientBuilder::default();
+            let retry_policy = client_builder.retry_policy();
+            let client = client_builder
+                .retries(0)
+                .build()
+                .expect("Failed to create download client");
 
-        (directory, installation)
+            // Download and verify the archive without running installation fixups:
+            // the input must retain its original install name and code signature.
+            let result = runtime
+                .block_on(download.fetch_with_retry(
+                    &client,
+                    &retry_policy,
+                    directory.path(),
+                    directory.path(),
+                    false,
+                    None,
+                    None,
+                    None,
+                ))
+                .expect("Failed to download Python dylib fixture");
+            let path = match result {
+                DownloadResult::AlreadyAvailable(path) | DownloadResult::Fetched(path) => path,
+            };
+
+            Self {
+                download,
+                bytes: fs_err::read(path.join(DYLIB)).expect("Failed to read Python dylib fixture"),
+            }
+        }
+
+        fn prepare(&self) -> PreparedInstallation {
+            let directory = tempfile::tempdir().expect("Failed to create installation directory");
+            fs_err::create_dir(directory.path().join("lib"))
+                .expect("Failed to create library directory");
+            fs_err::write(directory.path().join(DYLIB), &self.bytes)
+                .expect("Failed to write dylib");
+            let installation =
+                ManagedPythonInstallation::new(directory.path().to_path_buf(), self.download)
+                    .expect("Failed to construct managed installation");
+
+            PreparedInstallation {
+                installation,
+                _directory: directory,
+            }
+        }
     }
 
-    fn verify_install_name(installation: &ManagedPythonInstallation) {
-        let dylib = installation.path().join(DYLIB);
-        let output = Command::new("/usr/bin/otool")
-            .arg("-D")
-            .arg(&dylib)
-            .output()
-            .expect("Failed to inspect patched dylib");
-        assert!(output.status.success(), "otool failed: {output:?}");
-        let stdout = String::from_utf8(output.stdout).expect("otool output is not UTF-8");
-        assert_eq!(stdout.lines().nth(1), dylib.to_str());
+    struct PreparedInstallation {
+        installation: ManagedPythonInstallation,
+        _directory: TempDir,
+    }
+
+    impl PreparedInstallation {
+        fn patch(self) -> PatchedInstallation {
+            self.installation
+                .ensure_dylib_patched()
+                .expect("Failed to patch dylib");
+            PatchedInstallation(self)
+        }
+    }
+
+    struct PatchedInstallation(PreparedInstallation);
+
+    impl PatchedInstallation {
+        fn verify_install_name(&self) {
+            let dylib = self.0.installation.path().join(DYLIB);
+            let output = Command::new("/usr/bin/otool")
+                .arg("-D")
+                .arg(&dylib)
+                .output()
+                .expect("Failed to inspect patched dylib");
+            assert!(output.status.success(), "otool failed: {output:?}");
+            let stdout = String::from_utf8(output.stdout).expect("otool output is not UTF-8");
+            assert_eq!(stdout.lines().nth(1), dylib.to_str());
+        }
     }
 
     pub(super) fn patch_dylib(criterion: &mut Criterion<WallTime>) {
@@ -109,26 +139,17 @@ mod macos {
         let download = catalog
             .find(&request)
             .expect("Missing Python download metadata");
-        let bytes = load_dylib(download);
+        let fixture = DylibFixture::download(download);
 
         // Check the operation before timing it so a skipped edit cannot appear fast.
-        let (directory, installation) = prepare_dylib(&bytes, download);
-        installation
-            .ensure_dylib_patched()
-            .expect("Failed to patch dylib");
-        verify_install_name(&installation);
-        drop((directory, installation));
+        fixture.prepare().patch().verify_install_name();
 
         criterion.bench_function(
             &format!("patch_dylib/install_name_tool/{}", download.key()),
             |benchmark| {
-                benchmark.iter_batched_ref(
-                    || prepare_dylib(&bytes, download),
-                    |(_, installation)| {
-                        black_box(installation)
-                            .ensure_dylib_patched()
-                            .expect("Failed to patch dylib");
-                    },
+                benchmark.iter_batched(
+                    || fixture.prepare(),
+                    |installation| black_box(installation).patch(),
                     BatchSize::PerIteration,
                 );
             },
