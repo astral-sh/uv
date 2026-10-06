@@ -12,9 +12,8 @@ use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::path::Path;
 use url::Url;
-use uv_extract::hash::Hasher;
-use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_static::EnvVars;
+use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
 use uv_test::packse::generate_wheel;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
@@ -3795,59 +3794,25 @@ fn build_no_gitignore() -> Result<()> {
 #[test]
 fn build_require_hashes_md5_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    for (name, version) in [("build-dependency", "1.0.0"), ("project", "0.1.0")] {
-        let (filename, wheel) = generate_wheel(
-            &name.parse()?,
-            &version.parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
-        context
-            .temp_dir
-            .child("wheels")
-            .child(filename)
-            .write_binary(&wheel)?;
-    }
-    let wheel = context
+    let server = FindLinksServer::vendor();
+    let url = format!("{}/flit_core-3.9.0-py3-none-any.whl", server.url());
+    context.temp_dir.child("project/__init__.py").touch()?;
+    context
         .temp_dir
-        .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
-    let bytes = fs_err::read(wheel.path())?;
-    let mut hasher = Hasher::from(HashAlgorithm::Md5);
-    hasher.update(&bytes);
-    let md5 = HashDigest::from(hasher);
-    let md5 = md5.digest();
-    let sha256 = hex::encode(Sha256::digest(&bytes));
-    let url = Url::from_file_path(wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
-    let context = context.with_filter((md5.to_string(), "[MD5_HASH]"));
-    let pyproject = context.temp_dir.child("pyproject.toml");
-    pyproject.write_str(&formatdoc! {r#"
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
+        description = "A test project"
+        requires-python = ">=3.12"
 
         [build-system]
-        requires = ["build-dependency @ {url}#md5={md5}"]
-        build-backend = "backend"
-        backend-path = ["."]
+        requires = ["flit-core @ {url}#md5=c817750ae741d8f720b173a30f7b2085"]
+        build-backend = "flit_core.buildapi"
 
         [tool.uv]
         no-index = true
-    "#})?;
-    context.temp_dir.child("backend.py").write_str(indoc! {r#"
-        import shutil
-        from pathlib import Path
-
-        import build_dependency
-
-        Path(__file__).with_name("backend-executed").touch()
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            source = Path(__file__).parent / "wheels" / "project-0.1.0-py3-none-any.whl"
-            shutil.copyfile(source, Path(wheel_directory) / source.name)
-            return source.name
     "#})?;
 
     // An MD5 fragment cannot authorize a build dependency when hashes are required.
@@ -3860,13 +3825,8 @@ fn build_require_hashes_md5_url() -> Result<()> {
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl#md5=[MD5_HASH]`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: `md5` hashes are insecure and cannot be used with `--require-hashes` but no other hashes are available for: flit-core @ http://[LOCALHOST]/flit_core-3.9.0-py3-none-any.whl#md5=c817750ae741d8f720b173a30f7b2085
     ");
-    context
-        .temp_dir
-        .child("backend-executed")
-        .assert(predicate::path::missing());
 
     // MD5 remains usable when only verifying supplied hashes.
     uv_snapshot!(context.filters(), context.build()
@@ -3877,15 +3837,11 @@ fn build_require_hashes_md5_url() -> Result<()> {
     Building wheel...
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
-    fs_err::remove_file(context.temp_dir.child("backend-executed"))?;
 
     // A secure hash from a constraint can authorize the same URL.
-    context
-        .temp_dir
-        .child("constraints.txt")
-        .write_str(&format!(
-            "build-dependency @ {url} --hash=sha256:{sha256}\n"
-        ))?;
+    context.temp_dir.child("constraints.txt").write_str(&format!(
+        "flit-core @ {url} --hash=sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301\n"
+    ))?;
     uv_snapshot!(context.filters(), context.build()
         .arg("--wheel")
         .arg("--no-cache")
@@ -3896,10 +3852,6 @@ fn build_require_hashes_md5_url() -> Result<()> {
     Building wheel...
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
-    context
-        .temp_dir
-        .child("backend-executed")
-        .assert(predicate::path::exists());
     Ok(())
 }
 

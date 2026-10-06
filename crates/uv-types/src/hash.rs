@@ -495,16 +495,18 @@ impl HashStrategy {
         mode: HashCheckingMode,
     ) -> Result<Option<FxHashMap<VersionId, Vec<HashDigest>>>, HashStrategyError> {
         let mut hashes = None;
+        let mut insecure_requirements = Vec::new();
 
         for requirement in requirements {
             let Some((id, mut digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };
-            // When hashes are required, MD5 is not sufficient. Ignore it here so a URL with
-            // only an MD5 hash still needs another supplied hash.
+            // MD5 cannot authorize a requirement, but another requirement or constraint may
+            // supply a secure hash for the same archive.
             if mode.is_require() {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
                 if digests.is_empty() {
+                    insecure_requirements.push((id, requirement));
                     continue;
                 }
             }
@@ -520,6 +522,17 @@ impl HashStrategy {
             hashes
                 .get_or_insert_with(|| existing.clone())
                 .insert(id, merged);
+        }
+
+        let current = hashes.as_ref().unwrap_or(existing);
+        for (id, requirement) in insecure_requirements {
+            if !current.get(&id).is_some_and(|digests| !digests.is_empty()) {
+                return Err(HashStrategyError::InsecureHashAlgorithm(
+                    requirement.to_string(),
+                    HashAlgorithm::Md5,
+                    mode,
+                ));
+            }
         }
 
         Ok(hashes)
@@ -793,6 +806,36 @@ mod tests {
                 ArchiveHashPolicy::All(expected.as_slice())
             );
         }
+    }
+
+    #[test]
+    fn augment_requirements_accepts_secure_hash_in_either_order()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let url: DisplaySafeUrl = "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl".parse()?;
+        let md5 = requirement(&format!("{url}#md5=420d85e19168705cdf0223621b18831a"));
+        let sha256 = requirement(&format!(
+            "{url}#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f"
+        ));
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+
+        for requirements in [[&md5, &sha256], [&sha256, &md5]] {
+            let strategy = HashStrategy::from_requirements(
+                std::iter::empty(),
+                std::iter::empty(),
+                None,
+                HashCheckingMode::Require,
+            )?
+            .augment_with_requirements(requirements.into_iter())?;
+
+            assert!(strategy.allows_url(&url));
+            assert_eq!(
+                strategy.archive_policy_for_url(&url),
+                ArchiveHashPolicy::All(slice::from_ref(&digest))
+            );
+        }
+        Ok(())
     }
 
     #[test]
