@@ -50,7 +50,7 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildHashStrategy, BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
@@ -2230,7 +2230,7 @@ pub(crate) async fn resolve_names(
     // optional on the downstream APIs.
     let hasher = HashStrategy::default();
     let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = BuildHashStrategy::from_constraints(
         build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         build_hash_policy,
@@ -2263,7 +2263,6 @@ pub(crate) async fn resolve_names(
         *link_mode,
         build_options,
         &build_hasher,
-        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,
@@ -2476,7 +2475,7 @@ pub(crate) async fn resolve_environment(
         EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
     };
     let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = BuildHashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         build_hash_policy,
@@ -2536,7 +2535,6 @@ pub(crate) async fn resolve_environment(
         *link_mode,
         build_options,
         &build_hasher,
-        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         source_tree_editable_policy,
@@ -2643,7 +2641,7 @@ pub(crate) async fn sync_environment(
     };
 
     let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = BuildHashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         build_hash_policy,
@@ -2680,7 +2678,6 @@ pub(crate) async fn sync_environment(
         link_mode,
         build_options,
         &build_hasher,
-        build_hash_policy,
         exclude_newer.clone(),
         sources,
         SourceTreeEditablePolicy::Project,
@@ -2903,7 +2900,7 @@ pub(crate) async fn update_environment(
         .build();
 
     let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = BuildHashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         build_hash_policy,
@@ -2940,7 +2937,6 @@ pub(crate) async fn update_environment(
         *link_mode,
         build_options,
         &build_hasher,
-        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         source_tree_editable_policy,

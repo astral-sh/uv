@@ -4027,6 +4027,44 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .child("backend-executed")
         .assert(predicate::path::exists());
 
+    // Hashless workspace constraints remain version constraints under `--require-hashes`.
+    let hashed_pyproject = context.read("pyproject.toml");
+    pyproject.write_str(&hashed_pyproject.replace(
+        &format!(
+            "{{ requirement = \"build-dependency==1.0.0\", hashes = [\"sha256:{build_hash}\"] }}"
+        ),
+        "\"build-dependency>=1\"",
+    ))?;
+    constraints.write_str(&format!(
+        "build-dependency==1.0.0 --hash=sha256:{build_hash}\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .args(["--require-hashes", "--build-constraint", "constraints.txt"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    // Explicit build hash requirements apply to workspace constraints even with `--require-hashes`.
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .args(["--require-hashes", "--build-constraint", "constraints.txt"])
+        .arg("--require-build-hashes")
+        .arg("--preview-features=build-dependency-hashes"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/`
+      cause: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: build-dependency>=1
+    ");
+    pyproject.write_str(&hashed_pyproject)?;
+    constraints.write_str(&format!(
+        "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
+    ))?;
+
     // Without isolation, neither hash-checking mode installs or verifies build dependencies.
     context.temp_dir.child("backend.py").write_str(
         &context

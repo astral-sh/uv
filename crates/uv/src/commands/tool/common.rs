@@ -46,7 +46,7 @@ use uv_resolver::{FlatIndex, OptionsBuilder, Preference, ResolverOutput};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildHashStrategy, BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -472,7 +472,7 @@ impl ToolLock {
             .build();
         let hasher = HashStrategy::collect(HashCollection::Url);
         let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
-        let build_hasher = HashStrategy::from_build_constraints(
+        let build_hasher = BuildHashStrategy::from_constraints(
             build_constraints,
             Some(&interpreter.to_resolver_marker_environment()),
             build_hash_policy,
@@ -501,7 +501,6 @@ impl ToolLock {
             *link_mode,
             build_options,
             &build_hasher,
-            build_hash_policy,
             exclude_newer.clone(),
             sources.clone(),
             SourceTreeEditablePolicy::Tool,

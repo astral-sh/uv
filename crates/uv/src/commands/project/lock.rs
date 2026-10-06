@@ -40,7 +40,7 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildHashStrategy, BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
@@ -874,17 +874,15 @@ async fn do_lock(
     let (locked_hasher, locked_build_hasher) = if let Some(existing_lock) = existing_lock.as_ref() {
         let locked_hasher =
             existing_lock.hash_strategy(target.install_path(), &FxHashSet::default())?;
-        let build_hasher = HashStrategy::from_build_constraints(
+        let build_hasher = BuildHashStrategy::from_constraints(
             &existing_lock.build_constraints(target.install_path()),
             Some(&interpreter.to_resolver_marker_environment()),
             build_hash_policy,
         )?;
-        let locked_build_hasher = locked_hasher
-            .clone()
-            .with_constraint_hashes(&build_hasher)?;
+        let locked_build_hasher = build_hasher.with_lockfile_hashes(locked_hasher.clone())?;
         (locked_hasher, locked_build_hasher)
     } else {
-        (HashStrategy::default(), HashStrategy::default())
+        (HashStrategy::default(), BuildHashStrategy::disabled())
     };
     // Re-resolving an outdated lock does not authorize replacing known artifacts. Only an
     // explicit unlocked upgrade releases the selected packages' hashes.
@@ -905,14 +903,14 @@ async fn do_lock(
     let hasher = HashStrategy::collect(HashCollection::Url)
         .with_verification(resolution_hasher.verification().clone());
 
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = BuildHashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         build_hash_policy,
     )?;
     // Explicit build constraints apply even when fresh resolution can replace lockfile hashes.
     let resolution_build_hasher = match mode {
-        LockMode::Locked(..) => locked_hasher.with_constraint_hashes(&build_hasher)?,
+        LockMode::Locked(..) => build_hasher.with_lockfile_hashes(locked_hasher)?,
         LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => build_hasher,
     };
 
@@ -972,7 +970,6 @@ async fn do_lock(
         *link_mode,
         build_options,
         &resolution_build_hasher,
-        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,

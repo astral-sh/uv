@@ -16,7 +16,7 @@ use uv_build_frontend::SourceBuild;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildHashPolicy, BuildHashSources, BuildIsolation, BuildKind, BuildOptions, BuildOutput,
+    BuildHashChecking, BuildHashPolicy, BuildIsolation, BuildKind, BuildOptions, BuildOutput,
     Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyMode, DependencyModifiers,
     HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
 };
@@ -44,7 +44,9 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildHashStrategy, BuildStack, SourceTreeEditablePolicy,
+};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
@@ -334,6 +336,22 @@ async fn build_impl(
         cuda_driver_version: _,
         amd_gpu_architecture: _,
     } = settings;
+    // `uv build --require-hashes` allows hashless workspace constraints. Explicitly requiring
+    // build hashes also requires hashes for those constraints.
+    let hash_constraints_from_workspace = match (build_hash_checking, hash_checking) {
+        (BuildHashChecking::Default, Some(HashCheckingMode::Require)) => Cow::Owned(
+            build_constraints_from_workspace
+                .iter()
+                .filter(|entry| !entry.hashes.is_empty())
+                .cloned()
+                .collect::<Vec<_>>(),
+        ),
+        (BuildHashChecking::Default, None | Some(HashCheckingMode::Verify))
+        | (
+            BuildHashChecking::Require,
+            None | Some(HashCheckingMode::Verify | HashCheckingMode::Require),
+        ) => Cow::Borrowed(build_constraints_from_workspace),
+    };
     let build_hash_policy = build_hash_checking.resolve(hash_checking);
 
     // Determine the source to build.
@@ -502,6 +520,7 @@ async fn build_impl(
             clear,
             build_constraints,
             build_constraints_from_workspace,
+            &hash_constraints_from_workspace,
             build_isolation,
             extra_build_dependencies,
             extra_build_variables,
@@ -580,6 +599,7 @@ async fn build_package(
     clear: bool,
     build_constraints: &[RequirementsSource],
     build_constraints_from_workspace: &[NameRequirementSpecification],
+    hash_constraints_from_workspace: &[NameRequirementSpecification],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -666,24 +686,13 @@ async fn build_package(
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
-    // `uv build --require-hashes` allows hashless workspace constraints; the strict build
-    // policy requires hashes for workspace constraints as well as command-line constraints.
     let hash_constraints = Constraints::from_specifications(
-        command_line_constraints.iter().cloned().chain(
-            build_constraints_from_workspace
-                .iter()
-                .filter(|entry| match build_hash_policy {
-                    BuildHashPolicy::Require(BuildHashSources::AllRequirements) => {
-                        !entry.hashes.is_empty()
-                    }
-                    BuildHashPolicy::Disabled
-                    | BuildHashPolicy::Verify
-                    | BuildHashPolicy::Require(BuildHashSources::StaticRequirements) => true,
-                })
-                .cloned(),
-        ),
+        command_line_constraints
+            .iter()
+            .cloned()
+            .chain(hash_constraints_from_workspace.iter().cloned()),
     );
-    let hasher = HashStrategy::from_build_constraints(
+    let hasher = BuildHashStrategy::from_constraints(
         &hash_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         build_hash_policy,
@@ -741,7 +750,6 @@ async fn build_package(
         link_mode,
         build_options,
         &hasher,
-        build_hash_policy,
         exclude_newer,
         sources.clone(),
         SourceTreeEditablePolicy::Project,

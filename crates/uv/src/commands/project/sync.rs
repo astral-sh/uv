@@ -40,7 +40,7 @@ use uv_requirements::{script_extra_build_requires, script_specification};
 use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildHashStrategy, BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -1007,16 +1007,17 @@ pub(crate) async fn do_sync(
     let build_constraints = target.build_constraints();
 
     let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = BuildHashStrategy::from_constraints(
         &build_constraints,
         Some(&venv.interpreter().to_resolver_marker_environment()),
         build_hash_policy,
     )?;
     // Also verify artifacts in the full lockfile, including unselected extras and groups.
-    let build_hasher = target
-        .lock()
-        .hash_strategy(target.install_path(), &FxHashSet::default())?
-        .with_constraint_hashes(&build_hasher)?;
+    let build_hasher = build_hasher.with_lockfile_hashes(
+        target
+            .lock()
+            .hash_strategy(target.install_path(), &FxHashSet::default())?,
+    )?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
@@ -1040,7 +1041,6 @@ pub(crate) async fn do_sync(
         link_mode,
         build_options,
         &build_hasher,
-        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,

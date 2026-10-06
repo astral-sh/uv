@@ -18,8 +18,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildHashPolicy, BuildHashSources, BuildKind, BuildOptions, Constraints, DependencyModifiers,
-    IndexStrategy, NoSources, Reinstall,
+    BuildHashSources, BuildKind, BuildOptions, Constraints, DependencyModifiers, IndexStrategy,
+    NoSources, Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -40,8 +40,8 @@ use uv_resolver::{
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
+    AnyErrorBuild, BuildArena, BuildContext, BuildHashStrategy, BuildIsolation, BuildStack,
+    EmptyInstalledPackages, HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -140,8 +140,7 @@ pub struct BuildDispatch<'a> {
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
-    base_hasher: &'a HashStrategy,
-    hash_policy: BuildHashPolicy,
+    base_hasher: &'a BuildHashStrategy,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
@@ -170,8 +169,7 @@ impl<'a> BuildDispatch<'a> {
         extra_build_variables: &'a ExtraBuildVariables,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
-        hasher: &'a HashStrategy,
-        hash_policy: BuildHashPolicy,
+        hasher: &'a BuildHashStrategy,
         exclude_newer: ExcludeNewer,
         sources: NoSources,
         source_tree_editable_policy: SourceTreeEditablePolicy,
@@ -197,7 +195,6 @@ impl<'a> BuildDispatch<'a> {
             link_mode,
             build_options,
             base_hasher: hasher,
-            hash_policy,
             exclude_newer,
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
@@ -214,7 +211,7 @@ impl<'a> BuildDispatch<'a> {
     /// In-memory resolution, download, and build caches are reset, since they may depend on the
     /// previous policy.
     #[must_use]
-    pub fn fork<'fork>(&'fork self, hasher: &'fork HashStrategy) -> BuildDispatch<'fork> {
+    pub fn fork<'fork>(&'fork self, hasher: &'fork BuildHashStrategy) -> BuildDispatch<'fork> {
         BuildDispatch {
             base_hasher: hasher,
             shared_state: SharedState {
@@ -327,8 +324,8 @@ impl BuildContext for BuildDispatch<'_> {
             requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
         });
         let previous_hasher = hash_override;
-        let hasher = previous_hasher.unwrap_or(self.base_hasher).clone();
-        let hasher = match self.hash_policy.sources() {
+        let hasher = previous_hasher.unwrap_or(self.base_hasher.hashes()).clone();
+        let hasher = match self.base_hasher.sources() {
             BuildHashSources::StaticRequirements if previous_hasher.is_some() => {
                 hasher.augment_with_metadata_requirements(active_requirements)
             }
