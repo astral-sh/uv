@@ -240,7 +240,8 @@ dependencies = [
 [[package]]
 name = "astral-mail-headers"
 version = "0.0.1"
-source = "git+https://github.com/astral-sh/astral-mail-headers?rev=54e57e39f17eebd19c1adf71c7552efdc2e6d1d3#54e57e39f17eebd19c1adf71c7552efdc2e6d1d3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc019ecca82cfc91ffa31ab4ffe705aaa706399840a7152926b7eee736da410a"
 dependencies = [
  "base64 0.22.1",
  "encoding_rs",

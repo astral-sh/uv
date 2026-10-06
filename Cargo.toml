@@ -104,7 +104,7 @@ anyhow = { version = "1.0.89", default-features = false, features = ["std"] }
 arcstr = { version = "1.2.0", default-features = false }
 arrayvec = { version = "0.7.6", default-features = false }
 astral-html = { version = "0.0.3", default-features = false }
-astral-mail-headers = { git = "https://github.com/astral-sh/astral-mail-headers", rev = "54e57e39f17eebd19c1adf71c7552efdc2e6d1d3", default-features = false }
+astral-mail-headers = { version = "0.0.1", default-features = false }
 astral-tokio-tar = { version = "0.7.0", default-features = false }
 async-channel = { version = "2.3.1", default-features = false, features = ["std"] }
 async-compression = { version = "0.4.12", default-features = false, features = [
