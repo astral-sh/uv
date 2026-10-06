@@ -37,12 +37,12 @@ use uv_cli::{
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::RequirementsInput;
 use uv_configuration::{
-    ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode,
-    DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification,
-    GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary,
-    NoBuild, NoSources, Override, PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl,
-    Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    ActiveEnvironment, BuildHashChecking, BuildIsolation, BuildOptions, Concurrency,
+    DependencyGroups, DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions,
+    KeyringProviderType, NoBinary, NoBuild, NoSources, Override, PackageOverride, PipCompileFormat,
+    ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3484,7 +3484,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) overrides: Vec<RequirementsInput>,
     pub(crate) excludes: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) build_hash_checking: BuildHashChecking,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
@@ -3715,7 +3715,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<RequirementsInput>,
     pub(crate) constraints: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) build_hash_checking: BuildHashChecking,
     pub(crate) dry_run: DryRun,
     pub(crate) output_format: PipInstallFormat,
     pub(crate) refresh: Refresh,
@@ -3846,7 +3846,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) overrides: Vec<RequirementsInput>,
     pub(crate) excludes: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) build_hash_checking: BuildHashChecking,
     pub(crate) dry_run: DryRun,
     pub(crate) output_format: PipInstallFormat,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
@@ -4582,7 +4582,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) config_settings_package: &'a PackageConfigSettings,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) build_hash_checking: BuildHashChecking,
     pub(crate) build_isolation: &'a BuildIsolation,
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
@@ -4610,7 +4610,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) link_mode: LinkMode,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) build_hash_checking: BuildHashChecking,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
@@ -4623,9 +4623,9 @@ pub(crate) struct ResolverSettings {
     pub(crate) upgrade: Upgrade,
 }
 
-fn resolve_build_hash_checking(require_build_hashes: Option<bool>) -> HashCheckingMode {
+fn resolve_build_hash_checking(require_build_hashes: Option<bool>) -> BuildHashChecking {
     if !require_build_hashes.unwrap_or_default() {
-        return HashCheckingMode::Verify;
+        return BuildHashChecking::Default;
     }
     if !uv_preview::is_enabled(PreviewFeature::BuildDependencyHashes) {
         warn_user_once!(
@@ -4633,7 +4633,7 @@ fn resolve_build_hash_checking(require_build_hashes: Option<bool>) -> HashChecki
             PreviewFeature::BuildDependencyHashes
         );
     }
-    HashCheckingMode::Require
+    BuildHashChecking::Require
 }
 
 /// Resolve the `uv pip` build-hash policy from CLI, environment, and configuration settings.
@@ -4641,7 +4641,7 @@ fn resolve_pip_build_hash_checking(
     require_build_hashes: Option<bool>,
     filesystem: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
-) -> HashCheckingMode {
+) -> BuildHashChecking {
     let configured = filesystem.and_then(|filesystem| {
         filesystem
             .pip

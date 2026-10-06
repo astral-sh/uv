@@ -11,8 +11,8 @@ use tracing::warn;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
-    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
+    ActiveEnvironment, BuildHashPolicy, BuildOptions, Concurrency, Constraints, DependencyGroups,
+    DryRun, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -329,6 +329,7 @@ pub(crate) async fn venv(
             link_mode,
             &build_options,
             &build_hasher,
+            BuildHashPolicy::Disabled,
             exclude_newer,
             sources,
             SourceTreeEditablePolicy::Project,

@@ -14,9 +14,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
-    Reinstall, Upgrade,
+    BuildHashChecking, BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override,
+    PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -88,7 +88,7 @@ pub(crate) async fn pip_compile(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
-    build_hash_checking: HashCheckingMode,
+    build_hash_checking: BuildHashChecking,
     no_emit_packages: Vec<PackageName>,
     include_extras: bool,
     include_markers: bool,
@@ -507,10 +507,11 @@ pub(crate) async fn pip_compile(
     };
 
     // Verify hashes on pinned build constraints, if any.
-    let build_hashes = HashStrategy::from_constraints(
+    let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
+    let build_hashes = HashStrategy::from_build_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        build_hash_checking,
+        build_hash_policy,
     )?;
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
@@ -536,6 +537,7 @@ pub(crate) async fn pip_compile(
         link_mode,
         &build_options,
         &build_hashes,
+        build_hash_policy,
         exclude_newer.clone(),
         sources,
         SourceTreeEditablePolicy::Project,

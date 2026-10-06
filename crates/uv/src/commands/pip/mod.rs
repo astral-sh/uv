@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use uv_configuration::{HashCheckingMode, TargetTriple};
+use uv_configuration::{BuildHashChecking, BuildHashPolicy, HashCheckingMode, TargetTriple};
 use uv_platform_tags::{Tags, TagsError, TagsOptions};
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python::{Interpreter, PythonVersion};
@@ -18,16 +18,33 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod uninstall;
 
-/// Require build hashes independently of runtime checking. Otherwise, verify supplied build
-/// hashes only when runtime checking is enabled.
-fn resolve_build_hash_checking(
-    hash_checking: Option<HashCheckingMode>,
-    build_hash_checking: HashCheckingMode,
-) -> Option<HashCheckingMode> {
-    match build_hash_checking {
-        HashCheckingMode::Require => Some(HashCheckingMode::Require),
-        HashCheckingMode::Verify => hash_checking.map(|_| HashCheckingMode::Verify),
+/// Configured hash-checking options, before reading requirements files.
+pub(crate) struct PipHashOptions {
+    runtime: Option<HashCheckingMode>,
+    build: BuildHashChecking,
+}
+
+impl PipHashOptions {
+    pub(crate) fn new(runtime: Option<HashCheckingMode>, build: BuildHashChecking) -> Self {
+        Self { runtime, build }
     }
+
+    /// Resolve verification and trust after incorporating requirements-file directives.
+    fn resolve(self, require_hashes: bool) -> PipHashPolicies {
+        let runtime = HashCheckingMode::from_requirements_txt(self.runtime, require_hashes);
+        // Runtime hash requirements do not require build hashes, but enabling runtime checking
+        // also enables verification of supplied build hashes.
+        let build = self
+            .build
+            .resolve(runtime.map(|_| HashCheckingMode::Verify));
+        PipHashPolicies { runtime, build }
+    }
+}
+
+/// Effective policies for runtime and build dependencies.
+struct PipHashPolicies {
+    runtime: Option<HashCheckingMode>,
+    build: BuildHashPolicy,
 }
 
 pub(crate) fn resolution_markers(

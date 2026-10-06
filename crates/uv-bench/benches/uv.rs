@@ -541,7 +541,9 @@ mod resolver {
 
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources};
+    use uv_configuration::{
+        BuildHashPolicy, BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources,
+    };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
@@ -662,6 +664,7 @@ mod resolver {
             LinkMode::default(),
             &build_options,
             &hashes,
+            BuildHashPolicy::Disabled,
             exclude_newer,
             sources,
             SourceTreeEditablePolicy::Project,

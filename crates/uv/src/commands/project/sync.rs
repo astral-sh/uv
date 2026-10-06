@@ -1006,10 +1006,11 @@ pub(crate) async fn do_sync(
     // Read the build constraints from the lockfile.
     let build_constraints = target.build_constraints();
 
-    let build_hasher = HashStrategy::from_constraints(
+    let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
+    let build_hasher = HashStrategy::from_build_constraints(
         &build_constraints,
         Some(&venv.interpreter().to_resolver_marker_environment()),
-        build_hash_checking,
+        build_hash_policy,
     )?;
     // Also verify artifacts in the full lockfile, including unselected extras and groups.
     let build_hasher = target
@@ -1039,6 +1040,7 @@ pub(crate) async fn do_sync(
         link_mode,
         build_options,
         &build_hasher,
+        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,

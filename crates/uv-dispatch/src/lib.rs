@@ -18,8 +18,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, DependencyModifiers, HashCheckingMode, IndexStrategy,
-    NoSources, Reinstall,
+    BuildHashPolicy, BuildHashSources, BuildKind, BuildOptions, Constraints, DependencyModifiers,
+    IndexStrategy, NoSources, Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -41,7 +41,7 @@ use uv_resolver::{
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, HashVerification, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
+    HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -141,7 +141,7 @@ pub struct BuildDispatch<'a> {
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
     base_hasher: &'a HashStrategy,
-    build_hash_checking: HashCheckingMode,
+    hash_policy: BuildHashPolicy,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
@@ -171,6 +171,7 @@ impl<'a> BuildDispatch<'a> {
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
+        hash_policy: BuildHashPolicy,
         exclude_newer: ExcludeNewer,
         sources: NoSources,
         source_tree_editable_policy: SourceTreeEditablePolicy,
@@ -196,10 +197,7 @@ impl<'a> BuildDispatch<'a> {
             link_mode,
             build_options,
             base_hasher: hasher,
-            build_hash_checking: match hasher.verification() {
-                HashVerification::Required(_) => HashCheckingMode::Require,
-                HashVerification::None | HashVerification::IfPresent(_) => HashCheckingMode::Verify,
-            },
+            hash_policy,
             exclude_newer,
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
@@ -243,19 +241,6 @@ impl<'a> BuildDispatch<'a> {
             .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
             .collect();
         self
-    }
-
-    /// Set the hash-checking mode for build dependencies.
-    ///
-    /// When hashes are required, hashes from backend-generated requirements are not trusted.
-    #[must_use]
-    pub fn with_build_hash_checking(mut self, mode: HashCheckingMode) -> Self {
-        self.build_hash_checking = mode;
-        self
-    }
-
-    fn require_build_hashes(&self) -> bool {
-        self.build_hash_checking.is_require()
     }
 }
 
@@ -342,14 +327,14 @@ impl BuildContext for BuildDispatch<'_> {
             requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
         });
         let previous_hasher = hash_override;
-        let hasher = match previous_hasher {
-            Some(hasher) if self.require_build_hashes() => hasher
-                .clone()
-                .augment_with_metadata_requirements(active_requirements),
-            previous_hasher => previous_hasher
-                .unwrap_or(self.base_hasher)
-                .clone()
-                .augment_with_requirements(active_requirements),
+        let hasher = previous_hasher.unwrap_or(self.base_hasher).clone();
+        let hasher = match self.hash_policy.sources() {
+            BuildHashSources::StaticRequirements if previous_hasher.is_some() => {
+                hasher.augment_with_metadata_requirements(active_requirements)
+            }
+            BuildHashSources::StaticRequirements | BuildHashSources::AllRequirements => {
+                hasher.augment_with_requirements(active_requirements)
+            }
         }
         .map_err(uv_requirements::Error::from)?;
 

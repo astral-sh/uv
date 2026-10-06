@@ -16,7 +16,7 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
-    InstallOptions, NoSources,
+    HashCheckingMode, InstallOptions, NoSources,
 };
 use uv_dispatch::{BuildDispatch, PlatformState, UniversalState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -446,10 +446,14 @@ pub(crate) async fn add(
                     client.credentials_cache(),
                 )
                 .await?;
-            let build_hasher = HashStrategy::from_constraints(
+            let build_hash_policy = settings
+                .resolver
+                .build_hash_checking
+                .resolve(Some(HashCheckingMode::Verify));
+            let build_hasher = HashStrategy::from_build_constraints(
                 &build_constraints,
                 Some(&python_target.interpreter().to_resolver_marker_environment()),
-                settings.resolver.build_hash_checking,
+                build_hash_policy,
             )?;
             // Determine whether to enable build isolation.
             let environment;
@@ -510,6 +514,7 @@ pub(crate) async fn add(
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
                 &build_hasher,
+                build_hash_policy,
                 settings.resolver.exclude_newer.clone(),
                 sources,
                 SourceTreeEditablePolicy::Project,
