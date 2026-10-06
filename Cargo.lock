@@ -5832,7 +5832,6 @@ dependencies = [
  "uv-console",
  "uv-dispatch",
  "uv-distribution",
- "uv-distribution-filename",
  "uv-distribution-types",
  "uv-environment-operations",
  "uv-errors",
@@ -5854,6 +5853,7 @@ dependencies = [
  "uv-preview",
  "uv-project-commands",
  "uv-publish",
+ "uv-publish-commands",
  "uv-pypi-types",
  "uv-python",
  "uv-python-commands",
@@ -7440,6 +7440,32 @@ dependencies = [
  "uv-static",
  "uv-warnings",
  "wiremock",
+]
+
+[[package]]
+name = "uv-publish-commands"
+version = "0.0.90"
+dependencies = [
+ "anyhow",
+ "console",
+ "indicatif",
+ "insta",
+ "owo-colors",
+ "tokio",
+ "tracing",
+ "uv-auth",
+ "uv-cache",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-console",
+ "uv-distribution-filename",
+ "uv-distribution-types",
+ "uv-errors",
+ "uv-publish",
+ "uv-redacted",
+ "uv-settings",
+ "uv-warnings",
 ]
 
 [[package]]

@@ -29,7 +29,6 @@ uv-configuration = { workspace = true }
 uv-console = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
-uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-environment-operations = { workspace = true }
 uv-errors = { workspace = true }
@@ -48,7 +47,7 @@ uv-performance-memory-allocator = { workspace = true, optional = true }
 uv-pip-commands = { workspace = true }
 uv-preview = { workspace = true }
 uv-project-commands = { workspace = true }
-uv-publish = { workspace = true }
+uv-publish-commands = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-python-commands = { workspace = true }
@@ -217,7 +216,8 @@ windows-gui-bin = []
 # As workaround, we make `uv-test` a regular optional dependency. It's never
 # used as a regular dependency, but it allows using `uv-test?/git` as default
 # feature.
-ignored = ["uv-test"]
+# The uv-publish dev-dependency enables HTTP for trusted-publishing integration tests.
+ignored = ["uv-publish", "uv-test"]
 
 [package.metadata.dist]
 dist = true
