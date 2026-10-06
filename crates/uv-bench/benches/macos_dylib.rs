@@ -75,7 +75,7 @@ mod macos {
             }
         }
 
-        fn prepare(&self) -> PreparedInstallation {
+        fn prepare(&self) -> (TempDir, ManagedPythonInstallation) {
             let directory = tempfile::tempdir().expect("Failed to create installation directory");
             fs_err::create_dir(directory.path().join("lib"))
                 .expect("Failed to create library directory");
@@ -85,40 +85,7 @@ mod macos {
                 ManagedPythonInstallation::new(directory.path().to_path_buf(), self.download)
                     .expect("Failed to construct managed installation");
 
-            PreparedInstallation {
-                installation,
-                _directory: directory,
-            }
-        }
-    }
-
-    struct PreparedInstallation {
-        installation: ManagedPythonInstallation,
-        _directory: TempDir,
-    }
-
-    impl PreparedInstallation {
-        fn patch(self) -> PatchedInstallation {
-            self.installation
-                .ensure_dylib_patched()
-                .expect("Failed to patch dylib");
-            PatchedInstallation(self)
-        }
-    }
-
-    struct PatchedInstallation(PreparedInstallation);
-
-    impl PatchedInstallation {
-        fn verify_install_name(&self) {
-            let dylib = self.0.installation.path().join(DYLIB);
-            let output = Command::new("/usr/bin/otool")
-                .arg("-D")
-                .arg(&dylib)
-                .output()
-                .expect("Failed to inspect patched dylib");
-            assert!(output.status.success(), "otool failed: {output:?}");
-            let stdout = String::from_utf8(output.stdout).expect("otool output is not UTF-8");
-            assert_eq!(stdout.lines().nth(1), dylib.to_str());
+            (directory, installation)
         }
     }
 
@@ -142,14 +109,31 @@ mod macos {
         let fixture = DylibFixture::download(download);
 
         // Check the operation before timing it so a skipped edit cannot appear fast.
-        fixture.prepare().patch().verify_install_name();
+        let (directory, installation) = fixture.prepare();
+        installation
+            .ensure_dylib_patched()
+            .expect("Failed to patch dylib");
+        let dylib = installation.path().join(DYLIB);
+        let output = Command::new("/usr/bin/otool")
+            .arg("-D")
+            .arg(&dylib)
+            .output()
+            .expect("Failed to inspect patched dylib");
+        assert!(output.status.success(), "otool failed: {output:?}");
+        let stdout = String::from_utf8(output.stdout).expect("otool output is not UTF-8");
+        assert_eq!(stdout.lines().nth(1), dylib.to_str());
+        drop((directory, installation));
 
         criterion.bench_function(
             &format!("patch_dylib/install_name_tool/{}", download.key()),
             |benchmark| {
-                benchmark.iter_batched(
+                benchmark.iter_batched_ref(
                     || fixture.prepare(),
-                    |installation| black_box(installation).patch(),
+                    |(_, installation)| {
+                        black_box(installation)
+                            .ensure_dylib_patched()
+                            .expect("Failed to patch dylib");
+                    },
                     BatchSize::PerIteration,
                 );
             },
