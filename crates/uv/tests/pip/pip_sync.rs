@@ -6,6 +6,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err as fs;
 use indoc::{formatdoc, indoc};
+use insta::allow_duplicates;
 use predicates::Predicate;
 use url::Url;
 use wiremock::matchers::{method, path};
@@ -5618,6 +5619,91 @@ fn compatible_build_constraint() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Runtime and build hash policies are resolved together after reading requirements files.
+#[test]
+fn build_hash_policies() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    allow_duplicates! {
+        for install in [false, true] {
+            let context = uv_test::test_context!("3.12");
+            let requirements = context.temp_dir.child("requirements.txt");
+            let requirement = "a==1.0.0 --hash=sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5\n";
+            requirements.write_str(requirement)?;
+            let constraints = context.temp_dir.child("build-constraints.txt");
+            constraints.write_str("hatchling==1.20.0")?;
+
+            let command = || {
+                let mut command = if install {
+                    let mut command = context.pip_install();
+                    command.arg("-r");
+                    command
+                } else {
+                    context.pip_sync()
+                };
+                command
+                    .arg("requirements.txt")
+                    .arg("--index-url")
+                    .arg(server.index_url())
+                    .arg("--no-binary=a")
+                    .arg("--build-constraint=build-constraints.txt")
+                    .arg("--no-cache")
+                    .arg("--preview-features=build-dependency-hashes");
+                command
+            };
+
+            // Requiring build hashes is independent of runtime verification.
+            uv_snapshot!(command()
+                .arg("--no-verify-hashes")
+                .arg("--require-build-hashes"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            error: Failed to download and build `a==1.0.0`
+              cause: Failed to resolve requirements from `build-system.requires`
+              cause: No solution found when resolving: `hatchling`
+              cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+            ");
+
+            constraints.write_str("hatchling==1.20.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000")?;
+            for require_hashes in [false, true] {
+                let mut command = command();
+                if require_hashes {
+                    // A requirements-file directive re-enables verification for both policies.
+                    requirements.write_str(&format!("--require-hashes\n{requirement}"))?;
+                    command.arg("--no-verify-hashes");
+                }
+                uv_snapshot!(command, @"
+                exit_code: 1 (failure)
+                ----- stderr -----
+                Resolved 1 package in [TIME]
+                error: Failed to download and build `a==1.0.0`
+                  cause: Failed to install requirements from `build-system.requires`
+                  cause: Failed to download `hatchling==1.20.0`
+                  cause: Hash mismatch for `hatchling==1.20.0`
+
+                         Expected:
+                           sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+                         Computed:
+                           sha256:872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f
+                ");
+            }
+
+            // Without either requirement flag, disabling verification also applies to build hashes.
+            requirements.write_str(requirement)?;
+            uv_snapshot!(command().arg("--no-verify-hashes"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + a==1.0.0
+            ");
+        }
+        Ok(())
+    }
 }
 
 #[test]

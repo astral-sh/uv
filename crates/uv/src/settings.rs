@@ -3484,7 +3484,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) overrides: Vec<RequirementsInput>,
     pub(crate) excludes: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) require_build_hashes: bool,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
@@ -3634,7 +3634,7 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            build_hash_checking: resolve_pip_build_hash_checking(
+            require_build_hashes: resolve_pip_require_build_hashes(
                 flag(
                     require_build_hashes,
                     no_require_build_hashes,
@@ -3715,7 +3715,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<RequirementsInput>,
     pub(crate) constraints: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) require_build_hashes: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) output_format: PipInstallFormat,
     pub(crate) refresh: Refresh,
@@ -3782,7 +3782,7 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            build_hash_checking: resolve_pip_build_hash_checking(
+            require_build_hashes: resolve_pip_require_build_hashes(
                 flag(
                     require_build_hashes,
                     no_require_build_hashes,
@@ -3846,7 +3846,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) overrides: Vec<RequirementsInput>,
     pub(crate) excludes: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) require_build_hashes: bool,
     pub(crate) dry_run: DryRun,
     pub(crate) output_format: PipInstallFormat,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
@@ -3981,7 +3981,7 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            build_hash_checking: resolve_pip_build_hash_checking(
+            require_build_hashes: resolve_pip_require_build_hashes(
                 flag(
                     require_build_hashes,
                     no_require_build_hashes,
@@ -4582,7 +4582,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) config_settings_package: &'a PackageConfigSettings,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) require_build_hashes: bool,
     pub(crate) build_isolation: &'a BuildIsolation,
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
@@ -4610,7 +4610,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) link_mode: LinkMode,
-    pub(crate) build_hash_checking: HashCheckingMode,
+    pub(crate) require_build_hashes: bool,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
@@ -4623,9 +4623,9 @@ pub(crate) struct ResolverSettings {
     pub(crate) upgrade: Upgrade,
 }
 
-fn resolve_build_hash_checking(require_build_hashes: Option<bool>) -> HashCheckingMode {
+fn resolve_require_build_hashes(require_build_hashes: Option<bool>) -> bool {
     if !require_build_hashes.unwrap_or_default() {
-        return HashCheckingMode::Verify;
+        return false;
     }
     if !uv_preview::is_enabled(PreviewFeature::BuildDependencyHashes) {
         warn_user_once!(
@@ -4633,15 +4633,15 @@ fn resolve_build_hash_checking(require_build_hashes: Option<bool>) -> HashChecki
             PreviewFeature::BuildDependencyHashes
         );
     }
-    HashCheckingMode::Require
+    true
 }
 
 /// Resolve the `uv pip` build-hash policy from CLI, environment, and configuration settings.
-fn resolve_pip_build_hash_checking(
+fn resolve_pip_require_build_hashes(
     require_build_hashes: Option<bool>,
     filesystem: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
-) -> HashCheckingMode {
+) -> bool {
     let configured = filesystem.and_then(|filesystem| {
         filesystem
             .pip
@@ -4649,7 +4649,7 @@ fn resolve_pip_build_hash_checking(
             .and_then(|pip| pip.require_build_hashes)
             .or(filesystem.top_level.require_build_hashes)
     });
-    resolve_build_hash_checking(
+    resolve_require_build_hashes(
         require_build_hashes
             .or(environment.require_build_hashes)
             .or(configured),
@@ -4753,7 +4753,7 @@ impl From<ResolverOptions> for ResolverSettings {
             config_setting: value.config_settings.unwrap_or_default(),
             config_settings_package: value.config_settings_package.unwrap_or_default(),
             build_isolation: value.build_isolation.unwrap_or_default(),
-            build_hash_checking: resolve_build_hash_checking(value.require_build_hashes),
+            require_build_hashes: resolve_require_build_hashes(value.require_build_hashes),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: ExcludeNewer::from_args(
@@ -4886,7 +4886,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 keyring_provider: value.keyring_provider.unwrap_or_default(),
                 link_mode: value.link_mode.unwrap_or_default(),
                 build_isolation: value.build_isolation.unwrap_or_default(),
-                build_hash_checking: resolve_build_hash_checking(value.require_build_hashes),
+                require_build_hashes: resolve_require_build_hashes(value.require_build_hashes),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: resolve_prerelease(
@@ -5362,7 +5362,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             config_setting: &settings.resolver.config_setting,
             config_settings_package: &settings.resolver.config_settings_package,
             build_isolation: &settings.resolver.build_isolation,
-            build_hash_checking: settings.resolver.build_hash_checking,
+            require_build_hashes: settings.resolver.require_build_hashes,
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: &settings.resolver.exclude_newer,

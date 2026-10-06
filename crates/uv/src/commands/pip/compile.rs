@@ -88,7 +88,7 @@ pub(crate) async fn pip_compile(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
-    build_hash_checking: HashCheckingMode,
+    require_build_hashes: bool,
     no_emit_packages: Vec<PackageName>,
     include_extras: bool,
     include_markers: bool,
@@ -510,7 +510,11 @@ pub(crate) async fn pip_compile(
     let build_hashes = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        build_hash_checking,
+        if require_build_hashes {
+            HashCheckingMode::Require
+        } else {
+            HashCheckingMode::Verify
+        },
     )?;
     // Lower the extra build dependencies, if any.
     let extra_build_requires =

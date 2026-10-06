@@ -13,7 +13,8 @@ use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
+    ExcludeDependency, ExtrasSpecification, HashCheckingMode, Override, PackageOverride, Reinstall,
+    Upgrade,
 };
 use uv_dispatch::{BuildDispatch, UniversalState};
 use uv_distribution::{DistributionDatabase, FirstPartyPackages, LoweredExtraBuildDependencies};
@@ -526,7 +527,7 @@ async fn do_lock(
         config_setting,
         config_settings_package,
         build_isolation,
-        build_hash_checking,
+        require_build_hashes,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -875,7 +876,11 @@ async fn do_lock(
         let build_hasher = HashStrategy::from_constraints(
             &existing_lock.build_constraints(target.install_path()),
             Some(&interpreter.to_resolver_marker_environment()),
-            *build_hash_checking,
+            if *require_build_hashes {
+                HashCheckingMode::Require
+            } else {
+                HashCheckingMode::Verify
+            },
         )?;
         let locked_build_hasher = locked_hasher
             .clone()
@@ -906,7 +911,11 @@ async fn do_lock(
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        *build_hash_checking,
+        if *require_build_hashes {
+            HashCheckingMode::Require
+        } else {
+            HashCheckingMode::Verify
+        },
     )?;
     // Explicit build constraints apply even when fresh resolution can replace lockfile hashes.
     let resolution_build_hasher = match mode {

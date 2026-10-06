@@ -18,8 +18,7 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, DependencyModifiers, HashCheckingMode, IndexStrategy,
-    NoSources, Reinstall,
+    BuildKind, BuildOptions, Constraints, DependencyModifiers, IndexStrategy, NoSources, Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -141,7 +140,7 @@ pub struct BuildDispatch<'a> {
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
     base_hasher: &'a HashStrategy,
-    build_hash_checking: HashCheckingMode,
+    require_build_hashes: bool,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
@@ -196,9 +195,9 @@ impl<'a> BuildDispatch<'a> {
             link_mode,
             build_options,
             base_hasher: hasher,
-            build_hash_checking: match hasher.verification() {
-                HashVerification::Required(_) => HashCheckingMode::Require,
-                HashVerification::None | HashVerification::IfPresent(_) => HashCheckingMode::Verify,
+            require_build_hashes: match hasher.verification() {
+                HashVerification::Required(_) => true,
+                HashVerification::None | HashVerification::IfPresent(_) => false,
             },
             exclude_newer,
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
@@ -245,17 +244,13 @@ impl<'a> BuildDispatch<'a> {
         self
     }
 
-    /// Set the hash-checking mode for build dependencies.
+    /// Set whether hashes are required for build dependencies.
     ///
     /// When hashes are required, hashes from backend-generated requirements are not trusted.
     #[must_use]
-    pub fn with_build_hash_checking(mut self, mode: HashCheckingMode) -> Self {
-        self.build_hash_checking = mode;
+    pub fn with_require_build_hashes(mut self, require_build_hashes: bool) -> Self {
+        self.require_build_hashes = require_build_hashes;
         self
-    }
-
-    fn require_build_hashes(&self) -> bool {
-        self.build_hash_checking.is_require()
     }
 }
 
@@ -343,7 +338,7 @@ impl BuildContext for BuildDispatch<'_> {
         });
         let previous_hasher = hash_override;
         let hasher = match previous_hasher {
-            Some(hasher) if self.require_build_hashes() => hasher
+            Some(hasher) if self.require_build_hashes => hasher
                 .clone()
                 .augment_with_metadata_requirements(active_requirements),
             previous_hasher => previous_hasher

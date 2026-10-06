@@ -15,7 +15,7 @@ use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecification, GitLfsSetting, InstallOptions, Override, TargetTriple,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
 };
 use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::{
@@ -426,7 +426,7 @@ impl ToolLock {
             config_setting,
             config_settings_package,
             build_isolation,
-            build_hash_checking,
+            require_build_hashes,
             extra_build_dependencies,
             extra_build_variables,
             exclude_newer,
@@ -474,7 +474,11 @@ impl ToolLock {
         let build_hasher = HashStrategy::from_constraints(
             build_constraints,
             Some(&interpreter.to_resolver_marker_environment()),
-            *build_hash_checking,
+            if *require_build_hashes {
+                HashCheckingMode::Require
+            } else {
+                HashCheckingMode::Verify
+            },
         )?;
 
         let flat_index = FlatIndex::load(&client, cache, index_locations).await?;

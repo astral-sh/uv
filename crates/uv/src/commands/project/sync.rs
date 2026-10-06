@@ -784,7 +784,7 @@ pub(crate) async fn do_sync(
         config_setting,
         config_settings_package,
         build_isolation,
-        build_hash_checking,
+        require_build_hashes,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -1009,7 +1009,11 @@ pub(crate) async fn do_sync(
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&venv.interpreter().to_resolver_marker_environment()),
-        build_hash_checking,
+        if require_build_hashes {
+            HashCheckingMode::Require
+        } else {
+            HashCheckingMode::Verify
+        },
     )?;
     // Also verify artifacts in the full lockfile, including unselected extras and groups.
     let build_hasher = target

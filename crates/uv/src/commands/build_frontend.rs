@@ -322,7 +322,7 @@ async fn build_impl(
         config_setting,
         config_settings_package,
         build_isolation,
-        build_hash_checking,
+        require_build_hashes,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -495,7 +495,7 @@ async fn build_impl(
             index_locations,
             client_builder.clone(),
             hash_checking,
-            *build_hash_checking,
+            *require_build_hashes,
             build_logs,
             gitignore,
             force_pep517,
@@ -574,7 +574,7 @@ async fn build_package(
     index_locations: &IndexLocations,
     client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
-    build_hash_checking: HashCheckingMode,
+    require_build_hashes: bool,
     build_logs: bool,
     gitignore: bool,
     force_pep517: bool,
@@ -667,9 +667,10 @@ async fn build_package(
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
-    let hash_checking = match build_hash_checking {
-        HashCheckingMode::Require => Some(HashCheckingMode::Require),
-        HashCheckingMode::Verify => hash_checking,
+    let hash_checking = if require_build_hashes {
+        Some(HashCheckingMode::Require)
+    } else {
+        hash_checking
     };
     let hasher = if let Some(hash_checking) = hash_checking {
         // `uv build --require-hashes` requires hashes only for command-line build constraints;
@@ -680,7 +681,7 @@ async fn build_package(
                     .iter()
                     .filter(|entry| {
                         !hash_checking.is_require()
-                            || build_hash_checking.is_require()
+                            || require_build_hashes
                             || !entry.hashes.is_empty()
                     })
                     .cloned(),
@@ -754,7 +755,7 @@ async fn build_package(
         concurrency.clone(),
         preview,
     )
-    .with_build_hash_checking(build_hash_checking);
+    .with_require_build_hashes(require_build_hashes);
     let dependency_check = match types_build_isolation {
         uv_types::BuildIsolation::Isolated => None,
         uv_types::BuildIsolation::Shared(_) | uv_types::BuildIsolation::SharedPackage(..) => {

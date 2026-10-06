@@ -47,9 +47,7 @@ use crate::commands::install_report::write_install_report;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
-use crate::commands::pip::{
-    operations, resolution_markers, resolution_tags, resolve_build_hash_checking,
-};
+use crate::commands::pip::{PipHashPolicies, operations, resolution_markers, resolution_tags};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError};
@@ -67,7 +65,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
-    build_hash_checking: HashCheckingMode,
+    require_build_hashes: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
@@ -147,8 +145,10 @@ pub(crate) async fn pip_sync(
     )
     .await?;
 
-    let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
-    let build_hash_checking = resolve_build_hash_checking(hash_checking, build_hash_checking);
+    let PipHashPolicies {
+        runtime: hash_checking,
+        build: build_hash_checking,
+    } = PipHashPolicies::new(hash_checking, require_hashes, require_build_hashes);
 
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {

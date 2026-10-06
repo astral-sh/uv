@@ -18,15 +18,28 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod uninstall;
 
-/// Require build hashes independently of runtime checking. Otherwise, verify supplied build
-/// hashes only when runtime checking is enabled.
-fn resolve_build_hash_checking(
-    hash_checking: Option<HashCheckingMode>,
-    build_hash_checking: HashCheckingMode,
-) -> Option<HashCheckingMode> {
-    match build_hash_checking {
-        HashCheckingMode::Require => Some(HashCheckingMode::Require),
-        HashCheckingMode::Verify => hash_checking.map(|_| HashCheckingMode::Verify),
+/// Hash-checking policies for installing runtime and build dependencies with `uv pip`.
+struct PipHashPolicies {
+    runtime: Option<HashCheckingMode>,
+    build: Option<HashCheckingMode>,
+}
+
+impl PipHashPolicies {
+    /// Resolve both policies after reading `--require-hashes` from requirements files.
+    fn new(
+        hash_checking: Option<HashCheckingMode>,
+        require_hashes: bool,
+        require_build_hashes: bool,
+    ) -> Self {
+        let runtime = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
+        // Build hashes are required independently of runtime checking. Otherwise, supplied build
+        // hashes are verified only when runtime checking is enabled.
+        let build = if require_build_hashes {
+            Some(HashCheckingMode::Require)
+        } else {
+            runtime.map(|_| HashCheckingMode::Verify)
+        };
+        Self { runtime, build }
     }
 }
 
