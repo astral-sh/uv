@@ -72,7 +72,7 @@ uv-workspace = { workspace = true, features = ["clap"] }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 axoupdater = { workspace = true, features = [
   "github_releases",
   "tokio",
