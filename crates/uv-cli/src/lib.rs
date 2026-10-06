@@ -7019,11 +7019,11 @@ pub struct AuthTokenArgs {
     #[arg(long, short, value_hint = ValueHint::Other)]
     pub username: Option<String>,
 
-    /// The keyring provider to use for reading credentials.
     #[arg(
         long,
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
+        hide = true,
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 }
@@ -8337,7 +8337,7 @@ mod tests {
     use super::{AuthCommand, Cli, Commands};
 
     #[test]
-    fn auth_keyring_provider_hidden_from_login_logout_help() {
+    fn auth_keyring_provider_hidden_from_help() {
         let mut command = Cli::command();
         let auth = command
             .find_subcommand_mut("auth")
@@ -8356,6 +8356,13 @@ mod tests {
             .render_help()
             .to_string();
         assert!(!logout_help.contains("--keyring-provider"));
+
+        let token_help = auth
+            .find_subcommand_mut("token")
+            .expect("auth token subcommand should exist")
+            .render_help()
+            .to_string();
+        assert!(!token_help.contains("--keyring-provider"));
     }
 
     #[test]
