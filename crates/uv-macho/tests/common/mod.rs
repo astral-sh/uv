@@ -3,7 +3,6 @@
 use std::ffi::CStr;
 
 use anyhow::{Context, Result};
-use scroll::{LE, Pread};
 
 pub(crate) struct LoadCommand<'a> {
     pub(crate) offset: usize,
@@ -12,13 +11,13 @@ pub(crate) struct LoadCommand<'a> {
 }
 
 pub(crate) fn commands(image: &[u8]) -> Result<Vec<LoadCommand<'_>>> {
-    let count = image.pread_with::<u32>(16, LE)?;
+    let count = u32::from_le_bytes(image[16..20].try_into()?);
     let mut offset = 32;
     let mut commands = Vec::new();
 
     for _ in 0..count {
-        let kind = image.pread_with(offset, LE)?;
-        let size = image.pread_with::<u32>(offset + 4, LE)? as usize;
+        let kind = u32::from_le_bytes(image[offset..offset + 4].try_into()?);
+        let size = u32::from_le_bytes(image[offset + 4..offset + 8].try_into()?) as usize;
         commands.push(LoadCommand {
             offset,
             kind,
@@ -35,7 +34,7 @@ pub(crate) fn install_name(image: &[u8]) -> Result<&[u8]> {
         .into_iter()
         .find(|command| command.kind == 0xd)
         .context("LC_ID_DYLIB")?;
-    let offset = command.data.pread_with::<u32>(8, LE)? as usize;
+    let offset = u32::from_le_bytes(command.data[8..12].try_into()?) as usize;
     let bytes = command.data.get(offset..).context("install name")?;
     Ok(CStr::from_bytes_until_nul(bytes)?.to_bytes())
 }
@@ -55,17 +54,17 @@ pub(crate) fn sections(image: &[u8]) -> Result<Vec<Section<'_>>> {
             continue;
         }
 
-        let count = command.data.pread_with::<u32>(64, LE)? as usize;
+        let count = u32::from_le_bytes(command.data[64..68].try_into()?) as usize;
         for index in 0..count {
             let section = command
                 .data
                 .get(72 + index * 80..72 + (index + 1) * 80)
                 .context("section header")?;
-            let offset = section.pread_with::<u32>(48, LE)? as usize;
-            let flags = section.pread_with::<u32>(64, LE)?;
+            let offset = u32::from_le_bytes(section[48..52].try_into()?) as usize;
+            let flags = u32::from_le_bytes(section[64..68].try_into()?);
             let size = match flags & 0xff {
                 1 | 0xc | 0x12 => 0,
-                _ => usize::try_from(section.pread_with::<u64>(40, LE)?)?,
+                _ => usize::try_from(u64::from_le_bytes(section[40..48].try_into()?))?,
             };
             sections.push(Section {
                 name: &section[..16],
