@@ -225,7 +225,23 @@ impl CacheInfo {
 
         // If we have any globs, first cluster them using LCP and then do a single pass on each group.
         if !globs.is_empty() {
-            for (glob_base, glob_patterns) in cluster_globs(&globs) {
+            let mut groups = Vec::new();
+            let mut clusterable = Vec::new();
+            for glob in &globs {
+                let single = cluster_globs(std::slice::from_ref(glob));
+                // Literal bases can traverse symlinks, while the walker does not follow directory
+                // symlinks beneath its root. Keep those bases when combining other glob rules.
+                if single.iter().any(|(base, _)| {
+                    base.ancestors()
+                        .any(|ancestor| directory.join(ancestor).is_symlink())
+                }) {
+                    groups.extend(single);
+                } else {
+                    clusterable.push(glob);
+                }
+            }
+            groups.extend(cluster_globs(&clusterable));
+            for (glob_base, glob_patterns) in groups {
                 let walker = globwalk::GlobWalkerBuilder::from_patterns(
                     directory.join(glob_base),
                     &glob_patterns,
