@@ -8,7 +8,6 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_command_support::{ExitStatus, Printer};
 use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDistKind, Name};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -16,10 +15,12 @@ use uv_normalize::PackageName;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
 use uv_python::{PythonArchitecture, PythonPreference};
 
-use crate::commands::pip::reporters::report_target_environment;
+use crate::reporters::report_target_environment;
+use uv_command_support::ExitStatus;
+use uv_command_support::Printer;
 
 /// Enumerate the installed packages in the current environment.
-pub(crate) fn pip_freeze(
+pub fn pip_freeze(
     python_arch: Option<PythonArchitecture>,
     exclude_editable: bool,
     exclude: &FxHashSet<PackageName>,

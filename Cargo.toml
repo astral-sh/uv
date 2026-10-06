@@ -71,6 +71,7 @@ uv-pep508 = { version = "0.0.90", path = "crates/uv-pep508", features = [
   "non-pep508-extensions",
 ] }
 uv-platform = { version = "0.0.90", path = "crates/uv-platform" }
+uv-pip-commands = { version = "0.0.90", path = "crates/uv-pip-commands" }
 uv-platform-tags = { version = "0.0.90", path = "crates/uv-platform-tags" }
 uv-preview = { version = "0.0.90", path = "crates/uv-preview" }
 uv-publish = { version = "0.0.90", path = "crates/uv-publish" }

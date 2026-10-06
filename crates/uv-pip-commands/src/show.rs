@@ -8,7 +8,6 @@ use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_command_support::{ExitStatus, Printer};
 use uv_distribution_types::{DependencyMetadata, Diagnostic, Name};
 use uv_fs::Simplified;
 use uv_install_wheel::read_record;
@@ -19,10 +18,12 @@ use uv_python::{
     PythonRequest, Target,
 };
 
-use crate::commands::pip::reporters::report_target_environment;
+use crate::reporters::report_target_environment;
+use uv_command_support::ExitStatus;
+use uv_command_support::Printer;
 
 /// Show information about one or more installed packages.
-pub(crate) fn pip_show(
+pub fn pip_show(
     python_arch: Option<PythonArchitecture>,
     mut packages: Vec<PackageName>,
     strict: bool,

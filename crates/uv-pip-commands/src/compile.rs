@@ -13,7 +13,6 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
@@ -55,6 +54,8 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, OutputWriter, UvError};
 use uv_python_context::PythonDownloadReporter;
 use uv_resolve_operations::locked_requirements::{
     LockedRequirements, read_pylock_toml_requirements, read_requirements_txt,
@@ -64,7 +65,7 @@ use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn pip_compile(
+pub async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],

@@ -6,18 +6,15 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{Level, debug, enabled, warn};
 
-use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_errors::{Hinted, Hints};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::PipInstallFormat;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
-    ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
-    Reinstall, Upgrade,
+    ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, KeyringProviderType,
+    Modifications, NoSources, Override, PipInstallFormat, Reinstall, TargetTriple, Upgrade,
 };
-use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -47,22 +44,21 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
-use crate::commands::install_report::write_install_report;
-use crate::commands::pip::reporters::report_target_environment;
-use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
-use uv_configuration::Modifications;
+use crate::install_report::write_install_report;
+use crate::pylock::{read_pylock_toml, resolve_pylock_toml};
+use crate::reporters::report_target_environment;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_install_operations::Changelog;
 use uv_install_operations::editable::apply_editable_mode;
 use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
-use uv_python_context::PythonDownloadReporter;
-use uv_python_context::report_interpreter;
+use uv_python_context::{PythonDownloadReporter, report_interpreter};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// The interpreter is externally managed and cannot be modified.
 #[derive(Debug, Error)]
 #[error("{message}")]
-pub(crate) struct ExternallyManagedError {
+pub struct ExternallyManagedError {
     message: String,
     root: PathBuf,
     system: bool,
@@ -80,7 +76,7 @@ impl Hinted for ExternallyManagedError {
 
 /// Install packages into the current environment.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn pip_install(
+pub async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],

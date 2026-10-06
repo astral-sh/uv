@@ -8,13 +8,11 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_command_support::{ExitStatus, Printer, UvError};
-use uv_configuration::PipInstallFormat;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, Modifications, NoSources,
+    PipInstallFormat, Reinstall, TargetTriple, Upgrade,
 };
-use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -44,20 +42,19 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
-use crate::commands::install_report::write_install_report;
-use crate::commands::pip::reporters::report_target_environment;
-use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
-use uv_configuration::Modifications;
+use crate::install_report::write_install_report;
+use crate::pylock::{read_pylock_toml, resolve_pylock_toml};
+use crate::reporters::report_target_environment;
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_python_context::PythonDownloadReporter;
-use uv_python_context::report_interpreter;
+use uv_python_context::{PythonDownloadReporter, report_interpreter};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// Install a set of locked requirements into the current Python environment.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn pip_sync(
+pub async fn pip_sync(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
