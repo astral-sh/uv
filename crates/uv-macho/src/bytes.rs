@@ -1,3 +1,4 @@
+use std::ffi::CStr;
 use std::ops::Range;
 
 use crate::Error;
@@ -11,21 +12,12 @@ pub(crate) fn range(offset: usize, size: usize, limit: usize) -> Result<Range<us
     Ok(offset..end)
 }
 
-pub(crate) fn usize_size(value: u64) -> Result<usize, Error> {
-    value.try_into().map_err(|_| Error::TooLarge)
-}
-
-pub(crate) fn c_string(bytes: &[u8], offset: usize) -> Result<&[u8], Error> {
+pub(crate) fn c_string(bytes: &[u8], offset: usize) -> Result<&CStr, Error> {
     let bytes = bytes
         .get(offset..)
         .ok_or(Error::Malformed("invalid string offset"))?;
 
-    let end = bytes
-        .iter()
-        .position(|byte| *byte == 0)
-        .ok_or(Error::Malformed("unterminated string"))?;
-
-    Ok(&bytes[..end])
+    CStr::from_bytes_until_nul(bytes).map_err(|_| Error::Malformed("unterminated string"))
 }
 
 /// Read a fixed-width field without assuming its alignment in the input.
