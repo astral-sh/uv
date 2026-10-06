@@ -95,6 +95,7 @@ uv-test = { version = "0.0.90", path = "crates/uv-test" }
 uv-threads = { version = "0.0.90", path = "crates/uv-threads" }
 uv-toml = { version = "0.0.90", path = "crates/uv-toml" }
 uv-tool = { version = "0.0.90", path = "crates/uv-tool" }
+uv-tool-commands = { version = "0.0.90", path = "crates/uv-tool-commands" }
 uv-torch = { version = "0.0.90", path = "crates/uv-torch" }
 uv-trampoline-builder = { version = "0.0.90", path = "crates/uv-trampoline-builder" }
 uv-types = { version = "0.0.90", path = "crates/uv-types" }

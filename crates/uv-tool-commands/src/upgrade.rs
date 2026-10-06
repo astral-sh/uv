@@ -1,3 +1,4 @@
+use crate::common::finalize_tool_install;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -9,8 +10,10 @@ use tracing::{debug, trace};
 use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
-use uv_command_support::{ExitStatus, Printer, conjunction};
-use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraints, DryRun, HashCheckingMode, Modifications, TargetTriple,
+};
+use uv_dispatch::PlatformState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
@@ -28,10 +31,8 @@ use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::tool::common::finalize_tool_install;
-use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
-use uv_configuration::Modifications;
-use uv_dispatch::PlatformState;
+use crate::common::{ToolLock, remove_entrypoints, tool_environment_spec};
+use uv_command_support::{ExitStatus, Printer, conjunction};
 use uv_environment_operations::{
     EnvironmentResolution, EnvironmentUpdate, resolve_environment, sync_environment,
     update_environment,
@@ -43,7 +44,7 @@ use uv_resolve_operations::resolution_tags;
 use uv_settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
-pub(crate) async fn upgrade(
+pub async fn upgrade(
     names: Vec<String>,
     python: Option<String>,
     python_platform: Option<TargetTriple>,

@@ -6,20 +6,23 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_python::PythonRequest;
 
-pub(crate) mod audit;
-pub(crate) mod common;
-pub(crate) mod dir;
-pub(crate) mod install;
-pub(crate) mod list;
+pub mod audit;
+mod common;
+pub mod dir;
+mod error;
+pub mod install;
+pub mod list;
 mod requirements;
-pub(crate) mod run;
-pub(crate) mod uninstall;
-pub(crate) mod update_shell;
-pub(crate) mod upgrade;
+pub mod run;
+pub mod uninstall;
+pub mod update_shell;
+pub mod upgrade;
+
+pub use common::NoExecutablesError;
 
 /// A request to run or install a tool (e.g., `uvx ruff@latest`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ToolRequest<'a> {
+enum ToolRequest<'a> {
     // Running the interpreter directly e.g. `uvx python` or `uvx pypy@3.8`
     Python {
         /// The executable name (e.g., `bash`), if the interpreter was given via --from.
@@ -77,7 +80,7 @@ impl<'a> ToolRequest<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Target<'a> {
+enum Target<'a> {
     /// e.g., `ruff`
     Unspecified(&'a str),
     /// e.g., `ruff[extra]@0.6.0`
@@ -210,5 +213,3 @@ mod tests {
         assert_eq!(target, expected);
     }
 }
-
-mod error;

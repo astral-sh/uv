@@ -5,7 +5,7 @@ use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
 use crate::commands::python::install::InvalidUpgradeRequestError;
-use crate::commands::tool::common::NoExecutablesError;
+use crate::commands::tool::NoExecutablesError;
 use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
 use uv_command_support::Printer;
 use uv_resolve_operations::ExtrasWithoutSourceError;
