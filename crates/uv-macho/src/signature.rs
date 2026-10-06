@@ -5,7 +5,6 @@
 use std::collections::BTreeMap;
 use std::ffi::CStr;
 
-use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
 use crate::bytes::{array, slice};
@@ -21,6 +20,7 @@ const BLOB_WRAPPER: u32 = 0xfade_0b01;
 const CS_ADHOC: u32 = 2;
 const CS_LINKER_SIGNED: u32 = 0x20000;
 const PAGE_SIZE: usize = 4096;
+const SHA256_SIZE: usize = 32;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Metadata<'image> {
@@ -296,34 +296,24 @@ impl<'image> Metadata<'image> {
         code_limit: usize,
         text: (u64, u64),
         info_plist: Option<&'a [u8]>,
-        algorithms: SigningAlgorithms,
     ) -> Result<PreparedSignature<'a>, Error> {
-        let algorithms: &[CodeDirectoryHash] = match algorithms {
-            SigningAlgorithms::Sha256 => &[CodeDirectoryHash::Sha256],
-            SigningAlgorithms::Sha1AndSha256 => {
-                &[CodeDirectoryHash::Sha1, CodeDirectoryHash::Sha256]
-            }
-        };
-        let directories = algorithms
-            .iter()
-            .map(|&hash| PreparedCodeDirectory::new(self, code_limit, text, hash))
-            .collect::<Result<Vec<_>, Error>>()?;
+        // All supported macOS hosts accept SHA-256, regardless of the dylib's deployment target.
+        let directory = PreparedCodeDirectory::new(self, code_limit, text)?;
 
-        let count = self.components.len() + directories.len() + 1;
+        let count = self.components.len() + 2;
         let mut size = 12usize.checked_add(count * 8).ok_or(Error::TooLarge)?;
         for length in self
             .components
             .values()
             .map(Vec::len)
-            .chain(directories.iter().map(|directory| directory.bytes.len()))
-            .chain([8])
+            .chain([directory.bytes.len(), 8])
         {
             size = size.checked_add(length).ok_or(Error::TooLarge)?;
         }
 
         Ok(PreparedSignature {
             metadata: self,
-            directories,
+            directory,
             info_plist,
             code_limit,
             size: u32::try_from(size)?,
@@ -331,17 +321,10 @@ impl<'image> Metadata<'image> {
     }
 }
 
-/// The hash algorithms required by the dylib's deployment target.
-#[derive(Clone, Copy)]
-pub(crate) enum SigningAlgorithms {
-    Sha256,
-    Sha1AndSha256,
-}
-
 /// Allocated signature records that cannot be serialized until hashing completes.
 pub(crate) struct PreparedSignature<'a> {
     metadata: &'a Metadata<'a>,
-    directories: Vec<PreparedCodeDirectory<'a>>,
+    directory: PreparedCodeDirectory<'a>,
     info_plist: Option<&'a [u8]>,
     code_limit: usize,
     size: u32,
@@ -366,10 +349,7 @@ impl PreparedSignature<'_> {
             .iter()
             .map(|(slot, data)| (*slot as u32, data.clone()))
             .collect::<BTreeMap<_, _>>();
-        for (index, directory) in self.directories.into_iter().enumerate() {
-            let slot = if index == 0 { 0 } else { 0x1000 };
-            entries.insert(slot, directory.sign(source, self.info_plist));
-        }
+        entries.insert(0, self.directory.sign(source, self.info_plist));
 
         // An empty CMS wrapper matches Apple's bare ad-hoc signatures.
         let wrapper = [BLOB_WRAPPER.to_be_bytes(), 8u32.to_be_bytes()].concat();
@@ -399,16 +379,10 @@ struct PreparedCodeDirectory<'a> {
     metadata: &'a Metadata<'a>,
     bytes: Vec<u8>,
     hash_offset: usize,
-    hash: CodeDirectoryHash,
 }
 
 impl<'a> PreparedCodeDirectory<'a> {
-    fn new(
-        metadata: &'a Metadata<'a>,
-        code_limit: usize,
-        text: (u64, u64),
-        hash: CodeDirectoryHash,
-    ) -> Result<Self, Error> {
+    fn new(metadata: &'a Metadata<'a>, code_limit: usize, text: (u64, u64)) -> Result<Self, Error> {
         let fixed_size = if metadata.runtime == 0 { 88 } else { 96 };
         let special_count = metadata
             .components
@@ -420,10 +394,10 @@ impl<'a> PreparedCodeDirectory<'a> {
         let identifier = metadata.identifier.as_c_str().to_bytes_with_nul();
         let hash_offset = identifier
             .len()
-            .checked_add(fixed_size + special_count * hash.size())
+            .checked_add(fixed_size + special_count * SHA256_SIZE)
             .ok_or(Error::TooLarge)?;
         let length = hash_offset
-            .checked_add(code_count.checked_mul(hash.size()).ok_or(Error::TooLarge)?)
+            .checked_add(code_count.checked_mul(SHA256_SIZE).ok_or(Error::TooLarge)?)
             .ok_or(Error::TooLarge)?;
         let length_u32 = u32::try_from(length)?;
 
@@ -443,14 +417,8 @@ impl<'a> PreparedCodeDirectory<'a> {
         output[28..32].copy_from_slice(&u32::to_be_bytes(u32::try_from(code_count)?));
         output[32..36].copy_from_slice(&u32::to_be_bytes(u32::try_from(code_limit)?));
 
-        output[36] = match hash {
-            CodeDirectoryHash::Sha1 => 20,
-            CodeDirectoryHash::Sha256 => 32,
-        };
-        output[37] = match hash {
-            CodeDirectoryHash::Sha1 => 1,
-            CodeDirectoryHash::Sha256 => 2,
-        };
+        output[36] = 32;
+        output[37] = 2;
         output[39] = 12;
 
         output[64..72].copy_from_slice(&u64::to_be_bytes(text.0));
@@ -466,29 +434,23 @@ impl<'a> PreparedCodeDirectory<'a> {
             metadata,
             bytes: output,
             hash_offset,
-            hash,
         })
     }
 
     fn sign(mut self, source: &[u8], info_plist: Option<&[u8]>) -> Vec<u8> {
         for (&slot, data) in &self.metadata.components {
-            let offset = self.hash_offset - slot as usize * self.hash.size();
-            self.hash
-                .write(data, &mut self.bytes[offset..offset + self.hash.size()]);
+            let offset = self.hash_offset - slot as usize * SHA256_SIZE;
+            self.bytes[offset..offset + SHA256_SIZE].copy_from_slice(&Sha256::digest(data));
         }
 
         if let Some(info_plist) = info_plist {
-            self.hash.write(
-                info_plist,
-                &mut self.bytes[self.hash_offset - self.hash.size()..self.hash_offset],
-            );
+            self.bytes[self.hash_offset - SHA256_SIZE..self.hash_offset]
+                .copy_from_slice(&Sha256::digest(info_plist));
         }
 
-        for (page, destination) in source
-            .chunks(PAGE_SIZE)
-            .zip(self.bytes[self.hash_offset..].chunks_mut(self.hash.size()))
-        {
-            self.hash.write(page, destination);
+        let (hashes, _) = self.bytes[self.hash_offset..].as_chunks_mut::<SHA256_SIZE>();
+        for (page, destination) in source.chunks(PAGE_SIZE).zip(hashes) {
+            destination.copy_from_slice(&Sha256::digest(page));
         }
 
         self.bytes
@@ -523,27 +485,4 @@ enum ComponentSlot {
     Requirements = 2,
     Entitlements = 5,
     DerEntitlements = 7,
-}
-
-/// `CodeDirectory` hash formats store raw digests and include legacy SHA-1 support.
-#[derive(Clone, Copy)]
-enum CodeDirectoryHash {
-    Sha1,
-    Sha256,
-}
-
-impl CodeDirectoryHash {
-    fn size(self) -> usize {
-        match self {
-            Self::Sha1 => 20,
-            Self::Sha256 => 32,
-        }
-    }
-
-    fn write(self, data: &[u8], destination: &mut [u8]) {
-        match self {
-            Self::Sha1 => destination.copy_from_slice(&Sha1::digest(data)),
-            Self::Sha256 => destination.copy_from_slice(&Sha256::digest(data)),
-        }
-    }
 }
