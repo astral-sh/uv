@@ -296,7 +296,6 @@ pub async fn metadata(
             })
             .ok();
         let collected = collect_environment(
-            &mut export,
             install_target,
             &environment,
             &settings,
@@ -313,6 +312,7 @@ pub async fn metadata(
         .context("Failed to inspect environment")?;
         export = export
             .with_environment(&environment, collected.packages.iter())
+            .with_unmanaged_distributions(collected.unmanaged_distributions.iter())
             .with_module_owners(collected.module_owners);
     }
 

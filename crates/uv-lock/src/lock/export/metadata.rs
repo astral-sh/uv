@@ -90,10 +90,12 @@ pub struct Metadata {
     /// These entries are often what you should use as the entry-points into the `resolve` graph.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     members: Vec<MetadataWorkspaceMember>,
-    /// The dependency graph, including disconnected nodes for installed packages outside the
-    /// selected resolution.
+    /// The dependency graph.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     resolution: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
+    /// Package nodes for unmanaged distributions with discoverable modules.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    unmanaged_distributions: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
 }
 
 /// The schema version for the metadata report.
@@ -119,20 +121,20 @@ struct MetadataEnvironment {
     root: PortablePathBuf,
     /// Information about the Python interpreter in the environment.
     python: PythonReport,
-    /// Distributions present in the environment, independently of the locked resolution.
+    /// The distributions installed in the environment, regardless of the locked resolution.
     packages: BTreeMap<String, MetadataInstalledPackage>,
 }
 
-/// A distribution observed in an existing Python environment.
+/// A distribution installed in a Python environment.
 #[derive(Debug, serde::Serialize)]
 struct MetadataInstalledPackage {
-    /// Normalized distribution name.
+    /// The normalized name of the distribution.
     name: PackageName,
-    /// Installed distribution version.
+    /// The installed version of the distribution.
     version: Version,
-    /// Absolute path to the installed distribution metadata.
+    /// The absolute path to the distribution's installed metadata.
     path: PortablePathBuf,
-    /// Whether the distribution is installed in editable mode.
+    /// Whether the distribution was installed as editable.
     editable: bool,
 }
 
@@ -255,11 +257,11 @@ impl MetadataWorkspaceMember {
 /// An installed distribution that provides an importable module.
 #[derive(Debug, serde::Serialize)]
 struct MetadataModuleOwner {
-    /// Key for the package node in the `resolution` graph.
+    /// Key for the package node in `resolution` or `unmanaged_distributions`.
     package_id: MetadataNodeIdFlat,
 }
 
-/// A node in the dependency graph.
+/// A node in the metadata report.
 ///
 /// There are 6 kinds of nodes:
 ///
@@ -788,6 +790,17 @@ pub(crate) struct MetadataWorkspaceGroupNodeId {
 type MetadataNodeIdFlat = String;
 
 impl MetadataNodeId {
+    fn from_unmanaged_distribution(dist: &InstalledDist) -> Self {
+        Self::Package(MetadataPackageNodeId {
+            name: dist.name().clone(),
+            version: Some(dist.version().clone()),
+            source: MetadataSource::Unmanaged {
+                unmanaged: PortablePathBuf::from(dist.install_path()),
+            },
+            kind: MetadataNodeKind::Package,
+        })
+    }
+
     pub(crate) fn from_script(path: PortablePathBuf) -> Self {
         Self::Script(MetadataScriptNodeId {
             kind: MetadataScriptNodeKind::Script,
@@ -924,9 +937,12 @@ enum MetadataSource {
     Virtual {
         r#virtual: PortablePathBuf,
     },
-    /// An installed distribution outside the selected resolution, identified by its metadata path.
-    Installed {
-        installed: PortablePathBuf,
+    /// An unmanaged distribution, identified by its metadata path.
+    ///
+    /// Unmanaged distributions are installed but have no matching non-virtual package in the
+    /// selected resolution.
+    Unmanaged {
+        unmanaged: PortablePathBuf,
     },
 }
 
@@ -947,7 +963,7 @@ impl Display for MetadataSource {
             | Self::Directory { directory: path }
             | Self::Editable { editable: path }
             | Self::Virtual { r#virtual: path }
-            | Self::Installed { installed: path } => {
+            | Self::Unmanaged { unmanaged: path } => {
                 write!(f, "{}+{}", self.name(), path)
             }
         }
@@ -964,7 +980,7 @@ impl MetadataSource {
             Self::Directory { .. } => "directory",
             Self::Editable { .. } => "editable",
             Self::Virtual { .. } => "virtual",
-            Self::Installed { .. } => "installed",
+            Self::Unmanaged { .. } => "unmanaged",
         }
     }
 }
@@ -1466,6 +1482,7 @@ impl Metadata {
             requires_python: lock.requires_python.clone(),
             members,
             resolution: resolve,
+            unmanaged_distributions: BTreeMap::new(),
         }
     }
 
@@ -1483,22 +1500,28 @@ impl Metadata {
         .to_flat())
     }
 
-    /// Add a disconnected node for an installed distribution outside the selected resolution.
+    /// Return the package node ID for an unmanaged distribution.
     ///
-    /// The installation path identifies the node because installed distributions do not always
-    /// record their original source, such as the registry they were downloaded from.
-    pub fn add_installed_package(&mut self, dist: &InstalledDist) -> String {
-        let node = MetadataNode::new(MetadataNodeId::Package(MetadataPackageNodeId {
-            name: dist.name().clone(),
-            version: Some(dist.version().clone()),
-            source: MetadataSource::Installed {
-                installed: PortablePathBuf::from(dist.install_path()),
-            },
-            kind: MetadataNodeKind::Package,
-        }));
-        let id = node.id.to_flat();
-        self.resolution.insert(id.clone(), node);
-        id
+    /// Installed metadata may not identify the original source, such as the registry, so the
+    /// ID uses the distribution's metadata path as its source.
+    pub fn unmanaged_package_node_id(dist: &InstalledDist) -> String {
+        MetadataNodeId::from_unmanaged_distribution(dist).to_flat()
+    }
+
+    /// Attach package nodes for unmanaged distributions.
+    #[must_use]
+    pub fn with_unmanaged_distributions<'a>(
+        mut self,
+        distributions: impl IntoIterator<Item = &'a InstalledDist>,
+    ) -> Self {
+        self.unmanaged_distributions = distributions
+            .into_iter()
+            .map(|dist| {
+                let node = MetadataNode::new(MetadataNodeId::from_unmanaged_distribution(dist));
+                (node.id.to_flat(), node)
+            })
+            .collect();
+        self
     }
 
     #[must_use]
@@ -1526,7 +1549,10 @@ impl Metadata {
             .filter_map(|(module, owners)| {
                 let owners = owners
                     .into_iter()
-                    .filter(|package_id| self.resolution.contains_key(package_id))
+                    .filter(|package_id| {
+                        self.resolution.contains_key(package_id)
+                            || self.unmanaged_distributions.contains_key(package_id)
+                    })
                     .map(|package_id| MetadataModuleOwner { package_id })
                     .collect::<Vec<_>>();
                 (!owners.is_empty()).then_some((module, owners))

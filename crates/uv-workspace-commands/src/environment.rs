@@ -10,7 +10,7 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions, Modifications, Reinstall,
 };
 use uv_dispatch::UniversalState;
-use uv_distribution_types::{Dist, Name, ResolvedDist};
+use uv_distribution_types::{Dist, InstalledDist, Name, ResolvedDist};
 use uv_environment_operations::install_target::InstallTarget;
 use uv_environment_operations::malware::MalwareCheckContext;
 use uv_environment_operations::sync_from_lock;
@@ -26,20 +26,21 @@ use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::{InstallerSettingsRef, MalwareCheckSettings, ResolverSettings};
 use uv_workspace::WorkspaceCache;
 
+/// Installed distributions and their module ownership.
 pub(super) struct CollectedEnvironment {
+    /// All installed distributions, including unmanaged packages.
     pub(super) packages: SitePackages,
+    /// Unmanaged distributions with discoverable modules.
+    pub(super) unmanaged_distributions: Vec<InstalledDist>,
+    /// Maps importable module names to the IDs of their owning distributions.
     pub(super) module_owners: BTreeMap<ModuleName, Vec<String>>,
 }
 
-/// Inspect installed distributions, optionally syncing all locked extras and groups first.
+/// Collect installed distributions and module ownership, optionally synchronizing first.
 ///
-/// By default, synchronization is sufficient (inexact), so required distributions are available
-/// to inspect without removing unrelated packages from an existing environment. Exact
-/// synchronization removes those unrelated packages instead. Installed distributions are matched
-/// to the selected resolution by name; unmatched distributions with discovered modules get
-/// disconnected metadata nodes. The installed inventory includes every distribution.
+/// Synchronization includes all locked extras and groups. By default, it retains unmanaged packages
+/// outside the selected resolution; exact synchronization removes them.
 pub(super) async fn collect_environment(
-    metadata: &mut Metadata,
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     settings: &ResolverSettings,
@@ -106,17 +107,7 @@ pub(super) async fn collect_environment(
         .await?;
     }
 
-    let packages = SitePackages::from_environment(venv)?;
-    let module_owners = find_module_owners_in_environment(
-        metadata,
-        venv,
-        &packages,
-        &package_ids.unwrap_or_default(),
-    )?;
-    Ok(CollectedEnvironment {
-        packages,
-        module_owners,
-    })
+    inspect_environment(venv, &package_ids.unwrap_or_default())
 }
 
 /// Select the package IDs that can own modules in the target resolution.
@@ -153,13 +144,13 @@ fn selected_package_ids(
     Ok(Some(package_ids))
 }
 
-/// Map modules in an existing environment to selected or installed package IDs.
-fn find_module_owners_in_environment(
-    metadata: &mut Metadata,
+/// Collect installed distributions and associate their modules with selected or unmanaged package IDs.
+fn inspect_environment(
     venv: &PythonEnvironment,
-    packages: &SitePackages,
     package_ids: &BTreeMap<PackageName, String>,
-) -> Result<BTreeMap<ModuleName, Vec<String>>> {
+) -> Result<CollectedEnvironment> {
+    let packages = SitePackages::from_environment(venv)?;
+    let mut unmanaged_distributions = Vec::new();
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
     for dist in packages.iter() {
         let selected_package_id = package_ids.get(dist.name());
@@ -168,10 +159,10 @@ fn find_module_owners_in_environment(
         let modules = match dist.read_modules(venv.interpreter().extension_suffixes()) {
             Ok(modules) => modules,
             Err(err) if selected_package_id.is_none() => {
-                // An unrelated installation's incomplete metadata must not prevent inventorying
-                // the environment or reporting ownership for other distributions.
+                // Incomplete module metadata in an unmanaged package should not prevent
+                // inventory collection or module discovery for other packages.
                 tracing::warn!(
-                    "Failed to discover modules for installed package `{}`: {err}",
+                    "Failed to discover modules for unmanaged package `{}`: {err}",
                     dist.name()
                 );
                 continue;
@@ -181,18 +172,25 @@ fn find_module_owners_in_environment(
         if modules.is_empty() {
             continue;
         }
-        let package_id = selected_package_id
-            .cloned()
-            .unwrap_or_else(|| metadata.add_installed_package(dist));
+        let package_id = if let Some(package_id) = selected_package_id {
+            package_id.clone()
+        } else {
+            unmanaged_distributions.push(dist.clone());
+            Metadata::unmanaged_package_node_id(dist)
+        };
         for module in modules {
             owners.entry(module).or_default().insert(package_id.clone());
         }
     }
 
-    Ok(owners
-        .into_iter()
-        .map(|(module, owners)| (module, owners.into_iter().collect()))
-        .collect())
+    Ok(CollectedEnvironment {
+        packages,
+        unmanaged_distributions,
+        module_owners: owners
+            .into_iter()
+            .map(|(module, owners)| (module, owners.into_iter().collect()))
+            .collect(),
+    })
 }
 
 fn target_selection(
