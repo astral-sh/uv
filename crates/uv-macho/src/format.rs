@@ -5,8 +5,10 @@
 //! Command boundaries and command-relative strings also follow ruby-macho's readers:
 //! <https://github.com/Homebrew/ruby-macho/blob/e106f7782df467357d0273c17aacd40df953de66/lib/macho/load_commands.rb>.
 
+use std::ffi::CStr;
+
 use crate::Error;
-use crate::bytes::{array, c_string, le32, le64, slice};
+use crate::bytes::{array, slice};
 
 pub(crate) const HEADER_SIZE: usize = 32;
 pub(crate) const SEGMENT_SIZE: usize = 72;
@@ -64,11 +66,11 @@ impl Header {
         let data = &array::<HEADER_SIZE>(data, 0)?;
 
         Ok(Self {
-            magic: le32(data, 0)?,
-            cputype: le32(data, 4)?,
-            filetype: le32(data, 12)?,
-            ncmds: le32(data, 16)?,
-            sizeofcmds: le32(data, 20)?,
+            magic: u32::from_le_bytes(array(data, 0)?),
+            cputype: u32::from_le_bytes(array(data, 4)?),
+            filetype: u32::from_le_bytes(array(data, 12)?),
+            ncmds: u32::from_le_bytes(array(data, 16)?),
+            sizeofcmds: u32::from_le_bytes(array(data, 20)?),
         })
     }
 }
@@ -81,7 +83,7 @@ pub(crate) struct Command<'a> {
 
 impl<'a> Command<'a> {
     pub(crate) fn parse(data: &'a [u8]) -> Result<Self, Error> {
-        let kind = le32(data, 0)?;
+        let kind = u32::from_le_bytes(array(data, 0)?);
         let size = match kind {
             LC_SEGMENT_64 => SEGMENT_SIZE,
             LC_SYMTAB | LC_UUID | LC_BUILD_VERSION => 24,
@@ -110,7 +112,7 @@ impl<'a> Command<'a> {
                 // The section table is checked while reading the segment's sections.
             }
             LC_BUILD_VERSION => {
-                let tools_size = (le32(header, 20)? as usize)
+                let tools_size = (u32::from_le_bytes(array(header, 20)?) as usize)
                     .checked_mul(8)
                     .ok_or(Error::TooLarge)?;
                 let tools = slice(data, size, tools_size)?;
@@ -121,11 +123,15 @@ impl<'a> Command<'a> {
             LC_ID_DYLIB | LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB
             | LC_LOAD_UPWARD_DYLIB | LC_LAZY_LOAD_DYLIB | LC_RPATH | LC_SUB_FRAMEWORK
             | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY => {
-                let offset = le32(header, 8)? as usize;
+                let offset = u32::from_le_bytes(array(header, 8)?) as usize;
                 if offset < size {
                     return Err(Error::Malformed("invalid load-command string offset"));
                 }
-                c_string(data, offset)?;
+                let name = data
+                    .get(offset..)
+                    .ok_or(Error::Malformed("invalid string offset"))?;
+                CStr::from_bytes_until_nul(name)
+                    .map_err(|_| Error::Malformed("unterminated string"))?;
             }
             _ => {
                 if data.len() != size {
@@ -155,16 +161,17 @@ impl<'a> Segment<'a> {
             .split_at_checked(SEGMENT_SIZE)
             .ok_or(Error::Malformed("range extends past its containing data"))?;
         let (sections, trailing) = sections.as_chunks::<SECTION_SIZE>();
-        if !trailing.is_empty() || sections.len() != le32(header, 64)? as usize {
+        if !trailing.is_empty() || sections.len() != u32::from_le_bytes(array(header, 64)?) as usize
+        {
             return Err(Error::Malformed("invalid segment section table"));
         }
 
         Ok(Self {
             segname: array(header, 8)?,
-            vmaddr: le64(header, 24)?,
-            vmsize: le64(header, 32)?,
-            fileoff: le64(header, 40)?,
-            filesize: le64(header, 48)?,
+            vmaddr: u64::from_le_bytes(array(header, 24)?),
+            vmsize: u64::from_le_bytes(array(header, 32)?),
+            fileoff: u64::from_le_bytes(array(header, 40)?),
+            filesize: u64::from_le_bytes(array(header, 48)?),
             sections,
         })
     }
@@ -187,12 +194,12 @@ impl Section {
         Ok(Self {
             sectname: array(data, 0)?,
             segname: array(data, 16)?,
-            addr: le64(data, 32)?,
-            size: le64(data, 40)?,
-            offset: le32(data, 48)?,
-            reloff: le32(data, 56)?,
-            nreloc: le32(data, 60)?,
-            flags: le32(data, 64)?,
+            addr: u64::from_le_bytes(array(data, 32)?),
+            size: u64::from_le_bytes(array(data, 40)?),
+            offset: u32::from_le_bytes(array(data, 48)?),
+            reloff: u32::from_le_bytes(array(data, 56)?),
+            nreloc: u32::from_le_bytes(array(data, 60)?),
+            flags: u32::from_le_bytes(array(data, 64)?),
         })
     }
 }

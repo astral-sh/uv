@@ -114,11 +114,11 @@ fn malformed_inputs() {
 /// Locate commands in the known-good fixtures, independently of the layout reader.
 fn command_offset(image: &[u8], kind: u32) -> Result<usize> {
     let mut offset = 32;
-    for _ in 0..super::le32(image, 16)? {
-        if super::le32(image, offset)? == kind {
+    for _ in 0..u32::from_le_bytes(super::array(image, 16)?) {
+        if u32::from_le_bytes(super::array(image, offset)?) == kind {
             return Ok(offset);
         }
-        offset += super::le32(image, offset + 4)? as usize;
+        offset += u32::from_le_bytes(super::array(image, offset + 4)?) as usize;
     }
 
     anyhow::bail!("fixture is missing load command {kind:#x}")
@@ -129,11 +129,11 @@ fn reverse_regions(image: &[u8]) -> Result<Vec<u8>> {
     let mut commands = Vec::new();
     let mut offset = 32;
 
-    for _ in 0..super::le32(image, 16)? {
-        let size = super::le32(image, offset + 4)? as usize;
+    for _ in 0..u32::from_le_bytes(super::array(image, 16)?) {
+        let size = u32::from_le_bytes(super::array(image, offset + 4)?) as usize;
         let data = &image[offset..offset + size];
         let mut command = data.to_vec();
-        if super::le32(data, 0)? == 0x19 {
+        if u32::from_le_bytes(super::array(data, 0)?) == 0x19 {
             let (sections, trailing) = data[72..].as_chunks::<80>();
             assert!(trailing.is_empty());
             for (index, section) in sections.iter().rev().enumerate() {
@@ -158,13 +158,13 @@ fn command_boundaries() -> Result<()> {
     let install_id = command_offset(ARM64, 0xd)?;
     let build_version = command_offset(ARM64, 0x32)?;
     let symbols = command_offset(ARM64, 0x2)?;
-    let install_id_size = super::le32(ARM64, install_id + 4)?;
+    let install_id_size = u32::from_le_bytes(super::array(ARM64, install_id + 4)?);
 
     for (description, offset, value, expected) in [
         (
             "command extends past sizeofcmds",
             20,
-            super::le32(ARM64, 20)? - 8,
+            u32::from_le_bytes(super::array(ARM64, 20)?) - 8,
             Error::Malformed("range extends past its containing data"),
         ),
         (
@@ -218,7 +218,10 @@ fn command_boundaries() -> Result<()> {
     // An empty table does not reference any bytes, even with an out-of-bounds offset.
     let mut image = ARM64.to_vec();
     let dynamic_symbols = command_offset(ARM64, 0xb)?;
-    assert_eq!(super::le32(&image, dynamic_symbols + 36)?, 0);
+    assert_eq!(
+        u32::from_le_bytes(super::array(&image, dynamic_symbols + 36)?),
+        0
+    );
     image[dynamic_symbols + 32..dynamic_symbols + 36].copy_from_slice(&u32::MAX.to_le_bytes());
     parse(&image)?;
 
@@ -229,17 +232,17 @@ fn command_boundaries() -> Result<()> {
 fn overlapping_file_regions() -> Result<()> {
     for fixture in [ARM64, X86_64] {
         let text = command_offset(fixture, 0x19)?;
-        let linkedit = text + super::le32(fixture, text + 4)? as usize;
+        let linkedit = text + u32::from_le_bytes(super::array(fixture, text + 4)?) as usize;
         let first_section = text + 72;
-        let first_offset = super::le32(fixture, first_section + 48)?;
-        let first_size = super::le32(fixture, first_section + 40)?;
-        let second_offset = super::le32(fixture, first_section + 80 + 48)?;
+        let first_offset = u32::from_le_bytes(super::array(fixture, first_section + 48)?);
+        let first_size = u32::from_le_bytes(super::array(fixture, first_section + 40)?);
+        let second_offset = u32::from_le_bytes(super::array(fixture, first_section + 80 + 48)?);
 
         for (description, offset, value) in [
             (
                 "overlapping segments",
                 linkedit + 40,
-                super::le32(fixture, linkedit + 40)? - 1,
+                u32::from_le_bytes(super::array(fixture, linkedit + 40)?) - 1,
             ),
             (
                 "section overlaps previous",

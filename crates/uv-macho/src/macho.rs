@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::Error;
-use crate::bytes::{le32, slice};
+use crate::bytes::{array, slice};
 use crate::format::{
     CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, HEADER_SIZE, Header, LC_BUILD_VERSION,
     LC_CODE_SIGNATURE, LC_DATA_IN_CODE, LC_DYLD_CHAINED_FIXUPS, LC_DYLD_EXPORTS_TRIE, LC_DYLD_INFO,
@@ -35,7 +35,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
 
     let mut commands = Vec::new();
     for _ in 0..header.ncmds {
-        let size = le32(command_data, 4)? as usize;
+        let size = u32::from_le_bytes(array(command_data, 4)?) as usize;
         if size < 8 || !size.is_multiple_of(8) {
             return Err(Error::Malformed("invalid load-command size"));
         }
@@ -70,8 +70,8 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
             }
 
             LC_CODE_SIGNATURE => {
-                let data_offset = le32(command.data, 8)?;
-                let data_size = le32(command.data, 12)?;
+                let data_offset = u32::from_le_bytes(array(command.data, 8)?);
+                let data_size = u32::from_le_bytes(array(command.data, 12)?);
                 if signature_command.replace(index).is_some() {
                     return Err(Error::Malformed("invalid or duplicate LC_CODE_SIGNATURE"));
                 }
@@ -83,17 +83,23 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
             }
 
             LC_VERSION_MIN_MACOSX => {
-                if minimum_version.replace(le32(command.data, 8)?).is_some() {
+                if minimum_version
+                    .replace(u32::from_le_bytes(array(command.data, 8)?))
+                    .is_some()
+                {
                     return Err(Error::Malformed("multiple deployment targets"));
                 }
             }
 
             LC_BUILD_VERSION => {
-                if le32(command.data, 8)? != 1 {
+                if u32::from_le_bytes(array(command.data, 8)?) != 1 {
                     return Err(Error::Unsupported("non-macOS build platform"));
                 }
 
-                if minimum_version.replace(le32(command.data, 12)?).is_some() {
+                if minimum_version
+                    .replace(u32::from_le_bytes(array(command.data, 12)?))
+                    .is_some()
+                {
                     return Err(Error::Malformed("multiple deployment targets"));
                 }
             }
@@ -333,8 +339,8 @@ fn file_references(command: &Command<'_>, references: &mut Vec<(u32, u64)>) -> R
 
     for &(field, entry_size) in fields {
         references.push((
-            le32(command.data, field)?,
-            u64::from(le32(command.data, field + 4)?) * entry_size,
+            u32::from_le_bytes(array(command.data, field)?),
+            u64::from(u32::from_le_bytes(array(command.data, field + 4)?)) * entry_size,
         ));
     }
 
