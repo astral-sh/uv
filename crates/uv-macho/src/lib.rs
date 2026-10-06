@@ -51,7 +51,7 @@ pub struct EditedDylib {
 
 impl EditedDylib {
     /// Consume the edited image and regenerate its ad-hoc code signature.
-    pub fn adhoc_sign(self, identifier: &SigningIdentifier) -> Result<SignedDylib, Error> {
+    pub fn adhoc_sign(self, identifier: SigningIdentifier<'_>) -> Result<SignedDylib, Error> {
         adhoc_sign(&self.bytes, identifier)
     }
 
@@ -89,7 +89,7 @@ impl SignedDylib {
 /// Uses `identifier` when the image has no signing identifier. Existing requirements,
 /// entitlements, and runtime metadata are retained; certificate identity is removed.
 /// Unsupported signing metadata produces an error. The input is never modified.
-pub fn adhoc_sign(image: &[u8], identifier: &SigningIdentifier) -> Result<SignedDylib, Error> {
+pub fn adhoc_sign(image: &[u8], identifier: SigningIdentifier<'_>) -> Result<SignedDylib, Error> {
     Ok(SignedDylib {
         bytes: macho::Layout::parse(image)?.adhoc_sign(identifier)?,
     })
@@ -102,7 +102,7 @@ pub fn adhoc_sign(image: &[u8], identifier: &SigningIdentifier) -> Result<Signed
 pub fn set_install_name(
     image: &[u8],
     name: &InstallName,
-    identifier: &SigningIdentifier,
+    identifier: SigningIdentifier<'_>,
 ) -> Result<SignedDylib, Error> {
     replace_install_name(image, name)?.adhoc_sign(identifier)
 }

@@ -358,7 +358,7 @@ impl<'a> Layout<'a> {
         Ok(output)
     }
 
-    pub(crate) fn adhoc_sign(&self, identifier: &SigningIdentifier) -> Result<Vec<u8>, Error> {
+    pub(crate) fn adhoc_sign(&self, identifier: SigningIdentifier<'_>) -> Result<Vec<u8>, Error> {
         let metadata =
             Metadata::read(self.signature, identifier, self.code_limit, self.info_plist)?;
 

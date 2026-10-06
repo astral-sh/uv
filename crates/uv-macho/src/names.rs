@@ -21,14 +21,13 @@ impl<'a> InstallName<'a> {
     }
 }
 
-/// A nonempty code-signing identifier without interior NUL bytes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SigningIdentifier(CString);
+/// A borrowed, nonempty code-signing identifier without interior NUL bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SigningIdentifier<'a>(&'a CStr);
 
-impl SigningIdentifier {
-    /// Validate an identifier without requiring UTF-8.
-    pub fn new(identifier: &[u8]) -> Result<Self, Error> {
-        let identifier = CString::new(identifier).map_err(|_| Error::InvalidIdentifier)?;
+impl<'a> SigningIdentifier<'a> {
+    /// Validate a C string without requiring UTF-8.
+    pub fn new(identifier: &'a CStr) -> Result<Self, Error> {
         if identifier.is_empty() {
             return Err(Error::InvalidIdentifier);
         }
@@ -36,8 +35,19 @@ impl SigningIdentifier {
         Ok(Self(identifier))
     }
 
-    pub(crate) fn as_c_str(&self) -> &CStr {
-        &self.0
+    pub(crate) fn as_c_str(self) -> &'a CStr {
+        self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SigningIdentifier;
+    use crate::Error;
+
+    #[test]
+    fn invalid_identifier() {
+        assert_eq!(SigningIdentifier::new(c""), Err(Error::InvalidIdentifier));
     }
 }
 

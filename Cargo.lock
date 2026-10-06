@@ -5860,6 +5860,7 @@ dependencies = [
  "uv-lock",
  "uv-lock-operations",
  "uv-logging",
+ "uv-macho",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
