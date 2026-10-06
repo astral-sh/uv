@@ -118,55 +118,55 @@ pub struct Metadata23 {
 impl Metadata23 {
     /// Parse distribution metadata from metadata `MetadataError`
     pub fn parse(content: &[u8]) -> Result<Self, MetadataError> {
-        let headers = Headers::parse(content)?;
+        let headers = Headers::parse(content);
 
         let metadata_version = headers
-            .get_first_value("Metadata-Version")
+            .get_first_value("Metadata-Version")?
             .ok_or(MetadataError::FieldNotFound("Metadata-Version"))?;
         let name = headers
-            .get_first_value("Name")
+            .get_first_value("Name")?
             .ok_or(MetadataError::FieldNotFound("Name"))?;
         let version = headers
-            .get_first_value("Version")
+            .get_first_value("Version")?
             .ok_or(MetadataError::FieldNotFound("Version"))?;
-        let platforms = headers.get_all_values("Platform").collect();
-        let supported_platforms = headers.get_all_values("Supported-Platform").collect();
-        let summary = headers.get_first_value("Summary");
-        let body = str::from_utf8(&content[headers.body_start..])
-            .map_err(MetadataError::DescriptionEncoding)?;
+        let platforms = headers.get_all_values("Platform")?.collect();
+        let supported_platforms = headers.get_all_values("Supported-Platform")?.collect();
+        let summary = headers.get_first_value("Summary")?;
+        let body =
+            str::from_utf8(headers.message.body()).map_err(MetadataError::DescriptionEncoding)?;
         let description = if body.trim().is_empty() {
-            headers.get_first_value("Description")
+            headers.get_first_value("Description")?
         } else {
             Some(body.to_string())
         };
         let keywords = headers
-            .get_first_value("Keywords")
+            .get_first_value("Keywords")?
             .as_deref()
             .map(Keywords::from_metadata);
-        let home_page = headers.get_first_value("Home-Page");
-        let download_url = headers.get_first_value("Download-URL");
-        let author = headers.get_first_value("Author");
-        let author_email = headers.get_first_value("Author-email");
-        let license = headers.get_first_value("License");
-        let license_expression = headers.get_first_value("License-Expression");
-        let license_files = headers.get_all_values("License-File").collect();
-        let classifiers = headers.get_all_values("Classifier").collect();
-        let requires_dist = headers.get_all_values("Requires-Dist").collect();
-        let provides_dist = headers.get_all_values("Provides-Dist").collect();
-        let obsoletes_dist = headers.get_all_values("Obsoletes-Dist").collect();
-        let maintainer = headers.get_first_value("Maintainer");
-        let maintainer_email = headers.get_first_value("Maintainer-email");
-        let requires_python = headers.get_first_value("Requires-Python");
-        let requires_external = headers.get_all_values("Requires-External").collect();
-        let project_urls = ProjectUrls::from_iter_str(headers.get_all_values("Project-URL"));
-        let provides_extra = headers.get_all_values("Provides-Extra").collect();
-        let import_names: Vec<String> = headers.get_all_values("Import-Name").collect();
-        let import_namespaces: Vec<String> = headers.get_all_values("Import-Namespace").collect();
+        let home_page = headers.get_first_value("Home-Page")?;
+        let download_url = headers.get_first_value("Download-URL")?;
+        let author = headers.get_first_value("Author")?;
+        let author_email = headers.get_first_value("Author-email")?;
+        let license = headers.get_first_value("License")?;
+        let license_expression = headers.get_first_value("License-Expression")?;
+        let license_files = headers.get_all_values("License-File")?.collect();
+        let classifiers = headers.get_all_values("Classifier")?.collect();
+        let requires_dist = headers.get_all_values("Requires-Dist")?.collect();
+        let provides_dist = headers.get_all_values("Provides-Dist")?.collect();
+        let obsoletes_dist = headers.get_all_values("Obsoletes-Dist")?.collect();
+        let maintainer = headers.get_first_value("Maintainer")?;
+        let maintainer_email = headers.get_first_value("Maintainer-email")?;
+        let requires_python = headers.get_first_value("Requires-Python")?;
+        let requires_external = headers.get_all_values("Requires-External")?.collect();
+        let project_urls = ProjectUrls::from_iter_str(headers.get_all_values("Project-URL")?);
+        let provides_extra = headers.get_all_values("Provides-Extra")?.collect();
+        let import_names: Vec<String> = headers.get_all_values("Import-Name")?.collect();
+        let import_namespaces: Vec<String> = headers.get_all_values("Import-Namespace")?.collect();
         // PEP 794 requires rejecting modules that are used both in import names and import
         // namespaces. (Nesting is allowed, only exact matches are forbidden.)
         validate_import_name_overlap(&import_names, &import_namespaces)?;
-        let description_content_type = headers.get_first_value("Description-Content-Type");
-        let dynamic = headers.get_all_values("Dynamic").collect();
+        let description_content_type = headers.get_first_value("Description-Content-Type")?;
+        let dynamic = headers.get_all_values("Dynamic")?.collect();
         Ok(Self {
             metadata_version,
             name,

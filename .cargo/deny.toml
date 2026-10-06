@@ -96,6 +96,7 @@ allow-build-scripts = [
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-git = ["https://github.com/astral-sh/astral-mail-headers"]
 
 [licenses]
 confidence-threshold = 0.95
