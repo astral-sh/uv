@@ -40,6 +40,7 @@ use uv_test::archive::{generate_source_archive, write_tar_gz};
 use uv_test::diff_snapshot;
 use uv_test::package_server::PackageServer;
 use uv_test::packse::PackseServer;
+use uv_test::packse::generate_wheel;
 use uv_test::packse::scenario::{ArtifactMetadata, Package, PackageMetadata, Scenario};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
 
@@ -19812,4 +19813,157 @@ async fn compile_missing_python_download_error_warning() {
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     ");
+}
+/// A constraint must not trigger lookahead for a dependency excluded by the environment marker.
+#[test]
+fn lookahead_constraints_respect_false_dependency_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let wheels = context.temp_dir.child("wheels");
+    let requires = vec![str::parse("extra-leaf==1; python_version < '3.0'")?];
+    let extras = BTreeMap::new();
+    let (filename, wheel) = generate_wheel(
+        &"extra-host".parse()?,
+        &"1".parse()?,
+        &requires,
+        &extras,
+        None,
+        "py3-none-any",
+        &[],
+    );
+    wheels.child(&filename).write_binary(&wheel)?;
+    let wheel_url = url::Url::from_file_path(wheels.path().join(&filename))
+        .expect("absolute wheel path")
+        .to_string();
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("extra-host @ {wheel_url}"))?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("extra-leaf @ missing/extra_leaf-2-py3-none-any.whl")?;
+
+    let mut command = context.pip_compile();
+    command
+        .arg("requirements.in")
+        .arg("--constraint")
+        .arg("constraints.txt")
+        .arg("--python-version")
+        .arg("3.13")
+        .arg("--no-index")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-header")
+        .arg("--no-annotate");
+
+    uv_snapshot!(context.filters(), command, @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host @ file://[TEMP_DIR]/wheels/extra_host-1-py3-none-any.whl
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A constraint must not trigger lookahead for an inactive root requirement.
+#[test]
+fn lookahead_constraints_respect_false_root_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("extra-leaf==1; python_version < '3.0'")?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("extra-leaf @ missing/extra_leaf-2-py3-none-any.whl")?;
+
+    let mut command = context.pip_compile();
+    command
+        .arg("requirements.in")
+        .arg("--constraint")
+        .arg("constraints.txt")
+        .arg("--python-version")
+        .arg("3.13")
+        .arg("--no-index")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-header")
+        .arg("--no-annotate");
+    uv_snapshot!(context.filters(), command, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A URL constraint remains available when its dependency marker is active.
+#[test]
+fn lookahead_applies_constraints_for_active_dependency_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let wheels = context.temp_dir.child("wheels");
+    for (name, version, requires) in [
+        (
+            "extra-host",
+            "1",
+            vec![str::parse("extra-leaf>=1; python_version >= '3.0'")?],
+        ),
+        ("extra-leaf", "2", vec![]),
+    ] {
+        let extras = BTreeMap::new();
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &version.parse()?,
+            &requires,
+            &extras,
+            None,
+            "py3-none-any",
+            &[],
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+    let host_url = url::Url::from_file_path(wheels.path().join("extra_host-1-py3-none-any.whl"))
+        .expect("absolute wheel path")
+        .to_string();
+    let leaf_url = url::Url::from_file_path(wheels.path().join("extra_leaf-2-py3-none-any.whl"))
+        .expect("absolute wheel path")
+        .to_string();
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("extra-host @ {host_url}"))?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!("extra-leaf @ {leaf_url}"))?;
+
+    let mut command = context.pip_compile();
+    command
+        .arg("requirements.in")
+        .arg("--constraint")
+        .arg("constraints.txt")
+        .arg("--python-version")
+        .arg("3.13")
+        .arg("--no-index")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-header")
+        .arg("--no-annotate");
+
+    uv_snapshot!(context.filters(), command, @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host @ file://[TEMP_DIR]/wheels/extra_host-1-py3-none-any.whl
+    extra-leaf @ file://[TEMP_DIR]/wheels/extra_leaf-2-py3-none-any.whl
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
 }

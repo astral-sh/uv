@@ -88,12 +88,16 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut seen = FxHashSet::default();
         let mut hasher = self.hasher.clone();
 
-        // Queue up the initial requirements.
+        // Queue up the initial requirements. Filter before applying constraints so a constraint
+        // cannot trigger lookahead for a dependency that is not active in this environment.
         let mut queue: VecDeque<_> = self
             .constraints
             .apply(
                 self.modifiers
-                    .apply(DependencyModifierScope::Global, self.requirements),
+                    .apply(DependencyModifierScope::Global, self.requirements)
+                    .filter(|requirement| {
+                        requirement.evaluate_markers(env.marker_environment(), &[])
+                    }),
             )
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
             .map(|requirement| (*requirement).clone())
@@ -141,10 +145,22 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     } else {
                         hasher.augment_with_metadata_requirements(requirements)?
                     };
-                    for requirement in self.constraints.apply(self.modifiers.apply(
-                        DependencyModifierScope::Package(lookahead.package(), lookahead.version()),
-                        lookahead.requirements(),
-                    )) {
+                    // Apply constraints only after filtering the dependencies that are active
+                    // for this package and the extras requested by its parent.
+                    let applicable = self
+                        .modifiers
+                        .apply(
+                            DependencyModifierScope::Package(
+                                lookahead.package(),
+                                lookahead.version(),
+                            ),
+                            lookahead.requirements(),
+                        )
+                        .filter(|requirement| {
+                            requirement
+                                .evaluate_markers(env.marker_environment(), lookahead.extras())
+                        });
+                    for requirement in self.constraints.apply(applicable) {
                         if requirement
                             .evaluate_markers(env.marker_environment(), lookahead.extras())
                         {
