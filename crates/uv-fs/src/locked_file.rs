@@ -101,21 +101,39 @@ impl LockedFileMode {
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.
     ///
+    /// Retries on `EINTR`: `flock` (which backs [`std::fs::File::try_lock`]) can be interrupted by
+    /// a signal even in the non-blocking case, in which case it must be retried (see
+    /// [`flock(2)`](https://man7.org/linux/man-pages/man2/flock.2.html) and
+    /// [astral-sh/uv#15996](https://github.com/astral-sh/uv/issues/15996)). A genuine
+    /// [`std::fs::TryLockError::WouldBlock`] is propagated unchanged.
+    ///
     /// On Android, [`std::fs::File::try_lock`] is not supported
     /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
     ///
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
-        match self {
-            Self::Exclusive => file.try_lock()?,
-            Self::Shared => file.try_lock_shared()?,
+        loop {
+            let err = match self {
+                Self::Exclusive => file.try_lock(),
+                Self::Shared => file.try_lock_shared(),
+            };
+            let err = match err {
+                Ok(()) => return Ok(()),
+                Err(err) => err,
+            };
+            if matches!(&err, std::fs::TryLockError::Error(err) if err.kind() == io::ErrorKind::Interrupted)
+            {
+                continue;
+            }
+            return Err(err);
         }
-        Ok(())
     }
 
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.
+    ///
+    /// Retries on `EINTR` (see [astral-sh/uv#15996](https://github.com/astral-sh/uv/issues/15996)).
     ///
     /// Android-specific implementation using [`rustix::fs::flock`] because
     /// [`std::fs::File::try_lock`] always returns `Unsupported` on Android
@@ -130,16 +148,28 @@ impl LockedFileMode {
             Self::Exclusive => rustix::fs::FlockOperation::NonBlockingLockExclusive,
             Self::Shared => rustix::fs::FlockOperation::NonBlockingLockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation).map_err(|errno| {
-            if errno == rustix::io::Errno::WOULDBLOCK {
-                std::fs::TryLockError::WouldBlock
-            } else {
-                std::fs::TryLockError::Error(io::Error::from_raw_os_error(errno.raw_os_error()))
+        loop {
+            match rustix::fs::flock(file.as_fd(), operation) {
+                Ok(()) => return Ok(()),
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(rustix::io::Errno::WOULDBLOCK) => {
+                    return Err(std::fs::TryLockError::WouldBlock);
+                }
+                Err(errno) => {
+                    return Err(std::fs::TryLockError::Error(io::Error::from_raw_os_error(
+                        errno.raw_os_error(),
+                    )));
+                }
             }
-        })
+        }
     }
 
     /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// Retries on `EINTR`: `flock` (which backs [`std::fs::File::lock`]) can be interrupted by a
+    /// signal, in which case it must be retried (see
+    /// [`flock(2)`](https://man7.org/linux/man-pages/man2/flock.2.html) and
+    /// [astral-sh/uv#15996](https://github.com/astral-sh/uv/issues/15996)).
     ///
     /// On Android, [`std::fs::File::lock`] is not supported
     /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
@@ -147,14 +177,25 @@ impl LockedFileMode {
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
-        match self {
-            Self::Exclusive => file.lock()?,
-            Self::Shared => file.lock_shared()?,
+        loop {
+            let err = match self {
+                Self::Exclusive => file.lock(),
+                Self::Shared => file.lock_shared(),
+            };
+            let err = match err {
+                Ok(()) => return Ok(()),
+                Err(err) => err,
+            };
+            if err.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(err);
         }
-        Ok(())
     }
 
     /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// Retries on `EINTR` (see [astral-sh/uv#15996](https://github.com/astral-sh/uv/issues/15996)).
     ///
     /// Android-specific implementation using [`rustix::fs::flock`] because
     /// [`std::fs::File::lock`] always returns `Unsupported` on Android
@@ -169,8 +210,13 @@ impl LockedFileMode {
             Self::Exclusive => rustix::fs::FlockOperation::LockExclusive,
             Self::Shared => rustix::fs::FlockOperation::LockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation)
-            .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
+        loop {
+            match rustix::fs::flock(file.as_fd(), operation) {
+                Ok(()) => return Ok(()),
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(errno) => return Err(io::Error::from_raw_os_error(errno.raw_os_error())),
+            }
+        }
     }
 }
 
@@ -443,5 +489,50 @@ impl Drop for LockedFile {
                 );
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "tokio"))]
+mod tests {
+    use super::*;
+
+    /// A lock can be acquired, and re-acquired once dropped.
+    #[tokio::test]
+    async fn acquire_release_reacquire() -> Result<(), LockedFileError> {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("uv.lock");
+
+        let lock = LockedFile::acquire(&path, LockedFileMode::Exclusive, "resource").await?;
+        drop(lock);
+
+        let _lock = LockedFile::acquire(&path, LockedFileMode::Exclusive, "resource").await?;
+        Ok(())
+    }
+
+    /// While an exclusive lock is held, a non-blocking attempt to acquire it again returns `None`
+    /// rather than spinning forever (i.e. genuine contention is *not* mistaken for `EINTR`).
+    #[tokio::test]
+    async fn no_wait_reports_contention() -> Result<(), LockedFileError> {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("uv.lock");
+
+        let _held = LockedFile::acquire(&path, LockedFileMode::Exclusive, "resource").await?;
+        assert!(
+            LockedFile::acquire_no_wait(&path, LockedFileMode::Exclusive, "resource").is_none(),
+            "non-blocking acquire must report contention while the lock is held"
+        );
+        Ok(())
+    }
+
+    /// Multiple shared locks can be held simultaneously.
+    #[tokio::test]
+    async fn shared_locks_coexist() -> Result<(), LockedFileError> {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("uv.lock");
+
+        let _a = LockedFile::acquire(&path, LockedFileMode::Shared, "resource").await?;
+        let _b = LockedFile::acquire_no_wait(&path, LockedFileMode::Shared, "resource")
+            .expect("a second shared lock should be acquirable");
+        Ok(())
     }
 }
