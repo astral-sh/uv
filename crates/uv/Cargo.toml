@@ -75,6 +75,7 @@ uv-version = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true, features = ["clap"] }
+uv-workspace-commands = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }

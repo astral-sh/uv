@@ -5883,6 +5883,7 @@ dependencies = [
  "uv-warnings",
  "uv-windows",
  "uv-workspace",
+ "uv-workspace-commands",
  "walkdir",
  "which",
  "wiremock",
@@ -8105,6 +8106,38 @@ dependencies = [
  "uv-static",
  "uv-toml",
  "uv-warnings",
+]
+
+[[package]]
+name = "uv-workspace-commands"
+version = "0.0.90"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "owo-colors",
+ "tracing",
+ "uv-cache",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-dispatch",
+ "uv-distribution-types",
+ "uv-environment-operations",
+ "uv-fs",
+ "uv-install-operations",
+ "uv-installer",
+ "uv-lock",
+ "uv-lock-operations",
+ "uv-normalize",
+ "uv-preview",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-python-context",
+ "uv-resolve-operations",
+ "uv-scripts",
+ "uv-settings",
+ "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]

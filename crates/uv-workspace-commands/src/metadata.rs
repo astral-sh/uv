@@ -1,36 +1,36 @@
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use uv_lock_operations::LockError;
 
 use anyhow::{Context, Result};
+
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, Stdout, UvError};
-use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
-use uv_lock::{Lock, Metadata, Package};
-use uv_preview::{Preview, PreviewFeature};
-use uv_python::{
-    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+use uv_configuration::{
+    ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Modifications,
 };
-use uv_scripts::Pep723Script;
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
-use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, WorkspaceCache};
-
-use uv_configuration::Modifications;
 use uv_dispatch::UniversalState;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectInterpreter, ScriptEnvironment,
 };
-use uv_lock_operations::DiscoveredProject;
-use uv_lock_operations::FrozenWorkspace;
-use uv_lock_operations::LockTarget;
-use uv_lock_operations::{LockMode, LockOperation};
+use uv_lock::{Lock, Metadata, Package};
+use uv_lock_operations::{
+    DiscoveredProject, FrozenWorkspace, LockError, LockMode, LockOperation, LockTarget,
+};
+use uv_preview::{Preview, PreviewFeature};
+use uv_python::{
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+};
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
-use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
+use uv_scripts::Pep723Script;
+use uv_settings::{
+    FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverSettings,
+};
+use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
 use super::module_owners::collect_module_owners;
 
@@ -41,7 +41,7 @@ enum MetadataSource<'a> {
 }
 
 /// Display metadata about the workspace.
-pub(crate) async fn metadata(
+pub async fn metadata(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,

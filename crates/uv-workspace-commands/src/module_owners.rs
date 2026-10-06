@@ -1,32 +1,30 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
+
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
+    ExtrasSpecificationWithDefaults, InstallOptions, Modifications, Reinstall,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution_types::{Dist, Name, ResolvedDist};
+use uv_environment_operations::install_target::InstallTarget;
 use uv_environment_operations::malware::MalwareCheckContext;
 use uv_environment_operations::sync_from_lock;
 use uv_fs::PortablePathBuf;
+use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_installer::SitePackages;
 use uv_lock::{Installable, Metadata};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
-use uv_settings::MalwareCheckSettings;
-use uv_workspace::WorkspaceCache;
-
-use uv_configuration::Modifications;
-use uv_dispatch::UniversalState;
-use uv_environment_operations::install_target::InstallTarget;
-use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
-use uv_settings::{InstallerSettingsRef, ResolverSettings};
+use uv_settings::{InstallerSettingsRef, MalwareCheckSettings, ResolverSettings};
+use uv_workspace::WorkspaceCache;
 
 /// Map importable modules to package IDs, optionally syncing all locked extras and groups first.
 ///
@@ -34,7 +32,7 @@ use uv_settings::{InstallerSettingsRef, ResolverSettings};
 /// to inspect without removing unrelated packages from an existing environment. Exact
 /// synchronization removes those unrelated packages instead. Only distributions in the selected
 /// resolution are assigned package IDs.
-pub(crate) async fn collect_module_owners(
+pub(super) async fn collect_module_owners(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     settings: &ResolverSettings,
