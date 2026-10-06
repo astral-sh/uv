@@ -330,7 +330,7 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
-        hash_override: Option<&'data HashStrategy>,
+        previous_hasher: Option<&'data HashStrategy>,
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
@@ -338,22 +338,25 @@ impl BuildContext for BuildDispatch<'_> {
         let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
 
+        let active_requirements = requirements.iter().filter(|requirement| {
+            requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
+        });
+        let hasher = match previous_hasher {
+            Some(hasher) if self.require_build_hashes() => hasher
+                .clone()
+                .augment_with_metadata_requirements(active_requirements),
+            previous_hasher => previous_hasher
+                .unwrap_or(self.base_hasher)
+                .clone()
+                .augment_with_requirements(active_requirements),
+        }
+        .map_err(uv_requirements::Error::from)?;
+
         // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
         // member that depends on another workspace member) are known before the resolver runs
         // its URL allow-list check. This mirrors what the project resolver does in
         // `uv_requirements::LookaheadResolver` and prevents a `DisallowedUrl` error when one
         // `build-system.requires` entry pulls in another URL dependency.
-        let active_requirements = requirements.iter().filter(|requirement| {
-            requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
-        });
-        let preserve_declared_hashes = hash_override.is_some() && self.require_build_hashes();
-        let hasher = hash_override.unwrap_or(self.base_hasher).clone();
-        let hasher = if preserve_declared_hashes {
-            hasher.augment_with_metadata_requirements(active_requirements)
-        } else {
-            hasher.augment_with_requirements(active_requirements)
-        }
-        .map_err(uv_requirements::Error::from)?;
         let modifiers = DependencyModifiers::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
