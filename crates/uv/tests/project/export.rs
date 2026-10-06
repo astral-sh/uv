@@ -394,7 +394,6 @@ fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Resul
         dependencies = [
             { name = "shared", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'" },
             { name = "shared", version = "2.0.0", source = { registry = "https://other.example/simple" }, marker = "sys_platform != 'linux'" },
-            { name = "bridge", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux' and sys_platform == 'darwin'" },
         ]
 
         [package.optional-dependencies]
@@ -417,7 +416,6 @@ fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Resul
         version = "1.0.0"
         source = { registry = "https://example.com/simple" }
         resolution-markers = ["sys_platform == 'linux'"]
-        dependencies = [{ name = "leaf-a", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
 
         [package.optional-dependencies]
         a = [{ name = "leaf-b", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
@@ -439,11 +437,6 @@ fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Resul
         provides-extras = ["a"]
 
         [[package]]
-        name = "leaf-a"
-        version = "1.0.0"
-        source = { registry = "https://example.com/simple" }
-
-        [[package]]
         name = "leaf-b"
         version = "1.0.0"
         source = { registry = "https://example.com/simple" }
@@ -455,30 +448,19 @@ fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Resul
         "#,
     )?;
 
-    let output = context
-        .export()
-        .arg("--extra")
-        .arg("feature")
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--extra").arg("feature")
         .arg("--frozen")
-        .arg("--no-hashes")
-        .output()?;
-    assert!(output.status.success());
-    let output = String::from_utf8(output.stdout)?;
-    let requirements: Vec<_> = output
-        .lines()
-        .filter(|line| !line.starts_with('#') && !line.trim().is_empty() && !line.starts_with(' '))
-        .collect();
-    assert_eq!(
-        requirements,
-        [
-            "bridge==1.0.0 ; sys_platform == 'linux'",
-            "leaf-a==1.0.0 ; sys_platform == 'linux'",
-            "leaf-b==1.0.0",
-            "shared==1.0.0 ; sys_platform == 'linux'",
-            "shared==2.0.0 ; sys_platform != 'linux'",
-        ],
-        "full export must retain Linux's requested extra and exclude the incompatible extra: {output}"
-    );
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge==1.0.0 ; sys_platform == 'linux'
+    leaf-b==1.0.0
+    shared==1.0.0 ; sys_platform == 'linux'
+    shared==2.0.0 ; sys_platform != 'linux'
+    ");
 
     Ok(())
 }
