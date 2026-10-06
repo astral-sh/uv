@@ -63,12 +63,11 @@ the installed version differs from the locked version. The installed inventory r
 version independently of this ownership association.
 
 Unmatched installed packages with discovered modules also appear in `resolution`. Their nodes
-contain the installed name and version, an empty `dependencies` array, and a `source.installed`
-field identifying the package's metadata path, such as its `.dist-info` directory. These nodes have
-no dependency edges connecting them to the workspace or script. This lets consumers identify imports
-provided by packages that remain installed after their declarations are removed. The empty
-`dependencies` array does not describe the installed package's own requirements. Inventory IDs and
-resolution node IDs are separate; every `module_owners` entry references a resolution node.
+contain the installed name and version, and a `source.installed` field identifying the package's
+metadata path, such as its `.dist-info` directory. These nodes have no dependency edges connecting
+them to the workspace or script. This lets consumers identify imports provided by packages that
+remain installed after their declarations are removed. Inventory IDs and resolution node IDs are
+separate; every `module_owners` entry references a resolution node.
 
 Unmatched packages without discoverable modules remain in the inventory without ownership entries or
 resolution nodes. This includes installations with missing or unreadable module records, stub-only
