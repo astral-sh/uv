@@ -308,11 +308,28 @@ impl<'a> Layout<'a> {
     }
 
     pub(crate) fn replace_install_name(&self, name: InstallName<'_>) -> Result<Vec<u8>, Error> {
-        let name = name.as_c_str().to_bytes_with_nul();
-        let mut output = self.image[..HEADER_SIZE].to_vec();
+        let commands = self.load_commands(Some(name))?;
+        self.replace_commands(commands.bytes, self.image.len(), self.image.len())
+    }
+
+    /// Serialize load commands and record their new offsets before copying any file data.
+    fn load_commands(&self, name: Option<InstallName<'_>>) -> Result<LoadCommands, Error> {
+        let mut bytes = self.image[..HEADER_SIZE].to_vec();
+        let mut linkedit = HEADER_SIZE;
+        let mut signature = None;
 
         for (index, command) in self.commands.iter().enumerate() {
-            if index == self.install_id {
+            if index == self.linkedit_index {
+                linkedit = bytes.len();
+            }
+            if Some(index) == self.signature_command {
+                signature = Some(bytes.len());
+            }
+
+            if index == self.install_id
+                && let Some(name) = name
+            {
+                let name = name.as_c_str().to_bytes_with_nul();
                 let size = name
                     .len()
                     .checked_add(24)
@@ -320,22 +337,30 @@ impl<'a> Layout<'a> {
                     .ok_or(Error::TooLarge)?;
                 let size_u32 = u32::try_from(size)?;
 
-                let mut replacement = vec![0; size];
-                replacement[..24].copy_from_slice(&command.data[..24]);
-                replacement[4..8].copy_from_slice(&size_u32.to_le_bytes());
-                replacement[8..12].copy_from_slice(&24u32.to_le_bytes());
-                replacement[24..24 + name.len()].copy_from_slice(name);
-
-                output.extend(replacement);
+                let offset = bytes.len();
+                bytes.extend_from_slice(&command.data[..24]);
+                bytes[offset + 4..offset + 8].copy_from_slice(&size_u32.to_le_bytes());
+                bytes[offset + 8..offset + 12].copy_from_slice(&24u32.to_le_bytes());
+                bytes.extend_from_slice(name);
+                bytes.resize(offset + size, 0);
             } else {
-                output.extend_from_slice(command.data);
+                bytes.extend_from_slice(command.data);
             }
         }
 
-        self.replace_commands(output)
+        Ok(LoadCommands {
+            bytes,
+            linkedit,
+            signature,
+        })
     }
 
-    fn replace_commands(&self, mut output: Vec<u8>) -> Result<Vec<u8>, Error> {
+    fn replace_commands(
+        &self,
+        mut output: Vec<u8>,
+        image_end: usize,
+        capacity: usize,
+    ) -> Result<Vec<u8>, Error> {
         if output.len() > self.data_start || output.len() > self.code_limit {
             return Err(Error::InsufficientHeaderPadding);
         }
@@ -350,45 +375,40 @@ impl<'a> Layout<'a> {
 
         let sizeofcmds = u32::try_from(output.len() - HEADER_SIZE)?;
         output[20..24].copy_from_slice(&sizeofcmds.to_le_bytes());
+        // Both the copied data and the new signature fit without reallocating the image.
+        output.reserve(capacity - output.len());
         output.resize(output.len().max(self.command_end), 0);
-        output.extend_from_slice(&self.image[output.len()..]);
+        output.extend_from_slice(&self.image[output.len()..image_end]);
 
         Ok(output)
     }
 
-    pub(crate) fn adhoc_sign(&self, identifier: SigningIdentifier<'_>) -> Result<Vec<u8>, Error> {
+    pub(crate) fn adhoc_sign(
+        &self,
+        name: Option<InstallName<'_>>,
+        identifier: SigningIdentifier<'_>,
+    ) -> Result<Vec<u8>, Error> {
         let metadata =
             Metadata::read(self.signature, identifier, self.code_limit, self.info_plist)?;
 
-        let command_offset = |index: usize| {
-            HEADER_SIZE
-                + self.commands[..index]
-                    .iter()
-                    .map(|command| command.data.len())
-                    .sum::<usize>()
-        };
-        let linkedit_offset = command_offset(self.linkedit_index);
-
-        let (mut output, signature_offset) = if let Some(index) = self.signature_command {
-            (self.image.to_vec(), command_offset(index))
+        let mut commands = self.load_commands(name)?;
+        let signature_offset = if let Some(offset) = commands.signature {
+            offset
         } else {
-            let mut commands = self.image[..self.command_end].to_vec();
-            let offset = commands.len();
-            commands.resize(offset + 16, 0);
-            commands[offset..offset + 4].copy_from_slice(&u32::to_le_bytes(LC_CODE_SIGNATURE));
-            commands[offset + 4..offset + 8].copy_from_slice(&u32::to_le_bytes(16));
-            commands[16..20]
+            let offset = commands.bytes.len();
+            commands.bytes.resize(offset + 16, 0);
+            commands.bytes[offset..offset + 4]
+                .copy_from_slice(&u32::to_le_bytes(LC_CODE_SIGNATURE));
+            commands.bytes[offset + 4..offset + 8].copy_from_slice(&u32::to_le_bytes(16));
+            commands.bytes[16..20]
                 .copy_from_slice(&u32::to_le_bytes(u32::try_from(self.commands.len() + 1)?));
-
-            (self.replace_commands(commands)?, offset)
+            offset
         };
 
-        output.truncate(self.code_limit);
-        let signature_start = output
-            .len()
+        let signature_start = self
+            .code_limit
             .checked_next_multiple_of(16)
             .ok_or(Error::TooLarge)?;
-        output.resize(signature_start, 0);
 
         let signature = metadata.prepare(
             signature_start,
@@ -405,6 +425,9 @@ impl<'a> Layout<'a> {
         u32::try_from(final_size)?;
 
         // Finalize the load commands before hashing the image they describe.
+        let linkedit_offset = commands.linkedit;
+        let mut output = self.replace_commands(commands.bytes, self.code_limit, final_size)?;
+        output.resize(signature_start, 0);
         output[signature_offset + 8..signature_offset + 12]
             .copy_from_slice(&u32::to_le_bytes(u32::try_from(signature_start)?));
         output[signature_offset + 12..signature_offset + 16]
@@ -438,6 +461,13 @@ impl<'a> Layout<'a> {
 
         Ok(output)
     }
+}
+
+/// Serialized command bytes and the offsets that signing must update.
+struct LoadCommands {
+    bytes: Vec<u8>,
+    linkedit: usize,
+    signature: Option<usize>,
 }
 
 enum Architecture {

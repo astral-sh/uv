@@ -112,7 +112,12 @@ impl<'image> Metadata<'image> {
                     0x10000 => {
                         Blob::<BLOB_WRAPPER>::parse(data)?;
                     }
-                    _ => return Err(Error::Unsupported("unknown code-signing slot")),
+                    _ => {
+                        return Err(Error::UnsupportedValue {
+                            field: "code-signing slot",
+                            value: u64::from(slot),
+                        });
+                    }
                 }
             }
 
@@ -145,7 +150,10 @@ impl<'image> Metadata<'image> {
         let version = u32::from_be_bytes(array(data, 8)?);
         let flags = u32::from_be_bytes(array(data, 12)?);
         if flags & !0x0003_3f02 != 0 {
-            return Err(Error::Unsupported("CodeDirectory flags"));
+            return Err(Error::UnsupportedValue {
+                field: "CodeDirectory flags",
+                value: u64::from(flags),
+            });
         }
 
         let fixed_size = match version {
@@ -156,7 +164,12 @@ impl<'image> Metadata<'image> {
             0x20400..=0x204ff => 88,
             0x20500..=0x205ff => 96,
             0x20600 => 108,
-            _ => return Err(Error::Unsupported("CodeDirectory version")),
+            _ => {
+                return Err(Error::UnsupportedValue {
+                    field: "CodeDirectory version",
+                    value: u64::from(version),
+                });
+            }
         };
         let header = slice(data, 0, fixed_size)?;
         if (version >= 0x20100 && u32::from_be_bytes(array(header, 44)?) != 0)
@@ -215,7 +228,12 @@ impl<'image> Metadata<'image> {
             1 | 3 => 20,
             2 => 32,
             4 => 48,
-            _ => return Err(Error::Unsupported("CodeDirectory hash algorithm")),
+            algorithm => {
+                return Err(Error::UnsupportedValue {
+                    field: "CodeDirectory hash algorithm",
+                    value: u64::from(algorithm),
+                });
+            }
         };
 
         if hash_size != expected_hash_size {
@@ -226,7 +244,10 @@ impl<'image> Metadata<'image> {
         let code_count = u32::from_be_bytes(array(header, 28)?) as usize;
         let hash_offset = u32::from_be_bytes(array(header, 16)?) as usize;
         if special_count > 7 {
-            return Err(Error::Unsupported("CodeDirectory special slots"));
+            return Err(Error::UnsupportedValue {
+                field: "CodeDirectory special-slot count",
+                value: special_count as u64,
+            });
         }
 
         let special_start = hash_offset
@@ -265,9 +286,10 @@ impl<'image> Metadata<'image> {
                 1 if info_plist.is_some() => {}
                 2 | 5 | 7 if entries.contains_key(&u32::try_from(slot)?) => {}
                 _ => {
-                    return Err(Error::Unsupported(
-                        "unavailable or unsupported special-slot data",
-                    ));
+                    return Err(Error::UnsupportedValue {
+                        field: "unavailable or unsupported CodeDirectory special slot",
+                        value: slot as u64,
+                    });
                 }
             }
         }

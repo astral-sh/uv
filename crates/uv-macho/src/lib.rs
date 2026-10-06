@@ -91,18 +91,20 @@ impl SignedDylib {
 /// Unsupported signing metadata produces an error. The input is never modified.
 pub fn adhoc_sign(image: &[u8], identifier: SigningIdentifier<'_>) -> Result<SignedDylib, Error> {
     Ok(SignedDylib {
-        bytes: macho::Layout::parse(image)?.adhoc_sign(identifier)?,
+        bytes: macho::Layout::parse(image)?.adhoc_sign(None, identifier)?,
     })
 }
 
 /// Replace a dylib's install name and generate an ad-hoc signature.
 ///
-/// The intermediate [`EditedDylib`] is consumed by signing. The input is never modified,
+/// Both operations use the original image's validated layout. The input is never modified,
 /// including when editing or signing fails.
 pub fn set_install_name(
     image: &[u8],
     name: InstallName<'_>,
     identifier: SigningIdentifier<'_>,
 ) -> Result<SignedDylib, Error> {
-    replace_install_name(image, name)?.adhoc_sign(identifier)
+    Ok(SignedDylib {
+        bytes: macho::Layout::parse(image)?.adhoc_sign(Some(name), identifier)?,
+    })
 }
