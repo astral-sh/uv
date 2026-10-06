@@ -1376,10 +1376,10 @@ impl ProjectEnvironment {
             }),
         });
         let project_python = if let Some(frozen_target) = frozen_target {
-            ProjectPythonRequest::from_lockfile(
+            ProjectPythonRequest::from_requirements(
                 python,
-                frozen_target,
-                groups,
+                Some(frozen_target.install_path()),
+                Some(frozen_target.python_requirement(groups)?),
                 target.install_path(),
                 config_discovery,
             )

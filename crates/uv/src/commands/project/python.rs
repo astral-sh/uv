@@ -9,7 +9,6 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
-use uv_lock::Installable;
 use uv_pep440::TildeVersionSpecifier;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads,
@@ -20,8 +19,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::{RequiresPythonDeclaration, RequiresPythonSources, Workspace};
 
-use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::{EnvironmentError, PythonContextError};
+use crate::commands::project::PythonContextError;
 use crate::commands::reporters::PythonDownloadReporter;
 
 /// An interpreter that satisfies the Python requirement used to select it.
@@ -63,9 +61,9 @@ impl std::fmt::Display for PythonRequestSource {
 
 /// A Python requirement and the source used to derive it.
 #[derive(Debug, Clone)]
-struct ProjectPythonRequirement {
-    requires_python: RequiresPython,
-    source: PythonRequirementSource,
+pub(super) struct ProjectPythonRequirement {
+    pub(super) requires_python: RequiresPython,
+    pub(super) source: PythonRequirementSource,
 }
 
 /// The resolved Python request and requirement for a workspace or frozen lockfile.
@@ -82,24 +80,6 @@ pub(crate) struct ProjectPythonRequest {
 }
 
 impl ProjectPythonRequest {
-    /// Determine the Python request and requirement from a frozen lockfile.
-    pub(super) async fn from_lockfile(
-        python_request: Option<PythonRequest>,
-        target: InstallTarget<'_>,
-        groups: &DependencyGroupsWithDefaults,
-        project_dir: &Path,
-        config_discovery: ConfigDiscovery,
-    ) -> Result<Self, EnvironmentError> {
-        Ok(Self::from_requirements(
-            python_request,
-            Some(target.install_path()),
-            Some(find_lockfile_requires_python(target, groups)?),
-            project_dir,
-            config_discovery,
-        )
-        .await?)
-    }
-
     /// Determine the [`ProjectPythonRequest`] for the current [`Workspace`].
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
@@ -124,7 +104,7 @@ impl ProjectPythonRequest {
     }
 
     /// Select a Python request using a project's root and Python requirement.
-    async fn from_requirements(
+    pub(super) async fn from_requirements(
         python_request: Option<PythonRequest>,
         workspace_root: Option<&Path>,
         requirement: Option<ProjectPythonRequirement>,
@@ -301,65 +281,6 @@ fn find_workspace_python_requirement(
         })),
         None => Err(PythonContextError::DisjointRequiresPython(requires_python)),
     }
-}
-
-/// Intersect the lockfile's Python requirement with the selected groups' requirements.
-fn find_lockfile_requires_python(
-    target: InstallTarget<'_>,
-    groups: &DependencyGroupsWithDefaults,
-) -> Result<ProjectPythonRequirement, EnvironmentError> {
-    let lock = target.lock();
-    let mut group_requirements = RequiresPythonSources::new();
-
-    if let Some(members) = lock.member_group_metadata() {
-        let group_root = target.group_root(groups);
-
-        for (member, member_groups) in members {
-            // The group root can contribute groups without being an install root.
-            let is_install_root = target.roots().any(|root| root == member);
-            if !is_install_root && group_root != Some(member) {
-                continue;
-            }
-
-            for (group, metadata) in member_groups {
-                if target.includes_group(Some(member), group, groups)
-                    && let Some(requires_python) = &metadata.requires_python
-                {
-                    group_requirements.insert(
-                        RequiresPythonDeclaration::Member(member.clone(), Some(group.clone())),
-                        requires_python.clone(),
-                    );
-                }
-            }
-        }
-    }
-
-    for (group, metadata) in lock.workspace_group_metadata() {
-        if target.includes_group(None, group, groups)
-            && let Some(requires_python) = &metadata.requires_python
-        {
-            group_requirements.insert(
-                RequiresPythonDeclaration::Workspace(group.clone()),
-                requires_python.clone(),
-            );
-        }
-    }
-
-    let Some(requires_python) = RequiresPython::intersection(
-        std::iter::once(lock.requires_python().specifiers()).chain(group_requirements.values()),
-    ) else {
-        return Err(EnvironmentError::DisjointLockedRequiresPython {
-            locked: lock.requires_python().clone(),
-            groups: group_requirements,
-        });
-    };
-    Ok(ProjectPythonRequirement {
-        requires_python,
-        source: PythonRequirementSource::Lockfile {
-            locked: lock.requires_python().clone(),
-            groups: group_requirements,
-        },
-    })
 }
 
 /// The requirements that exclude a Python version, and where they were read.
