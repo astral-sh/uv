@@ -1,3 +1,7 @@
+//! Commands for publishing Python distributions.
+
+mod reporters;
+
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -22,9 +26,10 @@ use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::reporters::PublishReporter;
+use crate::reporters::PublishReporter;
 
-pub(crate) async fn publish(
+/// Publish distributions to a package index.
+pub async fn publish(
     paths: Vec<String>,
     publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
