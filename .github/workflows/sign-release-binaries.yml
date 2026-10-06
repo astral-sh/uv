@@ -157,11 +157,10 @@ jobs:
           merge-multiple: true
 
       - name: "Sign and notarize macOS executables"
-        uses: astral-sh/github-actions/sign-macos@bf151908d0fe75fc4d53303a73caaaad8092048a # shared release signing actions
+        uses: astral-sh/github-actions/sign-macos@8dd9b80fe9410d3e3f59f411a6406792aecf76bf # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
-          arm64-16k-code-pages: "true"
           azure-client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
           azure-tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
           azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
