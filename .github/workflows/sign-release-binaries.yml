@@ -157,7 +157,7 @@ jobs:
           merge-multiple: true
 
       - name: "Sign and notarize macOS executables"
-        uses: astral-sh/github-actions/sign-macos@8dd9b80fe9410d3e3f59f411a6406792aecf76bf # shared release signing actions
+        uses: astral-sh/github-actions/sign-macos@a30f3520f325da7fed035847afec51629d0ef4fa # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
