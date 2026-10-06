@@ -73,7 +73,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, OverrideDependency};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
-use crate::commands::pip::operations::Modifications;
+use crate::commands::operations::Modifications;
 use crate::commands::{
     InitKind, InitProjectKind, PythonUpgrade, PythonUpgradeSource, ToolRunCommand,
 };

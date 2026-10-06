@@ -28,9 +28,9 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, Prerelease};
 
 use crate::commands::ExitStatus;
-use crate::commands::pip::latest::LatestClient;
-use crate::commands::pip::operations::report_target_environment;
-use crate::commands::reporters::LatestVersionReporter;
+use crate::commands::operations::resolution::latest::LatestClient;
+use crate::commands::operations::resolution::reporters::LatestVersionReporter;
+use crate::commands::pip::reporters::report_target_environment;
 use crate::printer::Printer;
 
 /// Display the installed packages in the current environment as a dependency tree.

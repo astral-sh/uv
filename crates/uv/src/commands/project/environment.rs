@@ -2,8 +2,9 @@ use std::path::Path;
 
 use tracing::debug;
 
-use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::operations::Modifications;
+use crate::commands::operations::installation::loggers::InstallLogger;
+use crate::commands::operations::resolution::loggers::ResolveLogger;
 use crate::commands::project::{
     EnvironmentResolution, EnvironmentSpecification, ProjectError, resolve_environment,
     sync_environment,

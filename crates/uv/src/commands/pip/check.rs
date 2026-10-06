@@ -13,8 +13,8 @@ use uv_python::{
     PythonVersion,
 };
 
-use crate::commands::pip::operations::report_target_environment;
-use crate::commands::pip::{resolution_markers, resolution_tags};
+use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
+use crate::commands::pip::reporters::report_target_environment;
 use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 

@@ -1,12 +1,11 @@
 use std::borrow::Cow;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use std::time::Duration;
-use std::{fmt::Write, process::ExitCode};
 
 use anstream::AutoStream;
-use anyhow::{Context, bail};
-use owo_colors::OwoColorize;
+use anyhow::bail;
 use tracing::debug;
 use uv_warnings::warn_user;
 
@@ -65,21 +64,14 @@ pub(crate) use tool::run::run as tool_run;
 pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
-use uv_cache::Cache;
-use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
-use uv_fs::{CWD, Simplified};
-use uv_installer::{compile_files, compile_tree};
-use uv_python::PythonEnvironment;
+use uv_fs::Simplified;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
 pub(crate) use version::self_version;
 pub(crate) use workspace::dir::dir;
 pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
-
-use crate::commands::pip::operations::ChangedDist;
-use crate::printer::Printer;
 
 mod auth;
 pub(crate) mod build_backend;
@@ -89,10 +81,9 @@ mod cache_dir;
 mod cache_prune;
 mod cache_size;
 pub(crate) mod diagnostics;
-mod editable;
 mod help;
 mod install_report;
-mod locked_requirements;
+pub(crate) mod operations;
 pub(crate) mod pip;
 mod project;
 mod publish;
@@ -172,22 +163,12 @@ impl From<project::ProjectError> for UvError {
             | project::ProjectError::LockFormat(..)
             | project::ProjectError::MissingLockfile(..)
             | project::ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
-            project::ProjectError::Operation(error) => Self::from(error),
+            project::ProjectError::Resolve(error) => Self::from(error),
+            project::ProjectError::Install(error) => Self::from(error),
             project::ProjectError::Requirements(error) => {
-                Self::from(pip::operations::Error::Requirements(error))
+                Self::from(operations::resolution::Error::Requirements(error))
             }
             error => Self::unexpected(error.into()),
-        }
-    }
-}
-
-impl From<pip::operations::Error> for UvError {
-    fn from(error: pip::operations::Error) -> Self {
-        let error = error.with_default_resolution_context();
-        if error.is_user_failure() {
-            Self::user(error)
-        } else {
-            Self::unexpected(error.into())
         }
     }
 }
@@ -197,59 +178,87 @@ mod error_tests {
     use std::io::{Error, ErrorKind};
 
     use anyhow::bail;
-    use insta::{allow_duplicates, assert_snapshot};
+    use insta::assert_snapshot;
 
-    use super::{UvError, pip, project};
+    use crate::commands::operations::resolution::Error as ResolveError;
+    use crate::commands::project::ProjectError;
+
+    use super::UvError;
 
     #[test]
-    fn contextual_operations_keep_their_classification_and_cause() -> anyhow::Result<()> {
-        for (kind, user_failure) in [
-            (ErrorKind::NotFound, true),
-            (ErrorKind::PermissionDenied, false),
-        ] {
-            let error = pip::operations::Error::Requirements(uv_requirements::Error::Io(
-                Error::new(kind, "requirements failure"),
-            ));
-            let error = UvError::from(
-                error
-                    .with_resolution_context("script")
-                    .with_resolution_context("tool"),
-            );
-            let ((UvError::User(error), true) | (UvError::Unexpected(error), false)) =
-                (error, user_failure)
-            else {
-                bail!("operation classification changed with context");
-            };
-            allow_duplicates! {
-                assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
-            }
-            assert!(error.downcast_ref::<pip::operations::Error>().is_some());
-        }
+    fn resolution_context_missing_requirements() -> anyhow::Result<()> {
+        let error = ResolveError::Requirements(uv_requirements::Error::Io(Error::new(
+            ErrorKind::NotFound,
+            "requirements failure",
+        )));
+
+        // Tool requirements replace the script context.
+        let error = error
+            .with_resolution_context("script")
+            .with_resolution_context("tool");
+
+        let UvError::User(error) = UvError::from(error) else {
+            bail!("expected a user error");
+        };
+        assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
+        assert!(error.downcast_ref::<ResolveError>().is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolution_context_unreadable_requirements() -> anyhow::Result<()> {
+        let error = ResolveError::Requirements(uv_requirements::Error::Io(Error::new(
+            ErrorKind::PermissionDenied,
+            "requirements failure",
+        )));
+
+        // Tool requirements replace the script context.
+        let error = error
+            .with_resolution_context("script")
+            .with_resolution_context("tool");
+
+        let UvError::Unexpected(error) = UvError::from(error) else {
+            bail!("expected an unexpected error");
+        };
+        assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
+        assert!(error.downcast_ref::<ResolveError>().is_some());
+
         Ok(())
     }
 
     #[test]
     fn resolution_context_leaves_other_errors_unchanged() -> anyhow::Result<()> {
-        let error = pip::operations::Error::Io(Error::new(
+        let error = ResolveError::Io(Error::new(
             ErrorKind::PermissionDenied,
             "cache write failed",
         ));
-        let UvError::Unexpected(error) = UvError::from(error.with_resolution_context("tool"))
-        else {
-            bail!("operation classification changed with context");
+
+        // Resolution context only applies to requirements and solver errors.
+        let error = error.with_resolution_context("tool");
+
+        let UvError::Unexpected(error) = UvError::from(error) else {
+            bail!("expected an unexpected error");
         };
         assert_snapshot!(format!("{error:#}"), @"cache write failed");
-        assert!(error.downcast_ref::<pip::operations::Error>().is_some());
+        assert!(error.downcast_ref::<ResolveError>().is_some());
+
         Ok(())
     }
 
     #[test]
-    fn project_requirements_use_operation_classification() {
-        let error = project::ProjectError::Requirements(uv_requirements::Error::Io(Error::new(
+    fn project_requirements_use_operation_classification() -> anyhow::Result<()> {
+        let error = ProjectError::Requirements(uv_requirements::Error::Io(Error::new(
             ErrorKind::NotFound,
             "requirements failure",
         )));
-        assert!(matches!(UvError::from(error), UvError::User(_)));
+
+        // A missing requirements file is a user error.
+        let UvError::User(_) = UvError::from(error) else {
+            bail!("expected a user error");
+        };
+
+        Ok(())
     }
 }
 
@@ -364,99 +373,6 @@ pub(super) fn elapsed(duration: Duration) -> String {
     } else {
         format!("0.{:02}ms", duration.subsec_nanos() / 10_000)
     }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub(super) enum ChangeEventKind {
-    /// The package was removed from the environment.
-    Removed,
-    /// The package was added to the environment.
-    Added,
-    /// The package was reinstalled without changing versions.
-    Reinstalled,
-}
-
-#[derive(Debug)]
-pub(super) struct ChangeEvent<'a> {
-    dist: &'a ChangedDist,
-    kind: ChangeEventKind,
-}
-
-/// Compile all Python source files in site-packages to bytecode, to speed up the
-/// initial run of any subsequent executions.
-///
-/// See the `--compile` option on `pip sync` and `pip install`.
-pub(super) async fn compile_bytecode(
-    venv: &PythonEnvironment,
-    concurrency: &Concurrency,
-    cache: &Cache,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let start = std::time::Instant::now();
-    let mut files = 0;
-    for site_packages in venv.site_packages() {
-        let site_packages = CWD.join(site_packages);
-        if !site_packages.exists() {
-            debug!(
-                "Skipping non-existent site-packages directory: {}",
-                site_packages.display()
-            );
-            continue;
-        }
-        files += compile_tree(
-            &site_packages,
-            venv.python_executable(),
-            concurrency,
-            cache.root(),
-        )
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to bytecode-compile Python file in: {}",
-                site_packages.user_display()
-            )
-        })?;
-    }
-    write_bytecode_summary(files, start, printer)?;
-    Ok(())
-}
-
-/// Compile the given Python source files to bytecode.
-pub(super) async fn compile_bytecode_files(
-    files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
-    venv: &PythonEnvironment,
-    concurrency: &Concurrency,
-    cache: &Cache,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let start = std::time::Instant::now();
-    let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
-        .await
-        .context("Failed to bytecode-compile installed packages")?;
-    if files == 0 {
-        return Ok(());
-    }
-
-    write_bytecode_summary(files, start, printer)?;
-    Ok(())
-}
-
-fn write_bytecode_summary(
-    files: usize,
-    start: std::time::Instant,
-    printer: Printer,
-) -> std::fmt::Result {
-    let s = if files == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Bytecode compiled {} {}",
-            format!("{files} file{s}").bold(),
-            format!("in {}", elapsed(start.elapsed())).dimmed()
-        )
-        .dimmed()
-    )
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.

@@ -16,7 +16,7 @@ use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest,
 use uv_python::{PythonArchitecture, PythonPreference};
 
 use crate::commands::ExitStatus;
-use crate::commands::pip::operations::report_target_environment;
+use crate::commands::pip::reporters::report_target_environment;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
