@@ -73,7 +73,10 @@ fn malformed_inputs() {
             "unknown command",
             32,
             u32::MAX,
-            Error::Unsupported("load command"),
+            Error::UnsupportedValue {
+                field: "load command",
+                value: u64::from(u32::MAX),
+            },
         ),
         (
             "section count",

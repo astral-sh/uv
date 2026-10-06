@@ -107,7 +107,12 @@ impl<'a> Command<'a> {
             LC_ID_DYLIB | LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB
             | LC_LOAD_UPWARD_DYLIB | LC_LAZY_LOAD_DYLIB => 24,
             LC_RPATH | LC_SUB_FRAMEWORK | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY => 12,
-            _ => return Err(Error::Unsupported("load command")),
+            _ => {
+                return Err(Error::UnsupportedValue {
+                    field: "load command",
+                    value: u64::from(kind),
+                });
+            }
         };
         let header = slice(data, 0, size)?;
 
