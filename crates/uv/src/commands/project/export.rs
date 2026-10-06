@@ -17,7 +17,6 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
 };
-use uv_dispatch::UniversalState;
 use uv_distribution_types::Verbatim;
 use uv_fs::CWD;
 use uv_lock::{Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
@@ -32,14 +31,15 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
 
-use crate::commands::project::discovery::DiscoveredProject;
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::lock::{LockMode, LockOperation};
-use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, detect_conflicts,
 };
+use uv_dispatch::UniversalState;
+use uv_lock_operations::DiscoveredProject;
+use uv_lock_operations::FrozenWorkspace;
+use uv_lock_operations::LockTarget;
+use uv_lock_operations::{LockMode, LockOperation};
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_settings::{FrozenSource, LockCheck, ResolverSettings};

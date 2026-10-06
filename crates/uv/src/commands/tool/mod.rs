@@ -9,7 +9,6 @@ use uv_python::PythonRequest;
 pub(crate) mod audit;
 pub(crate) mod common;
 pub(crate) mod dir;
-mod error;
 pub(crate) mod install;
 pub(crate) mod list;
 pub(crate) mod run;
@@ -210,3 +209,5 @@ mod tests {
         assert_eq!(target, expected);
     }
 }
+
+mod error;

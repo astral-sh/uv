@@ -24,7 +24,7 @@ use uv_workspace::{DefaultGroupsError, WorkspaceError};
 
 /// The source of a missing lockfile error.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum MissingLockfileSource {
+pub enum MissingLockfileSource {
     /// Frozen mode required an existing lockfile.
     Frozen(FrozenSource),
     /// A lock check required an existing lockfile.
@@ -54,7 +54,7 @@ impl From<FrozenSource> for MissingLockfileSource {
 
 /// A failure while reading, validating, or resolving a lockfile.
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum LockError {
+pub enum LockError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
 
@@ -308,7 +308,7 @@ impl From<LockValidationError> for LockError {
 
 /// A failure while validating an existing lockfile against its requirements.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum LockValidationError {
+pub enum LockValidationError {
     #[error(transparent)]
     Lock(#[from] LockDataError),
 

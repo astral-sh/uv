@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
+use uv_lock_operations::LockOperation;
 
 use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
@@ -14,7 +15,6 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_configuration::{VersionBump, VersionBumpSpec, VersionFormat};
-use uv_dispatch::UniversalState;
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
@@ -34,17 +34,17 @@ use uv_workspace::{
 
 use crate::commands::operations::malware::MalwareCheckContext;
 use crate::commands::operations::sync::sync_from_lock;
-use crate::commands::project;
 use crate::commands::project::edit::{ProjectEdit, PythonTarget};
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::lock::LockMode;
-use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectError, ProjectInterpreter,
 };
 use uv_configuration::Modifications;
+use uv_dispatch::UniversalState;
 use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_lock_operations::LockMode;
+use uv_lock_operations::LockTarget;
 use uv_python_context::ProjectPythonRequest;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
@@ -506,7 +506,7 @@ async fn print_frozen_version(
 
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
-        project::lock::LockOperation::new(
+        LockOperation::new(
             LockMode::Frozen(frozen_source.into()),
             &settings.resolver,
             &client_builder,
@@ -651,7 +651,7 @@ async fn lock_and_sync(
 
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
-        project::lock::LockOperation::new(
+        LockOperation::new(
             mode,
             &settings.resolver,
             &client_builder,

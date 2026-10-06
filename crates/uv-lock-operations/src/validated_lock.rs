@@ -19,7 +19,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user;
 use uv_workspace::{Editability, WorkspaceMember};
 
-use crate::commands::project::LockValidationError;
+use crate::LockValidationError;
 
 // Lock diagnostics use a stable target for command-specific `RUST_LOG` filters.
 macro_rules! debug {
@@ -28,8 +28,9 @@ macro_rules! debug {
     };
 }
 
+/// Whether an existing lockfile can satisfy or guide a new resolution.
 #[derive(Debug)]
-pub(crate) enum ValidatedLock {
+pub enum ValidatedLock {
     /// An existing lockfile was provided, but its contents should be ignored.
     Unusable(Lock),
     /// An existing lockfile was provided, and the locked versions should be preferred if possible,
@@ -43,8 +44,8 @@ pub(crate) enum ValidatedLock {
 }
 
 impl ValidatedLock {
-    /// Validate a [`Lock`] against the workspace requirements.
-    pub(crate) async fn validate(
+    /// Validate a [`Lock`] against its requirements and resolution policy.
+    pub async fn validate(
         lock: Lock,
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
@@ -520,19 +521,19 @@ impl ValidatedLock {
 
     /// Return whether the existing lock satisfies the current inputs.
     #[must_use]
-    pub(crate) fn is_satisfied(&self) -> bool {
+    pub fn is_satisfied(&self) -> bool {
         matches!(self, Self::Satisfies(_))
     }
 
     /// Return whether the existing lock can provide version preferences.
     #[must_use]
-    pub(crate) fn is_usable(&self) -> bool {
+    pub fn is_usable(&self) -> bool {
         !matches!(self, Self::Unusable(_))
     }
 
     /// Convert the [`ValidatedLock`] into a [`Lock`].
     #[must_use]
-    pub(crate) fn into_lock(self) -> Lock {
+    pub fn into_lock(self) -> Lock {
         match self {
             Self::Unusable(lock) => lock,
             Self::Satisfies(lock) => lock,

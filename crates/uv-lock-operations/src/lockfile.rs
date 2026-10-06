@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+
 use uv_configuration::{DependencyGroups, DependencyGroupsWithDefaults};
 use uv_lock::{Lock, Package};
 use uv_normalize::PackageName;
@@ -10,7 +11,7 @@ use uv_workspace::pyproject::PyProjectToml;
 
 /// A frozen workspace resolution and the root used to interpret its relative paths.
 #[derive(Debug, Clone)]
-pub(crate) struct FrozenWorkspace {
+pub struct FrozenWorkspace {
     root: PathBuf,
     lock: Lock,
 }
@@ -95,16 +96,18 @@ impl FrozenWorkspace {
         Ok(Self { root, lock })
     }
 
-    pub(crate) fn root(&self) -> &Path {
+    /// Return the root used to resolve lockfile-relative paths.
+    pub fn root(&self) -> &Path {
         &self.root
     }
 
-    pub(crate) fn lock(&self) -> &Lock {
+    /// Return the frozen workspace resolution.
+    pub fn lock(&self) -> &Lock {
         &self.lock
     }
 
     /// Select the nearest workspace member, falling back to the root project.
-    pub(crate) fn current_project(&self, project_dir: &Path) -> Option<&PackageName> {
+    pub fn current_project(&self, project_dir: &Path) -> Option<&PackageName> {
         let project_dir = normalize_member_path(project_dir);
         self.member_paths()
             .filter(|(_, path)| project_dir.starts_with(path))
@@ -122,7 +125,7 @@ impl FrozenWorkspace {
     }
 
     /// Resolve groups using the selected member's or non-project root's recorded defaults.
-    pub(crate) fn resolve_groups(
+    pub fn resolve_groups(
         &self,
         groups: &DependencyGroups,
         project: Option<&PackageName>,
@@ -136,7 +139,7 @@ impl FrozenWorkspace {
     }
 
     /// Validate the selected packages against the workspace recorded in the lockfile.
-    pub(crate) fn validate_packages(&self, names: &[PackageName]) -> Result<()> {
+    pub fn validate_packages(&self, names: &[PackageName]) -> Result<()> {
         for name in names {
             if !(self.lock.members().contains(name)
                 || self.lock.members().is_empty()

@@ -10,6 +10,8 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple,
 };
 use uv_dispatch::UniversalState;
+use uv_lock_operations::LockTarget;
+use uv_lock_operations::{LockMode, LockOperation};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
@@ -26,8 +28,6 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::audit::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
-use crate::commands::project::lock::{LockMode, LockOperation};
-use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };

@@ -51,6 +51,7 @@ uv-install-operations = { version = "0.0.90", path = "crates/uv-install-operatio
 uv-installer = { version = "0.0.90", path = "crates/uv-installer" }
 uv-keyring = { version = "0.0.90", path = "crates/uv-keyring" }
 uv-lock = { version = "0.0.90", path = "crates/uv-lock" }
+uv-lock-operations = { version = "0.0.90", path = "crates/uv-lock-operations" }
 uv-logging = { version = "0.0.90", path = "crates/uv-logging" }
 uv-macros = { version = "0.0.90", path = "crates/uv-macros" }
 uv-metadata = { version = "0.0.90", path = "crates/uv-metadata" }

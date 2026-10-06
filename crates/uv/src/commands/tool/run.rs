@@ -6,7 +6,6 @@ use std::str::FromStr;
 use uv_command_support::child::read_env_files;
 use uv_command_support::child::run_to_completion;
 use uv_command_support::{ExitStatus, Printer, UvError};
-use uv_dispatch::PlatformState;
 use uv_distribution_types::RequirementScope;
 
 use anyhow::{Context, bail};
@@ -52,6 +51,7 @@ use crate::commands::project::{EnvironmentError, EnvironmentSpecification, resol
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::error::ToolError;
 use crate::commands::tool::{Target, ToolRequest};
+use uv_dispatch::PlatformState;
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_context::PythonDownloadReporter;
 use uv_resolve_operations::latest::LatestClient;
