@@ -322,13 +322,14 @@ or timings of the production release workflow. They exclude runner queueing, set
 processing, verification, and artifact upload. The Linux runs do not use manylinux containers, and
 production signing is not exercised.
 
-The uncompressed `uv` companions were also substantially smaller:
+The uncompressed `uv` companions were also substantially smaller. No-debug builds do not produce
+separate symbol companions:
 
-| Native target             | Full symbol bytes | Line-table symbol bytes | Size reduction |
-| ------------------------- | ----------------: | ----------------------: | -------------: |
-| x86_64-unknown-linux-gnu  |       681,367,000 |             197,367,616 |          71.0% |
-| aarch64-unknown-linux-gnu |       700,826,864 |             210,404,032 |          70.0% |
-| aarch64-apple-darwin      |       696,890,788 |             225,785,082 |          67.6% |
+| Native target             | No-debug symbol bytes | Full symbol bytes | Line-table symbol bytes | Size reduction vs. full |
+| ------------------------- | --------------------: | ----------------: | ----------------------: | ----------------------: |
+| x86_64-unknown-linux-gnu  |                     0 |       681,367,000 |             197,367,616 |                   71.0% |
+| aarch64-unknown-linux-gnu |                     0 |       700,826,864 |             210,404,032 |                   70.0% |
+| aarch64-apple-darwin      |                     0 |       696,890,788 |             225,785,082 |                   67.6% |
 
 Each target passed Rust entry-point, AWS-LC, and jitterentropy source lookups; removing the
 companion symbols prevented those lookups. Embedded SBOM validation, wheel installation with exact
