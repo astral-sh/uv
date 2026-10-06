@@ -426,7 +426,7 @@ impl ToolLock {
             config_setting,
             config_settings_package,
             build_isolation,
-            require_build_hashes,
+            build_hash_checking,
             extra_build_dependencies,
             extra_build_variables,
             exclude_newer,
@@ -471,14 +471,11 @@ impl ToolLock {
             .build_options(build_options.clone())
             .build();
         let hasher = HashStrategy::collect(HashCollection::Url);
-        let build_hasher = HashStrategy::from_constraints(
+        let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
+        let build_hasher = HashStrategy::from_build_constraints(
             build_constraints,
             Some(&interpreter.to_resolver_marker_environment()),
-            if *require_build_hashes {
-                HashCheckingMode::Require
-            } else {
-                HashCheckingMode::Verify
-            },
+            build_hash_policy,
         )?;
 
         let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
@@ -504,6 +501,7 @@ impl ToolLock {
             *link_mode,
             build_options,
             &build_hasher,
+            build_hash_policy,
             exclude_newer.clone(),
             sources.clone(),
             SourceTreeEditablePolicy::Tool,

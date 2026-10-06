@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
-use uv_configuration::{Constraints, HashCheckingMode};
+use uv_configuration::{BuildHashPolicy, Constraints, HashCheckingMode};
 use uv_distribution_types::{
     ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
     Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
@@ -452,6 +452,18 @@ impl HashStrategy {
             marker_env,
             mode,
         )
+    }
+
+    /// Read build constraints according to the resolved verification policy.
+    pub fn from_build_constraints(
+        constraints: &Constraints,
+        marker_env: Option<&ResolverMarkerEnvironment>,
+        policy: BuildHashPolicy,
+    ) -> Result<Self, HashStrategyError> {
+        match policy.checking() {
+            Some(mode) => Self::from_constraints(constraints, marker_env, mode),
+            None => Ok(Self::default()),
+        }
     }
 
     /// Read the required hashes from a [`Resolution`].

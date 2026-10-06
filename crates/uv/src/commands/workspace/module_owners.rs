@@ -63,7 +63,7 @@ pub(crate) async fn collect_module_owners(
             config_setting: &settings.config_setting,
             config_settings_package: &settings.config_settings_package,
             build_isolation: &settings.build_isolation,
-            require_build_hashes: settings.require_build_hashes,
+            build_hash_checking: settings.build_hash_checking,
             extra_build_dependencies: &settings.extra_build_dependencies,
             extra_build_variables: &settings.extra_build_variables,
             exclude_newer: &settings.exclude_newer,

@@ -2174,7 +2174,7 @@ pub(crate) async fn resolve_names(
         keyring_provider,
         link_mode,
         build_isolation,
-        require_build_hashes,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         prerelease: _,
@@ -2229,14 +2229,11 @@ pub(crate) async fn resolve_names(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let hasher = HashStrategy::default();
-    let build_hasher = HashStrategy::from_constraints(
+    let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
+    let build_hasher = HashStrategy::from_build_constraints(
         build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        if *require_build_hashes {
-            HashCheckingMode::Require
-        } else {
-            HashCheckingMode::Verify
-        },
+        build_hash_policy,
     )?;
     let flat_index = FlatIndex::load(&client, cache, index_locations)
         .await
@@ -2266,6 +2263,7 @@ pub(crate) async fn resolve_names(
         *link_mode,
         build_options,
         &build_hasher,
+        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,
@@ -2369,7 +2367,7 @@ pub(crate) async fn resolve_environment(
         config_setting,
         config_settings_package,
         build_isolation,
-        require_build_hashes,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -2477,14 +2475,11 @@ pub(crate) async fn resolve_environment(
         EnvironmentResolution::Specific => HashStrategy::default(),
         EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
     };
-    let build_hasher = HashStrategy::from_constraints(
+    let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
+    let build_hasher = HashStrategy::from_build_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        if *require_build_hashes {
-            HashCheckingMode::Require
-        } else {
-            HashCheckingMode::Verify
-        },
+        build_hash_policy,
     )?;
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls aren't
@@ -2541,6 +2536,7 @@ pub(crate) async fn resolve_environment(
         *link_mode,
         build_options,
         &build_hasher,
+        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         source_tree_editable_policy,
@@ -2610,7 +2606,7 @@ pub(crate) async fn sync_environment(
         config_setting,
         config_settings_package,
         build_isolation,
-        require_build_hashes,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -2646,14 +2642,11 @@ pub(crate) async fn sync_environment(
         }
     };
 
-    let build_hasher = HashStrategy::from_constraints(
+    let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
+    let build_hasher = HashStrategy::from_build_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        if require_build_hashes {
-            HashCheckingMode::Require
-        } else {
-            HashCheckingMode::Verify
-        },
+        build_hash_policy,
     )?;
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -2687,6 +2680,7 @@ pub(crate) async fn sync_environment(
         link_mode,
         build_options,
         &build_hasher,
+        build_hash_policy,
         exclude_newer.clone(),
         sources,
         SourceTreeEditablePolicy::Project,
@@ -2781,7 +2775,7 @@ pub(crate) async fn update_environment(
                 keyring_provider,
                 link_mode,
                 build_isolation,
-                require_build_hashes,
+                build_hash_checking,
                 extra_build_dependencies: _,
                 extra_build_variables,
                 prerelease,
@@ -2908,14 +2902,11 @@ pub(crate) async fn update_environment(
         .build_options(build_options.clone())
         .build();
 
-    let build_hasher = HashStrategy::from_constraints(
+    let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
+    let build_hasher = HashStrategy::from_build_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        if *require_build_hashes {
-            HashCheckingMode::Require
-        } else {
-            HashCheckingMode::Verify
-        },
+        build_hash_policy,
     )?;
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -2949,6 +2940,7 @@ pub(crate) async fn update_environment(
         *link_mode,
         build_options,
         &build_hasher,
+        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         source_tree_editable_policy,

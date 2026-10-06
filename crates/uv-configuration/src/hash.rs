@@ -56,3 +56,68 @@ impl std::fmt::Display for HashCheckingMode {
         }
     }
 }
+
+/// The configured hash requirement for build dependencies, before applying command defaults.
+#[derive(Debug, Default, Copy, Clone)]
+pub enum BuildHashChecking {
+    /// Use the command's default checking mode and trust hashes declared by requirements.
+    #[default]
+    Default,
+    /// Require hashes declared before the build backend runs.
+    Require,
+}
+
+impl BuildHashChecking {
+    /// Resolve verification and trust together, using the command's default checking mode.
+    pub fn resolve(self, default: Option<HashCheckingMode>) -> BuildHashPolicy {
+        match self {
+            Self::Require => BuildHashPolicy::Require(BuildHashSources::StaticRequirements),
+            Self::Default => match default {
+                None => BuildHashPolicy::Disabled,
+                Some(HashCheckingMode::Verify) => BuildHashPolicy::Verify,
+                Some(HashCheckingMode::Require) => {
+                    BuildHashPolicy::Require(BuildHashSources::AllRequirements)
+                }
+            },
+        }
+    }
+}
+
+/// The effective verification and trust policy for build dependencies.
+#[derive(Debug, Copy, Clone)]
+pub enum BuildHashPolicy {
+    /// Do not verify build dependency hashes.
+    Disabled,
+    /// Verify supplied hashes, including hashes declared by the build backend.
+    Verify,
+    /// Require hashes from the specified sources.
+    Require(BuildHashSources),
+}
+
+impl BuildHashPolicy {
+    /// The verification mode to use when constructing the build dependency hash strategy.
+    pub fn checking(self) -> Option<HashCheckingMode> {
+        match self {
+            Self::Disabled => None,
+            Self::Verify => Some(HashCheckingMode::Verify),
+            Self::Require(_) => Some(HashCheckingMode::Require),
+        }
+    }
+
+    /// The requirement declarations that may contribute trusted hashes.
+    pub fn sources(self) -> BuildHashSources {
+        match self {
+            Self::Disabled | Self::Verify => BuildHashSources::AllRequirements,
+            Self::Require(sources) => sources,
+        }
+    }
+}
+
+/// Sources that may introduce trusted hashes for build dependencies.
+#[derive(Debug, Copy, Clone)]
+pub enum BuildHashSources {
+    /// Constraints, static requirements, and requirements returned by the build backend.
+    AllRequirements,
+    /// Constraints and static requirements, excluding requirements returned by the build backend.
+    StaticRequirements,
+}

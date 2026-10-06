@@ -527,7 +527,7 @@ async fn do_lock(
         config_setting,
         config_settings_package,
         build_isolation,
-        require_build_hashes,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -870,17 +870,14 @@ async fn do_lock(
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
+    let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
     let (locked_hasher, locked_build_hasher) = if let Some(existing_lock) = existing_lock.as_ref() {
         let locked_hasher =
             existing_lock.hash_strategy(target.install_path(), &FxHashSet::default())?;
-        let build_hasher = HashStrategy::from_constraints(
+        let build_hasher = HashStrategy::from_build_constraints(
             &existing_lock.build_constraints(target.install_path()),
             Some(&interpreter.to_resolver_marker_environment()),
-            if *require_build_hashes {
-                HashCheckingMode::Require
-            } else {
-                HashCheckingMode::Verify
-            },
+            build_hash_policy,
         )?;
         let locked_build_hasher = locked_hasher
             .clone()
@@ -908,14 +905,10 @@ async fn do_lock(
     let hasher = HashStrategy::collect(HashCollection::Url)
         .with_verification(resolution_hasher.verification().clone());
 
-    let build_hasher = HashStrategy::from_constraints(
+    let build_hasher = HashStrategy::from_build_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        if *require_build_hashes {
-            HashCheckingMode::Require
-        } else {
-            HashCheckingMode::Verify
-        },
+        build_hash_policy,
     )?;
     // Explicit build constraints apply even when fresh resolution can replace lockfile hashes.
     let resolution_build_hasher = match mode {
@@ -979,6 +972,7 @@ async fn do_lock(
         *link_mode,
         build_options,
         &resolution_build_hasher,
+        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,

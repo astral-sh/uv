@@ -11,7 +11,7 @@ use uv_cli::PipInstallFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -47,7 +47,9 @@ use crate::commands::install_report::write_install_report;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
-use crate::commands::pip::{PipHashPolicies, operations, resolution_markers, resolution_tags};
+use crate::commands::pip::{
+    PipHashOptions, PipHashPolicies, operations, resolution_markers, resolution_tags,
+};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError};
@@ -64,8 +66,7 @@ pub(crate) async fn pip_sync(
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
-    hash_checking: Option<HashCheckingMode>,
-    require_build_hashes: bool,
+    hash_options: PipHashOptions,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
@@ -147,8 +148,8 @@ pub(crate) async fn pip_sync(
 
     let PipHashPolicies {
         runtime: hash_checking,
-        build: build_hash_checking,
-    } = PipHashPolicies::new(hash_checking, require_hashes, require_build_hashes);
+        build: build_hash_policy,
+    } = hash_options.resolve(require_hashes);
 
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {
@@ -352,11 +353,11 @@ pub(crate) async fn pip_sync(
         }
     };
 
-    let build_hasher = if let Some(build_hash_checking) = build_hash_checking {
-        HashStrategy::from_constraints(&build_constraints, Some(&marker_env), build_hash_checking)?
-    } else {
-        HashStrategy::default()
-    };
+    let build_hasher = HashStrategy::from_build_constraints(
+        &build_constraints,
+        Some(&marker_env),
+        build_hash_policy,
+    )?;
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -384,6 +385,7 @@ pub(crate) async fn pip_sync(
         link_mode,
         &build_options,
         &build_hasher,
+        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,
@@ -508,6 +510,7 @@ pub(crate) async fn pip_sync(
         link_mode,
         &build_options,
         &build_hasher,
+        build_hash_policy,
         exclude_newer.clone(),
         sources,
         SourceTreeEditablePolicy::Project,

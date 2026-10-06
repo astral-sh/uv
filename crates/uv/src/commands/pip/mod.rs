@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use uv_configuration::{HashCheckingMode, TargetTriple};
+use uv_configuration::{BuildHashChecking, BuildHashPolicy, HashCheckingMode, TargetTriple};
 use uv_platform_tags::{Tags, TagsError, TagsOptions};
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python::{Interpreter, PythonVersion};
@@ -18,29 +18,33 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod uninstall;
 
-/// Hash-checking policies for installing runtime and build dependencies with `uv pip`.
-struct PipHashPolicies {
+/// Configured hash-checking options, before reading requirements files.
+pub(crate) struct PipHashOptions {
     runtime: Option<HashCheckingMode>,
-    build: Option<HashCheckingMode>,
+    build: BuildHashChecking,
 }
 
-impl PipHashPolicies {
-    /// Resolve both policies after reading `--require-hashes` from requirements files.
-    fn new(
-        hash_checking: Option<HashCheckingMode>,
-        require_hashes: bool,
-        require_build_hashes: bool,
-    ) -> Self {
-        let runtime = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
-        // Build hashes are required independently of runtime checking. Otherwise, supplied build
-        // hashes are verified only when runtime checking is enabled.
-        let build = if require_build_hashes {
-            Some(HashCheckingMode::Require)
-        } else {
-            runtime.map(|_| HashCheckingMode::Verify)
-        };
+impl PipHashOptions {
+    pub(crate) fn new(runtime: Option<HashCheckingMode>, build: BuildHashChecking) -> Self {
         Self { runtime, build }
     }
+
+    /// Resolve verification and trust after incorporating requirements-file directives.
+    fn resolve(self, require_hashes: bool) -> PipHashPolicies {
+        let runtime = HashCheckingMode::from_requirements_txt(self.runtime, require_hashes);
+        // Runtime hash requirements do not require build hashes, but enabling runtime checking
+        // also enables verification of supplied build hashes.
+        let build = self
+            .build
+            .resolve(runtime.map(|_| HashCheckingMode::Verify));
+        PipHashPolicies { runtime, build }
+    }
+}
+
+/// Effective policies for runtime and build dependencies.
+struct PipHashPolicies {
+    runtime: Option<HashCheckingMode>,
+    build: BuildHashPolicy,
 }
 
 pub(crate) fn resolution_markers(

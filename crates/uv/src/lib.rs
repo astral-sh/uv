@@ -50,6 +50,7 @@ use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
+use crate::commands::pip::PipHashOptions;
 use crate::commands::{
     ExitStatus, ParsedRunCommand, ProjectError, RunCommand, ScriptPath, ToolRunCommand, UvError,
 };
@@ -783,7 +784,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.dependency_mode,
                 args.settings.upgrade,
                 args.settings.generate_hashes,
-                args.require_build_hashes,
+                args.build_hash_checking,
                 args.settings.no_emit_package,
                 args.settings.no_strip_extras,
                 args.settings.no_strip_markers,
@@ -882,8 +883,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
-                args.settings.hash_checking,
-                args.require_build_hashes,
+                PipHashOptions::new(args.settings.hash_checking, args.build_hash_checking),
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
@@ -1056,8 +1056,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
-                args.settings.hash_checking,
-                args.require_build_hashes,
+                PipHashOptions::new(args.settings.hash_checking, args.build_hash_checking),
                 globals.installer_metadata,
                 &args.settings.config_setting,
                 &args.settings.config_settings_package,

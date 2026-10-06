@@ -16,9 +16,9 @@ use uv_build_frontend::SourceBuild;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, DependencyMode, DependencyModifiers, HashCheckingMode,
-    IndexStrategy, KeyringProviderType, NoSources,
+    BuildHashPolicy, BuildHashSources, BuildIsolation, BuildKind, BuildOptions, BuildOutput,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyMode, DependencyModifiers,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -322,7 +322,7 @@ async fn build_impl(
         config_setting,
         config_settings_package,
         build_isolation,
-        require_build_hashes,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -334,6 +334,7 @@ async fn build_impl(
         cuda_driver_version: _,
         amd_gpu_architecture: _,
     } = settings;
+    let build_hash_policy = build_hash_checking.resolve(hash_checking);
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -494,8 +495,7 @@ async fn build_impl(
             printer,
             index_locations,
             client_builder.clone(),
-            hash_checking,
-            *require_build_hashes,
+            build_hash_policy,
             build_logs,
             gitignore,
             force_pep517,
@@ -573,8 +573,7 @@ async fn build_package(
     printer: Printer,
     index_locations: &IndexLocations,
     client_builder: BaseClientBuilder<'_>,
-    hash_checking: Option<HashCheckingMode>,
-    require_build_hashes: bool,
+    build_hash_policy: BuildHashPolicy,
     build_logs: bool,
     gitignore: bool,
     force_pep517: bool,
@@ -667,34 +666,28 @@ async fn build_package(
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
-    let hash_checking = if require_build_hashes {
-        Some(HashCheckingMode::Require)
-    } else {
-        hash_checking
-    };
-    let hasher = if let Some(hash_checking) = hash_checking {
-        // `uv build --require-hashes` requires hashes only for command-line build constraints;
-        // `--require-build-hashes` also includes workspace build constraints.
-        let hash_constraints = Constraints::from_specifications(
-            command_line_constraints.iter().cloned().chain(
-                build_constraints_from_workspace
-                    .iter()
-                    .filter(|entry| {
-                        !hash_checking.is_require()
-                            || require_build_hashes
-                            || !entry.hashes.is_empty()
-                    })
-                    .cloned(),
-            ),
-        );
-        HashStrategy::from_constraints(
-            &hash_constraints,
-            Some(&interpreter.to_resolver_marker_environment()),
-            hash_checking,
-        )?
-    } else {
-        HashStrategy::default()
-    };
+    // `uv build --require-hashes` allows hashless workspace constraints; the strict build
+    // policy requires hashes for workspace constraints as well as command-line constraints.
+    let hash_constraints = Constraints::from_specifications(
+        command_line_constraints.iter().cloned().chain(
+            build_constraints_from_workspace
+                .iter()
+                .filter(|entry| match build_hash_policy {
+                    BuildHashPolicy::Require(BuildHashSources::AllRequirements) => {
+                        !entry.hashes.is_empty()
+                    }
+                    BuildHashPolicy::Disabled
+                    | BuildHashPolicy::Verify
+                    | BuildHashPolicy::Require(BuildHashSources::StaticRequirements) => true,
+                })
+                .cloned(),
+        ),
+    );
+    let hasher = HashStrategy::from_build_constraints(
+        &hash_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        build_hash_policy,
+    )?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -748,14 +741,14 @@ async fn build_package(
         link_mode,
         build_options,
         &hasher,
+        build_hash_policy,
         exclude_newer,
         sources.clone(),
         SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    )
-    .with_require_build_hashes(require_build_hashes);
+    );
     let dependency_check = match types_build_isolation {
         uv_types::BuildIsolation::Isolated => None,
         uv_types::BuildIsolation::Shared(_) | uv_types::BuildIsolation::SharedPackage(..) => {
