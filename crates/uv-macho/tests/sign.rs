@@ -9,7 +9,6 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use scroll::{BE, LE, Pread};
-use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
 use common::{commands, install_name, name_capacity, sections};
@@ -50,46 +49,36 @@ fn verify_hashes(image: &[u8]) -> Result<()> {
         .find(|section| section.name == b"__info_plist\0\0\0\0")
         .map(|section| section.data);
 
-    for (&slot, directory) in &blobs {
-        if slot != 0 && slot != 0x1000 {
-            continue;
-        }
+    assert!(!blobs.keys().any(|slot| (0x1000..=0x1004).contains(slot)));
+    let directory = blobs.get(&0).context("primary CodeDirectory")?;
+    assert_eq!(directory[36], 32);
+    assert_eq!(directory[37], 2);
 
-        let hash_size = usize::from(directory[36]);
-        let hash = |data: &[u8]| -> Vec<u8> {
-            if directory[37] == 1 {
-                Sha1::digest(data).to_vec()
-            } else {
-                Sha256::digest(data).to_vec()
-            }
-        };
+    let offset = directory.pread_with::<u32>(16, BE)? as usize;
+    let count = directory.pread_with::<u32>(28, BE)? as usize;
+    assert_eq!(directory.pread_with::<u32>(32, BE)? as usize, limit);
+    assert_eq!(count, limit.div_ceil(4096));
+    assert_eq!(directory.len(), offset + count * 32);
 
-        let offset = directory.pread_with::<u32>(16, BE)? as usize;
-        let count = directory.pread_with::<u32>(28, BE)? as usize;
-        assert_eq!(directory.pread_with::<u32>(32, BE)? as usize, limit);
-        assert_eq!(count, limit.div_ceil(4096));
-        assert_eq!(directory.len(), offset + count * hash_size);
+    for (index, page) in image[..limit].chunks(4096).enumerate() {
+        assert_eq!(
+            &directory[offset + index * 32..][..32],
+            Sha256::digest(page).as_slice()
+        );
+    }
 
-        for (index, page) in image[..limit].chunks(4096).enumerate() {
-            assert_eq!(
-                &directory[offset + index * hash_size..][..hash_size],
-                hash(page)
-            );
-        }
+    let specials = directory.pread_with::<u32>(24, BE)? as usize;
 
-        let specials = directory.pread_with::<u32>(24, BE)? as usize;
-
-        for special in 1..=specials {
-            let actual = &directory[offset - special * hash_size..][..hash_size];
-            if let Some(data) = blobs.get(&u32::try_from(special)?) {
-                assert_eq!(actual, hash(data));
-            } else if special == 1
-                && let Some(info_plist) = info_plist
-            {
-                assert_eq!(actual, hash(info_plist));
-            } else {
-                assert_eq!(actual, vec![0; hash_size]);
-            }
+    for special in 1..=specials {
+        let actual = &directory[offset - special * 32..][..32];
+        if let Some(data) = blobs.get(&u32::try_from(special)?) {
+            assert_eq!(actual, Sha256::digest(data).as_slice());
+        } else if special == 1
+            && let Some(info_plist) = info_plist
+        {
+            assert_eq!(actual, Sha256::digest(info_plist).as_slice());
+        } else {
+            assert_eq!(actual, [0; 32]);
         }
     }
 
@@ -136,8 +125,8 @@ fn edit_and_sign() -> Result<()> {
     insta::assert_snapshot!(summary.join("\n"), @r"
     arm64: x: slots [0, 2, 65536]
     arm64: /a/longer/install/directory/libfixture.dylib: slots [0, 2, 65536]
-    x86_64: x: slots [0, 2, 4096, 65536]
-    x86_64: /a/longer/install/directory/libfixture.dylib: slots [0, 2, 4096, 65536]
+    x86_64: x: slots [0, 2, 65536]
+    x86_64: /a/longer/install/directory/libfixture.dylib: slots [0, 2, 65536]
     signed: x: slots [0, 2, 5, 7, 65536]
     signed: /a/longer/install/directory/libfixture.dylib: slots [0, 2, 5, 7, 65536]
     ");
@@ -382,6 +371,65 @@ fn macos_verification() -> Result<()> {
             String::from_utf8_lossy(&verification.stderr)
         );
     }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn resign_legacy_hashes() -> Result<()> {
+    let temporary = tempfile::tempdir()?;
+    let path = temporary.path().join("legacy.dylib");
+    fs_err::write(&path, X86_64)?;
+
+    let signing = Command::new("/usr/bin/codesign")
+        .args([
+            "--force",
+            "--sign",
+            "-",
+            "--digest-algorithm",
+            "sha1,sha256",
+            "--identifier",
+            "org.astral.uv.fixture",
+        ])
+        .arg(&path)
+        .output()?;
+    assert!(
+        signing.status.success(),
+        "{}",
+        String::from_utf8_lossy(&signing.stderr)
+    );
+
+    let image = fs_err::read(&path)?;
+    let (_, before) = signature(&image)?;
+    assert_eq!(before.get(&0).context("primary CodeDirectory")?[37], 1);
+    assert_eq!(
+        before.get(&0x1000).context("alternate CodeDirectory")?[37],
+        2
+    );
+
+    let output = adhoc_sign(&image, SigningIdentifier::new(c"ignored")?)?;
+    verify_hashes(output.as_bytes())?;
+
+    let (_, after) = signature(output.as_bytes())?;
+    assert_eq!(before.get(&2), after.get(&2));
+    let directory = after.get(&0).context("new CodeDirectory")?;
+    let identifier_offset = directory.pread_with::<u32>(20, BE)? as usize;
+    assert_eq!(
+        CStr::from_bytes_until_nul(&directory[identifier_offset..])?,
+        c"org.astral.uv.fixture"
+    );
+
+    fs_err::write(&path, output.as_bytes())?;
+    let verification = Command::new("/usr/bin/codesign")
+        .args(["--verify", "--strict"])
+        .arg(&path)
+        .output()?;
+    assert!(
+        verification.status.success(),
+        "{}",
+        String::from_utf8_lossy(&verification.stderr)
+    );
 
     Ok(())
 }
