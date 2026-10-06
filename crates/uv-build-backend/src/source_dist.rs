@@ -227,7 +227,7 @@ fn write_source_dist(
         .settings()
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore)?;
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),

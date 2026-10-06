@@ -260,14 +260,15 @@ respect-ignore = true
 ```
 
 uv reads `.gitignore` files in the project directory (containing `pyproject.toml`) and its
-subdirectories. Nested patterns and negations follow Git's ignore syntax. Git does not need to be
-installed, and the project does not need to be in a Git repository. Patterns also apply to files
-tracked by Git, since the build backend does not inspect the Git index.
+subdirectories. In a Git repository, uv also reads ancestor `.gitignore` files up to the repository
+root. Nested patterns and negations follow Git's ignore syntax. Git does not need to be installed,
+and the project does not need to be in a Git repository. Patterns also apply to files tracked by
+Git, since the build backend does not inspect the Git index.
 
-Ignore files above the project directory, global Git excludes, and `.git/info/exclude` are not used.
-The `source-exclude`, `wheel-exclude`, and default excludes still take precedence over Git ignore
-negations. If a required package file, such as a module's `__init__.py`, the readme, or a license
-file, is ignored, the build fails with an error.
+Global Git excludes and `.git/info/exclude` are not used. The `source-exclude`, `wheel-exclude`, and
+default excludes still take precedence over Git ignore negations. If a required package file, such
+as a module's `__init__.py`, the README, or a license file, is ignored, the build fails with an
+error.
 
 Git ignore filtering applies when building both source distributions and wheels. The generated
 `pyproject.toml` in a source distribution disables this setting, since its contents have already

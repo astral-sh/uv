@@ -472,7 +472,7 @@ impl PyProjectToml {
             root,
             self.settings()
                 .is_some_and(|settings| settings.respect_ignore),
-        );
+        )?;
         vcs_ignore.require(Path::new("pyproject.toml"))?;
         if let Some(readme) = self.readme().and_then(Readme::path) {
             vcs_ignore.require(readme)?;

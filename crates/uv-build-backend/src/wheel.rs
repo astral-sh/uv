@@ -143,7 +143,7 @@ fn write_wheel(
         .unwrap_or_else(BuildBackendSettings::default);
 
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore)?;
 
     debug!("Adding content files to wheel");
     let (src_root, module_relative) = find_roots(
@@ -281,7 +281,7 @@ pub fn build_editable(
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
-    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore);
+    let mut vcs_ignore = VcsIgnore::new(source_tree, settings.respect_ignore)?;
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
