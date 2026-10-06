@@ -7,6 +7,7 @@ use crate::commands::project::version::MissingProjectVersionError;
 use crate::commands::python::install::InvalidUpgradeRequestError;
 use crate::commands::tool::NoExecutablesError;
 use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
+use uv_build_commands::Error as BuildError;
 use uv_command_support::Printer;
 use uv_resolve_operations::ExtrasWithoutSourceError;
 
@@ -48,7 +49,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
         collect_hint::<InvalidUpgradeRequestError>(cause, &mut hints);
-        collect_hint::<crate::commands::build_frontend::Error>(cause, &mut hints);
+        collect_hint::<BuildError>(cause, &mut hints);
         collect_hint::<uv_build_backend::Error>(cause, &mut hints);
         collect_hint::<uv_build_frontend::Error>(cause, &mut hints);
         collect_hint::<uv_python::Error>(cause, &mut hints);

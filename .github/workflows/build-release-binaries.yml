@@ -466,7 +466,8 @@ jobs:
 
   linux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-latest-4
+    # The instrumented x86_64 PGO build exceeds 16 GB of RAM.
+    runs-on: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && 'depot-ubuntu-24.04-16' || 'depot-ubuntu-latest-4' }}
     strategy:
       matrix:
         include:
