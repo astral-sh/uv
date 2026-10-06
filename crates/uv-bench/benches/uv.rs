@@ -541,9 +541,7 @@ mod resolver {
 
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{
-        BuildHashPolicy, BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources,
-    };
+    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources};
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
@@ -562,7 +560,8 @@ mod resolver {
         Resolver, ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{
-        BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+        BuildHashStrategy, BuildIsolation, EmptyInstalledPackages, HashStrategy,
+        SourceTreeEditablePolicy,
     };
     use uv_workspace::WorkspaceCache;
 
@@ -625,6 +624,7 @@ mod resolver {
         let build_constraints = Constraints::default();
         let flat_index = FlatIndex::default();
         let hashes = HashStrategy::default();
+        let build_hashes = BuildHashStrategy::disabled();
         let state = SharedState::default();
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
@@ -663,8 +663,7 @@ mod resolver {
             &extra_build_variables,
             LinkMode::default(),
             &build_options,
-            &hashes,
-            BuildHashPolicy::Disabled,
+            &build_hashes,
             exclude_newer,
             sources,
             SourceTreeEditablePolicy::Project,

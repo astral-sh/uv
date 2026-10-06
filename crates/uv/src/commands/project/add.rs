@@ -40,7 +40,7 @@ use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_static::is_known_standard_library_package;
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildHashStrategy, BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
@@ -450,7 +450,7 @@ pub(crate) async fn add(
                 .resolver
                 .build_hash_checking
                 .resolve(Some(HashCheckingMode::Verify));
-            let build_hasher = HashStrategy::from_build_constraints(
+            let build_hasher = BuildHashStrategy::from_constraints(
                 &build_constraints,
                 Some(&python_target.interpreter().to_resolver_marker_environment()),
                 build_hash_policy,
@@ -514,7 +514,6 @@ pub(crate) async fn add(
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
                 &build_hasher,
-                build_hash_policy,
                 settings.resolver.exclude_newer.clone(),
                 sources,
                 SourceTreeEditablePolicy::Project,

@@ -40,7 +40,7 @@ use uv_resolver::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildHashStrategy, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -475,7 +475,7 @@ pub(crate) async fn pip_install(
         }
     };
 
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = BuildHashStrategy::from_constraints(
         &build_constraints,
         Some(&marker_env),
         build_hash_policy,
@@ -502,7 +502,6 @@ pub(crate) async fn pip_install(
         link_mode,
         &build_options,
         &build_hasher,
-        build_hash_policy,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,
@@ -637,7 +636,6 @@ pub(crate) async fn pip_install(
         link_mode,
         &build_options,
         &build_hasher,
-        build_hash_policy,
         exclude_newer.clone(),
         sources,
         SourceTreeEditablePolicy::Project,

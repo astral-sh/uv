@@ -49,7 +49,7 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildHashStrategy, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -508,7 +508,7 @@ pub(crate) async fn pip_compile(
 
     // Verify hashes on pinned build constraints, if any.
     let build_hash_policy = build_hash_checking.resolve(Some(HashCheckingMode::Verify));
-    let build_hashes = HashStrategy::from_build_constraints(
+    let build_hashes = BuildHashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         build_hash_policy,
@@ -537,7 +537,6 @@ pub(crate) async fn pip_compile(
         link_mode,
         &build_options,
         &build_hashes,
-        build_hash_policy,
         exclude_newer.clone(),
         sources,
         SourceTreeEditablePolicy::Project,

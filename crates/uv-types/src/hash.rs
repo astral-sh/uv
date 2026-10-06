@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
-use uv_configuration::{BuildHashPolicy, Constraints, HashCheckingMode};
+use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
     ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
     Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
@@ -67,7 +67,10 @@ impl HashStrategy {
     ///
     /// Preserve hash collection and require hashes if either strategy requires them. Constraints
     /// for identities absent from this strategy remain available for newly resolved dependencies.
-    pub fn with_constraint_hashes(mut self, constraints: &Self) -> Result<Self, HashStrategyError> {
+    pub(crate) fn with_constraint_hashes(
+        mut self,
+        constraints: &Self,
+    ) -> Result<Self, HashStrategyError> {
         let (requirement_hashes, mode) = match &self.verification {
             HashVerification::None => {
                 self.verification = constraints.verification.clone();
@@ -439,7 +442,7 @@ impl HashStrategy {
 
     /// Collect hashes from [`Constraints`] using the same handling as regular constraints in
     /// [`Self::from_requirements`], preserving declaration order.
-    fn from_constraints(
+    pub(crate) fn from_constraints(
         constraints: &Constraints,
         marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
@@ -452,18 +455,6 @@ impl HashStrategy {
             marker_env,
             mode,
         )
-    }
-
-    /// Read build constraints according to the resolved verification policy.
-    pub fn from_build_constraints(
-        constraints: &Constraints,
-        marker_env: Option<&ResolverMarkerEnvironment>,
-        policy: BuildHashPolicy,
-    ) -> Result<Self, HashStrategyError> {
-        match policy.checking() {
-            Some(mode) => Self::from_constraints(constraints, marker_env, mode),
-            None => Ok(Self::default()),
-        }
     }
 
     /// Read the required hashes from a [`Resolution`].

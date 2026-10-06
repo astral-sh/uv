@@ -11,8 +11,8 @@ use tracing::warn;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, BuildHashPolicy, BuildOptions, Concurrency, Constraints, DependencyGroups,
-    DryRun, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
+    ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
+    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -31,7 +31,8 @@ use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
+    AnyErrorBuild, BuildContext, BuildHashStrategy, BuildIsolation, BuildStack,
+    SourceTreeEditablePolicy,
 };
 use uv_virtualenv::{OnExisting, RemovalReason, Seed};
 use uv_warnings::warn_user;
@@ -301,7 +302,7 @@ pub(crate) async fn venv(
 
         // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = Constraints::default();
-        let build_hasher = HashStrategy::default();
+        let build_hasher = BuildHashStrategy::disabled();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
         let sources = NoSources::All;
@@ -329,7 +330,6 @@ pub(crate) async fn venv(
             link_mode,
             &build_options,
             &build_hasher,
-            BuildHashPolicy::Disabled,
             exclude_newer,
             sources,
             SourceTreeEditablePolicy::Project,
