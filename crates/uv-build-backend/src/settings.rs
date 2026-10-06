@@ -84,9 +84,9 @@ pub struct BuildBackendSettings {
     #[option(
         default = r#"false"#,
         value_type = "bool",
-        example = r#"respect-vcs-ignore = true"#
+        example = r#"respect-gitignore = true"#
     )]
-    pub(crate) respect_vcs_ignore: bool,
+    pub(crate) respect_gitignore: bool,
 
     /// Glob expressions which files and directories to exclude from the source distribution.
     ///
@@ -199,7 +199,7 @@ impl Default for BuildBackendSettings {
             module_name: None,
             source_include: Vec::new(),
             default_excludes: true,
-            respect_vcs_ignore: false,
+            respect_gitignore: false,
             source_exclude: Vec::new(),
             wheel_exclude: Vec::new(),
             namespace: false,
