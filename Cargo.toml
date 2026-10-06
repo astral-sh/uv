@@ -22,6 +22,7 @@ uv-audit-operations = { version = "0.0.90", path = "crates/uv-audit-operations" 
 uv-auth = { version = "0.0.90", path = "crates/uv-auth" }
 uv-bin-install = { version = "0.0.90", path = "crates/uv-bin-install" }
 uv-build-backend = { version = "0.0.90", path = "crates/uv-build-backend" }
+uv-build-commands = { version = "0.0.90", path = "crates/uv-build-commands" }
 uv-build-frontend = { version = "0.0.90", path = "crates/uv-build-frontend" }
 uv-cache = { version = "0.0.90", path = "crates/uv-cache" }
 uv-cache-info = { version = "0.0.90", path = "crates/uv-cache-info" }

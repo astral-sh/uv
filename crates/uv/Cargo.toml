@@ -18,6 +18,7 @@ workspace = true
 uv-auth = { workspace = true }
 uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }
+uv-build-commands = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
@@ -32,7 +33,6 @@ uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-environment-operations = { workspace = true }
 uv-errors = { workspace = true }
-uv-extract = { workspace = true }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-operations = { workspace = true }
@@ -90,7 +90,6 @@ itertools = { workspace = true }
 owo-colors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tar-codec = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
@@ -115,6 +114,7 @@ embed-manifest = { workspace = true }
 
 [dev-dependencies]
 uv-cache-key = { workspace = true }
+uv-extract = { workspace = true }
 uv-platform = { workspace = true }
 uv-publish = { workspace = true, features = ["test"] }
 uv-test = { workspace = true }
@@ -139,6 +139,7 @@ predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, default-features = false }
 sha2 = { workspace = true }
+tar-codec = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
