@@ -173,7 +173,10 @@ mod tests {
             ExpandedTags::parse(["cp312-cp312-win_amd64", "cp311-cp311-linux_x86_64"]).unwrap();
 
         assert!(!wheel.is_compatible(&environment));
-        assert!(!wheel.compatibility(&environment).is_compatible());
+        assert_eq!(
+            wheel.compatibility(&environment),
+            TagCompatibility::Incompatible(IncompatibleTag::Platform)
+        );
     }
 
     #[test]
