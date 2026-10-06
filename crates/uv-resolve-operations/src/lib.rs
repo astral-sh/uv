@@ -8,7 +8,6 @@ use std::sync::Arc;
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_command_support::Printer;
 use uv_configuration::{
@@ -38,21 +37,21 @@ use uv_resolver::{
 };
 use uv_types::{BuildContext, HashStrategy};
 
-use crate::commands::operations::resolution::loggers::ResolveLogger;
-use crate::commands::operations::resolution::reporters::ResolverReporter;
+use crate::loggers::ResolveLogger;
+use crate::reporters::ResolverReporter;
 
 mod error;
-pub(crate) mod latest;
-pub(crate) mod locked_requirements;
-pub(crate) mod loggers;
+pub mod latest;
+pub mod locked_requirements;
+pub mod loggers;
 mod markers;
-pub(crate) mod reporters;
+pub mod reporters;
 
-pub(crate) use error::{Error, ExtrasWithoutSourceError};
-pub(crate) use markers::{resolution_markers, resolution_tags};
+pub use error::{Error, ExtrasWithoutSourceError};
+pub use markers::{resolution_markers, resolution_tags};
 
 /// Consolidate the requirements for an installation.
-pub(crate) async fn read_requirements(
+pub async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
@@ -83,7 +82,7 @@ pub(crate) async fn read_requirements(
 }
 
 /// Resolve a set of constraints.
-pub(crate) async fn read_constraints(
+pub async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
@@ -95,7 +94,7 @@ pub(crate) async fn read_constraints(
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
-pub(crate) async fn resolve(
+pub async fn resolve(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
@@ -416,7 +415,7 @@ pub(crate) async fn resolve(
 }
 
 /// Report any diagnostics on resolved distributions.
-pub(crate) fn diagnose_resolution(
+pub fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
 ) -> Result<(), Error> {

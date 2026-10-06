@@ -5,7 +5,7 @@ use uv_platform_tags::{Tags, TagsError, TagsOptions};
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python::{Interpreter, PythonVersion};
 
-pub(crate) fn resolution_markers(
+pub fn resolution_markers(
     python_version: Option<&PythonVersion>,
     python_platform: Option<&TargetTriple>,
     interpreter: &Interpreter,
@@ -24,7 +24,7 @@ pub(crate) fn resolution_markers(
     }
 }
 
-pub(crate) fn resolution_tags<'env>(
+pub fn resolution_tags<'env>(
     python_version: Option<&PythonVersion>,
     python_platform: Option<&TargetTriple>,
     interpreter: &'env Interpreter,

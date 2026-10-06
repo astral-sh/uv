@@ -20,8 +20,8 @@ use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
-use crate::commands::operations::resolution::latest::LatestClient;
-use crate::commands::operations::resolution::reporters::LatestVersionReporter;
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::reporters::LatestVersionReporter;
 use uv_settings::ResolverInstallerSettings;
 
 /// List installed tools.

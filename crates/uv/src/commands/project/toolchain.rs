@@ -7,7 +7,7 @@ use uv_normalize::{GroupName, PackageName};
 use uv_python::Interpreter;
 use uv_workspace::VirtualProject;
 
-use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// A locked package selected for use as a project tool.
 pub(crate) struct LockedTool<'lock> {

@@ -11,8 +11,6 @@ use uv_requirements::ScriptRequirementsError;
 use uv_workspace::RequiresPythonSources;
 use uv_workspace::dependency_groups::DependencyGroupError;
 
-use crate::commands::operations::installation as install_operations;
-use crate::commands::operations::resolution as resolve_operations;
 use crate::commands::project::ConflictError;
 
 /// A failure while resolving, creating, or updating a Python environment.
@@ -118,10 +116,10 @@ pub(crate) enum EnvironmentError {
     Lock(#[from] uv_lock::LockError),
 
     #[error(transparent)]
-    Resolve(#[from] Box<resolve_operations::Error>),
+    Resolve(#[from] Box<uv_resolve_operations::Error>),
 
     #[error(transparent)]
-    Install(#[from] Box<install_operations::Error>),
+    Install(#[from] Box<uv_install_operations::Error>),
 
     #[error(transparent)]
     Interpreter(#[from] uv_python::InterpreterError),
@@ -190,14 +188,14 @@ impl From<uv_distribution::LoweringError> for EnvironmentError {
     }
 }
 
-impl From<resolve_operations::Error> for EnvironmentError {
-    fn from(error: resolve_operations::Error) -> Self {
+impl From<uv_resolve_operations::Error> for EnvironmentError {
+    fn from(error: uv_resolve_operations::Error) -> Self {
         Self::Resolve(Box::new(error))
     }
 }
 
-impl From<install_operations::Error> for EnvironmentError {
-    fn from(error: install_operations::Error) -> Self {
+impl From<uv_install_operations::Error> for EnvironmentError {
+    fn from(error: uv_install_operations::Error) -> Self {
         Self::Install(Box::new(error))
     }
 }
@@ -208,7 +206,7 @@ impl From<EnvironmentError> for UvError {
             EnvironmentError::Resolve(error) => Self::from(*error),
             EnvironmentError::Install(error) => Self::from(*error),
             EnvironmentError::Requirements(error) => {
-                Self::from(resolve_operations::Error::Requirements(error))
+                Self::from(uv_resolve_operations::Error::Requirements(error))
             }
             error @ (EnvironmentError::Conflict(..)
             | EnvironmentError::MissingGroupProject(..)

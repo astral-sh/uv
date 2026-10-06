@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-
 use uv_command_support::{Printer, progress::ProgressReporter};
 use uv_distribution_types::BuildableSource;
 use uv_distribution_types::CachedDist;
@@ -9,7 +8,7 @@ use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
 #[derive(Debug)]
-pub(crate) struct PrepareReporter {
+pub(super) struct PrepareReporter {
     reporter: ProgressReporter,
 }
 
@@ -80,7 +79,7 @@ impl uv_installer::PrepareReporter for PrepareReporter {
 }
 
 #[derive(Debug)]
-pub(crate) struct InstallReporter {
+pub(super) struct InstallReporter {
     progress: ProgressBar,
 }
 

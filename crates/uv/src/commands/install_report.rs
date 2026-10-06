@@ -1,13 +1,11 @@
 use std::fmt::Write;
 
 use serde::Serialize;
-
 use uv_command_support::Printer;
 use uv_configuration::DryRun;
 use uv_configuration::PipInstallFormat;
-
-use crate::commands::operations::installation::Changelog;
-use crate::commands::operations::installation::report::{PackageChangesReport, SchemaReport};
+use uv_install_operations::Changelog;
+use uv_install_operations::report::{PackageChangesReport, SchemaReport};
 
 /// Write the package changes as JSON when requested.
 pub(crate) fn write_install_report(

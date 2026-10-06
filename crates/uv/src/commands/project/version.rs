@@ -32,9 +32,7 @@ use uv_workspace::{
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
-use crate::commands::operations::installation::loggers::DefaultInstallLogger;
 use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
 use crate::commands::operations::sync::sync_from_lock;
 use crate::commands::project;
 use crate::commands::project::edit::{ProjectEdit, PythonTarget};
@@ -46,7 +44,9 @@ use crate::commands::project::{
     ProjectError, ProjectInterpreter,
 };
 use uv_configuration::Modifications;
+use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_python_context::ProjectPythonRequest;
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Version information for a project (`uv version`).

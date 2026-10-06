@@ -38,13 +38,13 @@ use uv_virtualenv::{OnExisting, RemovalReason, Seed};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::commands::operations::installation::Changelog;
-use crate::commands::operations::installation::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironmentTarget, centralized_environment_root,
     centralized_environments_enabled, is_centralized_environment_reference,
     lock_project_environment, update_project_environment_link,
 };
+use uv_install_operations::Changelog;
+use uv_install_operations::loggers::{DefaultInstallLogger, InstallLogger};
 use uv_python_context::ProjectPythonRequest;
 use uv_python_context::PythonDownloadReporter;
 use uv_python_context::report_interpreter;

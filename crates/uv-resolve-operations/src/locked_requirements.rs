@@ -13,16 +13,16 @@ use uv_requirements_txt::RequirementsTxt;
 use uv_resolver::{Preference, PreferenceError, UpgradePackages};
 
 #[derive(Debug, Default)]
-pub(crate) struct LockedRequirements {
+pub struct LockedRequirements {
     /// The pinned versions from the lockfile.
-    pub(crate) preferences: Vec<Preference>,
+    pub preferences: Vec<Preference>,
     /// The pinned Git SHAs from the lockfile.
-    pub(crate) git: Vec<ResolvedRepositoryReference>,
+    pub git: Vec<ResolvedRepositoryReference>,
 }
 
 impl LockedRequirements {
     /// Create a [`LockedRequirements`] from a list of preferences.
-    pub(crate) fn from_preferences(preferences: Vec<Preference>) -> Self {
+    pub fn from_preferences(preferences: Vec<Preference>) -> Self {
         Self {
             preferences,
             ..Self::default()
@@ -31,7 +31,7 @@ impl LockedRequirements {
 }
 
 /// Load the preferred requirements from an existing `requirements.txt`, applying the upgrade strategy.
-pub(crate) async fn read_requirements_txt(
+pub async fn read_requirements_txt(
     output_file: &Path,
     upgrade: &Upgrade,
 ) -> Result<Vec<Preference>> {
@@ -67,7 +67,7 @@ pub(crate) async fn read_requirements_txt(
 }
 
 /// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.
-pub(crate) fn read_lock_requirements(
+pub fn read_lock_requirements(
     lock: &Lock,
     install_path: &Path,
     upgrade: &Upgrade,
@@ -109,7 +109,7 @@ pub(crate) fn read_lock_requirements(
 }
 
 /// Load the preferred requirements from an existing `pylock.toml` file, applying the upgrade strategy.
-pub(crate) async fn read_pylock_toml_requirements(
+pub async fn read_pylock_toml_requirements(
     output_file: &Path,
     upgrade: &Upgrade,
 ) -> Result<LockedRequirements, PylockTomlErrorKind> {

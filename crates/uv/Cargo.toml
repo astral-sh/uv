@@ -39,6 +39,7 @@ uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
+uv-install-operations = { workspace = true }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
 uv-logging = { workspace = true }
@@ -56,6 +57,7 @@ uv-python-context = { workspace = true }
 uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-requirements-txt = { workspace = true }
+uv-resolve-operations = { workspace = true }
 uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true }
@@ -93,7 +95,6 @@ indoc = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
-rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-
 use uv_command_support::{Printer, progress::ProgressReporter};
 use uv_distribution_types::BuildableSource;
 use uv_distribution_types::VersionOrUrlRef;
@@ -10,7 +9,7 @@ use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
 
 #[derive(Debug)]
-pub(crate) struct ResolverReporter {
+pub struct ResolverReporter {
     reporter: ProgressReporter,
 }
 
@@ -116,7 +115,7 @@ impl uv_distribution::Reporter for ResolverReporter {
 }
 
 #[derive(Debug)]
-pub(crate) struct LatestVersionReporter {
+pub struct LatestVersionReporter {
     progress: ProgressBar,
 }
 
@@ -133,21 +132,21 @@ impl From<Printer> for LatestVersionReporter {
 
 impl LatestVersionReporter {
     #[must_use]
-    pub(crate) fn with_length(self, length: u64) -> Self {
+    pub fn with_length(self, length: u64) -> Self {
         self.progress.set_length(length);
         self
     }
 
-    pub(crate) fn on_fetch_progress(&self) {
+    pub fn on_fetch_progress(&self) {
         self.progress.inc(1);
     }
 
-    pub(crate) fn on_fetch_version(&self, name: &PackageName, version: &Version) {
+    pub fn on_fetch_version(&self, name: &PackageName, version: &Version) {
         self.progress.set_message(format!("{name} v{version}"));
         self.progress.inc(1);
     }
 
-    pub(crate) fn on_fetch_complete(&self) {
+    pub fn on_fetch_complete(&self) {
         self.progress.set_message("");
         self.progress.finish_and_clear();
     }

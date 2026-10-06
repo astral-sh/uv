@@ -33,11 +33,7 @@ use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
-use crate::commands::operations::installation::Changelog;
-use crate::commands::operations::installation::loggers::DefaultInstallLogger;
-use crate::commands::operations::installation::report::{PackageChangesReport, SchemaReport};
 use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
 use crate::commands::operations::sync::sync_from_lock;
 use crate::commands::project::discovery::DiscoveredProject;
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
@@ -50,6 +46,10 @@ use crate::commands::project::{
     update_environment,
 };
 use uv_configuration::Modifications;
+use uv_install_operations::Changelog;
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_install_operations::report::{PackageChangesReport, SchemaReport};
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_settings::{FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings};
 
 /// Sync the project environment.

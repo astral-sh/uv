@@ -17,6 +17,8 @@ use uv_python::{
 };
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
+use uv_resolve_operations::loggers::DefaultResolveLogger;
+use uv_resolve_operations::resolution_markers;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
@@ -24,8 +26,6 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::audit::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
-use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
-use crate::commands::operations::resolution::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{

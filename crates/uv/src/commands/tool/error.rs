@@ -1,4 +1,3 @@
-use crate::commands::operations::resolution as resolve_operations;
 use crate::commands::project::EnvironmentError;
 use uv_command_support::UvError;
 
@@ -14,7 +13,7 @@ pub(crate) enum ToolError {
     #[error(transparent)]
     Python(Box<uv_python::Error>),
     #[error(transparent)]
-    Resolve(Box<resolve_operations::Error>),
+    Resolve(Box<uv_resolve_operations::Error>),
     #[error(transparent)]
     ClientBuild(#[from] uv_client::ClientBuildError),
     #[error(transparent)]
@@ -39,8 +38,8 @@ impl From<uv_python::Error> for ToolError {
     }
 }
 
-impl From<resolve_operations::Error> for ToolError {
-    fn from(error: resolve_operations::Error) -> Self {
+impl From<uv_resolve_operations::Error> for ToolError {
+    fn from(error: uv_resolve_operations::Error) -> Self {
         Self::Resolve(Box::new(error))
     }
 }
@@ -51,7 +50,7 @@ impl From<ToolError> for UvError {
             ToolError::Environment(error) => Self::from(error),
             ToolError::Resolve(error) => Self::from(*error),
             ToolError::Requirements(error) => {
-                Self::from(resolve_operations::Error::Requirements(error))
+                Self::from(uv_resolve_operations::Error::Requirements(error))
             }
             ToolError::Python(error) => Self::unexpected((*error).into()),
             ToolError::Client(error) => Self::unexpected(error.into()),

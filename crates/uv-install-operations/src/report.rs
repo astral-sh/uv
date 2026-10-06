@@ -1,9 +1,8 @@
 use serde::Serialize;
-
 use uv_distribution_types::Name;
 use uv_normalize::PackageName;
 
-use crate::commands::operations::installation::{ChangedDist, Changelog};
+use crate::{ChangedDist, Changelog};
 
 #[derive(Serialize, Debug, Default)]
 #[serde(rename_all = "snake_case")]
@@ -14,17 +13,17 @@ enum SchemaVersion {
 }
 
 #[derive(Serialize, Debug, Default)]
-pub(crate) struct SchemaReport {
+pub struct SchemaReport {
     /// The version of the schema.
     version: SchemaVersion,
 }
 
 /// A summary of all package changes made or planned during an installation.
 #[derive(Serialize, Debug, Clone, Default)]
-pub(crate) struct PackageChangesReport(Vec<PackageChangeReport>);
+pub struct PackageChangesReport(Vec<PackageChangeReport>);
 
 impl PackageChangesReport {
-    pub(crate) fn from_changelog(changelog: &Changelog) -> Self {
+    pub fn from_changelog(changelog: &Changelog) -> Self {
         let mut changes: Vec<_> =
             changelog
                 .uninstalled

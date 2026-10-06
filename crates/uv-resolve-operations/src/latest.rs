@@ -16,14 +16,14 @@ use uv_warnings::warn_user_once;
 /// The returned distribution is guaranteed to be compatible with the provided tags and Python
 /// requirement (if specified).
 #[derive(Debug, Clone)]
-pub(crate) struct LatestClient<'env> {
-    pub(crate) client: &'env RegistryClient,
-    pub(crate) capabilities: &'env IndexCapabilities,
-    pub(crate) prerelease: &'env Prerelease,
-    pub(crate) exclude_newer: &'env ExcludeNewer,
-    pub(crate) index_locations: &'env IndexLocations,
-    pub(crate) tags: Option<&'env Tags>,
-    pub(crate) requires_python: Option<&'env RequiresPython>,
+pub struct LatestClient<'env> {
+    pub client: &'env RegistryClient,
+    pub capabilities: &'env IndexCapabilities,
+    pub prerelease: &'env Prerelease,
+    pub exclude_newer: &'env ExcludeNewer,
+    pub index_locations: &'env IndexLocations,
+    pub tags: Option<&'env Tags>,
+    pub requires_python: Option<&'env RequiresPython>,
 }
 
 impl LatestClient<'_> {
@@ -100,7 +100,7 @@ impl LatestClient<'_> {
     }
 
     /// Find the latest version of a package from an index.
-    pub(crate) async fn find_latest(
+    pub async fn find_latest(
         &self,
         package: &PackageName,
         index: Option<&IndexUrl>,

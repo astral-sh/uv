@@ -5802,7 +5802,6 @@ dependencies = [
  "predicates",
  "regex",
  "reqwest",
- "rkyv",
  "rustc-hash",
  "self-replace",
  "serde",
@@ -5847,6 +5846,7 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-git-types",
+ "uv-install-operations",
  "uv-install-wheel",
  "uv-installer",
  "uv-lock",
@@ -5866,6 +5866,7 @@ dependencies = [
  "uv-redacted",
  "uv-requirements",
  "uv-requirements-txt",
+ "uv-resolve-operations",
  "uv-resolver",
  "uv-scripts",
  "uv-settings",
@@ -6744,6 +6745,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-install-operations"
+version = "0.0.90"
+dependencies = [
+ "anyhow",
+ "fs-err",
+ "indicatif",
+ "insta",
+ "itertools 0.14.0",
+ "owo-colors",
+ "rustc-hash",
+ "serde",
+ "thiserror",
+ "tracing",
+ "uv-cache",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-dispatch",
+ "uv-distribution",
+ "uv-distribution-types",
+ "uv-errors",
+ "uv-fs",
+ "uv-install-wheel",
+ "uv-installer",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-preview",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-redacted",
+ "uv-types",
+ "uv-warnings",
+]
+
+[[package]]
 name = "uv-install-wheel"
 version = "0.0.90"
 dependencies = [
@@ -7357,6 +7395,47 @@ dependencies = [
  "uv-pep508",
  "uv-pypi-types",
  "uv-redacted",
+ "uv-warnings",
+]
+
+[[package]]
+name = "uv-resolve-operations"
+version = "0.0.90"
+dependencies = [
+ "anyhow",
+ "fs-err",
+ "indicatif",
+ "itertools 0.14.0",
+ "jiff",
+ "owo-colors",
+ "rkyv",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-dispatch",
+ "uv-distribution",
+ "uv-distribution-filename",
+ "uv-distribution-types",
+ "uv-errors",
+ "uv-fs",
+ "uv-git",
+ "uv-installer",
+ "uv-lock",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-platform-tags",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-redacted",
+ "uv-requirements",
+ "uv-requirements-txt",
+ "uv-resolver",
+ "uv-types",
  "uv-warnings",
 ]
 

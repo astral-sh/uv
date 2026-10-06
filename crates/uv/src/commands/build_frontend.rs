@@ -43,6 +43,7 @@ use uv_python::{
     VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
+use uv_resolve_operations as operations;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy, SourceTreeEditablePolicy};
@@ -50,7 +51,6 @@ use uv_warnings::warn_user;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
-use crate::commands::operations;
 use uv_python_context::{PythonContextError, PythonDownloadReporter, find_requires_python};
 use uv_settings::ResolverSettings;
 
@@ -71,7 +71,7 @@ pub(crate) enum Error {
     #[error(transparent)]
     Extract(#[from] uv_extract::Error),
     #[error(transparent)]
-    Operations(#[from] operations::resolution::Error),
+    Operations(#[from] operations::Error),
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
     #[error(transparent)]
@@ -653,7 +653,7 @@ async fn build_package(
 
     // Read build constraints.
     let command_line_constraints =
-        operations::resolution::read_constraints(build_constraints, &client_builder).await?;
+        operations::read_constraints(build_constraints, &client_builder).await?;
     let build_constraints = Constraints::from_specifications(
         command_line_constraints
             .iter()

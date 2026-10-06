@@ -1,7 +1,5 @@
 use uv_errors::{Hinted, Hints};
 
-use crate::commands::operations;
-use crate::commands::operations::resolution::ExtrasWithoutSourceError;
 use crate::commands::pip::install::ExternallyManagedError;
 use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
@@ -12,6 +10,7 @@ use crate::commands::python::install::InvalidUpgradeRequestError;
 use crate::commands::tool::common::NoExecutablesError;
 use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
 use uv_command_support::Printer;
+use uv_resolve_operations::ExtrasWithoutSourceError;
 
 /// Format an error chain with the default user-facing hints and output settings.
 pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::fmt::Result {
@@ -37,8 +36,8 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
         collect_hint::<uv_lock::LockError>(cause, &mut hints);
         collect_hint::<LockError>(cause, &mut hints);
-        collect_hint::<operations::resolution::Error>(cause, &mut hints);
-        collect_hint::<operations::installation::Error>(cause, &mut hints);
+        collect_hint::<uv_resolve_operations::Error>(cause, &mut hints);
+        collect_hint::<uv_install_operations::Error>(cause, &mut hints);
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
         collect_hint::<RecursionLimitError>(cause, &mut hints);
         collect_hint::<DependencyNotFoundError>(cause, &mut hints);

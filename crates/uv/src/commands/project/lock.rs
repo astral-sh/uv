@@ -43,22 +43,19 @@ use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::operations::resolution::locked_requirements::{
-    LockedRequirements, read_lock_requirements,
-};
-use crate::commands::operations::resolution::loggers::{
-    DefaultResolveLogger, ResolveLogger, SummaryResolveLogger,
-};
-use crate::commands::operations::resolution::reporters::ResolverReporter;
+use crate::commands::ScriptPath;
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::validated_lock::ValidatedLock;
 use crate::commands::project::{
     LockError, LockValidationError, MissingLockfileSource, ProjectEnvironmentPolicy,
     ProjectEnvironmentTarget, ProjectInterpreter,
 };
-use crate::commands::{ScriptPath, operations};
 use uv_python_context::PythonDownloadReporter;
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter, init_script_python_requirement};
+use uv_resolve_operations::Error as ResolveError;
+use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_requirements};
+use uv_resolve_operations::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
+use uv_resolve_operations::reporters::ResolverReporter;
 use uv_settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
 /// The result of running a lock operation.
@@ -1130,14 +1127,14 @@ async fn do_lock(
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(target.members_requirements())
                 .await
-                .map_err(operations::resolution::Error::from)?;
+                .map_err(ResolveError::from)?;
             let workspace_members = member_requirements
                 .iter()
                 .map(|requirement| (requirement.name.clone(), requirement.source.clone()))
                 .collect();
 
             // Resolve the requirements.
-            let (resolution, _) = operations::resolution::resolve(
+            let (resolution, _) = uv_resolve_operations::resolve(
                 member_requirements
                     .into_iter()
                     .chain(target.group_requirements())
@@ -1190,7 +1187,7 @@ async fn do_lock(
             logger.on_complete(resolution.len(), start, printer)?;
 
             // Notify the user of any resolution diagnostics.
-            operations::resolution::diagnose_resolution(resolution.diagnostics(), printer)?;
+            uv_resolve_operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
             let manifest = ResolverManifest::new(
                 members,
