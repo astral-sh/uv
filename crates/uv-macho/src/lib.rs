@@ -16,6 +16,8 @@ pub enum Error {
     Malformed(&'static str),
     #[error("Unsupported Mach-O: {0}")]
     Unsupported(&'static str),
+    #[error("Unsupported Mach-O {field}: {value:#x}")]
+    UnsupportedValue { field: &'static str, value: u64 },
     #[error("Mach-O image exceeds the supported size")]
     TooLarge,
     #[error("Mach-O integer exceeds the supported size")]

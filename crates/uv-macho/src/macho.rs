@@ -25,7 +25,12 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
 
     match header.cputype {
         CPU_TYPE_ARM64 | CPU_TYPE_X86_64 => {}
-        _ => return Err(Error::Unsupported("CPU architecture")),
+        _ => {
+            return Err(Error::UnsupportedValue {
+                field: "CPU architecture",
+                value: u64::from(header.cputype),
+            });
+        }
     }
 
     let mut command_data = slice(image, HEADER_SIZE, header.sizeofcmds as usize)?;
@@ -93,8 +98,12 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
             }
 
             LC_BUILD_VERSION => {
-                if u32::from_le_bytes(array(command.data, 8)?) != 1 {
-                    return Err(Error::Unsupported("non-macOS build platform"));
+                let platform = u32::from_le_bytes(array(command.data, 8)?);
+                if platform != 1 {
+                    return Err(Error::UnsupportedValue {
+                        field: "build platform",
+                        value: u64::from(platform),
+                    });
                 }
 
                 if minimum_version
@@ -333,7 +342,12 @@ fn file_references(command: &Command<'_>, references: &mut Vec<(u32, u64)>) -> R
         | LC_SUB_UMBRELLA
         | LC_SUB_CLIENT
         | LC_SUB_LIBRARY => &[],
-        _ => return Err(Error::Unsupported("load-command file references")),
+        _ => {
+            return Err(Error::UnsupportedValue {
+                field: "load command with file references",
+                value: u64::from(command.kind),
+            });
+        }
     };
 
     for &(field, entry_size) in fields {
