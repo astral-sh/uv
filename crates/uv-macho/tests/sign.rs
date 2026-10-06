@@ -94,13 +94,13 @@ fn edit_and_sign() -> Result<()> {
 
     for (architecture, fixture) in [("arm64", ARM64), ("x86_64", X86_64), ("signed", SIGNED)] {
         let path = temporary.path().join(format!("{architecture}.dylib"));
-        let name = path.as_os_str().as_encoded_bytes();
+        let name = CString::new(path.as_os_str().as_encoded_bytes())?;
         let output = set_install_name(
             fixture,
-            &InstallName::new(name)?,
+            InstallName::new(&name)?,
             SigningIdentifier::new(&identifier)?,
         )?;
-        assert_eq!(install_name(output.as_bytes())?, name);
+        assert_eq!(install_name(output.as_bytes())?, name.as_bytes());
         assert_eq!(sections(output.as_bytes())?, sections(fixture)?);
         verify_hashes(output.as_bytes())?;
         assert_eq!(
@@ -275,7 +275,7 @@ fn malformed_signatures() -> Result<()> {
         assert_eq!(
             set_install_name(
                 &image,
-                &InstallName::new(b"name")?,
+                InstallName::new(c"name")?,
                 SigningIdentifier::new(c"fixture")?
             ),
             Err(expected),
@@ -295,7 +295,7 @@ fn malformed_signatures() -> Result<()> {
     assert_eq!(
         set_install_name(
             &trailing,
-            &InstallName::new(b"name")?,
+            InstallName::new(c"name")?,
             SigningIdentifier::new(c"fixture")?
         ),
         Err(Error::Unsupported(
@@ -376,20 +376,20 @@ fn non_utf8_identifier() -> Result<()> {
 #[test]
 fn header_padding() -> Result<()> {
     let available = name_capacity(ARM64)? - 16;
-    let name = vec![b'x'; available - 25];
+    let name = CString::new(vec![b'x'; available - 25])?;
     let output = set_install_name(
         ARM64,
-        &InstallName::new(&name)?,
+        InstallName::new(&name)?,
         SigningIdentifier::new(c"fixture")?,
     )?;
 
     verify_hashes(output.as_bytes())?;
 
-    let too_long = vec![b'x'; name.len() + 1];
+    let too_long = CString::new(vec![b'x'; name.as_bytes().len() + 1])?;
     assert_eq!(
         set_install_name(
             ARM64,
-            &InstallName::new(&too_long)?,
+            InstallName::new(&too_long)?,
             SigningIdentifier::new(c"fixture")?
         ),
         Err(Error::InsufficientHeaderPadding)

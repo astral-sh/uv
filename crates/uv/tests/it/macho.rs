@@ -24,11 +24,8 @@ fn macho_dylib_loading() -> anyhow::Result<()> {
     let identifier = SigningIdentifier::new(&identifier)?;
 
     let path = context.temp_dir.join("fixture.dylib");
-    let output = set_install_name(
-        fixture,
-        &InstallName::new(path.as_os_str().as_encoded_bytes())?,
-        identifier,
-    )?;
+    let name = CString::new(path.as_os_str().as_encoded_bytes())?;
+    let output = set_install_name(fixture, InstallName::new(&name)?, identifier)?;
     fs_err::write(&path, output.as_bytes())?;
 
     uv_snapshot!(context.filters(), context.python_command()
