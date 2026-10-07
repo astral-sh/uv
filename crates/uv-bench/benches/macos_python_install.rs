@@ -4,11 +4,11 @@
 //! `cargo build -p uv --profile profiling`
 //! `cargo bench -p uv-bench --bench macos_python_install --profile profiling`
 //!
-//! Setup primes a private UV_PYTHON_CACHE_DIR with CPython 3.13.1. Every measured
+//! Setup primes a private `UV_PYTHON_CACHE_DIR` with CPython 3.13.1. Every measured
 //! install uses --offline with a fresh install directory, bin directory, and uv cache.
 //! Timing includes uv startup, archive hashing and extraction, installation fixups,
 //! and executable links. Fixture creation, cleanup, and verification are untimed.
-//! The macos_dylib benchmark isolates dylib patching for diagnosing these results.
+//! The `macos_dylib` benchmark isolates dylib patching for diagnosing these results.
 
 // Don't optimize the alloc crate away due to it being otherwise unused.
 // https://github.com/rust-lang/rust/issues/64402
