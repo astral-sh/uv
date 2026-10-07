@@ -5,7 +5,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
-use uv_configuration::RequiredVersion;
+use uv_configuration::{RequiredVersion, RequirementsInput, RequirementsInputError};
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::{IndexUrlError, Origin};
 use uv_flags::EnvironmentFlags;
@@ -788,6 +788,10 @@ pub struct EnvironmentOptions {
     pub only_install_local: EnvFlag,
     pub no_env_file: EnvFlag,
     pub no_group: Option<Vec<GroupName>>,
+    pub constraints: Option<Vec<RequirementsInput>>,
+    pub overrides: Option<Vec<RequirementsInput>>,
+    pub excludes: Option<Vec<RequirementsInput>>,
+    pub build_constraints: Option<Vec<RequirementsInput>>,
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_sources_package: Option<Vec<PackageName>>,
@@ -930,6 +934,10 @@ impl EnvironmentOptions {
             only_install_local: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_LOCAL)?,
             no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
             no_group: parse_name_list_environment_variable(EnvVars::UV_NO_GROUP)?,
+            constraints: parse_path_list_environment_variable(EnvVars::UV_CONSTRAINT)?,
+            overrides: parse_path_list_environment_variable(EnvVars::UV_OVERRIDE)?,
+            excludes: parse_path_list_environment_variable(EnvVars::UV_EXCLUDE)?,
+            build_constraints: parse_path_list_environment_variable(EnvVars::UV_BUILD_CONSTRAINT)?,
             no_binary_package: parse_name_list_environment_variable(EnvVars::UV_NO_BINARY_PACKAGE)?,
             no_build_package: parse_name_list_environment_variable(EnvVars::UV_NO_BUILD_PACKAGE)?,
             no_sources_package: parse_name_list_environment_variable(
@@ -1010,6 +1018,34 @@ where
         Ok(None)
     } else {
         Ok(Some(names))
+    }
+}
+
+/// Parse an environment variable containing a whitespace-delimited list of requirements inputs.
+fn parse_path_list_environment_variable(
+    name: &'static str,
+) -> Result<Option<Vec<RequirementsInput>>, Error> {
+    let Some(value) = parse_string_environment_variable(name)? else {
+        return Ok(None);
+    };
+
+    let inputs = value
+        .split_whitespace()
+        .map(|entry| {
+            entry.parse().map_err(|err: RequirementsInputError| {
+                Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: value.clone(),
+                    err: err.to_string(),
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if inputs.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(inputs))
     }
 }
 
