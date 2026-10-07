@@ -2,7 +2,7 @@ use std::{io::Write, process::Stdio};
 use tokio::process::Command;
 use tracing::{debug, instrument, trace, warn};
 use uv_redacted::DisplaySafeUrl;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user_once, warn_user_once_with_chain};
 
 use crate::credentials::Credentials;
 
@@ -82,11 +82,11 @@ impl KeyringProvider {
         credentials: &Credentials,
     ) -> Result<bool, Error> {
         let Some(username) = credentials.username() else {
-            trace!("Unable to store credentials in keyring for {url} due to missing username");
+            trace!("Unable to store credentials in keyring for `{url}` due to missing username");
             return Ok(false);
         };
         let Some(password) = credentials.password() else {
-            trace!("Unable to store credentials in keyring for {url} due to missing password");
+            trace!("Unable to store credentials in keyring for `{url}` due to missing password");
             return Ok(false);
         };
 
@@ -210,7 +210,7 @@ impl KeyringProvider {
 
         // Check the full URL first
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
-        trace!("Checking keyring for URL {url}");
+        trace!("Checking keyring for URL `{url}`");
         let mut credentials = match self.backend {
             KeyringProviderBackend::Native => self.fetch_native(url.as_str(), username).await,
             KeyringProviderBackend::Subprocess => {
@@ -313,8 +313,11 @@ impl KeyringProvider {
                 .ok()?;
 
             let (username, password) = if let Some(username) = username {
-                // We're only expecting a password
-                let password = Self::strip_line_ending(&output);
+                // `keyring get` prints the password with a trailing newline.
+                let password = output
+                    .strip_suffix("\r\n")
+                    .or_else(|| output.strip_suffix('\n'))
+                    .unwrap_or(&output);
                 (username, password)
             } else {
                 // We're expecting a username and password
@@ -354,13 +357,6 @@ impl KeyringProvider {
         }
     }
 
-    fn strip_line_ending(output: &str) -> &str {
-        output
-            .strip_suffix("\r\n")
-            .or_else(|| output.strip_suffix('\n'))
-            .unwrap_or(output)
-    }
-
     #[instrument(skip(self))]
     async fn fetch_native(
         &self,
@@ -378,8 +374,12 @@ impl KeyringProvider {
                 debug!("No entry found in system keyring for {service}");
             }
             Err(err) => {
-                warn_user_once!(
-                    "Unable to fetch credentials for {service} from system keyring: {err}"
+                warn_user_once_with_chain!(
+                    anyhow::Error::from(err)
+                        .context(format!(
+                            "Unable to fetch credentials for {service} from system keyring"
+                        ))
+                        .as_ref()
                 );
             }
         }
@@ -430,65 +430,57 @@ impl KeyringProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::FutureExt;
     use url::Url;
 
-    #[test]
-    fn subprocess_password_preserves_trailing_whitespace() {
-        assert_eq!(
-            KeyringProvider::strip_line_ending("password \t\n"),
-            "password \t"
-        );
-        assert_eq!(
-            KeyringProvider::strip_line_ending("password \t\r\n"),
-            "password \t"
-        );
-        assert_eq!(
-            KeyringProvider::strip_line_ending("password \t\r"),
-            "password \t\r"
-        );
-    }
-
     #[tokio::test]
+    #[cfg_attr(
+        debug_assertions,
+        should_panic(expected = "Should only use keyring for URLs with host")
+    )]
     async fn fetch_url_no_host() {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some("user"));
-        if cfg!(debug_assertions) {
-            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
-            assert!(result.is_err());
-        } else {
-            assert_eq!(fetch.await, None);
-        }
+        assert_eq!(
+            keyring
+                .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
+                .await,
+            None
+        );
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        debug_assertions,
+        should_panic(expected = "Should only use keyring for URLs without a password")
+    )]
     async fn fetch_url_with_password() {
         let url = Url::parse("https://user:password@example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()));
-        if cfg!(debug_assertions) {
-            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
-            assert!(result.is_err());
-        } else {
-            assert_eq!(fetch.await, None);
-        }
+        assert_eq!(
+            keyring
+                .fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()))
+                .await,
+            None
+        );
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        debug_assertions,
+        should_panic(expected = "Should only use keyring with a non-empty username")
+    )]
     async fn fetch_url_with_empty_username() {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()));
-        if cfg!(debug_assertions) {
-            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
-            assert!(result.is_err());
-        } else {
-            assert_eq!(fetch.await, None);
-        }
+        assert_eq!(
+            keyring
+                .fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()))
+                .await,
+            None
+        );
     }
 
     #[tokio::test]

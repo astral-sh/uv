@@ -21,9 +21,10 @@ use uv_fs::{
 };
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
+use uv_pypi_types::Digest;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{Launcher, LauncherKind};
+use uv_trampoline_builder::{Launcher, LauncherKind, WindowMode, windows_python_launcher};
 
 use crate::discovery::VersionRequest;
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
@@ -53,9 +54,9 @@ pub enum Error {
     ExtractError(#[from] uv_extract::Error),
     #[error(transparent)]
     SysconfigError(#[from] sysconfig::Error),
-    #[error("Missing expected Python executable at {}", _0.user_display())]
+    #[error("Missing expected Python executable at `{}`", _0.user_display())]
     MissingExecutable(PathBuf),
-    #[error("Missing expected target directory for Python minor version link at {}", _0.user_display())]
+    #[error("Missing expected target directory for Python minor version link at `{}`", _0.user_display())]
     MissingPythonMinorVersionLinkTargetDirectory(PathBuf),
     #[error("Failed to create canonical Python executable")]
     CanonicalizeExecutable(#[source] io::Error),
@@ -300,6 +301,8 @@ pub struct ManagedPythonInstallation {
     path: PathBuf,
     /// An install key for the Python version.
     key: PythonInstallationKey,
+    /// The implementation recorded in the key. Managed installations require a known name.
+    implementation: ImplementationName,
     /// The URL with the Python archive.
     ///
     /// Empty when self was constructed from a path.
@@ -307,7 +310,7 @@ pub struct ManagedPythonInstallation {
     /// The SHA256 of the Python archive at the URL.
     ///
     /// Empty when self was constructed from a path.
-    sha256: Option<Cow<'static, str>>,
+    sha256: Option<Digest<32>>,
     /// The build version of the Python installation.
     ///
     /// Empty when self was constructed from a path without a BUILD file.
@@ -315,14 +318,16 @@ pub struct ManagedPythonInstallation {
 }
 
 impl ManagedPythonInstallation {
-    pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Self {
-        Self {
+    pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
+        let implementation = ImplementationName::try_from(&download.key().implementation)?;
+        Ok(Self {
             path,
             key: download.key().clone(),
+            implementation,
             url: Some(download.url().clone()),
             sha256: download.sha256().cloned(),
             build: download.build().map(Cow::Borrowed),
-        }
+        })
     }
 
     fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
@@ -334,6 +339,8 @@ impl ManagedPythonInstallation {
                 .to_str()
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
+
+        let implementation = ImplementationName::try_from(&key.implementation)?;
 
         let path = std::path::absolute(path)
             .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
@@ -348,6 +355,7 @@ impl ManagedPythonInstallation {
         Ok(Self {
             path,
             key,
+            implementation,
             url: None,
             sha256: None,
             build,
@@ -466,12 +474,16 @@ impl ManagedPythonInstallation {
         self.key.version()
     }
 
+    /// Return the implementation in the key without interpreting Emscripten as Pyodide.
+    pub(crate) fn key_implementation(&self) -> ImplementationName {
+        self.implementation
+    }
+
     pub fn implementation(&self) -> ImplementationName {
-        match self.key.implementation().into_owned() {
-            LenientImplementationName::Known(implementation) => implementation,
-            LenientImplementationName::Unknown(_) => {
-                panic!("Managed Python installations should have a known implementation")
-            }
+        if self.key.os().is_emscripten() {
+            ImplementationName::Pyodide
+        } else {
+            self.implementation
         }
     }
 
@@ -515,7 +527,7 @@ impl ManagedPythonInstallation {
             match symlink_or_copy_file(&python, &executable) {
                 Ok(()) => {
                     debug!(
-                        "Created link {} -> {}",
+                        "Created link `{}` -> `{}`",
                         executable.user_display(),
                         python.user_display(),
                     );
@@ -698,7 +710,7 @@ impl ManagedPythonInstallation {
 
     #[cfg(windows)]
     pub(crate) fn sha256(&self) -> Option<&str> {
-        self.sha256.as_deref()
+        self.sha256.as_ref().map(Digest::as_str)
     }
 }
 
@@ -800,7 +812,7 @@ impl PythonMinorVersionLink {
         ) {
             Ok(()) => {
                 debug!(
-                    "Created link {} -> {}",
+                    "Created link `{}` -> `{}`",
                     &self.symlink_directory.user_display(),
                     &self.target_directory.user_display(),
                 );
@@ -883,27 +895,54 @@ fn executable_path_from_base(
     }
 }
 
+/// A Python executable and its window mode.
+///
+/// The [`WindowMode`] is used by Windows launchers and ignored for Unix symlinks.
+#[derive(Debug, Clone, Copy)]
+pub struct PythonExecutable<'a> {
+    path: &'a Path,
+    window_mode: WindowMode,
+}
+
+impl<'a> PythonExecutable<'a> {
+    /// Create a Python executable that runs attached to a console.
+    pub fn console(path: &'a Path) -> Self {
+        Self {
+            path,
+            window_mode: WindowMode::Console,
+        }
+    }
+
+    /// Create a Python executable that runs without opening a console window.
+    pub fn windowed(path: &'a Path) -> Self {
+        Self {
+            path,
+            window_mode: WindowMode::Windowed,
+        }
+    }
+}
+
 /// Create a link to a managed Python executable.
 ///
 /// If the file already exists at the link path, an error will be returned.
-pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
+pub fn create_link_to_executable(
+    link: &Path,
+    executable: PythonExecutable<'_>,
+) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
     fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
-        match symlink_or_copy_file(executable, link) {
+        match symlink_or_copy_file(executable.path, link) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                Err(Error::MissingExecutable(executable.to_path_buf()))
+                Err(Error::MissingExecutable(executable.path.to_path_buf()))
             }
             Err(err) => Err(Error::LinkExecutable(err)),
         }
     } else if cfg!(windows) {
-        use uv_trampoline_builder::windows_python_launcher;
-
-        // TODO(zanieb): Install GUI launchers as well
-        let launcher = windows_python_launcher(executable, false)?;
+        let launcher = windows_python_launcher(executable.path, executable.window_mode)?;
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
@@ -923,16 +962,17 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 /// If a file already exists at the link path, it will be atomically replaced.
 ///
 /// See [`create_link_to_executable`] for a variant that errors if the link already exists.
-pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
+pub fn replace_link_to_executable(
+    link: &Path,
+    executable: PythonExecutable<'_>,
+) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
     fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
-        replace_symlink(executable, link).map_err(Error::LinkExecutable)
+        replace_symlink(executable.path, link).map_err(Error::LinkExecutable)
     } else if cfg!(windows) {
-        use uv_trampoline_builder::windows_python_launcher;
-
-        let launcher = windows_python_launcher(executable, false)?;
+        let launcher = windows_python_launcher(executable.path, executable.window_mode)?;
 
         uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
     } else {
@@ -998,6 +1038,7 @@ mod tests {
         ManagedPythonInstallation {
             path: PathBuf::from("/test/path"),
             key,
+            implementation,
             url: None,
             sha256: None,
             build: build.map(|s| Cow::Owned(s.to_owned())),

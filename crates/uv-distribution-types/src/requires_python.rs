@@ -165,7 +165,7 @@ impl RequiresPython {
                     key: MarkerValueVersion::PythonFullVersion,
                     specifier: VersionSpecifier::less_than_equal_version(upper.clone()),
                 });
-                lower.and(upper);
+                lower = lower.and(upper);
                 lower
             }
             (Bound::Included(lower), Bound::Excluded(upper)) => {
@@ -177,7 +177,7 @@ impl RequiresPython {
                     key: MarkerValueVersion::PythonFullVersion,
                     specifier: VersionSpecifier::less_than_version(upper.clone()),
                 });
-                lower.and(upper);
+                lower = lower.and(upper);
                 lower
             }
             (Bound::Excluded(lower), Bound::Included(upper)) => {
@@ -189,7 +189,7 @@ impl RequiresPython {
                     key: MarkerValueVersion::PythonFullVersion,
                     specifier: VersionSpecifier::less_than_equal_version(upper.clone()),
                 });
-                lower.and(upper);
+                lower = lower.and(upper);
                 lower
             }
             (Bound::Excluded(lower), Bound::Excluded(upper)) => {
@@ -201,7 +201,7 @@ impl RequiresPython {
                     key: MarkerValueVersion::PythonFullVersion,
                     specifier: VersionSpecifier::less_than_version(upper.clone()),
                 });
-                lower.and(upper);
+                lower = lower.and(upper);
                 lower
             }
             (Bound::Unbounded, Bound::Unbounded) => MarkerTree::TRUE,
@@ -615,7 +615,7 @@ impl SimplifiedMarkerTree {
 
     /// Combine this simplified marker with another via a conjunction.
     pub fn and(&mut self, marker: Self) {
-        self.0.and(marker.0);
+        self.0 = self.0.and(marker.0);
     }
 }
 

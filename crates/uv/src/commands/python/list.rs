@@ -15,9 +15,10 @@ use uv_python::downloads::{
     Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
 };
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonPreference, PythonRequest, PythonSource,
-    find_all_python_installations,
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+    PythonSource, find_all_python_installations,
 };
+use uv_settings::PythonInstallMirrors;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -62,29 +63,31 @@ pub(crate) async fn list(
     all_arches: bool,
     show_urls: bool,
     output_format: PythonListFormat,
-    python_downloads_json_url: Option<String>,
-    python_install_mirror: Option<String>,
-    pypy_install_mirror: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let python_arch = if all_platforms || all_arches {
+        None
+    } else {
+        python_arch
+    };
     let request = request.as_deref().map(PythonRequest::parse);
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
         None
     } else {
         // If the user request cannot be mapped to a download request, we won't show any downloads
-        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
+        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any)).map(
+            |request| request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)),
+        )
     };
 
-    let download_list =
-        ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url.as_deref())
-            .await?;
-    let mut output = BTreeSet::new();
-    if let Some(base_download_request) = base_download_request {
-        let download_request = match kinds {
+    let download_request = if let Some(base_download_request) = base_download_request {
+        match kinds {
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
@@ -109,13 +112,22 @@ pub(crate) async fn list(
             }
         }
         // Include pre-release versions
-        .map(|request| request.with_prereleases(true));
+        .map(|request| request.with_prereleases(true))
+    } else {
+        None
+    };
 
-        let downloads = download_request
-            .as_ref()
-            .map(|request| download_list.iter_matching(request))
-            .into_iter()
-            .flatten()
+    let mut output = BTreeSet::new();
+    if let Some(download_request) = download_request {
+        let download_list = ManagedPythonDownloadList::new(
+            client_builder,
+            cache,
+            install_mirrors.python_downloads_json_url.as_deref(),
+        )
+        .await?;
+
+        let downloads = download_list
+            .iter_matching(&download_request)
             // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
             .filter(|download| !download.key().variant().is_debug());
 
@@ -125,10 +137,7 @@ pub(crate) async fn list(
                 Kind::Download,
                 Either::Right(
                     download
-                        .download_urls(
-                            python_install_mirror.as_deref(),
-                            pypy_install_mirror.as_deref(),
-                        )?
+                        .download_urls(install_mirrors.mirrors())?
                         .into_iter()
                         .next()
                         .ok_or(PythonDownloadError::NoPythonDownloadUrlFound)?,
@@ -152,6 +161,7 @@ pub(crate) async fn list(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
                 discovery_preference,
+                python_arch,
                 cache,
             )?;
             // Apply the original `PythonPreference` to discovered interpreters, since we may

@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_TEST_PACKAGES = [
     # anyio is used throughout our test suite as a minimal dependency
     "anyio",
@@ -31,7 +33,7 @@ if sys.platform == "linux":
 def install_package(*, uv: str, package: str, flags: list[str]):
     """Install a package"""
 
-    logging.info(f"Installing the package {package!r} with {uv!r}.")
+    logger.info(f"Installing the package {package!r} with {uv!r}.")
     subprocess.run(
         [uv, "pip", "install", package, "--cache-dir", os.path.join(temp_dir, "cache")]
         + flags,
@@ -39,10 +41,10 @@ def install_package(*, uv: str, package: str, flags: list[str]):
         check=True,
     )
 
-    logging.info(f"Checking that `{package}` is available.")
-    code = subprocess.run([uv, "pip", "show", package], cwd=temp_dir)
+    logger.info(f"Checking that `{package}` is available.")
+    code = subprocess.run([uv, "pip", "show", package], cwd=temp_dir, check=False)
     if code.returncode != 0:
-        raise Exception(f"Could not show {package}.")
+        raise RuntimeError(f"Could not show {package}.")
 
 
 def clean_cache(*, uv: str):
@@ -121,14 +123,15 @@ if __name__ == "__main__":
 
     # Create a temporary directory.
     with tempfile.TemporaryDirectory() as temp_dir:
-        logging.info("Creating a virtual environment.")
+        logger.info("Creating a virtual environment.")
         code = subprocess.run(
             [uv_current, "venv"],
             cwd=temp_dir,
+            check=False,
         )
 
         for package in test_packages:
-            logging.info(f"Testing with {package!r}.")
+            logger.info(f"Testing with {package!r}.")
             check_cache_with_package(
                 uv_current=uv_current,
                 uv_previous=uv_previous,

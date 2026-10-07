@@ -2,34 +2,164 @@
 // https://github.com/rust-lang/rust/issues/64402
 extern crate uv_performance_memory_allocator;
 
+use std::env;
 use std::fmt::Write;
 use std::hint::black_box;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path::Path;
 use std::str::FromStr;
+use std::task::Poll;
 
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
-use criterion::{BatchSize, Criterion, criterion_group, criterion_main, measurement::WallTime};
+use criterion::{
+    BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main,
+    measurement::WallTime,
+};
+use fastrand::Rng;
 use flate2::write::GzEncoder;
+use futures::TryStreamExt;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
+use futures::stream;
+use sha2::{Digest, Sha256};
+use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+use tokio::io::AsyncRead;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
+use uv_extract::dirhash::UnhashedFile;
+use uv_extract::hash::{HashReader, Hasher};
 use uv_install_wheel::{InstallState, Layout, LinkMode};
-use uv_preview::Preview;
-use uv_pypi_types::Scheme;
+use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
+use uv_pypi_types::{HashAlgorithm, Scheme};
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
-const MANY_FILES_SDIST_FILENAME: &str = "manyfiles-0.0.0.tar.gz";
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
+const SHA256_BENCHMARK_SIZE: usize = 1024 * 1024;
+
+fn is_codspeed_simulation() -> bool {
+    // CodSpeed reports Simulation as `instrumentation` in current versions.
+    matches!(
+        env::var("CODSPEED_RUNNER_MODE").as_deref(),
+        Ok("instrumentation" | "simulation")
+    )
+}
+
+fn hash_sha256(c: &mut Criterion<WallTime>) {
+    let bytes = vec![0_u8; SHA256_BENCHMARK_SIZE];
+
+    c.bench_function("hash_sha256", |b| {
+        b.iter(|| black_box(Sha256::digest(black_box(&bytes))));
+    });
+}
+
+fn hash_reader(criterion: &mut Criterion<WallTime>) {
+    if !is_codspeed_simulation() {
+        return;
+    }
+
+    // Rounded PyPI wheel size deciles (10th through 90th), with a second median-sized wheel,
+    // followed by a representative 33 MiB Python standalone archive.
+    let inputs = [7, 12, 20, 32, 55, 55, 98, 220, 589, 3154, 33 * 1024]
+        .map(|kibibytes| vec![0_u8; kibibytes * 1024]);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("Failed to create Tokio runtime");
+    let mut group = criterion.benchmark_group("hash_reader");
+    group.throughput(Throughput::Bytes(
+        inputs.iter().map(|bytes| bytes.len() as u64).sum(),
+    ));
+
+    for (case, algorithms) in [
+        ("none", &[][..]),
+        ("sha256", &[HashAlgorithm::Sha256][..]),
+        ("sha384", &[HashAlgorithm::Sha384][..]),
+        ("sha512", &[HashAlgorithm::Sha512][..]),
+        ("blake2b", &[HashAlgorithm::Blake2b256][..]),
+        (
+            "combined",
+            &[
+                HashAlgorithm::Sha256,
+                HashAlgorithm::Sha384,
+                HashAlgorithm::Sha512,
+                HashAlgorithm::Blake2b256,
+            ][..],
+        ),
+    ] {
+        // Exercise chunks both smaller and larger than the reader's drain buffer.
+        for chunk_size in [4 * 1024, 64 * 1024] {
+            group.bench_with_input(
+                BenchmarkId::new(format!("finish_{case}"), chunk_size),
+                algorithms,
+                |benchmark, algorithms| {
+                    // Use the same sequence of shuffled inputs for each benchmark.
+                    let mut random = Rng::with_seed(0);
+                    benchmark.iter_batched(
+                        || {
+                            let mut inputs = inputs
+                                .iter()
+                                .map(|bytes| {
+                                    let hashers = algorithms
+                                        .iter()
+                                        .copied()
+                                        .map(Hasher::from)
+                                        .collect::<Vec<_>>();
+                                    (bytes, hashers)
+                                })
+                                .collect::<Vec<_>>();
+                            random.shuffle(&mut inputs);
+                            inputs
+                        },
+                        |mut inputs| {
+                            runtime.block_on(async {
+                                for (bytes, hashers) in &mut inputs {
+                                    let stream =
+                                        hash_reader_stream(black_box(bytes.as_slice()), chunk_size);
+                                    let mut reader = HashReader::new(stream, hashers);
+                                    reader
+                                        .finish()
+                                        .await
+                                        .expect("Failed to read benchmark input");
+                                    black_box(reader.bytes_read());
+                                }
+                            });
+                            black_box(inputs);
+                        },
+                        BatchSize::SmallInput,
+                    );
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
+
+/// Simulate chunked delivery through the same stream adapter as HTTP downloads.
+fn hash_reader_stream(bytes: &[u8], chunk_size: usize) -> impl AsyncRead + Unpin + '_ {
+    let mut chunks = bytes.chunks(chunk_size);
+    let mut pending = true;
+    stream::poll_fn(move |context| {
+        // Yield before each chunk to include wakeup overhead without network timing noise.
+        if pending {
+            pending = false;
+            context.waker().wake_by_ref();
+            Poll::Pending
+        } else {
+            pending = true;
+            Poll::Ready(chunks.next().map(Ok::<_, io::Error>))
+        }
+    })
+    .into_async_read()
+    .compat()
+}
 
 fn create_many_files_wheel() -> tempfile::NamedTempFile {
     let archive = tempfile::NamedTempFile::new().expect("Failed to create temporary archive");
@@ -68,9 +198,8 @@ fn create_many_files_wheel() -> tempfile::NamedTempFile {
 
 fn create_many_files_sdist() -> tempfile::NamedTempFile {
     let archive = tempfile::NamedTempFile::new().expect("Failed to create temporary archive");
-    let encoder = GzEncoder::new(archive.as_file(), flate2::Compression::default());
-    let mut writer =
-        tokio_tar::Builder::new_non_terminated(AllowStdIo::new(encoder).compat_write());
+    let mut encoder = GzEncoder::new(archive.as_file(), flate2::Compression::default());
+    let mut writer = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
     for index in 0..MANY_FILES_SDIST_FILE_COUNT {
         write_tar_entry(
             &mut writer,
@@ -88,12 +217,8 @@ fn create_many_files_sdist() -> tempfile::NamedTempFile {
         &format!("{MANY_FILES_SDIST_TOP_LEVEL}/pyproject.toml"),
         b"[project]\nname = \"manyfiles\"\nversion = \"0.0.0\"\n",
     );
-    let writer = block_on(writer.into_inner()).expect("Failed to finish tar archive");
-    writer
-        .into_inner()
-        .into_inner()
-        .finish()
-        .expect("Failed to finish gzip archive");
+    block_on(writer.finish()).expect("Failed to finish tar archive");
+    encoder.finish().expect("Failed to finish gzip archive");
     archive
 }
 
@@ -113,6 +238,11 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
         .build()
         .expect("Failed to create Tokio runtime");
 
+    uv_preview::set(Preview::from_feature_names(&[MaybePreviewFeature::Known(
+        PreviewFeature::TarCodec,
+    )]))
+    .expect("Failed to configure tar backend preview features");
+
     c.bench_function("unpack_sdist_many_files", |b| {
         b.iter_batched(
             || {
@@ -124,12 +254,11 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                 )
             },
             |(archive, extracted_sdist)| {
-                let files = runtime
+                let (extracted_sdist, files) = runtime
                     .block_on(uv_extract::stream::archive(
-                        MANY_FILES_SDIST_FILENAME,
                         archive,
                         SourceDistExtension::TarGz,
-                        extracted_sdist.path(),
+                        extracted_sdist,
                     ))
                     .expect("Failed to unpack sdist");
                 let source_tree = uv_extract::strip_component(extracted_sdist.path())
@@ -139,9 +268,17 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
             BatchSize::PerIteration,
         );
     });
+
+    uv_preview::set(Preview::default())
+        .expect("Failed to restore default preview features after tar benchmark");
+    uv_preview::finalize().expect("Failed to finalize preview features");
 }
 
 fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
+    if is_codspeed_simulation() {
+        return;
+    }
+
     let archive = create_many_files_wheel();
 
     c.bench_function("unzip_wheel_many_files", |b| {
@@ -163,6 +300,10 @@ fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
 }
 
 fn prepare_wheel_many_files(c: &mut Criterion<WallTime>) {
+    if is_codspeed_simulation() {
+        return;
+    }
+
     let archive = create_many_files_wheel();
     let filename =
         WheelFilename::from_str(MANY_FILES_WHEEL_FILENAME).expect("Invalid wheel filename");
@@ -235,10 +376,14 @@ fn prepare_wheel(
     archive: fs_err::File,
     extracted_wheel: &Path,
     filename: &WheelFilename,
-) -> Vec<(PathBuf, u64)> {
+) -> Vec<UnhashedFile> {
     let files = uv_extract::unzip(archive, extracted_wheel).expect("Failed to extract wheel");
-    uv_install_wheel::validate_and_heal_record(extracted_wheel, files.iter(), filename)
-        .expect("Failed to validate wheel");
+    uv_install_wheel::validate_and_heal_record(
+        extracted_wheel,
+        files.iter().map(|file| (file.path(), file.size())),
+        filename,
+    )
+    .expect("Failed to validate wheel");
     files
 }
 
@@ -247,22 +392,13 @@ fn write_zip_entry(writer: &mut ZipFileWriter<Vec<u8>>, path: &str, contents: &[
     block_on(writer.write_entry_whole(entry, contents)).expect("Failed to write ZIP entry");
 }
 
-fn write_tar_entry<W: tokio::io::AsyncWrite + Unpin + Send>(
-    writer: &mut tokio_tar::Builder<W>,
+fn write_tar_entry<W: tokio::io::AsyncWrite + Unpin>(
+    writer: &mut tar_codec::Builder<TarEncoder<W>>,
     path: &str,
     contents: &[u8],
 ) {
-    let mut header = tokio_tar::Header::new_gnu();
-    header.set_size(contents.len() as u64);
-    header.set_mode(0o644);
-    header.set_entry_type(tokio_tar::EntryType::Regular);
-    header.set_cksum();
-    block_on(writer.append_data(
-        &mut header,
-        path,
-        AllowStdIo::new(Cursor::new(contents)).compat(),
-    ))
-    .expect("Failed to write tar entry");
+    block_on(writer.add_file(path, contents, EntryMetadata::default()))
+        .expect("Failed to write tar entry");
 }
 
 fn layout(root: &Path) -> Layout {
@@ -323,7 +459,6 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
 fn criterion_with_preview() -> Criterion<WallTime> {
     uv_preview::set(Preview::default())
         .expect("Global preview features should not have been initialized already");
-    uv_preview::finalize().expect("Failed to finalize preview features");
 
     Criterion::default()
 }
@@ -332,6 +467,8 @@ criterion_group! {
     name = uv;
     config = criterion_with_preview();
     targets =
+        hash_sha256,
+        hash_reader,
         unpack_sdist_many_files,
         unzip_wheel_many_files,
         prepare_wheel_many_files,

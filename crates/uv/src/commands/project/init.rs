@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
@@ -18,12 +18,13 @@ use uv_configuration::{
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
+use uv_install_wheel::reserved_script_name;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
@@ -45,7 +46,6 @@ pub(crate) async fn init(
     project_dir: &Path,
     explicit_path: Option<PathBuf>,
     name: Option<PackageName>,
-    package: bool,
     init_kind: InitKind,
     bare: bool,
     description: Option<String>,
@@ -60,8 +60,9 @@ pub(crate) async fn init(
     no_workspace: bool,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -78,6 +79,7 @@ pub(crate) async fn init(
                 install_mirrors,
                 client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 cache,
                 printer,
@@ -85,8 +87,7 @@ pub(crate) async fn init(
                 no_readme,
                 author_from,
                 pin_python,
-                package,
-                no_config,
+                config_discovery,
             )
             .await?;
 
@@ -126,6 +127,12 @@ pub(crate) async fn init(
                     // whitespace, and replacing any internal whitespace with hyphens.
                     let candidate = directory_name.trim().replace(' ', "-");
                     match PackageName::from_owned(candidate) {
+                        Ok(name) if reserved_script_name(name.as_str()).is_some() => {
+                            anyhow::bail!(
+                                "The directory name (`{directory_name}`) cannot be used as project \
+                                name, please provide a package name with `--name`."
+                            );
+                        }
                         Ok(name) => name,
                         Err(_) => {
                             let directory_description = if explicit_path.is_some() {
@@ -144,7 +151,6 @@ pub(crate) async fn init(
             Box::pin(init_project(
                 &path,
                 &name,
-                package,
                 project_kind,
                 bare,
                 description,
@@ -159,8 +165,9 @@ pub(crate) async fn init(
                 no_workspace,
                 client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
-                no_config,
+                config_discovery,
                 cache,
                 printer,
             ))
@@ -205,6 +212,7 @@ async fn init_script(
     install_mirrors: PythonInstallMirrors,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
     printer: Printer,
@@ -212,8 +220,7 @@ async fn init_script(
     no_readme: bool,
     author_from: Option<AuthorFrom>,
     pin_python: bool,
-    package: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -224,10 +231,6 @@ async fn init_script(
     if author_from.is_some() {
         warn_user_once!("`--author-from` is a no-op for Python scripts, which are standalone");
     }
-    if package {
-        warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
-    }
-
     let reporter = PythonDownloadReporter::single(printer);
 
     // If the file already exists, read its content.
@@ -261,8 +264,9 @@ async fn init_script(
         script_path.parent().unwrap_or(&CWD),
         !pin_python,
         python_preference,
+        python_arch,
         python_downloads,
-        no_config,
+        config_discovery,
         client_builder,
         cache,
         &reporter,
@@ -283,8 +287,6 @@ async fn init_script(
 async fn init_project(
     path: &Path,
     name: &PackageName,
-    // TODO(konsti): Remove when stabilizing.
-    package: bool,
     project_kind: InitProjectKind,
     bare: bool,
     description: Option<String>,
@@ -299,8 +301,9 @@ async fn init_project(
     no_workspace: bool,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
 ) -> Result<()> {
@@ -381,7 +384,7 @@ async fn init_project(
                     .map(Workspace::install_path)
                     .map(PathBuf::as_ref),
             )
-            .with_no_config(no_config),
+            .with_config_discovery(config_discovery),
     )
     .await?
     {
@@ -397,6 +400,7 @@ async fn init_project(
         install_mirrors,
         client_builder,
         python_preference,
+        python_arch,
         python_downloads,
         cache,
         workspace.as_deref(),
@@ -416,7 +420,6 @@ async fn init_project(
         build_backend,
         author_from,
         no_readme,
-        package,
     )?;
 
     if let Some(workspace) = workspace {
@@ -502,6 +505,7 @@ async fn determine_requires_python(
     install_mirrors: PythonInstallMirrors,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
     workspace: Option<&Workspace>,
@@ -560,12 +564,12 @@ async fn determine_requires_python(
                         Some(python_request),
                         EnvironmentPreference::OnlySystem,
                         python_preference,
+                        python_arch,
                         python_downloads,
                         client_builder,
                         cache,
                         Some(reporter),
-                        install_mirrors.python_install_mirror.as_deref(),
-                        install_mirrors.pypy_install_mirror.as_deref(),
+                        install_mirrors.mirrors(),
                         install_mirrors.python_downloads_json_url.as_deref(),
                     )
                     .await?
@@ -587,12 +591,12 @@ async fn determine_requires_python(
                     Some(python_request),
                     EnvironmentPreference::OnlySystem,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     client_builder,
                     cache,
                     Some(reporter),
-                    install_mirrors.python_install_mirror.as_deref(),
-                    install_mirrors.pypy_install_mirror.as_deref(),
+                    install_mirrors.mirrors(),
                     install_mirrors.python_downloads_json_url.as_deref(),
                 )
                 .await?
@@ -657,12 +661,12 @@ async fn determine_requires_python(
                 Some(&python_request),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
+                python_arch,
                 python_downloads,
                 client_builder,
                 cache,
                 Some(reporter),
-                install_mirrors.python_install_mirror.as_deref(),
-                install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.mirrors(),
                 install_mirrors.python_downloads_json_url.as_deref(),
             )
             .await?
@@ -686,12 +690,12 @@ async fn determine_requires_python(
             None,
             EnvironmentPreference::OnlySystem,
             python_preference,
+            python_arch,
             python_downloads,
             client_builder,
             cache,
             Some(reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?
@@ -742,203 +746,10 @@ pub(crate) enum InitProjectKind {
     /// Initialize only a `pyproject.toml` with `[build-system]` table (but without associated
     /// source files).
     BareWithBuildSystem,
-    // TODO(konsti): Remove when stabilizing.
-    /// Initialize a Python application.
-    ApplicationOld,
-    // TODO(konsti): Remove when stabilizing.
-    /// Initialize a Python library.
-    LibraryOld,
 }
 
 impl InitProjectKind {
     /// Initialize this project kind at the target path.
-    // TODO(konsti): Remove when stabilizing packaged-init.
-    #[expect(clippy::fn_params_excessive_bools)]
-    fn init_old(
-        self,
-        name: &PackageName,
-        path: &Path,
-        requires_python: &RequiresPython,
-        description: Option<&str>,
-        no_description: bool,
-        bare: bool,
-        vcs: Option<VersionControlSystem>,
-        build_backend: Option<ProjectBuildBackend>,
-        author_from: Option<AuthorFrom>,
-        no_readme: bool,
-        package: bool,
-    ) -> Result<()> {
-        match self {
-            Self::ApplicationOld => Self::init_application_old(
-                name,
-                path,
-                requires_python,
-                description,
-                no_description,
-                bare,
-                vcs,
-                build_backend,
-                author_from,
-                no_readme,
-                package,
-            ),
-            Self::LibraryOld => Self::init_library_old(
-                name,
-                path,
-                requires_python,
-                description,
-                no_description,
-                bare,
-                vcs,
-                build_backend,
-                author_from,
-                no_readme,
-                package,
-            ),
-            _ => unreachable!(),
-        }
-    }
-
-    /// Initialize a Python application at the target path.
-    // TODO(konsti): Remove when stabilizing packaged-init.
-    #[expect(clippy::fn_params_excessive_bools)]
-    fn init_application_old(
-        name: &PackageName,
-        path: &Path,
-        requires_python: &RequiresPython,
-        description: Option<&str>,
-        no_description: bool,
-        bare: bool,
-        vcs: Option<VersionControlSystem>,
-        build_backend: Option<ProjectBuildBackend>,
-        author_from: Option<AuthorFrom>,
-        no_readme: bool,
-        package: bool,
-    ) -> Result<()> {
-        fs_err::create_dir_all(path)?;
-
-        // Initialize the version control system first so that Git configuration can properly
-        // read conditional includes that depend on the repository path.
-        init_vcs(path, vcs)?;
-
-        // Do not fill in `authors` for non-packaged applications unless explicitly requested.
-        let author_from = author_from.unwrap_or_else(|| {
-            if package {
-                AuthorFrom::default()
-            } else {
-                AuthorFrom::None
-            }
-        });
-        let author = get_author_info(path, author_from);
-
-        // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(
-            name,
-            requires_python,
-            author.as_ref(),
-            description,
-            no_description,
-            no_readme || bare,
-        );
-
-        // Include additional project configuration for packaged applications
-        if package {
-            // Since it'll be packaged, we can add a `[project.scripts]` entry
-            if !bare {
-                pyproject.push('\n');
-                pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
-            }
-
-            // Add a build system
-            let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
-            pyproject.push('\n');
-            pyproject.push_str(&pyproject_build_system(name, build_backend));
-            pyproject_build_backend_prerequisites(name, path, build_backend)?;
-
-            if !bare {
-                // Generate `src` files
-                generate_package_scripts(name, path, build_backend, false)?;
-            }
-        } else {
-            // Create `main.py` if it doesn't exist
-            // (This isn't intended to be a particularly special or magical filename, just nice)
-            // TODO(zanieb): Only create `main.py` if there are no other Python files?
-            let main_py = path.join("main.py");
-            if !main_py.try_exists()? && !bare {
-                fs_err::write(
-                    path.join("main.py"),
-                    indoc::formatdoc! {r#"
-                    def main():
-                        print("Hello from {name}!")
-
-
-                    if __name__ == "__main__":
-                        main()
-                    "#},
-                )?;
-            }
-        }
-        fs_err::write(path.join("pyproject.toml"), pyproject)?;
-
-        Ok(())
-    }
-
-    /// Initialize a library project at the target path.
-    // TODO(konsti): Remove when stabilizing packaged-init.
-    #[expect(clippy::fn_params_excessive_bools)]
-    fn init_library_old(
-        name: &PackageName,
-        path: &Path,
-        requires_python: &RequiresPython,
-        description: Option<&str>,
-        no_description: bool,
-        bare: bool,
-        vcs: Option<VersionControlSystem>,
-        build_backend: Option<ProjectBuildBackend>,
-        author_from: Option<AuthorFrom>,
-        no_readme: bool,
-        package: bool,
-    ) -> Result<()> {
-        if !package {
-            return Err(anyhow!("Library projects must be packaged"));
-        }
-
-        fs_err::create_dir_all(path)?;
-
-        // Initialize the version control system first so that Git configuration can properly
-        // read conditional includes that depend on the repository path.
-        init_vcs(path, vcs)?;
-
-        let author = get_author_info(path, author_from.unwrap_or_default());
-
-        // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(
-            name,
-            requires_python,
-            author.as_ref(),
-            description,
-            no_description,
-            no_readme || bare,
-        );
-
-        // Always include a build system if the project is packaged.
-        let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
-        pyproject.push('\n');
-        pyproject.push_str(&pyproject_build_system(name, build_backend));
-        pyproject_build_backend_prerequisites(name, path, build_backend)?;
-
-        fs_err::write(path.join("pyproject.toml"), pyproject)?;
-
-        // Generate `src` files
-        if !bare {
-            generate_package_scripts(name, path, build_backend, true)?;
-        }
-
-        Ok(())
-    }
-
-    /// Initialize this project kind at the target path.
-    #[expect(clippy::fn_params_excessive_bools)]
     fn init(
         self,
         name: &PackageName,
@@ -951,25 +762,7 @@ impl InitProjectKind {
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
         no_readme: bool,
-        package: bool,
     ) -> Result<()> {
-        // TODO(konsti): Remove when stabilizing.
-        if matches!(self, Self::ApplicationOld | Self::LibraryOld) {
-            return self.init_old(
-                name,
-                path,
-                requires_python,
-                description,
-                no_description,
-                bare,
-                vcs,
-                build_backend,
-                author_from,
-                no_readme,
-                package,
-            );
-        }
-
         fs_err::create_dir_all(path)?;
 
         // Initialize the version control system first so that Git configuration can properly
@@ -982,7 +775,6 @@ impl InitProjectKind {
                 AuthorFrom::default()
             }
             Self::Application | Self::Bare => AuthorFrom::None,
-            Self::ApplicationOld | Self::LibraryOld => unreachable!(),
         });
         let author = get_author_info(path, author_from);
 
@@ -1047,7 +839,6 @@ impl InitProjectKind {
                 // Generate `src` files
                 generate_package_scripts(name, path, build_backend, true)?;
             }
-            _ => unreachable!(),
         }
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
         Ok(())

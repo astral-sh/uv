@@ -46,11 +46,10 @@ the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has 
 re-installs than desired.
 
 To incorporate additional information into the cache key for a given package, you can add cache key
-entries under [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys),
-which covers both file paths and Git commit hashes. Setting
-[`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys) will replace
-defaults, so any necessary files (like `pyproject.toml`) should still be included in the
-user-defined cache keys.
+entries under [`tool.uv.cache-keys`](../reference/settings.md#cache-keys), which covers both file
+paths and Git commit hashes. Setting [`tool.uv.cache-keys`](../reference/settings.md#cache-keys)
+will replace defaults, so any necessary files (like `pyproject.toml`) should still be included in
+the user-defined cache keys.
 
 For example, if a project specifies dependencies in `pyproject.toml` but uses
 [`setuptools-scm`](https://pypi.org/project/setuptools-scm/) to manage its version, and should thus
@@ -144,6 +143,19 @@ uv provides a few different mechanisms for removing entries from the cache:
   example, the cache directory may contain entries created in previous uv versions that are no
   longer necessary and can be safely removed. Centralized project environments are recreated as
   needed. `uv cache prune` is safe to run periodically, to keep the cache directory clean.
+
+By default, cache cleanup estimates the disk space reclaimed. Enable the `cache-physical-space`
+[preview feature](./preview.md) for a more accurate estimate that accounts for hardlinks and
+copy-on-write clones:
+
+```console
+$ uv cache clean --preview-features cache-physical-space
+```
+
+If an entry's allocated size cannot be measured, such as a compressed extent on Btrfs, uv reports a
+lower bound for the space reclaimed from the remaining entries. The preview feature is currently
+supported on macOS and Linux; other platforms continue reporting a coarser estimate of the space
+reclaimed.
 
 uv blocks cache-modifying operations while other uv commands are running. By default, those
 `uv cache` commands have a 5 min timeout waiting for other uv processes to terminate to avoid

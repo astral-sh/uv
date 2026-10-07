@@ -24,8 +24,10 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
-use uv_resolver::{ExcludeNewer, PrereleaseMode};
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonEnvironment, PythonPreference, Target,
+};
+use uv_resolver::{ExcludeNewer, Prerelease};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
@@ -35,11 +37,12 @@ use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) async fn pip_list(
+    python_arch: Option<PythonArchitecture>,
     editable: Option<bool>,
     exclude: &FxHashSet<PackageName>,
     format: &ListFormat,
     outdated: bool,
-    prerelease: PrereleaseMode,
+    prerelease: Prerelease,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
@@ -65,19 +68,20 @@ pub(crate) async fn pip_list(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
+        python_arch,
         cache,
     )?;
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
         debug!(
-            "Using `--target` directory at {}",
+            "Using `--target` directory at `{}`",
             target.root().user_display()
         );
         environment.with_target(target)?
     } else if let Some(prefix) = prefix {
         debug!(
-            "Using `--prefix` directory at {}",
+            "Using `--prefix` directory at `{}`",
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
@@ -127,7 +131,7 @@ pub(crate) async fn pip_list(
         let client = LatestClient {
             client: &client,
             capabilities: &capabilities,
-            prerelease,
+            prerelease: &prerelease,
             exclude_newer: &exclude_newer,
             index_locations: &latest_index_locations,
             tags: Some(tags),

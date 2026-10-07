@@ -37,5 +37,8 @@ fn main() {
             .long_path_aware(Setting::Enabled);
         embed_manifest(manifest).expect("unable to embed manifest");
     }
+    // Expose the build profile to integration tests.
+    let profile = std::env::var(EnvVars::PROFILE).expect("PROFILE should be set by Cargo");
+    println!("cargo:rustc-env={}={profile}", EnvVars::PROFILE);
     println!("cargo:rerun-if-changed=build.rs");
 }

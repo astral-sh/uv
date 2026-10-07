@@ -17,6 +17,10 @@ If your project does not include a `[build-system]` definition in the `pyproject
 build it during `uv sync` operations in the project, but will fall back to the legacy setuptools
 build system during `uv build`.
 
+!!! note
+
+    Projects created with `uv init` include a `[build-system]` definition by default.
+
 We strongly recommend configuring a build system. Read more about build systems in the
 [project configuration](../concepts/projects/config.md#build-systems) documentation.
 
@@ -131,6 +135,13 @@ Set a PyPI token with `--token` or `UV_PUBLISH_TOKEN`, or set a username with `-
 PyPI from GitHub Actions or another Trusted Publisher, you don't need to set any credentials.
 Instead,
 [add a trusted publisher to the PyPI project](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).
+
+When using trusted publishing, uv will attempt to invalidate the short-lived PyPI token after
+publishing, even if publishing fails. This further reduces the exposure period for the short-lived
+token, beyond its already short lifetime.
+
+If invalidation fails, uv emits a warning without changing the publishing result. Tokens provided
+explicitly with `--token` or `UV_PUBLISH_TOKEN` are not revoked.
 
 !!! note
 

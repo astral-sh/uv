@@ -846,6 +846,32 @@ impl Version {
         }
     }
 
+    /// Compare this version, without its post and dev components, to another version.
+    #[inline]
+    pub(crate) fn without_post_and_dev_eq(&self, other: &Self) -> bool {
+        match (&self.inner, &other.inner) {
+            (VersionInner::Small { small }, VersionInner::Small { small: other }) => {
+                // Copy the inline representation without allocating.
+                let mut base = small.clone();
+                let _ = base.set_post(None);
+                let _ = base.set_dev(None);
+                base.repr == other.repr
+            }
+            (VersionInner::Small { .. }, VersionInner::Full { .. })
+            | (VersionInner::Full { .. }, VersionInner::Small { .. } | VersionInner::Full { .. }) => {
+                self.without_post_and_dev_eq_slow(other)
+            }
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn without_post_and_dev_eq_slow(&self, other: &Self) -> bool {
+        self.epoch() == other.epoch()
+            && compare_release(&self.release(), &other.release()) == Ordering::Equal
+            && sortable_tuple_with(self, None, None) == sortable_tuple(other)
+    }
+
     /// Performs a "slow" but complete comparison between two versions.
     ///
     /// This comparison is done using only the public API of a `Version`, and
@@ -1167,13 +1193,13 @@ pub enum BumpCommand {
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 struct VersionSmall {
+    /// The representation discussed above.
+    repr: u64,
     /// The number of segments in the release component.
     ///
     /// PEP 440 considers `1.2`  equivalent to `1.2.0.0`, but we want to preserve trailing zeroes
     /// in roundtrips, as the "full" version representation also does.
     len: u8,
-    /// The representation discussed above.
-    repr: u64,
     /// Force a niche into the aligned type so the [`Version`] enum is two words instead of three.
     _force_niche: NonZero<u8>,
 }
@@ -2461,7 +2487,7 @@ impl ReleaseNumbers {
                 if *len == 4 {
                     let mut numbers = numbers.to_vec();
                     numbers.push(n);
-                    *self = Self::Vec(numbers.clone());
+                    *self = Self::Vec(numbers);
                 } else {
                     numbers[*len] = n;
                     *len += 1;
@@ -2760,7 +2786,7 @@ impl From<VersionParseError> for VersionPatternParseError {
 
 /// Compare the release parts of two versions, e.g. `4.3.1` > `4.2`, `1.1.0` ==
 /// `1.1` and `1.16` < `1.19`
-pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
+fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
     if this.len() == other.len() {
         return this.cmp(other);
     }
@@ -2801,13 +2827,21 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 ///
 /// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
 fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersionSlice<'_>) {
+    sortable_tuple_with(version, version.post(), version.dev())
+}
+
+fn sortable_tuple_with(
+    version: &Version,
+    post: Option<u64>,
+    dev: Option<u64>,
+) -> (u64, u64, Option<u64>, u64, LocalVersionSlice<'_>) {
     // If the version is a "max" version, use a post version larger than any possible post version.
     let post = if version.max().is_some() {
         Some(u64::MAX)
     } else {
-        version.post()
+        post
     };
-    match (version.pre(), post, version.dev(), version.min()) {
+    match (version.pre(), post, dev, version.min()) {
         // min release
         (_pre, post, _dev, Some(n)) => (0, 0, post, n, version.local()),
         // dev release
@@ -4373,6 +4407,11 @@ mod tests {
     fn type_size() {
         assert_eq!(size_of::<VersionSmall>(), size_of::<usize>() * 2);
         assert_eq!(size_of::<Version>(), size_of::<usize>() * 2);
+        #[cfg(feature = "rkyv")]
+        {
+            assert_eq!(size_of::<rkyv::Archived<VersionSmall>>(), 16);
+            assert_eq!(size_of::<rkyv::Archived<Version>>(), 24);
+        }
     }
 
     /// Test major bumping

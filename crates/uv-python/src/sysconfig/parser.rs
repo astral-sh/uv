@@ -269,6 +269,8 @@ pub enum Error {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -337,7 +339,7 @@ mod tests {
         );
 
         let result = input.parse::<SysconfigData>();
-        assert!(matches!(result, Err(Error::UnexpectedEof)));
+        assert_matches!(result, Err(Error::UnexpectedEof));
     }
 
     #[test]
@@ -352,7 +354,7 @@ mod tests {
         );
 
         let result = input.parse::<SysconfigData>();
-        assert!(matches!(result, Err(Error::UnrecognizedEscape('v'))));
+        assert_matches!(result, Err(Error::UnrecognizedEscape('v')));
     }
 
     #[test]
@@ -464,7 +466,7 @@ mod tests {
         );
 
         let result = input.parse::<SysconfigData>();
-        assert!(matches!(result, Err(Error::MissingHeader)));
+        assert_matches!(result, Err(Error::MissingHeader));
     }
 
     #[test]
@@ -479,7 +481,7 @@ mod tests {
         );
 
         let result = input.parse::<SysconfigData>();
-        assert!(matches!(result, Err(Error::MissingAssignment)));
+        assert_matches!(result, Err(Error::MissingAssignment));
     }
 
     #[test]

@@ -55,7 +55,7 @@ impl Error {
             String::new()
         };
         warn_user!(
-            "Failed to patch the install name of the dynamic library for {}. This may cause issues when building Python native extensions.{}",
+            "Failed to patch the install name of the dynamic library for `{}`. This may cause issues when building Python native extensions.{}",
             installation.executable(false).simplified_display(),
             error
         );

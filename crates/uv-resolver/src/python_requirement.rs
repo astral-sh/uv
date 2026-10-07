@@ -16,9 +16,27 @@ pub struct PythonRequirement {
     /// dependencies. This is typically the same as the installed version, but may be different
     /// when specifying an alternate Python version for the resolution.
     target: RequiresPython,
+    /// The canonical marker representation of the target Python requirement.
+    target_marker: MarkerTree,
 }
 
 impl PythonRequirement {
+    fn new(
+        source: PythonRequirementSource,
+        exact: Version,
+        installed: RequiresPython,
+        target: RequiresPython,
+    ) -> Self {
+        let target_marker = target.to_marker_tree();
+        Self {
+            source,
+            exact,
+            installed,
+            target,
+            target_marker,
+        }
+    }
+
     /// Create a [`PythonRequirement`] to resolve against both an [`Interpreter`] and a
     /// [`PythonVersion`].
     pub fn from_python_version(interpreter: &Interpreter, python_version: &PythonVersion) -> Self {
@@ -32,12 +50,12 @@ impl PythonRequirement {
             .python_full_version()
             .only_release()
             .without_trailing_zeros();
-        Self {
+        Self::new(
+            PythonRequirementSource::PythonVersion,
             exact,
-            installed: RequiresPython::greater_than_equal_version(&installed),
-            target: RequiresPython::greater_than_equal_version(&target),
-            source: PythonRequirementSource::PythonVersion,
-        }
+            RequiresPython::greater_than_equal_version(&installed),
+            RequiresPython::greater_than_equal_version(&target),
+        )
     }
 
     /// Create a [`PythonRequirement`] to resolve against both an [`Interpreter`] and a
@@ -61,12 +79,12 @@ impl PythonRequirement {
             .version
             .only_release()
             .without_trailing_zeros();
-        Self {
+        Self::new(
+            PythonRequirementSource::Interpreter,
             exact,
-            installed: RequiresPython::greater_than_equal_version(&installed),
-            target: RequiresPython::greater_than_equal_version(&installed),
-            source: PythonRequirementSource::Interpreter,
-        }
+            RequiresPython::greater_than_equal_version(&installed),
+            RequiresPython::greater_than_equal_version(&installed),
+        )
     }
 
     /// Create a [`PythonRequirement`] from a [`MarkerEnvironment`] and a
@@ -89,12 +107,12 @@ impl PythonRequirement {
             .version
             .only_release()
             .without_trailing_zeros();
-        Self {
+        Self::new(
+            PythonRequirementSource::RequiresPython,
             exact,
-            installed: RequiresPython::greater_than_equal_version(&installed),
-            target: requires_python,
-            source: PythonRequirementSource::RequiresPython,
-        }
+            RequiresPython::greater_than_equal_version(&installed),
+            requires_python,
+        )
     }
 
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
@@ -102,12 +120,12 @@ impl PythonRequirement {
     ///
     /// Returns `None` if the given range is not narrower than the current range.
     pub(crate) fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
-        Some(Self {
-            exact: self.exact.clone(),
-            installed: self.installed.clone(),
-            target: self.target.narrow(target)?,
-            source: self.source,
-        })
+        Some(Self::new(
+            self.source,
+            self.exact.clone(),
+            self.installed.clone(),
+            self.target.narrow(target)?,
+        ))
     }
 
     /// Split the [`PythonRequirement`] at the given version.
@@ -117,18 +135,18 @@ impl PythonRequirement {
     pub(crate) fn split(&self, at: Bound<Version>) -> Option<(Self, Self)> {
         let (lower, upper) = self.target.split(at)?;
         Some((
-            Self {
-                exact: self.exact.clone(),
-                installed: self.installed.clone(),
-                target: lower,
-                source: self.source,
-            },
-            Self {
-                exact: self.exact.clone(),
-                installed: self.installed.clone(),
-                target: upper,
-                source: self.source,
-            },
+            Self::new(
+                self.source,
+                self.exact.clone(),
+                self.installed.clone(),
+                lower,
+            ),
+            Self::new(
+                self.source,
+                self.exact.clone(),
+                self.installed.clone(),
+                upper,
+            ),
         ))
     }
 
@@ -171,7 +189,7 @@ impl PythonRequirement {
     ///
     /// See: [`RequiresPython::to_marker_tree`]
     pub(crate) fn to_marker_tree(&self) -> MarkerTree {
-        self.target.to_marker_tree()
+        self.target_marker
     }
 }
 

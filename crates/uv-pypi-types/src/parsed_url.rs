@@ -16,17 +16,17 @@ use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {
-    #[error("Unsupported URL prefix `{prefix}` in URL: `{url}` ({message})")]
+    #[error("Unsupported URL prefix `{prefix}` in URL `{url}` ({message})")]
     UnsupportedUrlPrefix {
         prefix: String,
         url: String,
         message: &'static str,
     },
-    #[error("Invalid path in file URL: `{0}`")]
+    #[error("Invalid path in file URL: {0}")]
     InvalidFileUrl(String),
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
-    #[error("Not a valid URL: `{0}`")]
+    #[error("Not a valid URL: {0}")]
     UrlParse(String, #[source] DisplaySafeUrlError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
@@ -38,6 +38,19 @@ pub enum ParsedUrlError {
     MissingExtensionUrl(String, ExtensionError),
     #[error("Expected path (`{0}`) to end in a supported file extension: {1}")]
     MissingExtensionPath(PathBuf, ExtensionError),
+}
+
+/// An error converting a parsed URL into an editable source.
+#[derive(Debug, Error)]
+pub enum MakeEditableError {
+    #[error("Local archives cannot be editable")]
+    LocalArchive,
+
+    #[error("Remote archives cannot be editable")]
+    RemoteArchive,
+
+    #[error("Git sources cannot be editable")]
+    Git,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
@@ -56,6 +69,15 @@ impl VerbatimParsedUrl {
     /// Returns `true` if the URL is editable.
     pub fn is_editable(&self) -> bool {
         self.parsed_url.is_editable()
+    }
+
+    /// Make the URL an editable source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MakeEditableError`] if the URL does not refer to a local directory.
+    pub fn make_editable(&mut self) -> Result<(), MakeEditableError> {
+        self.parsed_url.make_editable()
     }
 }
 
@@ -158,6 +180,16 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         }
     }
 
+    fn with_expanded(self, expanded: bool) -> Self {
+        Self {
+            verbatim: <VerbatimUrl as UnnamedRequirementUrl>::with_expanded(
+                self.verbatim,
+                expanded,
+            ),
+            ..self
+        }
+    }
+
     fn given(&self) -> Option<&str> {
         self.verbatim.given()
     }
@@ -201,6 +233,23 @@ impl ParsedUrl {
                 ..
             })
         )
+    }
+
+    /// Make the URL an editable source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MakeEditableError`] if the URL does not refer to a local directory.
+    fn make_editable(&mut self) -> Result<(), MakeEditableError> {
+        match self {
+            Self::Directory(directory) => {
+                directory.editable = Some(true);
+                Ok(())
+            }
+            Self::Path(_) => Err(MakeEditableError::LocalArchive),
+            Self::Archive(_) => Err(MakeEditableError::RemoteArchive),
+            Self::GitDirectory(_) | Self::GitPath(_) => Err(MakeEditableError::Git),
+        }
     }
 }
 
@@ -541,7 +590,8 @@ impl From<&ParsedDirectoryUrl> for DirectUrl {
 impl From<&ParsedArchiveUrl> for DirectUrl {
     fn from(value: &ParsedArchiveUrl) -> Self {
         Self::ArchiveUrl {
-            url: value.url.to_string(),
+            // Query parameters identify the source, so only strip username and password credentials.
+            url: value.url.without_credentials().to_string(),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,

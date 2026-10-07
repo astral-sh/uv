@@ -8,9 +8,11 @@ use thiserror::Error;
 use url::Url;
 
 const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
+    "sig",
     "X-Amz-Credential",
     "X-Amz-Security-Token",
     "X-Amz-Signature",
+    "sig",
 ];
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -228,6 +230,14 @@ impl DisplaySafeUrl {
     pub fn displayable_with_credentials(&self) -> impl Display {
         &self.0
     }
+
+    /// Redact all occurrences of this URL in a message.
+    ///
+    /// This is useful for errors from external tools, which may include the credentialed URL in
+    /// their command or output instead of using the URL's [`Display`] implementation.
+    pub fn redact_in(&self, message: &str) -> String {
+        message.replace(self.0.as_str(), &self.to_string())
+    }
 }
 
 impl Deref for DisplaySafeUrl {
@@ -253,19 +263,7 @@ impl Display for DisplaySafeUrl {
 impl Debug for DisplaySafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let url = &self.0;
-        // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid masking the
-        // username.
-        let (username, password) = if is_ssh_git_username(url) {
-            (url.username(), None)
-        } else if url.username() != "" && url.password().is_some() {
-            (url.username(), Some("****"))
-        } else if url.username() != "" {
-            ("****", None)
-        } else if url.password().is_some() {
-            ("", Some("****"))
-        } else {
-            ("", None)
-        };
+        let (username, password) = redacted_credentials(url);
 
         f.debug_struct("DisplaySafeUrl")
             .field("scheme", &url.scheme())
@@ -311,6 +309,18 @@ fn is_ssh_git_username(url: &Url) -> bool {
         && url.password().is_none()
 }
 
+/// Returns the URL's username and password with sensitive values redacted for display.
+fn redacted_credentials(url: &Url) -> (&str, Option<&str>) {
+    match (url.username(), url.password()) {
+        (username, Some(_)) => (username, Some("****")),
+        ("", None) => ("", None),
+        // The generic Git username is not sensitive.
+        (username, None) if is_ssh_git_username(url) => (username, None),
+        // Other standalone usernames may be tokens.
+        (_, None) => ("****", None),
+    }
+}
+
 fn is_sensitive_query_parameter(key: &str) -> bool {
     SENSITIVE_QUERY_PARAMETERS
         .iter()
@@ -348,15 +358,10 @@ fn display_with_redacted_credentials(
     if url.has_authority() {
         write!(f, "//")?;
 
-        if url.username() != "" && url.password().is_some() {
-            write!(f, "{}", url.username())?;
-            write!(f, ":****@")?;
-        } else if url.username() != "" && is_ssh_git_username(url) {
-            write!(f, "{}@", url.username())?;
-        } else if url.username() != "" {
-            write!(f, "****@")?;
-        } else if url.password().is_some() {
-            write!(f, ":****@")?;
+        match redacted_credentials(url) {
+            ("", None) => {}
+            (username, Some(password)) => write!(f, "{username}:{password}@")?,
+            (username, None) => write!(f, "{username}@")?,
         }
 
         write!(f, "{}", url.host_str().unwrap_or(""))?;
@@ -379,6 +384,8 @@ fn display_with_redacted_credentials(
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_debug_snapshot;
+
     use super::*;
 
     #[test]
@@ -496,6 +503,35 @@ mod tests {
     }
 
     #[test]
+    fn redact_url_in_message() {
+        let url = DisplaySafeUrl::parse("https://user:pass@example.com/org/repo.git").unwrap();
+        let message = format!(
+            "process didn't exit successfully: `git fetch '{}'`\n--- stderr\nfatal: Authentication failed for '{}'",
+            url.as_str(),
+            url.as_str()
+        );
+
+        assert_eq!(
+            url.redact_in(&message),
+            "process didn't exit successfully: `git fetch 'https://user:****@example.com/org/repo.git'`\n--- stderr\nfatal: Authentication failed for 'https://user:****@example.com/org/repo.git'"
+        );
+    }
+
+    #[test]
+    fn redact_presigned_url_in_message() {
+        let url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz%2DSignature=signature&X-Amz-Credential=credential&X-Amz-Security-Token=token&safe=value",
+        )
+        .unwrap();
+        let message = format!("failed to fetch '{}'", url.as_str());
+
+        assert_eq!(
+            url.redact_in(&message),
+            "failed to fetch 'https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Signature=****&X-Amz-Credential=****&X-Amz-Security-Token=****&safe=value'"
+        );
+    }
+
+    #[test]
     fn redact_aws_presigned_query_values() {
         let log_safe_url = DisplaySafeUrl::parse(
             "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=credential&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=signature&X-Amz-Security-Token=token",
@@ -506,6 +542,27 @@ mod tests {
             log_safe_url.to_string(),
             "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=****&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=****&X-Amz-Security-Token=****"
         );
+    }
+
+    #[test]
+    fn redact_azure_shared_access_signature() -> Result<(), DisplaySafeUrlError> {
+        let url = DisplaySafeUrl::parse(
+            "https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=signature&sp=r",
+        )?;
+        assert_eq!(
+            url.to_string(),
+            "https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=****&sp=r"
+        );
+        assert_eq!(
+            url.redact_in(&format!("failed to fetch '{}'", url.as_str())),
+            "failed to fetch 'https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=****&sp=r'"
+        );
+        // Formatting must not alter the signature used in actual requests.
+        assert_eq!(
+            url.as_str(),
+            "https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=signature&sp=r"
+        );
+        Ok(())
     }
 
     #[test]
@@ -545,6 +602,22 @@ mod tests {
         assert!(debug.contains(r#"query: Some("X-Amz-Credential=****&X-Amz-Signature=****")"#));
         assert!(!debug.contains("credential"));
         assert!(!debug.contains("signature"));
+    }
+
+    #[test]
+    fn redact_azure_sas_query_signature() {
+        let urls = [
+            "https://account.blob.core.windows.net/container/dist.whl?sv=2024-11-04&sr=b&sig=signature&sp=r",
+            "https://account.blob.core.windows.net/container/dist.whl?SIG=signature&safe=value",
+        ]
+        .map(|url| DisplaySafeUrl::parse(url).unwrap().to_string());
+
+        assert_debug_snapshot!(urls, @r#"
+        [
+            "https://account.blob.core.windows.net/container/dist.whl?sv=2024-11-04&sr=b&sig=****&sp=r",
+            "https://account.blob.core.windows.net/container/dist.whl?SIG=****&safe=value",
+        ]
+        "#);
     }
 
     #[test]

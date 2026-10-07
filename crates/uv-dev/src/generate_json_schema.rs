@@ -49,15 +49,15 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                 } else {
                     let comparison = StrComparison::new(&current, &schema_string);
                     bail!(
-                        "{filename} changed, please run `cargo dev generate-json-schema`:\n{comparison}"
+                        "`{filename}` changed, please run `cargo dev generate-json-schema`:\n{comparison}"
                     );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!("{filename} not found, please run `cargo dev generate-json-schema`");
+                bail!("`{filename}` not found, please run `cargo dev generate-json-schema`");
             }
             Err(err) => {
-                bail!("{filename} changed, please run `cargo dev generate-json-schema`:\n{err}");
+                bail!("`{filename}` changed, please run `cargo dev generate-json-schema`:\n{err}");
             }
         },
         Mode::Write => match fs_err::read_to_string(&schema_path) {
@@ -74,7 +74,7 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                 fs_err::write(schema_path, schema_string.as_bytes())?;
             }
             Err(err) => {
-                bail!("{filename} changed, please run `cargo dev generate-json-schema`:\n{err}");
+                bail!("`{filename}` changed, please run `cargo dev generate-json-schema`:\n{err}");
             }
         },
     }
@@ -100,7 +100,7 @@ fn generate() -> Result<String> {
 
     // Format with prettier
     let output = Command::new("npx")
-        .args(["prettier", "--stdin-filepath", "uv.schema.json"])
+        .args(["prettier@3.9.0", "--stdin-filepath", "uv.schema.json"])
         .current_dir(ROOT_DIR)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())

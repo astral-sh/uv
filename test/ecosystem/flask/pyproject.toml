@@ -1,0 +1,277 @@
+[project]
+name = "Flask"
+version = "3.2.0.dev"
+description = "A simple framework for building complex web applications."
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE.txt"]
+maintainers = [{name = "Pallets", email = "contact@palletsprojects.com"}]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Internet :: WWW/HTTP :: WSGI",
+    "Topic :: Internet :: WWW/HTTP :: WSGI :: Application",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Typing :: Typed",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "blinker>=1.9.0",
+    "click>=8.1.3",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.2",
+    "markupsafe>=2.1.1",
+    "werkzeug>=3.1.0",
+]
+
+[project.optional-dependencies]
+async = ["asgiref>=3.2"]
+dotenv = ["python-dotenv"]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "tox",
+    "tox-uv",
+]
+docs = [
+    "pallets-sphinx-themes",
+    "sphinx<9",
+    "sphinx-tabs",
+    "sphinxcontrib-log-cabinet",
+]
+docs-auto = [
+    "sphinx-autobuild",
+]
+gha-update = [
+    "gha-update ; python_full_version >= '3.12'",
+]
+pre-commit = [
+    "pre-commit",
+    "pre-commit-uv",
+]
+tests = [
+    "asgiref",
+    "pytest",
+    "python-dotenv",
+]
+typing = [
+    "asgiref",
+    "cryptography",
+    "mypy",
+    "pyright",
+    "pytest",
+    "python-dotenv",
+    "types-contextvars",
+    "types-dataclasses",
+]
+
+[project.urls]
+Donate = "https://palletsprojects.com/donate"
+Documentation = "https://flask.palletsprojects.com/"
+Changes = "https://flask.palletsprojects.com/page/changes/"
+Source = "https://github.com/pallets/flask/"
+Chat = "https://discord.gg/pallets"
+
+[project.scripts]
+flask = "flask.cli:main"
+
+[build-system]
+requires = ["flit_core>=3.11,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "flask"
+
+[tool.flit.sdist]
+include = [
+    "docs/",
+    "examples/",
+    "tests/",
+    "CHANGES.rst",
+    "uv.lock"
+]
+exclude = [
+    "docs/_build/",
+]
+
+[tool.uv]
+default-groups = ["dev", "pre-commit", "tests", "typing"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "error",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["flask", "tests"]
+
+[tool.coverage.paths]
+source = ["src", "*/site-packages"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if t.TYPE_CHECKING",
+    "raise NotImplementedError",
+    ": \\.{3}",
+]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src", "tests/type_check"]
+show_error_codes = true
+pretty = true
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "asgiref.*",
+    "dotenv.*",
+    "cryptography.*",
+    "importlib_metadata",
+]
+ignore_missing_imports = true
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["src", "tests/type_check"]
+typeCheckingMode = "basic"
+
+[tool.ruff]
+src = ["src"]
+fix = true
+show-fixes = true
+output-format = "full"
+
+[tool.ruff.lint]
+select = [
+    "B",  # flake8-bugbear
+    "E",  # pycodestyle error
+    "F",  # pyflakes
+    "I",  # isort
+    "UP",  # pyupgrade
+    "W",  # pycodestyle warning
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+order-by-type = false
+
+[tool.codespell]
+ignore-words-list = "te"
+
+[tool.tox]
+env_list = [
+    "py3.14", "py3.14t",
+    "py3.13", "py3.12", "py3.11", "py3.10",
+    "pypy3.11",
+    "tests-min", "tests-dev",
+    "style",
+    "typing",
+    "docs",
+]
+
+[tool.tox.env_run_base]
+description = "pytest on latest dependency versions"
+runner = "uv-venv-lock-runner"
+package = "wheel"
+wheel_build_env = ".pkg"
+constrain_package_deps = true
+use_frozen_constraints = true
+dependency_groups = ["tests"]
+env_tmp_dir = "{toxworkdir}/tmp/{envname}"
+commands = [[
+    "pytest", "-v", "--tb=short", "--basetemp={env_tmp_dir}",
+    {replace = "posargs", default = [], extend = true},
+]]
+
+[tool.tox.env.tests-min]
+description = "pytest on minimum dependency versions"
+base_python = ["3.14"]
+commands = [
+    [
+        "uv", "pip", "install",
+        "blinker==1.9.0",
+        "click==8.1.3",
+        "itsdangerous==2.2.0",
+        "jinja2==3.1.2",
+        "markupsafe==2.1.1",
+        "werkzeug==3.1.0",
+    ],
+    [
+        "pytest", "-v", "--tb=short", "--basetemp={env_tmp_dir}",
+        {replace = "posargs", default = [], extend = true},
+    ],
+]
+
+[tool.tox.env.tests-dev]
+description = "pytest on development dependency versions (git main branch)"
+base_python = ["3.10"]
+commands = [
+    [
+        "uv", "pip", "install",
+        "https://github.com/pallets-eco/blinker/archive/refs/heads/main.tar.gz",
+        "https://github.com/pallets/click/archive/refs/heads/main.tar.gz",
+        "https://github.com/pallets/itsdangerous/archive/refs/heads/main.tar.gz",
+        "https://github.com/pallets/jinja/archive/refs/heads/main.tar.gz",
+        "https://github.com/pallets/markupsafe/archive/refs/heads/main.tar.gz",
+        "https://github.com/pallets/werkzeug/archive/refs/heads/main.tar.gz",
+    ],
+    [
+        "pytest", "-v", "--tb=short", "--basetemp={env_tmp_dir}",
+        {replace = "posargs", default = [], extend = true},
+    ],
+]
+
+[tool.tox.env.style]
+description = "run all pre-commit hooks on all files"
+dependency_groups = ["pre-commit"]
+skip_install = true
+commands = [["pre-commit", "run", "--all-files"]]
+
+[tool.tox.env.typing]
+description = "run static type checkers"
+dependency_groups = ["typing"]
+commands = [
+    ["mypy"],
+    ["pyright"],
+]
+
+[tool.tox.env.docs]
+description = "build docs"
+dependency_groups = ["docs"]
+commands = [["sphinx-build", "-E", "-W", "-b", "dirhtml", "docs", "docs/_build/dirhtml"]]
+
+[tool.tox.env.docs-auto]
+description = "continuously rebuild docs and start a local server"
+dependency_groups = ["docs", "docs-auto"]
+commands = [["sphinx-autobuild", "-W", "-b", "dirhtml", "--watch", "src", "docs", "docs/_build/dirhtml"]]
+
+[tool.tox.env.update-actions]
+description = "update GitHub Actions pins"
+labels = ["update"]
+dependency_groups = ["gha-update"]
+skip_install = true
+commands = [["gha-update"]]
+
+[tool.tox.env.update-pre_commit]
+description = "update pre-commit pins"
+labels = ["update"]
+dependency_groups = ["pre-commit"]
+skip_install = true
+commands = [["pre-commit", "autoupdate", "--freeze", "-j4"]]
+
+[tool.tox.env.update-requirements]
+description = "update uv lock"
+labels = ["update"]
+dependency_groups = []
+no_default_groups = true
+skip_install = true
+commands = [["uv", "lock", {replace = "posargs", default = ["-U"], extend = true}]]
