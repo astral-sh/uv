@@ -1721,7 +1721,7 @@ pub async fn sync_environment(
     Ok(venv)
 }
 
-/// The result of updating a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
+/// The result of updating a [`PythonEnvironment`] to satisfy a [`RequirementsSpecification`].
 #[derive(Debug)]
 pub struct EnvironmentUpdate {
     /// The updated [`PythonEnvironment`].
@@ -1730,7 +1730,7 @@ pub struct EnvironmentUpdate {
     pub changelog: Changelog,
 }
 
-/// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
+/// Update a [`PythonEnvironment`] to satisfy a [`RequirementsSpecification`].
 pub async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,

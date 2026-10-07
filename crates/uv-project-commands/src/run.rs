@@ -1410,8 +1410,7 @@ pub enum RunCommand {
     /// Execute a Python package containing a `__main__.py` file.
     /// If an entrypoint with the target name is installed in the environment, it is preferred.
     PythonPackage(OsString, PathBuf, Vec<OsString>),
-    /// Execute a Python [zipapp].
-    /// [zipapp]: <https://docs.python.org/3/library/zipapp.html>
+    /// Execute a Python [zipapp](https://docs.python.org/3/library/zipapp.html).
     PythonZipapp(PathBuf, Vec<OsString>),
     /// Execute a `python` script provided via `stdin`.
     PythonStdin(Vec<u8>, Vec<OsString>),
