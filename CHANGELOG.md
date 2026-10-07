@@ -73,6 +73,15 @@ There are no breaking changes to the configuration of the [uv build backend](htt
 
   This stabilizes the `tar-codec` preview feature.
 
+- **Reject `uv build --clear` output directories that contain a build source**
+  ([#22276](https://github.com/astral-sh/uv/pull/22276))
+
+  Previously, `uv build --clear` could delete a project or input source distribution when the
+  output directory contained the source. Now, uv rejects these output directories, including
+  equivalent paths reached through symlinks, before clearing any build output.
+
+  Select an output directory that does not contain any build sources, or omit `--clear`.
+
 ### Python
 
 - Add CPython 3.15.0 ([#22400](https://github.com/astral-sh/uv/pull/22400))
