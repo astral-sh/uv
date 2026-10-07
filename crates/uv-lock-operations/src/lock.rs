@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
@@ -41,14 +42,16 @@ use crate::{
     ValidatedLock,
 };
 
-/// The command that requested a lock operation.
-#[derive(Debug, Clone, Copy)]
+/// The command to suggest when a lockfile is missing.
+#[derive(Debug, Clone)]
 pub enum LockCommand {
     Add,
     Audit,
     Check,
     Export,
     Lock,
+    /// Lock a project outside the invocation's working directory.
+    LockProject(PathBuf),
     Remove,
     Run,
     Sync,
@@ -65,7 +68,7 @@ impl std::fmt::Display for LockCommand {
             Self::Audit => "audit",
             Self::Check => "check",
             Self::Export => "export",
-            Self::Lock => "lock",
+            Self::Lock | Self::LockProject(_) => "lock",
             Self::Remove => "remove",
             Self::Run => "run",
             Self::Sync => "sync",
