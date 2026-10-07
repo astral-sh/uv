@@ -65,6 +65,7 @@ pub(crate) async fn list(
     python_downloads_json_url: Option<String>,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    graalpy_install_mirror: Option<String>,
     python_preference: PythonPreference,
     python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
@@ -141,6 +142,7 @@ pub(crate) async fn list(
                         .download_urls(
                             python_install_mirror.as_deref(),
                             pypy_install_mirror.as_deref(),
+                            graalpy_install_mirror.as_deref(),
                         )?
                         .into_iter()
                         .next()

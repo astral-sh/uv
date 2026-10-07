@@ -18,6 +18,73 @@ use uv_fs::Simplified;
 use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
 use walkdir::WalkDir;
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+#[tokio::test]
+async fn python_install_graalpy_mirror() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs()
+        .without_python_download_cache()
+        .with_filter((
+            r"(http://[^/]+/(?:config|environment|command-line)/)[^`\s)]+",
+            "$1[FILE-PATH]",
+        ));
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(4)
+        .mount(&server)
+        .await;
+
+    context.temp_dir.child("uv.toml").write_str(&format!(
+        "graalpy-install-mirror = '{}/config'",
+        server.uri()
+    ))?;
+
+    // Explicit installations use the configured mirror.
+    uv_snapshot!(context.filters(), context.python_install().arg("graalpy@3.10"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to install graalpy-3.10.0-[PLATFORM]
+      cause: Failed to download `http://[LOCALHOST]/config/[FILE-PATH]`
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/config/[FILE-PATH])
+    ");
+
+    // The environment variable overrides the configuration file.
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("graalpy@3.10")
+        .env(EnvVars::UV_GRAALPY_INSTALL_MIRROR, format!("{}/environment", server.uri())), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to install graalpy-3.10.0-[PLATFORM]
+      cause: Failed to download `http://[LOCALHOST]/environment/[FILE-PATH]`
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/environment/[FILE-PATH])
+    ");
+
+    // The command-line option overrides both the environment and configuration file.
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("graalpy@3.10")
+        .env(EnvVars::UV_GRAALPY_INSTALL_MIRROR, format!("{}/environment", server.uri()))
+        .arg("--graalpy-mirror")
+        .arg(format!("{}/command-line", server.uri())), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to install graalpy-3.10.0-[PLATFORM]
+      cause: Failed to download `http://[LOCALHOST]/command-line/[FILE-PATH]`
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/command-line/[FILE-PATH])
+    ");
+
+    // Automatic downloads use the same configuration as explicit installations.
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("graalpy@3.10"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to download `http://[LOCALHOST]/config/[FILE-PATH]`
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/config/[FILE-PATH])
+    ");
+
+    Ok(())
+}
 
 #[test]
 fn python_install() {

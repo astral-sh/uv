@@ -1225,9 +1225,14 @@ impl ManagedPythonDownload {
         reinstall: bool,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        graalpy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
+        let urls = self.download_urls(
+            python_install_mirror,
+            pypy_install_mirror,
+            graalpy_install_mirror,
+        )?;
         if urls.is_empty() {
             return Err(Error::NoPythonDownloadUrlFound);
         }
@@ -1552,11 +1557,13 @@ impl ManagedPythonDownload {
         &self,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        graalpy_install_mirror: Option<&str>,
     ) -> Result<Vec<DisplaySafeUrl>, Error> {
         let custom_astral_mirror = astral_mirror_url_from_env();
         self.download_urls_with_astral_mirror(
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             custom_astral_mirror.as_deref(),
         )
     }
@@ -1565,6 +1572,7 @@ impl ManagedPythonDownload {
         &self,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        graalpy_install_mirror: Option<&str>,
         astral_mirror_url: Option<&str>,
     ) -> Result<Vec<DisplaySafeUrl>, Error> {
         let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
@@ -1613,7 +1621,25 @@ impl ManagedPythonDownload {
                 }
             }
 
-            _ => {}
+            LenientImplementationName::Known(ImplementationName::GraalPy) => {
+                if let Some(mirror) = graalpy_install_mirror {
+                    let Some(suffix) = self
+                        .url
+                        .strip_prefix("https://github.com/oracle/graalpython/releases/download/")
+                    else {
+                        return Err(Error::Mirror(
+                            EnvVars::UV_GRAALPY_INSTALL_MIRROR,
+                            self.url.to_string(),
+                        ));
+                    };
+                    return Ok(vec![DisplaySafeUrl::parse(
+                        format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
+                    )?]);
+                }
+            }
+
+            LenientImplementationName::Known(ImplementationName::Pyodide)
+            | LenientImplementationName::Unknown(_) => {}
         }
 
         Ok(vec![DisplaySafeUrl::parse(&self.url)?])
@@ -2355,9 +2381,12 @@ mod tests {
         );
     }
 
-    fn cpython_download_for_url(url: &'static str) -> ManagedPythonDownload {
+    fn python_download_for_url(
+        implementation: ImplementationName,
+        url: &'static str,
+    ) -> ManagedPythonDownload {
         let key = PythonInstallationKey::new(
-            LenientImplementationName::Known(crate::implementation::ImplementationName::CPython),
+            LenientImplementationName::Known(implementation),
             3,
             12,
             4,
@@ -2380,12 +2409,14 @@ mod tests {
 
     #[test]
     fn test_cpython_download_urls_custom_astral_mirror() {
-        let download = cpython_download_for_url(
+        let download = python_download_for_url(
+            ImplementationName::CPython,
             "https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
         );
 
         let urls = download
             .download_urls_with_astral_mirror(
+                None,
                 None,
                 None,
                 Some("https://nexus.example.com/repository/releases.astral.sh/"),
@@ -2406,13 +2437,15 @@ mod tests {
 
     #[test]
     fn test_cpython_specific_mirror_takes_precedence_over_astral_mirror() {
-        let download = cpython_download_for_url(
+        let download = python_download_for_url(
+            ImplementationName::CPython,
             "https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
         );
 
         let urls = download
             .download_urls_with_astral_mirror(
                 Some("https://python-mirror.example.com/releases/"),
+                None,
                 None,
                 Some("https://nexus.example.com/repository/releases.astral.sh/"),
             )
@@ -2432,18 +2465,102 @@ mod tests {
 
     #[test]
     fn test_cpython_download_urls_empty_astral_mirror_uses_default() {
-        let download = cpython_download_for_url(
+        let download = python_download_for_url(
+            ImplementationName::CPython,
             "https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
         );
 
         let default_urls = download
-            .download_urls_with_astral_mirror(None, None, None)
+            .download_urls_with_astral_mirror(None, None, None, None)
             .expect("download URLs should be valid");
         let empty_urls = download
-            .download_urls_with_astral_mirror(None, None, Some(""))
+            .download_urls_with_astral_mirror(None, None, None, Some(""))
             .expect("download URLs should be valid");
 
         assert_eq!(default_urls, empty_urls);
+    }
+
+    #[test]
+    fn test_graalpy_download_urls_mirror() {
+        let download = python_download_for_url(
+            ImplementationName::GraalPy,
+            "https://github.com/oracle/graalpython/releases/download/graal-25.4.4/graalpy3.13-25.4.4-linux-amd64.tar.gz",
+        );
+
+        for mirror in [
+            "https://graalpy-mirror.example.com/releases",
+            "https://graalpy-mirror.example.com/releases/",
+            "https://graalpy-mirror.example.com/releases///",
+        ] {
+            let urls = download
+                .download_urls_with_astral_mirror(
+                    Some("https://python-mirror.example.com/releases/"),
+                    Some("https://pypy-mirror.example.com/releases/"),
+                    Some(mirror),
+                    Some("https://nexus.example.com/repository/releases.astral.sh/"),
+                )
+                .expect("download URLs should be valid");
+            let urls = urls
+                .into_iter()
+                .map(|url| url.to_string())
+                .collect::<Vec<_>>();
+            insta::allow_duplicates! {
+                insta::assert_debug_snapshot!(urls, @r#"
+                [
+                    "https://graalpy-mirror.example.com/releases/graal-25.4.4/graalpy3.13-25.4.4-linux-amd64.tar.gz",
+                ]
+                "#);
+            }
+        }
+    }
+
+    #[test]
+    fn test_graalpy_download_urls_without_mirror() {
+        let download = python_download_for_url(
+            ImplementationName::GraalPy,
+            "https://github.com/oracle/graalpython/releases/download/graal-25.4.4/graalpy3.13-25.4.4-linux-amd64.tar.gz",
+        );
+
+        let urls = download
+            .download_urls_with_astral_mirror(
+                Some("https://python-mirror.example.com/releases/"),
+                Some("https://pypy-mirror.example.com/releases/"),
+                None,
+                Some("https://nexus.example.com/repository/releases.astral.sh/"),
+            )
+            .expect("download URLs should be valid");
+        let urls = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(urls, @r#"
+        [
+            "https://github.com/oracle/graalpython/releases/download/graal-25.4.4/graalpy3.13-25.4.4-linux-amd64.tar.gz",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn test_graalpy_download_urls_mirror_unrecognized_url() {
+        let download = python_download_for_url(
+            ImplementationName::GraalPy,
+            "https://example.com/graalpy.tar.gz",
+        );
+
+        let error = download
+            .download_urls_with_astral_mirror(
+                None,
+                None,
+                Some("https://graalpy-mirror.example.com/releases/"),
+                None,
+            )
+            .expect_err("unrecognized download URLs cannot be rewritten to use a mirror");
+        insta::assert_debug_snapshot!(error, @r#"
+        Mirror(
+            "UV_GRAALPY_INSTALL_MIRROR",
+            "https://example.com/graalpy.tar.gz",
+        )
+        "#);
     }
 
     /// A hash mismatch is a post-download integrity failure — retrying a different URL cannot fix

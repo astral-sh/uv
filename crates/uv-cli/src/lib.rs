@@ -6410,6 +6410,15 @@ pub struct PythonInstallArgs {
     #[arg(long, value_hint = ValueHint::Url)]
     pub pypy_mirror: Option<String>,
 
+    /// Set the URL to use as the source for downloading GraalPy installations.
+    ///
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g.,
+    /// `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub graalpy_mirror: Option<String>,
+
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
@@ -6468,6 +6477,7 @@ impl PythonInstallArgs {
         PythonInstallMirrors {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
+            graalpy_install_mirror: self.graalpy_mirror.clone(),
             python_downloads_json_url: self.python_downloads_json_url.clone(),
         }
     }
@@ -6510,6 +6520,15 @@ pub struct PythonUpgradeArgs {
     #[arg(long, value_hint = ValueHint::Url)]
     pub pypy_mirror: Option<String>,
 
+    /// Set the URL to use as the source for downloading GraalPy installations.
+    ///
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g.,
+    /// `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub graalpy_mirror: Option<String>,
+
     /// Reinstall the latest Python patch, if it's already installed.
     ///
     /// By default, uv will exit successfully if the latest patch is already
@@ -6531,6 +6550,7 @@ impl PythonUpgradeArgs {
         PythonInstallMirrors {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
+            graalpy_install_mirror: self.graalpy_mirror.clone(),
             python_downloads_json_url: self.python_downloads_json_url.clone(),
         }
     }

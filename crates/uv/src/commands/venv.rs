@@ -171,6 +171,7 @@ pub(crate) async fn venv(
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.graalpy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;

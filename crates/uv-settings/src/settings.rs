@@ -1358,6 +1358,22 @@ pub struct PythonInstallMirrors {
         "#
     )]
     pub pypy_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed GraalPy installations.
+    ///
+    /// By default, managed GraalPy installations are downloaded from [GitHub](https://github.com/oracle/graalpython/releases).
+    /// This variable can be set to a mirror URL to use a different source for GraalPy installations.
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g., `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            graalpy-install-mirror = "https://github.com/oracle/graalpython/releases/download"
+        "#
+    )]
+    pub graalpy_install_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     #[option(
@@ -1377,6 +1393,7 @@ impl PythonInstallMirrors {
         Self {
             python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
             pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            graalpy_install_mirror: self.graalpy_install_mirror.or(other.graalpy_install_mirror),
             python_downloads_json_url: self
                 .python_downloads_json_url
                 .or(other.python_downloads_json_url),
@@ -2616,6 +2633,7 @@ struct OptionsWire {
     // install_mirror: PythonInstallMirrors,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    graalpy_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
 
     // #[serde(flatten)]
@@ -2677,6 +2695,7 @@ impl TryFrom<OptionsWire> for Options {
             python_downloads,
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             python_downloads_json_url,
             concurrent_downloads,
             concurrent_builds,
@@ -2812,6 +2831,7 @@ impl TryFrom<OptionsWire> for Options {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
+                graalpy_install_mirror,
                 python_downloads_json_url,
             },
             conflicts,

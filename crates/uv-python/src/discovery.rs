@@ -1579,6 +1579,7 @@ pub(crate) async fn find_best_python_installation(
     reporter: Option<&dyn crate::downloads::Reporter>,
     python_install_mirror: Option<&str>,
     pypy_install_mirror: Option<&str>,
+    graalpy_install_mirror: Option<&str>,
     python_downloads_json_url: Option<&str>,
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {request}");
@@ -1664,6 +1665,7 @@ pub(crate) async fn find_best_python_installation(
                     reporter,
                     python_install_mirror,
                     pypy_install_mirror,
+                    graalpy_install_mirror,
                 )
                 .await
                 .map(Some),

@@ -253,6 +253,10 @@
         }
       ]
     },
+    "graalpy-install-mirror": {
+      "description": "Mirror URL to use for downloading managed GraalPy installations.\n\nBy default, managed GraalPy installations are downloaded from [GitHub](https://github.com/oracle/graalpython/releases).\nThis variable can be set to a mirror URL to use a different source for GraalPy installations.\nThe provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g., `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": ["string", "null"]
+    },
     "http-proxy": {
       "description": "The URL of the HTTP proxy to use.",
       "anyOf": [
