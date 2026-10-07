@@ -6176,7 +6176,7 @@ pub struct PythonInstallArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub pyodide_mirror: Option<String>,
+    pyodide_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
@@ -6296,7 +6296,7 @@ pub struct PythonUpgradeArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, value_hint = ValueHint::Url)]
-    pub pyodide_mirror: Option<String>,
+    pyodide_mirror: Option<String>,
 
     /// Reinstall the latest Python patch, if it's already installed.
     ///
