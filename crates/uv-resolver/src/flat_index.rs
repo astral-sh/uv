@@ -10,15 +10,19 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
-    MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
-    SourceDistCompatibility, WheelCompatibility,
+    File, Index, IndexLocations, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel,
+    RegistrySourceDist,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
+
+use crate::prioritized_distribution::{
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
+    SourceDistCompatibility, WheelCompatibility,
+};
 
 /// Unfiltered entries from `--find-links`, indexed by [`PackageName`].
 #[derive(Debug, Clone, Default)]

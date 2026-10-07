@@ -87,6 +87,14 @@ reason = "used by Pixi to construct a `VersionMap` from custom distributions"
 [[override]]
 lint = "hawk::unnecessary_public"
 crate = "uv_resolver"
+item = "prioritized_distribution::PrioritizedDist::insert_source"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct a prioritized distribution for its resolver provider"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
 item = "python_requirement::PythonRequirement::from_marker_environment"
 kind = "inherent_method"
 level = "expect"

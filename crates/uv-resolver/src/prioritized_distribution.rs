@@ -5,6 +5,11 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
+use uv_distribution_types::{
+    File, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RequiresPython,
+};
+use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{
@@ -12,10 +17,8 @@ use uv_platform_tags::{
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
-use crate::{
-    File, InstalledDist, KnownPlatform, MinimumLibcVersion, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, ResolvedDistRef,
-};
+use crate::known_platform::KnownPlatform;
+use crate::resolved::ResolvedDistRef;
 
 /// A collection of distributions that have been filtered by relevance.
 #[derive(Debug, Default, Clone)]
@@ -56,7 +59,7 @@ impl Default for PrioritizedDistInner {
 
 /// A distribution that can be used for both resolution and installation.
 #[derive(Debug, Copy, Clone)]
-pub enum CompatibleDist<'a> {
+pub(crate) enum CompatibleDist<'a> {
     /// The distribution is already installed and can be used.
     InstalledDist(&'a InstalledDist),
     /// The distribution should be resolved and installed using a source distribution.
@@ -70,8 +73,6 @@ pub enum CompatibleDist<'a> {
     CompatibleWheel {
         /// The wheel that should be used.
         wheel: &'a RegistryBuiltWheel,
-        /// The platform priority associated with the wheel.
-        priority: Option<TagPriority>,
         /// The prioritized distribution that the wheel came from.
         prioritized: &'a PrioritizedDist,
     },
@@ -87,12 +88,33 @@ pub enum CompatibleDist<'a> {
     },
 }
 
+impl Name for CompatibleDist<'_> {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::InstalledDist(dist) => dist.name(),
+            Self::SourceDist {
+                sdist,
+                prioritized: _,
+            } => sdist.name(),
+            Self::CompatibleWheel {
+                wheel,
+                prioritized: _,
+            } => wheel.name(),
+            Self::IncompatibleWheel {
+                sdist,
+                wheel: _,
+                prioritized: _,
+            } => sdist.name(),
+        }
+    }
+}
+
 impl CompatibleDist<'_> {
     /// Return whether a usable source distribution or a wheel matching [`RequiresPython`] exists.
     ///
     /// Wheel compatibility must be checked against the current Python range when a resolver fork
     /// narrows the range used to construct the [`PrioritizedDist`].
-    pub fn matches_python_requirement(&self, requires_python: &RequiresPython) -> bool {
+    pub(crate) fn matches_python_requirement(&self, requires_python: &RequiresPython) -> bool {
         self.prioritized().is_none_or(|prioritized| {
             !prioritized
                 .0
@@ -102,7 +124,7 @@ impl CompatibleDist<'_> {
     }
 
     /// Return the `requires-python` specifier for the distribution, if any.
-    pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
+    pub(crate) fn requires_python(&self) -> Option<&VersionSpecifiers> {
         match self {
             Self::InstalledDist(_) => None,
             Self::SourceDist { sdist, .. } => sdist.file.requires_python.as_deref(),
@@ -112,7 +134,7 @@ impl CompatibleDist<'_> {
     }
 
     // For installable distributions, return the prioritized distribution it was derived from.
-    pub fn prioritized(&self) -> Option<&PrioritizedDist> {
+    pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
         match self {
             Self::InstalledDist(_) => None,
             Self::SourceDist { prioritized, .. }
@@ -122,7 +144,7 @@ impl CompatibleDist<'_> {
     }
 
     /// Return the set of supported platforms for the distribution, in terms of their markers.
-    pub fn implied_markers(&self) -> MarkerTree {
+    pub(crate) fn implied_markers(&self) -> MarkerTree {
         match self.prioritized() {
             Some(prioritized) => {
                 let [glibc, musl] = prioritized.0.markers;
@@ -144,7 +166,7 @@ pub enum IncompatibleDist {
 }
 
 impl IncompatibleDist {
-    pub fn singular_message(&self) -> String {
+    pub(crate) fn singular_message(&self) -> String {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => format!("has {self}"),
@@ -173,7 +195,7 @@ impl IncompatibleDist {
         }
     }
 
-    pub fn plural_message(&self) -> String {
+    pub(crate) fn plural_message(&self) -> String {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => format!("have {self}"),
@@ -202,7 +224,7 @@ impl IncompatibleDist {
         }
     }
 
-    pub fn context_message(
+    pub(crate) fn context_message(
         &self,
         tags: Option<&Tags>,
         requires_python: Option<AbiTag>,
@@ -322,7 +344,7 @@ pub enum PythonRequirementKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WheelCompatibility {
+pub(crate) enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
     Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
 }
@@ -371,7 +393,7 @@ pub enum HashComparison {
 
 impl PrioritizedDist {
     /// Insert the given built distribution into the [`PrioritizedDist`].
-    pub fn insert_built(
+    pub(crate) fn insert_built(
         &mut self,
         dist: RegistryBuiltWheel,
         hashes: impl IntoIterator<Item = HashDigest>,
@@ -434,14 +456,14 @@ impl PrioritizedDist {
     }
 
     /// Return the highest-priority distribution for the package version, if any.
-    pub fn get(&self) -> Option<CompatibleDist<'_>> {
+    pub(crate) fn get(&self) -> Option<CompatibleDist<'_>> {
         let best_wheel = self.0.best_wheel_index.map(|i| &self.0.wheels[i]);
         match (&best_wheel, &self.0.source) {
             // If both are compatible, break ties based on the hash outcome. For example, prefer a
             // source distribution with a matching hash over a wheel with a mismatched hash. When
             // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
             (
-                Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority, ..))),
+                Some((wheel, WheelCompatibility::Compatible(wheel_hash, ..))),
                 Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
             ) => {
                 if sdist_hash > wheel_hash {
@@ -452,16 +474,14 @@ impl PrioritizedDist {
                 } else {
                     Some(CompatibleDist::CompatibleWheel {
                         wheel,
-                        priority: *tag_priority,
                         prioritized: self,
                     })
                 }
             }
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, WheelCompatibility::Compatible(_, tag_priority, ..))), _) => {
+            (Some((wheel, WheelCompatibility::Compatible(..))), _) => {
                 Some(CompatibleDist::CompatibleWheel {
                     wheel,
-                    priority: *tag_priority,
                     prioritized: self,
                 })
             }
@@ -492,7 +512,7 @@ impl PrioritizedDist {
     }
 
     /// Return the incompatibility for the best source distribution, if any.
-    pub fn incompatible_source(&self) -> Option<&IncompatibleSource> {
+    pub(crate) fn incompatible_source(&self) -> Option<&IncompatibleSource> {
         self.0
             .source
             .as_ref()
@@ -503,7 +523,7 @@ impl PrioritizedDist {
     }
 
     /// Return the incompatibility for the best wheel, if any.
-    pub fn incompatible_wheel(&self) -> Option<&IncompatibleWheel> {
+    pub(crate) fn incompatible_wheel(&self) -> Option<&IncompatibleWheel> {
         self.0
             .best_wheel_index
             .map(|i| &self.0.wheels[i])
@@ -514,19 +534,19 @@ impl PrioritizedDist {
     }
 
     /// Return the hashes for each distribution.
-    pub fn hashes(&self) -> &[HashDigest] {
+    pub(crate) fn hashes(&self) -> &[HashDigest] {
         &self.0.hashes
     }
 
     /// Returns true if and only if this distribution does not contain any
     /// source distributions or wheels.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.source.is_none() && self.0.wheels.is_empty()
     }
 
     /// If this prioritized dist has at least one wheel, then this creates
     /// a built distribution with the best wheel in this prioritized dist.
-    pub fn built_dist(&self) -> Option<RegistryBuiltDist> {
+    pub(crate) fn built_dist(&self) -> Option<RegistryBuiltDist> {
         let best_wheel_index = self.0.best_wheel_index?;
 
         // Remove any excluded wheels from the list of wheels, and adjust the wheel index to be
@@ -558,7 +578,7 @@ impl PrioritizedDist {
 
     /// If this prioritized dist has an sdist, then this creates a source
     /// distribution.
-    pub fn source_dist(&self) -> Option<RegistrySourceDist> {
+    pub(crate) fn source_dist(&self) -> Option<RegistrySourceDist> {
         let mut sdist = self
             .0
             .source
@@ -581,12 +601,12 @@ impl PrioritizedDist {
 
     /// Returns the "best" wheel in this prioritized distribution, if one
     /// exists.
-    pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
+    pub(crate) fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
     }
 
     /// Returns an iterator of all wheels and the source distribution, if any.
-    pub fn files(&self) -> impl Iterator<Item = &File> {
+    pub(crate) fn files(&self) -> impl Iterator<Item = &File> {
         self.0
             .wheels
             .iter()
@@ -600,7 +620,7 @@ impl PrioritizedDist {
     }
 
     /// Returns an iterator over all Python tags for the distribution.
-    pub fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
+    pub(crate) fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
         self.0
             .wheels
             .iter()
@@ -608,7 +628,7 @@ impl PrioritizedDist {
     }
 
     /// Returns an iterator over all ABI tags for the distribution.
-    pub fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
+    pub(crate) fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
         self.0
             .wheels
             .iter()
@@ -617,7 +637,7 @@ impl PrioritizedDist {
 
     /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
     /// tags.
-    pub fn platform_tags<'a>(
+    pub(crate) fn platform_tags<'a>(
         &'a self,
         tags: &'a Tags,
     ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
@@ -639,7 +659,7 @@ impl PrioritizedDist {
 
 impl<'a> CompatibleDist<'a> {
     /// Return the [`ResolvedDistRef`] to use during resolution.
-    pub fn for_resolution(&self) -> ResolvedDistRef<'a> {
+    pub(crate) fn for_resolution(&self) -> ResolvedDistRef<'a> {
         match self {
             Self::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
             Self::SourceDist { sdist, prioritized } => {
@@ -655,7 +675,7 @@ impl<'a> CompatibleDist<'a> {
     }
 
     /// Return the [`ResolvedDistRef`] to use during installation.
-    pub fn for_installation(&self) -> ResolvedDistRef<'a> {
+    pub(crate) fn for_installation(&self) -> ResolvedDistRef<'a> {
         match self {
             Self::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
             Self::SourceDist { sdist, prioritized } => {
@@ -672,7 +692,7 @@ impl<'a> CompatibleDist<'a> {
 
     /// Returns a [`RegistryBuiltWheel`] if the distribution includes a compatible or incompatible
     /// wheel.
-    pub fn wheel(&self) -> Option<&RegistryBuiltWheel> {
+    pub(crate) fn wheel(&self) -> Option<&RegistryBuiltWheel> {
         match self {
             Self::InstalledDist(_) => None,
             Self::SourceDist { .. } => None,
@@ -831,7 +851,7 @@ impl IncompatibleWheel {
 /// Given a wheel filename, determine the markers covered by every configured libc baseline.
 ///
 /// A wheel with multiple platform tags can remain eligible without covering every tagged platform.
-pub fn implied_markers(
+pub(crate) fn implied_markers(
     filename: &WheelFilename,
     minimum_libc_version: Option<MinimumLibcVersion>,
 ) -> MarkerTree {
