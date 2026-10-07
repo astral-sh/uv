@@ -4,7 +4,7 @@ use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString}
 
 /// A platform for which the resolver is solving.
 #[derive(Debug, Clone, Copy)]
-pub enum KnownPlatform {
+pub(crate) enum KnownPlatform {
     Linux,
     Windows,
     MacOS,
