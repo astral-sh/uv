@@ -17,6 +17,16 @@ Unreleased.
 
   Set `UV_PYTHON_ARCH=x86_64` to keep using emulated Python, or request an explicit architecture such as `cpython-3.14-windows-x86_64`.
 
+- **Reject editable requirements in included constraints files**
+  ([#22282](https://github.com/astral-sh/uv/pull/22282))
+
+  Previously, uv silently ignored editable (`-e`) requirements in constraints files included with
+  `-c` from a requirements file. Now, uv rejects these requirements with an error, matching
+  [pip's behavior](https://pip.pypa.io/en/stable/user_guide/#constraints-files).
+
+  Move editable requirements to a requirements file passed with `-r`, or pass them directly with
+  `--editable`, instead of including them in a constraints file.
+
 - **Omit the distutils startup patch on Python 3.10 and later**
   ([#22096](https://github.com/astral-sh/uv/pull/22096))
 
