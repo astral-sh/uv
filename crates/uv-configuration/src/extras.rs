@@ -8,7 +8,7 @@ use uv_normalize::{DefaultExtras, ExtraName};
 #[derive(Debug, Default, Clone)]
 pub struct ExtrasSpecification(Arc<ExtrasSpecificationInner>);
 
-/// Manager of all dependency-group decisions and settings history.
+/// Extra decisions and settings history shared by an [`ExtrasSpecification`].
 #[derive(Debug, Default, Clone)]
 pub struct ExtrasSpecificationInner {
     /// Extras to include.
@@ -203,9 +203,7 @@ impl ExtrasSpecificationHistory {
     /// If a flag was provided multiple times (e.g. `--extra A --extra B`) this will
     /// elide the arguments and just show the flag once (e.g. just yield "--extra").
     ///
-    /// Conceptually this being an empty list should be equivalent to
-    /// [`ExtrasSpecification::is_empty`][] when there aren't any defaults set.
-    /// When there are defaults the two will disagree, and rightfully so!
+    /// Default extras are omitted because they do not come from CLI flags.
     pub fn as_flags_pretty(&self) -> Vec<Cow<'_, str>> {
         let Self {
             extra,
