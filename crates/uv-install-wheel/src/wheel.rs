@@ -671,20 +671,20 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            // Here, two wrappers over rename are clashing: We want to retry for security software
-            // blocking the file, but we also need the copy fallback is the problem was trying to
-            // move a file cross-drive.
+            // Retry when security software temporarily blocks the file.
             match uv_fs::with_retry_sync(&path, &script_absolute, "renaming", || {
                 fs_err::rename(&path, &script_absolute)
             }) {
                 Ok(()) => (),
-                Err(err) => {
+                Err(err) if err.kind() == io::ErrorKind::CrossesDevices => {
+                    // Fall back to copy only when the rename crosses devices.
                     debug!("Failed to rename, falling back to copy: {err}");
                     uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
                         fs_err::copy(&path, &script_absolute)?;
                         Ok(())
                     })?;
                 }
+                Err(err) => return Err(Error::Io(err)),
             }
         }
 

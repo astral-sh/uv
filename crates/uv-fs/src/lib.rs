@@ -601,13 +601,16 @@ pub fn with_retry_sync(
             })
             .call()
             .map_err(|err| {
-                std::io::Error::other(format!(
-                    "Failed {} `{}` to `{}`: {}",
-                    operation_name,
-                    from.display(),
-                    to.display(),
-                    err
-                ))
+                std::io::Error::new(
+                    err.kind(),
+                    format!(
+                        "Failed {} `{}` to `{}`: {}",
+                        operation_name,
+                        from.display(),
+                        to.display(),
+                        err
+                    ),
+                )
             })
     }
     #[cfg(not(windows))]
@@ -1067,6 +1070,40 @@ mod tests {
         ] {
             assert_eq!(transcode_to_string(&encoded, source)?, expected, "{source}");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn with_retry_sync_preserves_not_found() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let source = tempdir.path().join("missing");
+        let destination = tempdir.path().join("destination");
+        let error = with_retry_sync(&source, &destination, "renaming", || {
+            fs_err::rename(&source, &destination)
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        Ok(())
+    }
+
+    /// Requires `UV_INTERNAL__TEST_ALT_FS` on a different device from the default temp directory.
+    #[test]
+    fn with_retry_sync_preserves_cross_device_error() -> io::Result<()> {
+        let Some(alternate) = std::env::var_os(uv_static::EnvVars::UV_INTERNAL__TEST_ALT_FS) else {
+            return Ok(());
+        };
+        fs_err::create_dir_all(&alternate)?;
+        let tempdir = tempfile::tempdir()?;
+        let alternate = tempfile::tempdir_in(alternate)?;
+        let source = tempdir.path().join("source");
+        let destination = alternate.path().join("destination");
+        fs_err::write(&source, "contents")?;
+
+        let error = with_retry_sync(&source, &destination, "renaming", || {
+            fs_err::rename(&source, &destination)
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::CrossesDevices);
         Ok(())
     }
 

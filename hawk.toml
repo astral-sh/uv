@@ -135,7 +135,7 @@ reason = "used by Pixi to distinguish packages installed through its uv integrat
 # Keep APIs that are consumed by another platform or by non-Rust components.
 
 [[override]]
-lint = "hawk::dead_public"
+lint = "hawk::unnecessary_public"
 crate = "uv_fs"
 item = "with_retry_sync"
 kind = "function"
