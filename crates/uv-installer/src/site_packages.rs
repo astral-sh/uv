@@ -904,6 +904,8 @@ mod tests {
             "sys_path": [],
             "site_packages": [],
             "stdlib": "/python/lib/python3.12",
+            "cache_tag": "cpython-312",
+            "bytecode_magic_number": [203, 13, 13, 10],
             "extension_suffixes": [".cpython-312-x86_64-linux-gnu.so", ".abi3.so", ".so"],
             "scheme": {
                 "data": "/python",

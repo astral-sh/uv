@@ -5,7 +5,9 @@ use tracing::info;
 
 use uv_cache::{Cache, CacheArgs};
 use uv_configuration::Concurrency;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    EnvironmentPreference, Interpreter, PythonEnvironment, PythonPreference, PythonRequest,
+};
 
 #[derive(Parser)]
 pub(crate) struct CompileArgs {
@@ -20,17 +22,16 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init().await?;
 
     let interpreter = if let Some(python) = args.python {
-        python
+        Interpreter::query(python, &cache)?
     } else {
-        let interpreter = PythonEnvironment::find(
+        PythonEnvironment::find(
             &PythonRequest::default(),
             EnvironmentPreference::OnlyVirtual,
             PythonPreference::default(),
             None,
             &cache,
         )?
-        .into_interpreter();
-        interpreter.sys_executable().to_path_buf()
+        .into_interpreter()
     };
 
     let files = uv_installer::compile_tree(

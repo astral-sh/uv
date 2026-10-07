@@ -1286,14 +1286,9 @@ async fn compile_stdlib_bytecode(
         }
     };
 
-    let files = uv_installer::compile_tree(
-        &stdlib_path,
-        &installation.executable(false),
-        concurrency,
-        cache.root(),
-    )
-    .await
-    .with_context(|| format!("Error compiling bytecode in: {}", stdlib_path.display()))?;
+    let files = uv_installer::compile_tree(&stdlib_path, &interpreter, concurrency, cache.root())
+        .await
+        .with_context(|| format!("Error compiling bytecode in: {}", stdlib_path.display()))?;
     if files == 0 {
         return Ok(None);
     }
