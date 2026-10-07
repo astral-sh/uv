@@ -81,6 +81,9 @@ pub enum BuildDispatchError {
     UninstallBuildDependencies(#[source] uv_installer::UninstallError),
 
     #[error(transparent)]
+    Plan(#[from] uv_installer::PlanError),
+
+    #[error(transparent)]
     Lookahead(#[from] uv_requirements::Error),
 }
 
@@ -88,6 +91,7 @@ impl uv_errors::Hinted for BuildDispatchError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BuildFrontend(err) => err.hints(),
+            Self::Plan(error) => error.hints(),
             Self::Resolve(err) | Self::ResolveRequirements { source: err, .. } => err.hints(),
             Self::BuildBackend(_)
             | Self::Tags(_)
@@ -113,7 +117,8 @@ impl IsBuildBackendError for BuildDispatchError {
             | Self::Tags(_)
             | Self::Join(_)
             | Self::Anyhow(_)
-            | Self::UninstallBuildDependencies(_) => false,
+            | Self::UninstallBuildDependencies(_)
+            | Self::Plan(_) => false,
         }
     }
 
@@ -127,6 +132,7 @@ impl IsBuildBackendError for BuildDispatchError {
             | Self::Anyhow(_)
             | Self::Prepare(_)
             | Self::UninstallBuildDependencies(_)
+            | Self::Plan(_)
             | Self::Lookahead(_) => false,
             Self::BuildFrontend(err) => err.is_build_backend_error(),
         }

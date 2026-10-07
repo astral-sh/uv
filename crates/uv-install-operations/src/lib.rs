@@ -254,7 +254,7 @@ impl InstallationPlan {
                 venv,
                 tags,
             )
-            .context("Failed to determine installation plan")?;
+            .map_err(Error::Plan)?;
 
         Ok(Self {
             plan,
