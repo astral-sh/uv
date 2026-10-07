@@ -141,7 +141,7 @@ impl ProjectPythonRequest {
         } else {
             // (3) `requires-python` in `pyproject.toml`
             let request = requirement.as_ref().and_then(|requirement| {
-                PythonRequest::from_requires_python(&requirement.requires_python)
+                PythonRequest::from_specifiers(requirement.requires_python.specifiers())
             });
             let source = PythonRequestSource::RequiresPython;
             (source, request)

@@ -439,7 +439,7 @@ impl ScriptPython {
             // Ignore version files that are incompatible with the script's `requires-python`
             match (file.version(), requires_python.as_ref()) {
                 (Some(request), Some(requires_python)) => {
-                    request.intersects_requires_python(requires_python)
+                    request.intersects_specifiers(requires_python.specifiers())
                 }
                 _ => true,
             }

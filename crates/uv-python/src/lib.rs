@@ -227,6 +227,13 @@ impl From<PythonEnvironmentError> for Error {
 // TODO(zanieb): We should write a mock interpreter script that works on Windows
 #[cfg(all(test, unix))]
 mod tests {
+    fn parse_request(value: &str) -> PythonRequest {
+        PythonRequest::parse_with_working_directory(
+            value,
+            &crate::current_dir().expect("The test working directory must be available"),
+        )
+    }
+
     use std::assert_matches;
     use std::{
         env,
@@ -712,7 +719,7 @@ mod tests {
 
         let installation = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("3.14"),
+                &parse_request("3.14"),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
                 arch,
@@ -725,7 +732,7 @@ mod tests {
         for request in ["3.14.99", "3.99"] {
             let installation = context.run(|| {
                 find_best_python_installation_no_download(
-                    &PythonRequest::parse(request),
+                    &parse_request(request),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     arch,
@@ -737,7 +744,7 @@ mod tests {
 
         let installations = context.run(|| {
             find_all_python_installations(
-                &PythonRequest::parse("3.14"),
+                &parse_request("3.14"),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
                 arch,
@@ -754,7 +761,7 @@ mod tests {
 
         let installation = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("cpython-3.14-linux-x86_64-gnu"),
+                &parse_request("cpython-3.14-linux-x86_64-gnu"),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
                 arch,
@@ -1167,7 +1174,7 @@ mod tests {
             })??
             .key()
             .to_string();
-        let key_request = PythonRequest::parse(&key);
+        let key_request = parse_request(&key);
         assert_matches!(
             key_request,
             PythonRequest::Key(_),
@@ -1177,9 +1184,9 @@ mod tests {
         let requests = [
             PythonRequest::Any,
             PythonRequest::Default,
-            PythonRequest::parse("3.12"),
-            PythonRequest::parse("cpython"),
-            PythonRequest::parse("pypy@3.10"),
+            parse_request("3.12"),
+            parse_request("cpython"),
+            parse_request("pypy@3.10"),
             PythonRequest::ExecutableName(format!("pypy{}", env::consts::EXE_SUFFIX)),
             PythonRequest::File(cpython_312),
             PythonRequest::Directory(virtual_environment.to_path_buf()),
@@ -1411,7 +1418,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("3.11"),
+                &parse_request("3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -1443,7 +1450,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("3.11.2"),
+                &parse_request("3.11.2"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -1475,7 +1482,7 @@ mod tests {
 
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("3.9"),
+                &parse_request("3.9"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -1498,7 +1505,7 @@ mod tests {
 
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("3.11.9"),
+                &parse_request("3.11.9"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -1547,7 +1554,7 @@ mod tests {
 
         let python = context.run(|| {
             find_best_python_installation_no_download(
-                &PythonRequest::parse("3.11.3"),
+                &parse_request("3.11.3"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -1579,7 +1586,7 @@ mod tests {
 
         let python = context.run(|| {
             find_best_python_installation_no_download(
-                &PythonRequest::parse("3.11.11"),
+                &parse_request("3.11.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -1614,7 +1621,7 @@ mod tests {
         let python =
             context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_best_python_installation_no_download(
-                    &PythonRequest::parse("3.10"),
+                    &parse_request("3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -1643,7 +1650,7 @@ mod tests {
         let python =
             context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_best_python_installation_no_download(
-                    &PythonRequest::parse("3.10.2"),
+                    &parse_request("3.10.2"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -2344,7 +2351,7 @@ mod tests {
         let python =
             context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_python_installation(
-                    &PythonRequest::parse("3.12"),
+                    &parse_request("3.12"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     None,
@@ -2361,7 +2368,7 @@ mod tests {
         let result =
             context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_python_installation(
-                    &PythonRequest::parse("3.12.3"),
+                    &parse_request("3.12.3"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     None,
@@ -2401,7 +2408,7 @@ mod tests {
             &[(EnvVars::VIRTUAL_ENV, Some(context.tempdir.as_os_str()))],
             || {
                 find_python_installation(
-                    &PythonRequest::parse("3.12.3"),
+                    &parse_request("3.12.3"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     None,
@@ -2483,7 +2490,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("foobar"),
+                &parse_request("foobar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2513,7 +2520,7 @@ mod tests {
 
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("3.10.0"),
+                &parse_request("3.10.0"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2543,7 +2550,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("./foo/bar"),
+                &parse_request("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2559,7 +2566,7 @@ mod tests {
         context.add_python_versions(&["3.11.1"])?;
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("./foo/bar"),
+                &parse_request("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2589,7 +2596,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(python_path.to_str().unwrap()),
+                &parse_request(python_path.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2605,7 +2612,7 @@ mod tests {
         // With `EnvironmentPreference::ExplicitSystem`
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(python_path.to_str().unwrap()),
+                &parse_request(python_path.to_str().unwrap()),
                 EnvironmentPreference::ExplicitSystem,
                 PythonPreference::OnlySystem,
                 None,
@@ -2621,7 +2628,7 @@ mod tests {
         // With `EnvironmentPreference::OnlyVirtual`
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(python_path.to_str().unwrap()),
+                &parse_request(python_path.to_str().unwrap()),
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
                 None,
@@ -2637,7 +2644,7 @@ mod tests {
         context.add_python_versions(&["3.11.1"])?;
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(python_path.to_str().unwrap()),
+                &parse_request(python_path.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2661,7 +2668,7 @@ mod tests {
         TestContext::mock_venv(&venv, "3.10.0")?;
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("../foo/.venv"),
+                &parse_request("../foo/.venv"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2676,7 +2683,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(venv.to_str().unwrap()),
+                &parse_request(venv.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2700,7 +2707,7 @@ mod tests {
         )?;
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(context.tempdir.child("bar").to_str().unwrap()),
+                &parse_request(context.tempdir.child("bar").to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2720,7 +2727,7 @@ mod tests {
             &[(EnvVars::VIRTUAL_ENV, Some(other_venv.as_os_str()))],
             || {
                 find_python_installation(
-                    &PythonRequest::parse(venv.to_str().unwrap()),
+                    &parse_request(venv.to_str().unwrap()),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -2749,7 +2756,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("../proj/.venv"),
+                &parse_request("../proj/.venv"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2771,7 +2778,7 @@ mod tests {
 
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("./foo/bar"),
+                &parse_request("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2802,7 +2809,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("bar"),
+                &parse_request("bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2818,7 +2825,7 @@ mod tests {
         // With [`EnvironmentPreference::OnlyVirtual`], we should not allow the interpreter
         let result = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("bar"),
+                &parse_request("bar"),
                 EnvironmentPreference::ExplicitSystem,
                 PythonPreference::OnlySystem,
                 None,
@@ -2846,7 +2853,7 @@ mod tests {
         let python = context
             .run(|| {
                 find_python_installation(
-                    &PythonRequest::parse("bar"),
+                    &parse_request("bar"),
                     EnvironmentPreference::ExplicitSystem,
                     PythonPreference::OnlySystem,
                     None,
@@ -2904,7 +2911,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("pypy"),
+                &parse_request("pypy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2930,7 +2937,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("pypy"),
+                &parse_request("pypy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2971,7 +2978,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("pypy3.10"),
+                &parse_request("pypy3.10"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -2998,7 +3005,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("pypy@3.10"),
+                &parse_request("pypy@3.10"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -3025,7 +3032,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(">= 3.11"),
+                &parse_request(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -3052,7 +3059,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(">= 3.11"),
+                &parse_request(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -3079,7 +3086,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse(">= 3.11"),
+                &parse_request(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -3145,7 +3152,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("graalpy"),
+                &parse_request("graalpy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -3171,7 +3178,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("graalpy"),
+                &parse_request("graalpy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -3224,7 +3231,7 @@ mod tests {
         let python = context
             .run(|| {
                 find_python_installation(
-                    &PythonRequest::parse("pypy@3.10"),
+                    &parse_request("pypy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -3242,7 +3249,7 @@ mod tests {
         let python = context
             .run(|| {
                 find_python_installation(
-                    &PythonRequest::parse("pypy"),
+                    &parse_request("pypy"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -3284,7 +3291,7 @@ mod tests {
         let python = context
             .run(|| {
                 find_python_installation(
-                    &PythonRequest::parse("pypy@3.10"),
+                    &parse_request("pypy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -3302,7 +3309,7 @@ mod tests {
         let python = context
             .run(|| {
                 find_python_installation(
-                    &PythonRequest::parse("default"),
+                    &parse_request("default"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -3339,7 +3346,7 @@ mod tests {
         let python = context
             .run(|| {
                 find_python_installation(
-                    &PythonRequest::parse("graalpy@3.10"),
+                    &parse_request("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -3362,7 +3369,7 @@ mod tests {
         let python = context
             .run(|| {
                 find_python_installation(
-                    &PythonRequest::parse("graalpy@3.10"),
+                    &parse_request("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -3385,7 +3392,7 @@ mod tests {
         let python = context
             .run(|| {
                 find_python_installation(
-                    &PythonRequest::parse("graalpy@3.10"),
+                    &parse_request("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     None,
@@ -3424,7 +3431,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("3.13t"),
+                &parse_request("3.13t"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
@@ -3475,7 +3482,7 @@ mod tests {
 
         let python = context.run(|| {
             find_python_installation(
-                &PythonRequest::parse("3.13"),
+                &parse_request("3.13"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 None,
