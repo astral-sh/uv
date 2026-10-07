@@ -1,5 +1,7 @@
 //! Commands for inspecting and modifying Python environments.
 
+pub use pylock::PylockResolutionError;
+
 pub mod check;
 pub mod compile;
 pub mod freeze;
