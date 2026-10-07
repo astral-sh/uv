@@ -110,7 +110,7 @@ jobs:
             'Acquire::Retries "0";' \
             'Acquire::http::Timeout "10";' \
             'Acquire::https::Timeout "10";' \
-            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+            | sudo tee /etc/apt/apt.conf.d/zz-uv-retries > /dev/null
           sudo apt-get update
           sudo apt-get install gcc-arm-linux-gnueabihf
 
