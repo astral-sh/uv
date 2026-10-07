@@ -987,12 +987,15 @@ fn implied_platform_markers<'a>(
     marker
 }
 
-/// Translate a macOS deployment target into the corresponding
+/// Translate a macOS deployment target into a lower bound on its
 /// [Darwin kernel release](<https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards>).
+///
+/// This identifies the release family, not the exact kernel version. Modern macOS minor
+/// versions are unsupported; callers choosing a major-release baseline must pass zero.
 ///
 /// macOS 10.16 is the compatibility spelling of macOS 11. macOS 26 uses Darwin 25;
 /// starting with macOS 27, the major versions match.
-fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
+pub fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
     let release = match (major, minor) {
         (10, 0) => [1, 3, 0],
         (10, 1) => [1, 4, 1],

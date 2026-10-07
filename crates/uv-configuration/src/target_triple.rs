@@ -1,5 +1,8 @@
+use std::borrow::Cow;
+
 use tracing::debug;
 
+use uv_distribution_types::macos_darwin_release;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::{Arch, Os, Platform};
 use uv_static::EnvVars;
@@ -1530,14 +1533,23 @@ impl TargetTriple {
     }
 
     /// Return the `platform_release` value for the target.
-    fn platform_release(self) -> &'static str {
-        match self {
+    fn platform_release(self) -> Cow<'static, str> {
+        let release = match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Aarch64PcWindowsMsvc => "",
             Self::Linux | Self::X8664UnknownLinuxGnu => "",
-            Self::Macos | Self::Aarch64AppleDarwin => "",
+            Self::Macos | Self::Aarch64AppleDarwin | Self::X8664AppleDarwin => {
+                // Use the same deployment target as wheel selection. Modern macOS wheel tags
+                // ignore minor versions, so use the Darwin baseline for that major release.
+                if let Os::Macos { major, minor } = self.platform().os()
+                    && let Some(release) =
+                        macos_darwin_release(*major, if *major >= 11 { 0 } else { *minor })
+                {
+                    return Cow::Owned(release.to_string());
+                }
+                ""
+            }
             Self::I686PcWindowsMsvc => "",
-            Self::X8664AppleDarwin => "",
             Self::Aarch64UnknownLinuxGnu => "",
             Self::Aarch64UnknownLinuxMusl => "",
             Self::X8664UnknownLinuxMusl => "",
@@ -1612,7 +1624,8 @@ impl TargetTriple {
             Self::Arm64Ios => "",
             Self::Arm64IosSimulator => "",
             Self::X8664IosSimulator => "",
-        }
+        };
+        Cow::Borrowed(release)
     }
 
     /// Return the `os_name` value for the target.

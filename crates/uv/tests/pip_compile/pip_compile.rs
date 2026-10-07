@@ -17,9 +17,7 @@ use fs_err::{File, read};
 use fs_err::{read_to_string, remove_file, write};
 #[cfg(feature = "test-python-managed")]
 use http::StatusCode;
-#[cfg(feature = "test-universal")]
-use indoc::formatdoc;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 #[cfg(feature = "test-universal")]
 use regex::Regex;
 use sha2::{Digest, Sha256, Sha512};
@@ -14351,6 +14349,84 @@ fn python_platform() -> Result<()> {
     "
     );
 
+    Ok(())
+}
+
+/// macOS target markers use the Darwin release baseline of the selected deployment target.
+#[test]
+fn python_platform_macos_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    for name in ["matching", "threshold", "unequal"] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &"1".parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+
+    for (platform, deployment_target, release) in [
+        ("macos", None, "22.0.0"),
+        ("aarch64-apple-darwin", Some("15.4"), "24.0.0"),
+        ("x86_64-apple-darwin", Some("15.0"), "24.0.0"),
+        ("macos", Some("26.0"), "25.0.0"),
+        ("aarch64-apple-darwin", Some("27.1"), "27.0.0"),
+        ("x86_64-apple-darwin", Some("10.15"), "19.0.0"),
+    ] {
+        context
+            .temp_dir
+            .child("requirements.in")
+            .write_str(&formatdoc! {r"
+                matching==1 ; platform_release == '{release}'
+                threshold==1 ; platform_release >= '{release}'
+                unequal==1 ; platform_release != '24'
+            "})?;
+        let mut command = context.pip_compile();
+        command
+            .arg("requirements.in")
+            .arg("--python-platform")
+            .arg(platform)
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg("wheels")
+            .arg("--no-header")
+            .arg("--no-annotate")
+            .env_remove(EnvVars::MACOSX_DEPLOYMENT_TARGET);
+        if let Some(deployment_target) = deployment_target {
+            command.env(EnvVars::MACOSX_DEPLOYMENT_TARGET, deployment_target);
+        }
+        if release == "24.0.0" {
+            insta::allow_duplicates! {
+                uv_snapshot!(context.filters(), command, @"
+                exit_code: 0 (success)
+                ----- stdout -----
+                matching==1
+                threshold==1
+
+                ----- stderr -----
+                Resolved 2 packages in [TIME]
+                ");
+            }
+        } else {
+            insta::allow_duplicates! {
+                uv_snapshot!(context.filters(), command, @"
+                exit_code: 0 (success)
+                ----- stdout -----
+                matching==1
+                threshold==1
+                unequal==1
+
+                ----- stderr -----
+                Resolved 3 packages in [TIME]
+                ");
+            }
+        }
+    }
     Ok(())
 }
 
