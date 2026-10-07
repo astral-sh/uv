@@ -27,6 +27,7 @@ mod macos {
 
     use uv_client::BaseClientBuilder;
     use uv_preview::Preview;
+    use uv_python::PythonDownloadMirrors;
     use uv_python::downloads::{DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList};
     use uv_python::managed::ManagedPythonInstallation;
 
@@ -60,8 +61,7 @@ mod macos {
                     directory.path(),
                     directory.path(),
                     false,
-                    None,
-                    None,
+                    PythonDownloadMirrors::default(),
                     None,
                 ))
                 .expect("Failed to download Python dylib fixture");
