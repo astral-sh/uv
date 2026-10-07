@@ -6169,6 +6169,15 @@ pub struct PythonInstallArgs {
     #[arg(long, value_hint = ValueHint::Url)]
     graalpy_mirror: Option<String>,
 
+    /// Set the URL to use as the source for downloading Pyodide installations.
+    ///
+    /// The provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in, e.g.,
+    /// `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub pyodide_mirror: Option<String>,
+
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     python_downloads_json_url: Option<String>,
@@ -6228,6 +6237,7 @@ impl PythonInstallArgs {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
             graalpy_install_mirror: self.graalpy_mirror.clone(),
+            pyodide_install_mirror: self.pyodide_mirror.clone(),
             python_downloads_json_url: self.python_downloads_json_url.clone(),
         }
     }
@@ -6279,6 +6289,15 @@ pub struct PythonUpgradeArgs {
     #[arg(long, value_hint = ValueHint::Url)]
     graalpy_mirror: Option<String>,
 
+    /// Set the URL to use as the source for downloading Pyodide installations.
+    ///
+    /// The provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in, e.g.,
+    /// `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub pyodide_mirror: Option<String>,
+
     /// Reinstall the latest Python patch, if it's already installed.
     ///
     /// By default, uv will exit successfully if the latest patch is already
@@ -6301,6 +6320,7 @@ impl PythonUpgradeArgs {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
             graalpy_install_mirror: self.graalpy_mirror.clone(),
+            pyodide_install_mirror: self.pyodide_mirror.clone(),
             python_downloads_json_url: self.python_downloads_json_url.clone(),
         }
     }

@@ -1374,6 +1374,22 @@ pub struct PythonInstallMirrors {
         "#
     )]
     pub graalpy_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed Pyodide installations.
+    ///
+    /// By default, managed Pyodide installations are downloaded from [GitHub](https://github.com/pyodide/pyodide/releases).
+    /// This variable can be set to a mirror URL to use a different source for Pyodide installations.
+    /// The provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in, e.g., `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            pyodide-install-mirror = "https://github.com/pyodide/pyodide/releases/download"
+        "#
+    )]
+    pub pyodide_install_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     #[option(
@@ -1394,6 +1410,7 @@ impl PythonInstallMirrors {
             cpython: self.python_install_mirror.as_deref(),
             pypy: self.pypy_install_mirror.as_deref(),
             graalpy: self.graalpy_install_mirror.as_deref(),
+            pyodide: self.pyodide_install_mirror.as_deref(),
         }
     }
 
@@ -1403,6 +1420,7 @@ impl PythonInstallMirrors {
             python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
             pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
             graalpy_install_mirror: self.graalpy_install_mirror.or(other.graalpy_install_mirror),
+            pyodide_install_mirror: self.pyodide_install_mirror.or(other.pyodide_install_mirror),
             python_downloads_json_url: self
                 .python_downloads_json_url
                 .or(other.python_downloads_json_url),
@@ -2643,6 +2661,7 @@ struct OptionsWire {
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
     graalpy_install_mirror: Option<String>,
+    pyodide_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
 
     // #[serde(flatten)]
@@ -2705,6 +2724,7 @@ impl TryFrom<OptionsWire> for Options {
             python_install_mirror,
             pypy_install_mirror,
             graalpy_install_mirror,
+            pyodide_install_mirror,
             python_downloads_json_url,
             concurrent_downloads,
             concurrent_builds,
@@ -2841,6 +2861,7 @@ impl TryFrom<OptionsWire> for Options {
                 python_install_mirror,
                 pypy_install_mirror,
                 graalpy_install_mirror,
+                pyodide_install_mirror,
                 python_downloads_json_url,
             },
             conflicts,

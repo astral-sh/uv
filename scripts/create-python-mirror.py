@@ -38,6 +38,7 @@ PREFIXES = [
     "https://github.com/astral-sh/python-build-standalone/releases/download/",
     "https://downloads.python.org/pypy/",
     "https://github.com/oracle/graalpython/releases/download/",
+    "https://github.com/pyodide/pyodide/releases/download/",
 ]
 
 
