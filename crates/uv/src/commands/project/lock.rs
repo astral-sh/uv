@@ -1237,8 +1237,12 @@ async fn do_lock(
 
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
                 previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
+            } else if let Some(previous) = previous.as_ref() {
+                // Compare both locks in their persisted form when marker serialization changes
+                // their internal representation. The previous lock has already been parsed.
+                *previous == lock || *previous == Lock::from_toml(&lock.to_toml()?)?
             } else {
-                previous.as_ref().is_some_and(|previous| *previous == lock)
+                false
             };
 
             if unchanged {

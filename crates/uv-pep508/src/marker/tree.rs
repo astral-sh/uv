@@ -882,6 +882,14 @@ impl MarkerTree {
         INTERNER.lock().is_disjoint_nontrivial(self.0, other.0)
     }
 
+    /// Returns whether two markers are known to select the same environments.
+    ///
+    /// Unlike tree equality, this accounts for relationships between different comparison
+    /// variables. As with [`Self::is_disjoint`], complex expressions may produce false negatives.
+    pub fn is_equivalent(self, other: Self) -> bool {
+        self == other || (self.is_disjoint(other.negate()) && other.is_disjoint(self.negate()))
+    }
+
     /// Returns the contents of this marker tree, if it contains at least one expression.
     ///
     /// If the marker is `true`, this method will return `None`.

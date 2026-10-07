@@ -3472,6 +3472,50 @@ fn update() -> Result<()> {
     Ok(())
 }
 
+/// Equivalent Darwin release markers update the existing dependency instead of adding another pin.
+#[test]
+fn add_equivalent_platform_release_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["foo==1; sys_platform == 'darwin' and platform_release == '24'"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--frozen")
+        .arg("foo==2; sys_platform == 'darwin' and platform_release <= '24' and platform_release >= '24'"), @"exit_code: 0 (success)");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "foo==2 ; platform_release >= '24' and platform_release <= '24' and sys_platform == 'darwin'",
+    ]
+    "#);
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--frozen")
+        .arg("foo==3; sys_platform == 'darwin' and platform_release == '24'"), @"exit_code: 0 (success)");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "foo==3 ; platform_release == '24' and sys_platform == 'darwin'",
+    ]
+    "#);
+
+    Ok(())
+}
+
 /// Add and update a requirement, with different markers
 #[test]
 fn add_update_marker() -> Result<()> {

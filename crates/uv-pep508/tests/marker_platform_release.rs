@@ -271,3 +271,40 @@ fn darwin_release_collective_contradictions() -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
+
+#[test]
+fn darwin_release_equivalence() -> Result<(), Box<dyn Error>> {
+    for (left, right, expected) in [
+        (
+            "platform_release == '24'",
+            "platform_release <= '24' and platform_release >= '24'",
+            true,
+        ),
+        (
+            "(platform_release < '10' or platform_release > '24') and (platform_release <= '1' or platform_release > '24')",
+            "platform_release <= '1' or platform_release > '24'",
+            true,
+        ),
+        (
+            "platform_release == '24'",
+            "platform_release == '24.0'",
+            true,
+        ),
+        (
+            "platform_release >= '24'",
+            "platform_release >= '24.0'",
+            false,
+        ),
+        (
+            "platform_release == '24'",
+            "platform_release == '25'",
+            false,
+        ),
+    ] {
+        let left: MarkerTree = format!("sys_platform == 'darwin' and ({left})").parse()?;
+        let right: MarkerTree = format!("sys_platform == 'darwin' and ({right})").parse()?;
+        assert_eq!(left.is_equivalent(right), expected);
+        assert_eq!(right.is_equivalent(left), expected);
+    }
+    Ok(())
+}
