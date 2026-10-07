@@ -265,5 +265,5 @@ pub(super) async fn run(
     }
 
     let handle = command.spawn().context("Failed to spawn `ty check`")?;
-    run_to_completion(handle).await
+    run_to_completion(handle, printer).await
 }
