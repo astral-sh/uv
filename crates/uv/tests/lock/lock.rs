@@ -22663,7 +22663,7 @@ fn lock_metadata_free_root_extra_project_conflicting_workspace_extra() -> Result
         .arg("--locked")
         .arg("--offline")
         .arg("--no-cache")
-        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+        .env("RUST_LOG", "uv_lock_operations::validated_lock=debug"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Existing `uv.lock` satisfies workspace requirements
@@ -22744,7 +22744,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
         .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url())
-        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+        .env("RUST_LOG", "uv_lock_operations::validated_lock=debug"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Existing `uv.lock` satisfies workspace requirements

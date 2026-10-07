@@ -3,6 +3,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use owo_colors::OwoColorize;
+use tracing::debug;
 use uv_cache::Refresh;
 use uv_command_support::Printer;
 use uv_configuration::{Constraints, ExcludeDependency, Override, Upgrade};
@@ -20,13 +21,6 @@ use uv_warnings::warn_user;
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::LockValidationError;
-
-// Lock diagnostics use a stable target for command-specific `RUST_LOG` filters.
-macro_rules! debug {
-    ($($args:tt)*) => {
-        tracing::debug!(target: "uv::commands::project::lock", $($args)*)
-    };
-}
 
 /// Whether an existing lockfile can satisfy or guide a new resolution.
 #[derive(Debug)]
