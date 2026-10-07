@@ -34,23 +34,6 @@ pub fn generate_wheel(
     tag: &str,
     entry_points: &[String],
 ) -> (String, Vec<u8>) {
-    let mut files = Vec::new();
-    if !entry_points.is_empty() {
-        let normalized = name.as_dist_info_name();
-        let mut entry_points_metadata = String::from("[console_scripts]\n");
-        for entry_point in entry_points {
-            entry_points_metadata.push_str(entry_point);
-            entry_points_metadata.push_str(" = ");
-            entry_points_metadata.push_str(&normalized);
-            entry_points_metadata.push_str(".cli:main\n");
-        }
-        files.push((
-            format!("{normalized}-{version}.dist-info/entry_points.txt"),
-            entry_points_metadata,
-        ));
-        files.push((format!("{normalized}/cli.py"), build_cli_module(name)));
-    }
-
     generate_wheel_with_files(
         name,
         version,
@@ -58,10 +41,8 @@ pub fn generate_wheel(
         extras,
         requires_python,
         tag,
-        &files
-            .iter()
-            .map(|(path, contents)| (path.as_str(), contents.as_str()))
-            .collect::<Vec<_>>(),
+        entry_points,
+        &[],
     )
 }
 
@@ -75,8 +56,25 @@ pub fn generate_wheel_with_files(
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
     tag: &str,
+    entry_points: &[String],
     files: &[(&str, &str)],
 ) -> (String, Vec<u8>) {
+    let mut script_files = Vec::new();
+    if !entry_points.is_empty() {
+        let normalized = name.as_dist_info_name();
+        let mut entry_points_metadata = String::from("[console_scripts]\n");
+        for entry_point in entry_points {
+            entry_points_metadata.push_str(entry_point);
+            entry_points_metadata.push_str(" = ");
+            entry_points_metadata.push_str(&normalized);
+            entry_points_metadata.push_str(".cli:main\n");
+        }
+        script_files.push((
+            format!("{normalized}-{version}.dist-info/entry_points.txt"),
+            entry_points_metadata,
+        ));
+        script_files.push((format!("{normalized}/cli.py"), build_cli_module(name)));
+    }
     let normalized = name.as_dist_info_name();
     let dist_info = format!("{normalized}-{version}.dist-info");
 
@@ -101,6 +99,7 @@ pub fn generate_wheel_with_files(
             ),
         ),
     ];
+    entries.extend(script_files);
     entries.extend(
         files
             .iter()

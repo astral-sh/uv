@@ -110,6 +110,10 @@ pub struct PackageMetadata {
     #[serde(default)]
     pub entry_points: Vec<String>,
 
+    /// Additional UTF-8 files to include in generated wheels, keyed by their archive paths.
+    #[serde(default)]
+    pub wheel_files: BTreeMap<String, String>,
+
     /// Whether to produce a source distribution, and optionally its metadata.
     #[serde(
         default = "default_artifact",
