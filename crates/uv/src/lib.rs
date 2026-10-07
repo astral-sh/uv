@@ -1358,6 +1358,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &workspace_cache,
                 printer,
                 globals.preview,
+                commands::diagnostics::write_error_chain,
             )
             .await
         }

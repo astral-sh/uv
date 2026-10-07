@@ -1,3 +1,5 @@
+//! Commands for building Python distributions.
+
 use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -30,7 +32,7 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations,
     NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_errors::{ErrorOptions, Hinted, Hints, write_error_chain_with_options};
+use uv_errors::{Hinted, Hints};
 use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
@@ -55,7 +57,7 @@ use uv_python_context::{PythonContextError, PythonDownloadReporter, find_require
 use uv_settings::ResolverSettings;
 
 #[derive(Debug, Error)]
-pub(crate) enum Error {
+pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -194,8 +196,10 @@ impl Hinted for Error {
 }
 
 /// Build source distributions and wheels.
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn build_frontend(
+pub async fn build_frontend(
     project_dir: &Path,
     skip_dependency_check: bool,
     src: Option<PathBuf>,
@@ -225,89 +229,8 @@ pub(crate) async fn build_frontend(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    render_error: fn(&anyhow::Error, Printer) -> std::fmt::Result,
 ) -> Result<ExitStatus> {
-    let build_result = build_impl(
-        project_dir,
-        skip_dependency_check,
-        src.as_deref(),
-        package.as_ref(),
-        all_packages,
-        output_dir.as_deref(),
-        sdist,
-        wheel,
-        list,
-        build_logs,
-        gitignore,
-        force_pep517,
-        clear,
-        &build_constraints,
-        &build_constraints_from_workspace,
-        hash_checking,
-        python.as_deref(),
-        install_mirrors,
-        settings,
-        client_builder,
-        config_discovery,
-        python_preference,
-        python_arch,
-        python_downloads,
-        &concurrency,
-        cache,
-        workspace_cache,
-        printer,
-        preview,
-    )
-    .await?;
-
-    match build_result {
-        BuildResult::Failure => Ok(ExitStatus::Error),
-        BuildResult::Success => Ok(ExitStatus::Success),
-    }
-}
-
-/// Represents the overall result of a build process.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BuildResult {
-    /// Indicates that at least one of the builds failed.
-    Failure,
-    /// Indicates that all builds succeeded.
-    Success,
-}
-
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-#[expect(clippy::fn_params_excessive_bools)]
-async fn build_impl(
-    project_dir: &Path,
-    skip_dependency_check: bool,
-    src: Option<&Path>,
-    package: Option<&PackageName>,
-    all_packages: bool,
-    output_dir: Option<&Path>,
-    sdist: bool,
-    wheel: bool,
-    list: bool,
-    build_logs: bool,
-    gitignore: bool,
-    force_pep517: bool,
-    clear: bool,
-    build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[NameRequirementSpecification],
-    hash_checking: Option<HashCheckingMode>,
-    python_request: Option<&str>,
-    install_mirrors: PythonInstallMirrors,
-    settings: &ResolverSettings,
-    client_builder: &BaseClientBuilder<'_>,
-    config_discovery: ConfigDiscovery,
-    python_preference: PythonPreference,
-    python_arch: Option<PythonArchitecture>,
-    python_downloads: PythonDownloads,
-    concurrency: &Concurrency,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
-    printer: Printer,
-    preview: Preview,
-) -> Result<BuildResult> {
     // Extract the resolver settings.
     let ResolverSettings {
         index_locations,
@@ -378,7 +301,7 @@ async fn build_impl(
     );
 
     // If a `--package` or `--all-packages` was provided, adjust the source directory.
-    let packages = if let Some(package) = package {
+    let packages = if let Some(package) = package.as_ref() {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
                 "Cannot specify `--package` when building from a file"
@@ -478,8 +401,8 @@ async fn build_impl(
         let future = build_package(
             source.clone(),
             skip_dependency_check,
-            output_dir,
-            python_request,
+            output_dir.as_deref(),
+            python.as_deref(),
             install_mirrors.clone(),
             config_discovery,
             workspace.as_deref(),
@@ -496,8 +419,8 @@ async fn build_impl(
             gitignore,
             force_pep517,
             clear,
-            build_constraints,
-            build_constraints_from_workspace,
+            &build_constraints,
+            &build_constraints_from_workspace,
             build_isolation,
             extra_build_dependencies,
             extra_build_variables,
@@ -505,7 +428,7 @@ async fn build_impl(
             *keyring_provider,
             exclude_newer.clone(),
             sources.clone(),
-            concurrency,
+            &concurrency,
             build_options,
             sdist,
             wheel,
@@ -533,12 +456,7 @@ async fn build_impl(
             }
             Err(err) => {
                 let err = anyhow::Error::from(err).context(format!("Failed to build `{source}`"));
-                let hints = crate::commands::diagnostics::hints_for_error(&err);
-                write_error_chain_with_options(
-                    err.as_ref(),
-                    &hints,
-                    ErrorOptions::default().with_stream(printer.stderr_important()),
-                )?;
+                render_error(&err, printer)?;
 
                 success = false;
             }
@@ -546,9 +464,9 @@ async fn build_impl(
     }
 
     if success {
-        Ok(BuildResult::Success)
+        Ok(ExitStatus::Success)
     } else {
-        Ok(BuildResult::Failure)
+        Ok(ExitStatus::Error)
     }
 }
 
