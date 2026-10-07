@@ -1,26 +1,23 @@
 use std::error::Error;
 
 use uv_pep440::VersionParseError;
-use uv_pep508::{
-    MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerTree, MarkerValueString,
-};
+use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerTree};
 
 fn environment(
     sys_platform: &str,
     platform_release: &str,
-    python_version: &str,
 ) -> Result<MarkerEnvironment, VersionParseError> {
     MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
         implementation_name: "cpython",
-        implementation_version: python_version,
+        implementation_version: "3.13",
         os_name: "posix",
         platform_machine: "aarch64",
         platform_python_implementation: "CPython",
         platform_release,
         platform_system: "",
         platform_version: "",
-        python_full_version: python_version,
-        python_version,
+        python_full_version: "3.13",
+        python_version: "3.13",
         sys_platform,
     })
 }
@@ -33,13 +30,17 @@ fn assert_roundtrip(
     for (marker, expected) in [(marker, expected), (marker.negate(), !expected)] {
         assert_eq!(marker.evaluate(environment, &[]), expected);
 
-        let printed = marker.try_to_pep508()?.ok_or("missing marker contents")?;
-        let roundtrip: MarkerTree = printed.parse()?;
-        assert_eq!(roundtrip, marker);
-        assert_eq!(roundtrip.evaluate(environment, &[]), expected);
+        if let Some(printed) = marker.try_to_string() {
+            let roundtrip: MarkerTree = printed.parse()?;
+            assert_eq!(roundtrip, marker);
+            assert_eq!(roundtrip.evaluate(environment, &[]), expected);
+        } else {
+            assert!(marker.is_true());
+        }
 
         let serialized = serde_json::to_string(&marker.contents())?;
-        let roundtrip: MarkerTree = serde_json::from_str(&serialized)?;
+        let roundtrip: Option<MarkerTree> = serde_json::from_str(&serialized)?;
+        let roundtrip = roundtrip.unwrap_or_default();
         assert_eq!(roundtrip, marker);
         assert_eq!(roundtrip.evaluate(environment, &[]), expected);
     }
@@ -47,290 +48,226 @@ fn assert_roundtrip(
 }
 
 #[test]
-fn darwin_release_exact_equality() -> Result<(), Box<dyn Error>> {
-    let equality: MarkerTree = "platform_release == '24'".parse()?;
-    let inequality: MarkerTree = "platform_release != '24'".parse()?;
-    assert_eq!(equality.negate(), inequality);
+fn darwin_invalid_release_negation() -> Result<(), Box<dyn Error>> {
+    let marker: MarkerTree = "sys_platform == 'darwin' and platform_release == '24'".parse()?;
+    let inequality: MarkerTree = "sys_platform == 'darwin' and platform_release != '24'".parse()?;
 
-    for (sys_platform, release, expected) in [
-        ("darwin", "", false),
-        ("darwin", "not-a-version", false),
-        ("darwin", "24", true),
-        ("darwin", "24.0.0", true),
-        ("darwin", "25", false),
-        ("linux", "", false),
-        ("linux", "24", true),
-        ("linux", "24.0.0", false),
-    ] {
-        let environment = environment(sys_platform, release, "3.13")?;
-        assert_roundtrip(equality, &environment, expected)?;
-        assert_eq!(inequality.evaluate(&environment, &[]), !expected);
+    for release in ["not-a-version", ""] {
+        let environment = environment("darwin", release)?;
+        assert!(!marker.evaluate(&environment, &[]));
+        assert!(marker.negate().evaluate(&environment, &[]));
+        assert!(inequality.evaluate(&environment, &[]));
     }
     Ok(())
 }
 
 #[test]
-fn darwin_release_exact_equality_sets() -> Result<(), Box<dyn Error>> {
-    let included: MarkerTree = "platform_release == '24' or platform_release == '25'".parse()?;
-    let excluded: MarkerTree = "platform_release != '24' and platform_release != '25'".parse()?;
-    assert_eq!(included.negate(), excluded);
+fn darwin_invalid_release_union() -> Result<(), Box<dyn Error>> {
+    let environment = environment("darwin", "3-invalid")?;
+    let lower: MarkerTree = "sys_platform == 'darwin' and platform_release >= '9'".parse()?;
+    let upper: MarkerTree = "sys_platform == 'darwin' and platform_release < '24'".parse()?;
+    let union: MarkerTree =
+        "sys_platform == 'darwin' and (platform_release >= '9' or platform_release < '24')"
+            .parse()?;
 
-    for (release, expected) in [
-        ("", false),
-        ("not-a-version", false),
-        ("23", false),
-        ("24", true),
-        ("24.0.0", true),
-        ("24.1", false),
-        ("25", true),
-        ("26", false),
-    ] {
-        let environment = environment("darwin", release, "3.13")?;
-        assert_roundtrip(included, &environment, expected)?;
-        assert_eq!(excluded.evaluate(&environment, &[]), !expected);
+    // The numeric ranges cover all versions, but their lexical ranges leave a gap.
+    assert!(!lower.evaluate(&environment, &[]));
+    assert!(!upper.evaluate(&environment, &[]));
+    assert!(!lower.or(upper).evaluate(&environment, &[]));
+    assert_roundtrip(union, &environment, false)?;
+    Ok(())
+}
+
+#[test]
+fn darwin_release_disjointness_includes_lexical_ranges() -> Result<(), Box<dyn Error>> {
+    let lower: MarkerTree = "sys_platform == 'darwin' and platform_release >= '25'".parse()?;
+    let upper: MarkerTree = "sys_platform == 'darwin' and platform_release < '24'".parse()?;
+    assert!(lower.is_disjoint(upper));
+
+    let lower: MarkerTree = "sys_platform == 'darwin' and platform_release >= '24'".parse()?;
+    let upper: MarkerTree = "sys_platform == 'darwin' and platform_release < '9'".parse()?;
+    // These numeric ranges are disjoint, but both lexical comparisons accept this release.
+    assert!(!lower.is_disjoint(upper));
+    let environment = environment("darwin", "3-invalid")?;
+    assert!(lower.evaluate(&environment, &[]));
+    assert!(upper.evaluate(&environment, &[]));
+    assert!(lower.and(upper).evaluate(&environment, &[]));
+    Ok(())
+}
+
+#[test]
+fn darwin_release_restriction_preserves_assumption() -> Result<(), Box<dyn Error>> {
+    let required: MarkerTree = "sys_platform == 'darwin' and platform_release == '24'".parse()?;
+    let coverage: MarkerTree = "sys_platform == 'darwin' and platform_release >= '25'".parse()?;
+    let assumption = required.or(coverage);
+    let darwin: MarkerTree = "sys_platform == 'darwin'".parse()?;
+    let split = required.restrict(assumption).and(darwin);
+
+    for release in ["24", "24.0", "24.1", "25", "25-invalid", ""] {
+        let environment = environment("darwin", release)?;
+        assert_roundtrip(split, &environment, split.evaluate(&environment, &[]))?;
+        if assumption.evaluate(&environment, &[]) {
+            assert_eq!(
+                split.evaluate(&environment, &[]),
+                required.evaluate(&environment, &[])
+            );
+        }
     }
     Ok(())
 }
 
 #[test]
-fn darwin_release_exact_equality_python_branches() -> Result<(), Box<dyn Error>> {
-    let marker: MarkerTree = "(platform_release == '24' and python_version >= '3.13') or \
-         (platform_release != '24' and python_version < '3.13')"
-        .parse()?;
-
-    // Releases other than 24 select the Python <3.13 branch, including opaque releases.
-    for (python_version, equal, other) in [("3.12", false, true), ("3.13", true, false)] {
-        for (release, expected) in [
-            ("", other),
-            ("not-a-version", other),
-            ("24", equal),
-            ("24.0.0", equal),
-            ("25", other),
-        ] {
-            let environment = environment("darwin", release, python_version)?;
+fn darwin_release_numeric_and_lexical_comparisons() -> Result<(), Box<dyn Error>> {
+    for (sys_platform, release, constant, expected) in [
+        (
+            "darwin",
+            "23",
+            "24",
+            [false, true, true, true, false, false],
+        ),
+        (
+            "darwin",
+            "24.0.0",
+            "24",
+            [true, false, false, true, false, true],
+        ),
+        (
+            "darwin",
+            "24.10",
+            "24.9",
+            [false, true, false, false, true, true],
+        ),
+        ("darwin", "", "24", [false, true, true, true, false, false]),
+        (
+            "darwin",
+            "not-a-version",
+            "24",
+            [false, true, false, false, true, true],
+        ),
+        (
+            "darwin",
+            "24",
+            "opaque",
+            [false, true, true, true, false, false],
+        ),
+        (
+            "darwin",
+            "opaque",
+            "opaque",
+            [true, false, false, true, false, true],
+        ),
+        (
+            "linux",
+            "24.10",
+            "24.9",
+            [false, true, true, true, false, false],
+        ),
+        (
+            "linux",
+            "24.0.0",
+            "24",
+            [false, true, false, false, true, true],
+        ),
+    ] {
+        let environment = environment(sys_platform, release)?;
+        for (operator, expected) in ["==", "!=", "<", "<=", ">", ">="].into_iter().zip(expected) {
+            let marker: MarkerTree = format!("platform_release {operator} '{constant}'").parse()?;
             assert_roundtrip(marker, &environment, expected)?;
         }
     }
     Ok(())
 }
 
-fn assert_extended_evaluation(
-    marker: MarkerTree,
-    environment: &MarkerEnvironment,
-    expected: bool,
-) -> Result<(), Box<dyn Error>> {
-    for (marker, expected) in [(marker, expected), (marker.negate(), !expected)] {
-        assert_eq!(marker.evaluate(environment, &[]), expected);
-        if let Some(printed) = marker.to_extended_string() {
-            let roundtrip = MarkerTree::parse_extended(&printed)?;
-            assert_eq!(roundtrip.evaluate(environment, &[]), expected, "{printed}");
-        } else {
-            assert!(marker.is_true());
-        }
-    }
-    Ok(())
-}
-
 #[test]
-fn darwin_release_comparison_fallback() -> Result<(), Box<dyn Error>> {
-    for (release, constant, expected) in [
-        ("23", "24", [false, true, true, true, false, false]),
-        ("24", "24", [true, false, false, true, false, true]),
-        ("24.0.0", "24", [true, false, false, true, false, true]),
-        ("25", "24", [false, true, false, false, true, true]),
-        ("24.10", "24.9", [false, true, false, false, true, true]),
-        ("", "24", [false, true, false, false, false, false]),
-        (
-            "not-a-version",
-            "24",
-            [false, true, false, false, false, false],
-        ),
-        ("24", "opaque", [false, true, false, false, false, false]),
-        ("opaque", "opaque", [true, false, false, true, false, true]),
-        (
-            "different",
-            "opaque",
-            [false, true, false, false, false, false],
-        ),
-        ("", "", [true, false, false, true, false, true]),
-        ("24.10", "24.*", [true, false, false, false, false, false]),
-        ("25", "24.*", [false, true, false, false, false, false]),
-        ("24.*", "24.*", [true, false, false, true, false, true]),
-    ] {
-        let environment = environment("darwin", release, "3.13")?;
-        for (operator, expected) in ["==", "!=", "<", "<=", ">", ">="].into_iter().zip(expected) {
-            let expression =
-                format!("sys_platform == 'darwin' and platform_release {operator} '{constant}'");
-            let marker: MarkerTree = expression.parse()?;
-            assert_eq!(
-                marker.evaluate(&environment, &[]),
-                expected,
-                "{expression}, release={release}"
-            );
-            assert_extended_evaluation(marker, &environment, expected)?;
-
-            let printed = marker.try_to_pep508()?.ok_or("missing marker contents")?;
-            let roundtrip: MarkerTree = printed.parse()?;
-            assert_eq!(
-                roundtrip.evaluate(&environment, &[]),
-                expected,
-                "{printed}, release={release}"
-            );
-        }
-    }
-    Ok(())
-}
-
-#[test]
-fn darwin_release_composition_retains_opaque_domain() -> Result<(), Box<dyn Error>> {
-    for (left, right) in [
-        ("platform_release >= '9'", "platform_release < '24'"),
-        ("platform_release < '24'", "platform_release > '24'"),
-    ] {
-        let left: MarkerTree = left.parse()?;
-        let right: MarkerTree = right.parse()?;
-        for release in ["", "not-a-version", "3-invalid", "9", "24", "25"] {
-            let environment = environment("darwin", release, "3.13")?;
-            let left_value = left.evaluate(&environment, &[]);
-            let right_value = right.evaluate(&environment, &[]);
-            assert_extended_evaluation(left.or(right), &environment, left_value || right_value)?;
-            assert_extended_evaluation(left.and(right), &environment, left_value && right_value)?;
-        }
-        for release in ["", "not-a-version", "3-invalid"] {
-            let environment = environment("darwin", release, "3.13")?;
-            assert!(!left.or(right).evaluate(&environment, &[]));
-        }
-    }
-    Ok(())
-}
-
-#[test]
-fn darwin_release_negated_ordering_serialization() -> Result<(), Box<dyn Error>> {
-    let darwin: MarkerTree = "sys_platform == 'darwin'".parse()?;
+fn darwin_release_composition_matches_individual_comparisons() -> Result<(), Box<dyn Error>> {
     let lower: MarkerTree = "platform_release < '24'".parse()?;
-    let upper: MarkerTree = "platform_release >= '24'".parse()?;
-    let complement = darwin.and(lower.negate());
-    let opaque = darwin.and(lower.or(upper).negate());
-
-    assert!(complement.try_to_pep508().is_err());
-    assert!(opaque.try_to_pep508().is_err());
-    for (release, complement_expected, opaque_expected) in [
-        ("", true, true),
-        ("not-a-version", true, true),
-        ("23", false, false),
-        ("24", true, false),
-        ("25", true, false),
-    ] {
-        let environment = environment("darwin", release, "3.13")?;
-        assert_extended_evaluation(complement, &environment, complement_expected)?;
-        assert_extended_evaluation(opaque, &environment, opaque_expected)?;
+    let upper: MarkerTree = "platform_release > '24'".parse()?;
+    let outside: MarkerTree = "platform_release != '24'".parse()?;
+    for sys_platform in ["darwin", "linux"] {
+        for release in ["", "not-a-version", "24", "24.0", "25"] {
+            let environment = environment(sys_platform, release)?;
+            let lower_value = lower.evaluate(&environment, &[]);
+            let upper_value = upper.evaluate(&environment, &[]);
+            assert_eq!(
+                outside.evaluate(&environment, &[]),
+                lower_value || upper_value
+            );
+            assert_roundtrip(lower.or(upper), &environment, lower_value || upper_value)?;
+            assert_roundtrip(lower.and(upper), &environment, lower_value && upper_value)?;
+        }
     }
     Ok(())
 }
 
 #[test]
-fn logical_negation_requires_extended_parser() -> Result<(), Box<dyn Error>> {
-    let darwin: MarkerTree = "sys_platform == 'darwin'".parse()?;
-    let lower: MarkerTree = "platform_release < '24'".parse()?;
-    let upper: MarkerTree = "platform_release >= '24'".parse()?;
-    let equality: MarkerTree = "platform_release == '25'".parse()?;
+fn darwin_release_roundtrip_retains_lexical_threshold() -> Result<(), Box<dyn Error>> {
+    let environment = environment("darwin", "24-invalid")?;
+
+    // These thresholds denote the same version but have different lexical ordering.
     for (expression, expected) in [
-        ("not (sys_platform == 'darwin')", darwin.negate()),
-        ("not (not (platform_release < '24'))", lower),
         (
-            "not (platform_release < '24' or platform_release >= '24')",
-            lower.or(upper).negate(),
+            "sys_platform == 'darwin' and platform_release >= '24'",
+            true,
         ),
         (
-            "sys_platform == 'darwin' and not (platform_release < '24') or platform_release == '25'",
-            darwin.and(lower.negate()).or(equality),
+            "sys_platform == 'darwin' and platform_release >= '24.0'",
+            false,
         ),
     ] {
-        assert!(expression.parse::<MarkerTree>().is_err());
-        assert_eq!(MarkerTree::parse_extended(expression)?, expected);
+        let marker: MarkerTree = expression.parse()?;
+        assert_roundtrip(marker, &environment, expected)?;
     }
-    for expression in [
-        "not platform_release < '24'",
-        "not ()",
-        "not (platform_release < '24'",
-        "notx (platform_release < '24')",
-    ] {
-        assert!(MarkerTree::parse_extended(expression).is_err());
-    }
-    let membership = "platform_release not in '24'";
-    assert_eq!(MarkerTree::parse_extended(membership)?, membership.parse()?);
     Ok(())
 }
 
 #[test]
-fn release_domain_expression_roundtrip() -> Result<(), Box<dyn Error>> {
-    for valid in [false, true] {
-        let expression = MarkerExpression::VersionStringDomain {
-            key: MarkerValueString::PlatformRelease,
-            valid,
-        };
-        let marker = MarkerTree::expression(expression.clone());
-        assert_eq!(MarkerTree::parse_extended(&expression.to_string())?, marker);
-        let printed = marker
-            .to_extended_string()
-            .ok_or("missing marker contents")?;
-        assert_eq!(MarkerTree::parse_extended(&printed)?, marker);
+fn darwin_release_wildcard_roundtrip() -> Result<(), Box<dyn Error>> {
+    let marker: MarkerTree = "sys_platform == 'darwin' and platform_release == '24.*'".parse()?;
+    for (release, expected) in [
+        ("24.10", true),
+        ("24.*", true),
+        ("24-invalid", false),
+        ("", false),
+    ] {
+        let environment = environment("darwin", release)?;
+        assert_roundtrip(marker, &environment, expected)?;
+    }
+    Ok(())
+}
 
-        for (sys_platform, release, numeric_domain) in [
-            ("darwin", "24", true),
-            ("darwin", "not-a-version", false),
-            ("linux", "24", true),
-            ("linux", "not-a-version", true),
+#[test]
+fn darwin_release_collective_contradictions() -> Result<(), Box<dyn Error>> {
+    let darwin: MarkerTree = "sys_platform == 'darwin'".parse()?;
+    for expressions in [
+        [
+            "platform_release != '24'",
+            "platform_release <= '24'",
+            "platform_release >= '24'",
+        ],
+        [
+            "platform_release <= '9'",
+            "platform_release >= '24'",
+            "platform_release <= '100'",
+        ],
+    ] {
+        let markers = expressions
+            .map(str::parse::<MarkerTree>)
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+        // Each pair has a numeric or lexical witness, but all three constraints cannot hold.
+        for [first, second, third] in [
+            [0, 1, 2],
+            [0, 2, 1],
+            [1, 0, 2],
+            [1, 2, 0],
+            [2, 0, 1],
+            [2, 1, 0],
         ] {
-            let environment = environment(sys_platform, release, "3.13")?;
-            assert_eq!(marker.evaluate(&environment, &[]), valid == numeric_domain);
+            let pair = darwin.and(markers[first]).and(markers[second]);
+            assert!(!pair.is_false());
+            assert!(pair.is_disjoint(markers[third]));
+            assert!(pair.and(markers[third]).is_false());
         }
     }
-    Ok(())
-}
-
-#[test]
-fn darwin_release_compound_standard_serialization() -> Result<(), Box<dyn Error>> {
-    for expression in [
-        "python_version < '3.13' or platform_release < '24'",
-        "platform_release < '24' or (platform_release != '25' and python_version >= '3.13')",
-        "platform_release != '0' and platform_release != '24.*'",
-        "platform_release != '25' and platform_release != '24.*'",
-        "platform_release != '24.0.*' and platform_release != '25'",
-        "platform_release != '24.*' or platform_release >= '24.*'",
-        "(platform_release != '24.*' or platform_release <= '24') and platform_release != '9'",
-        "(platform_release != '24.*' or platform_release >= '24.*') and \
-         (platform_release != '25.*' or platform_release >= '25.*')",
-        "(platform_release != '24.1.*' or platform_release >= '24.1.*') and \
-         (platform_release != '24.2.*' or platform_release >= '24.2.*')",
-    ] {
-        for expression in [
-            expression.to_string(),
-            format!("sys_platform == 'darwin' and ({expression})"),
-        ] {
-            let marker: MarkerTree = expression.parse()?;
-            let printed = marker.try_to_pep508()?.ok_or("missing marker contents")?;
-            let roundtrip: MarkerTree = printed.parse()?;
-            assert_eq!(roundtrip, marker, "{expression}: {printed}");
-
-            let serialized = serde_json::to_string(&marker.contents())?;
-            assert_eq!(serde_json::from_str::<MarkerTree>(&serialized)?, marker);
-        }
-    }
-    Ok(())
-}
-
-#[test]
-fn darwin_release_standard_serialization_expansion_limit() -> Result<(), Box<dyn Error>> {
-    let marker = MarkerTree::parse_extended(
-        "sys_platform == 'darwin' and \
-         (platform_release < '24' or platform_release >= '1000000' or \
-          not (platform_release < '0' or platform_release >= '0'))",
-    )?;
-    assert!(marker.try_to_pep508().is_err());
-    let printed = marker
-        .to_extended_string()
-        .ok_or("missing marker contents")?;
-    assert_eq!(MarkerTree::parse_extended(&printed)?, marker);
     Ok(())
 }

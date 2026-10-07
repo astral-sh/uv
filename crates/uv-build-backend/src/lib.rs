@@ -24,7 +24,6 @@ use tracing::debug;
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::PortableGlobError;
 use uv_normalize::PackageName;
-use uv_pep508::MarkerSerializationError;
 use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
@@ -42,8 +41,6 @@ pub enum Error {
     TomlSerialize(#[source] toml::ser::Error),
     #[error("Invalid project metadata")]
     Validation(#[from] ValidationError),
-    #[error("Failed to serialize dependency markers in package metadata")]
-    MarkerSerialization(#[from] MarkerSerializationError),
     #[error("Invalid module name: {0}")]
     InvalidModuleName(String, #[source] IdentifierParseError),
     #[error("Unsupported glob expression in: {field}")]

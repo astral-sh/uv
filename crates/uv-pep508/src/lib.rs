@@ -24,8 +24,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use itertools::Itertools;
-#[cfg(feature = "rkyv")]
-use rkyv::rancor::Source;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
@@ -38,10 +36,9 @@ pub(crate) use crate::marker::MarkerValue;
 pub use crate::marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
-    MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerSerializationError,
-    MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValueExtra, MarkerValueList,
-    MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion,
-    VersionMarkerTree, VersionStringMarkerTree,
+    MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
+    MarkerTreeKind, MarkerValueExtra, MarkerValueList, MarkerValueString, MarkerValueVersion,
+    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree, VersionStringMarkerTree,
 };
 pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -159,21 +156,13 @@ impl<T: Pep508Url> Requirement<T> {
 
     /// Returns a [`Display`] implementation that doesn't mask credentials.
     pub fn displayable_with_credentials(&self) -> impl Display {
-        std::fmt::from_fn(|f| fmt_requirement(self, f, true, self.marker.contents()))
-    }
-
-    /// Format this requirement using standard PEP 508 marker syntax.
-    ///
-    /// Returns an error if the marker cannot be expressed without logical negation.
-    pub fn to_pep508(&self) -> Result<String, MarkerSerializationError> {
-        let marker = self.marker.try_to_pep508()?;
-        Ok(std::fmt::from_fn(|f| fmt_requirement(self, f, false, marker.as_deref())).to_string())
+        std::fmt::from_fn(|f| fmt_requirement(self, f, true))
     }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        fmt_requirement(self, f, false, self.marker.contents())
+        fmt_requirement(self, f, false)
     }
 }
 
@@ -181,7 +170,6 @@ fn fmt_requirement<T: Pep508Url + Display>(
     requirement: &Requirement<T>,
     f: &mut Formatter<'_>,
     display_credentials: bool,
-    marker: Option<impl Display>,
 ) -> std::fmt::Result {
     write!(f, "{}", requirement.name)?;
     if !requirement.extras.is_empty() {
@@ -202,7 +190,7 @@ fn fmt_requirement<T: Pep508Url + Display>(
             }
         }
     }
-    if let Some(marker) = marker {
+    if let Some(marker) = requirement.marker.contents() {
         write!(f, " ; {marker}")?;
     }
     Ok(())
@@ -241,8 +229,7 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     where
         S: Serializer,
     {
-        let requirement = self.to_pep508().map_err(serde::ser::Error::custom)?;
-        serializer.serialize_str(&requirement)
+        serializer.collect_str(self)
     }
 }
 
@@ -1043,11 +1030,11 @@ fn parse_pep508_requirement<T: Pep508Url>(
 /// An [`rkyv`] implementation for [`Requirement`].
 impl<T: Pep508Url + Display> rkyv::Archive for Requirement<T> {
     type Archived = rkyv::string::ArchivedString;
-    type Resolver = (rkyv::string::StringResolver, String);
+    type Resolver = rkyv::string::StringResolver;
 
     #[inline]
     fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
-        let (resolver, as_str) = resolver;
+        let as_str = self.to_string();
         rkyv::string::ArchivedString::resolve_from_str(&as_str, resolver, out);
     }
 }
@@ -1059,9 +1046,8 @@ where
     S::Error: rkyv::rancor::Source,
 {
     fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        let as_str = self.to_pep508().map_err(S::Error::new)?;
-        let resolver = rkyv::string::ArchivedString::serialize_from_str(&as_str, serializer)?;
-        Ok((resolver, as_str))
+        let as_str = self.to_string();
+        rkyv::string::ArchivedString::serialize_from_str(&as_str, serializer)
     }
 }
 
@@ -1079,7 +1065,6 @@ impl<T: Pep508Url + Display, D: rkyv::rancor::Fallible + ?Sized>
 mod tests {
     //! Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>
 
-    use std::error::Error;
     use std::str::FromStr;
 
     use insta::assert_snapshot;
@@ -1093,44 +1078,6 @@ mod tests {
     use crate::{
         MarkerOperator, MarkerValueString, Requirement, TracingReporter, VerbatimUrl, VersionOrUrl,
     };
-
-    #[test]
-    fn serialize_requirement_markers() -> Result<(), Box<dyn Error>> {
-        let mut requirement =
-            Requirement::<VerbatimUrl>::from_str("example>=1 ; python_version >= '3.9'")?;
-        let serialized = serde_json::to_string(&requirement)?;
-        assert_eq!(
-            serde_json::from_str::<Requirement>(&serialized)?,
-            requirement
-        );
-        assert_eq!(requirement.to_pep508()?, requirement.to_string());
-
-        requirement.marker = MarkerTree::expression(MarkerExpression::VersionStringDomain {
-            key: MarkerValueString::PlatformRelease,
-            valid: false,
-        });
-        assert_snapshot!(serde_json::to_string(&requirement).unwrap_err(), @"cannot serialize this marker in standard dependency marker syntax while preserving opaque `platform_release` values");
-        Ok(())
-    }
-
-    #[cfg(feature = "rkyv")]
-    #[test]
-    fn archive_requirement_markers() -> Result<(), Box<dyn Error>> {
-        let mut requirement =
-            Requirement::<VerbatimUrl>::from_str("example>=1 ; python_version >= '3.9'")?;
-        let serialized = rkyv::to_bytes::<rkyv::rancor::Error>(&requirement)?;
-        assert_eq!(
-            rkyv::from_bytes::<Requirement, rkyv::rancor::Error>(&serialized)?,
-            requirement
-        );
-
-        requirement.marker = MarkerTree::expression(MarkerExpression::VersionStringDomain {
-            key: MarkerValueString::PlatformRelease,
-            valid: false,
-        });
-        assert!(rkyv::to_bytes::<rkyv::rancor::Error>(&requirement).is_err());
-        Ok(())
-    }
 
     fn parse_pep508_err(input: &str) -> String {
         Requirement::<VerbatimUrl>::from_str(input)

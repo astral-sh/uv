@@ -712,10 +712,7 @@ impl PyProjectToml {
                 .cloned()
                 .map(Into::into)
                 .collect(),
-            requires_dist: requires_dist
-                .iter()
-                .map(Requirement::to_pep508)
-                .collect::<Result<_, _>>()?,
+            requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
             provides_extra: extras.iter().map(ToString::to_string).collect(),
             // Not commonly set.
             provides_dist: vec![],
@@ -1289,7 +1286,7 @@ mod tests {
     use insta::assert_snapshot;
     use std::iter;
     use tempfile::TempDir;
-    use uv_pep508::{MarkerEnvironmentBuilder, MarkerValueString};
+    use uv_pep508::MarkerEnvironmentBuilder;
 
     fn extend_project(payload: &str) -> String {
         formatdoc! {r#"
@@ -1311,24 +1308,6 @@ mod tests {
             let _ = write!(formatted, "\n  Caused by: {source}");
         }
         formatted
-    }
-
-    #[test]
-    fn unrepresentable_dependency_marker() -> Result<(), Box<dyn std::error::Error>> {
-        let mut pyproject_toml: PyProjectToml = toml::from_str(&extend_project(""))?;
-        let mut requirement = Requirement::from_str("example")?;
-        requirement.marker = MarkerTree::expression(MarkerExpression::VersionStringDomain {
-            key: MarkerValueString::PlatformRelease,
-            valid: false,
-        });
-        pyproject_toml.project.dependencies = Some(vec![requirement]);
-        let temp_dir = TempDir::new()?;
-
-        assert_snapshot!(format_err(pyproject_toml.to_metadata(temp_dir.path()).unwrap_err()), @"
-        Failed to serialize dependency markers in package metadata
-          Caused by: cannot serialize this marker in standard dependency marker syntax while preserving opaque `platform_release` values
-        ");
-        Ok(())
     }
 
     #[test]

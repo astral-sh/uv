@@ -575,27 +575,13 @@ fn parse_extra_expr(
 /// marker_expr   = marker_var:l marker_op:o marker_var:r -> (o, l, r)
 ///               | wsp* '(' marker:m wsp* ')' -> m
 /// ```
-/// Extended parsing additionally accepts `not (<marker>)`.
 fn parse_marker_expr<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
-    allow_not: bool,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     cursor.eat_whitespace();
-    if allow_not {
-        let (start, len) = cursor.peek_while(|char| !char.is_whitespace() && char != '(');
-        if cursor.slice(start, len) == "not" {
-            cursor.take_while(|char| !char.is_whitespace() && char != '(');
-            cursor.eat_whitespace();
-            let start_pos = cursor.pos();
-            cursor.next_expect_char('(', start_pos)?;
-            let marker = parse_marker_or(cursor, reporter, allow_not)?;
-            cursor.next_expect_char(')', start_pos)?;
-            return Ok(marker.map(MarkerTree::negate));
-        }
-    }
     if let Some(start_pos) = cursor.eat_char('(') {
-        let marker = parse_marker_or(cursor, reporter, allow_not)?;
+        let marker = parse_marker_or(cursor, reporter)?;
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
@@ -610,16 +596,8 @@ fn parse_marker_expr<T: Pep508Url>(
 fn parse_marker_and<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
-    allow_not: bool,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    parse_marker_op(
-        cursor,
-        "and",
-        MarkerTree::and,
-        parse_marker_expr,
-        reporter,
-        allow_not,
-    )
+    parse_marker_op(cursor, "and", MarkerTree::and, parse_marker_expr, reporter)
 }
 
 /// ```text
@@ -629,15 +607,13 @@ fn parse_marker_and<T: Pep508Url>(
 fn parse_marker_or<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
-    allow_not: bool,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     parse_marker_op(
         cursor,
         "or",
         MarkerTree::or,
-        parse_marker_and,
+        |cursor, reporter| parse_marker_and(cursor, reporter),
         reporter,
-        allow_not,
     )
 }
 
@@ -647,14 +623,13 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
     op: &str,
     apply: fn(MarkerTree, MarkerTree) -> MarkerTree,
-    parse_inner: fn(&mut Cursor, &mut R, bool) -> Result<Option<MarkerTree>, Pep508Error<T>>,
+    parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
     reporter: &mut R,
-    allow_not: bool,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     let mut tree = None;
 
     // marker_and or marker_expr
-    let first_element = parse_inner(cursor, reporter, allow_not)?;
+    let first_element = parse_inner(cursor, reporter)?;
 
     if let Some(expression) = first_element {
         tree = Some(match tree {
@@ -672,7 +647,7 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
             value if value == op => {
                 cursor.take_while(|c| !c.is_whitespace());
 
-                if let Some(expression) = parse_inner(cursor, reporter, allow_not)? {
+                if let Some(expression) = parse_inner(cursor, reporter)? {
                     tree = Some(match tree {
                         Some(tree) => apply(tree, expression),
                         None => expression,
@@ -691,16 +666,7 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    parse_markers_cursor_impl(cursor, reporter, false)
-}
-
-/// Parses a complete marker with an explicit choice of whether to accept logical negation.
-fn parse_markers_cursor_impl<T: Pep508Url>(
-    cursor: &mut Cursor,
-    reporter: &mut impl Reporter,
-    allow_not: bool,
-) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    let marker = parse_marker_or(cursor, reporter, allow_not)?;
+    let marker = parse_marker_or(cursor, reporter)?;
     cursor.eat_whitespace();
     if let Some((pos, unexpected)) = cursor.next() {
         // If we're here, both parse_marker_or and parse_marker_and returned because the next
@@ -730,14 +696,4 @@ pub(crate) fn parse_markers<T: Pep508Url>(
     // If the tree consisted entirely of arbitrary expressions
     // that were ignored, it evaluates to true.
     parse_markers_cursor(&mut chars, reporter).map(|result| result.unwrap_or(MarkerTree::TRUE))
-}
-
-/// Parses markers with the `not (<marker>)` extension used for internal serialization.
-pub(crate) fn parse_markers_extended<T: Pep508Url>(
-    markers: &str,
-    reporter: &mut impl Reporter,
-) -> Result<MarkerTree, Pep508Error<T>> {
-    let mut cursor = Cursor::new(markers);
-    parse_markers_cursor_impl(&mut cursor, reporter, true)
-        .map(|result| result.unwrap_or(MarkerTree::TRUE))
 }

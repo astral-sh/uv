@@ -705,8 +705,6 @@ async fn render_export<'output>(
                     .await?;
             }
 
-            let export = export.to_toml()?;
-
             if include_header {
                 writeln!(
                     writer,
@@ -715,7 +713,7 @@ async fn render_export<'output>(
                 )?;
                 writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
             }
-            write!(writer, "{export}")?;
+            write!(writer, "{}", export.to_toml()?)?;
         }
         ExportFormat::CycloneDX1_5 => {
             let export = cyclonedx_json::from_lock(

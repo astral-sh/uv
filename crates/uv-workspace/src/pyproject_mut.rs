@@ -15,7 +15,7 @@ use uv_distribution_types::{Index, IndexFormat, IndexUrl};
 use uv_fs::{PortablePath, is_same_file_allow_missing, try_relative_to_if};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerSerializationError, MarkerTree, Requirement, VersionOrUrl};
+use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -49,8 +49,6 @@ pub enum Error {
     Parse(#[from] Box<TomlError>),
     #[error("Failed to serialize `pyproject.toml`")]
     Serialize(#[from] Box<toml::ser::Error>),
-    #[error("Failed to serialize dependency markers in `pyproject.toml`")]
-    MarkerSerialization(#[from] MarkerSerializationError),
     #[error("Failed to deserialize `pyproject.toml`")]
     Deserialize(#[from] Box<toml::de::Error>),
     #[error("Dependencies in `pyproject.toml` are malformed")]
@@ -378,7 +376,7 @@ impl PyProjectTomlMut {
             return Ok(Vec::new());
         };
 
-        let replacement = replacement.to_pep508()?;
+        let replacement = replacement.to_string();
         let mut edits = Vec::new();
         for (index, requirement) in
             find_dependencies(&existing.name, Some(&existing.marker), dependencies)
@@ -901,7 +899,7 @@ impl PyProjectTomlMut {
         req.version_or_url = Some(VersionOrUrl::VersionSpecifier(
             bound_kind.specifiers(version),
         ));
-        group.replace(index, req.to_pep508()?);
+        group.replace(index, req.to_string());
 
         Ok(())
     }
@@ -1496,10 +1494,9 @@ fn add_dependency(
             };
 
             let req_string = if raw {
-                req.marker.try_to_pep508()?;
                 req.displayable_with_credentials().to_string()
             } else {
-                req.to_pep508()?
+                req.to_string()
             };
             let index = match sort {
                 Sort::CaseInsensitive => deps.iter().position(|dep| {
@@ -1683,7 +1680,7 @@ fn add_dependency(
         [_] => {
             let (i, mut old_req) = to_replace.remove(0);
             update_requirement(&mut old_req, req, has_source);
-            deps.replace(i, old_req.to_pep508()?);
+            deps.replace(i, old_req.to_string());
             reformat_array_multiline(deps);
             Ok(ArrayEdit::Update(i))
         }
@@ -2009,38 +2006,7 @@ mod test {
     use uv_distribution_types::Index;
     use uv_normalize::{ExtraName, GroupName, PackageName};
     use uv_pep440::Version;
-    use uv_pep508::{
-        MarkerExpression, MarkerTree, MarkerValueString, Requirement, RequirementOrigin,
-    };
-
-    #[test]
-    fn unrepresentable_dependency_marker() -> Result<()> {
-        let mut requirement = Requirement::from_str("example")?;
-        requirement.marker = MarkerTree::expression(MarkerExpression::VersionStringDomain {
-            key: MarkerValueString::PlatformRelease,
-            valid: false,
-        });
-
-        let mut errors = Vec::new();
-        for raw in [false, true] {
-            let mut pyproject = PyProjectTomlMut::from_toml(
-                "[project]\ndependencies = []\n",
-                DependencyTarget::PyProjectToml,
-            )?;
-            errors.push(
-                pyproject
-                    .add_dependency(&requirement, None, raw)
-                    .unwrap_err()
-                    .to_string(),
-            );
-            assert_eq!(pyproject.to_string(), "[project]\ndependencies = []\n");
-        }
-        assert_snapshot!(errors.join("\n"), @"
-        Failed to serialize dependency markers in `pyproject.toml`
-        Failed to serialize dependency markers in `pyproject.toml`
-        ");
-        Ok(())
-    }
+    use uv_pep508::{Requirement, RequirementOrigin};
 
     #[test]
     fn split() {

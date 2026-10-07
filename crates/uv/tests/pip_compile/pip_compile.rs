@@ -14360,22 +14360,24 @@ fn python_platform_empty_release() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let wheels = context.temp_dir.child("wheels");
-    let (filename, wheel) = generate_wheel(
-        &"included".parse()?,
-        &"1".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
-    wheels.child(filename).write_binary(&wheel)?;
+    for name in ["included", "included-less"] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &"1".parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
         included==1 ; platform_release != '24'
         excluded ; platform_release == '24'
-        excluded-less ; sys_platform == 'darwin' and platform_release < '24'
+        included-less==1 ; sys_platform == 'darwin' and platform_release < '24'
         excluded-greater-equal ; sys_platform == 'darwin' and platform_release >= '24'
     "})?;
 
@@ -14389,9 +14391,10 @@ fn python_platform_empty_release() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     included==1
+    included-less==1
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.pip_compile()

@@ -50,8 +50,7 @@ use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerSerializationError, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError,
-    split_scheme,
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
@@ -95,24 +94,19 @@ mod tree;
 #[cfg(test)]
 mod windows_emulation_tests;
 
-/// The lockfile version used when all markers are representable in PEP 508.
+/// The current version of the lockfile format.
 const VERSION: u32 = 1;
-
-/// The lockfile version that supports logical negation in generated markers.
-const EXTENDED_MARKERS_VERSION: u32 = 2;
 
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
     /// The lockfile uses an unsupported schema version.
-    #[error(
-        "unsupported lockfile schema version (v{version}, but the latest supported version is v{supported})"
-    )]
+    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
     UnsupportedVersion { supported: u32, version: u32 },
 
     /// The lockfile cannot be parsed and uses an unsupported schema version.
     #[error(
-        "failed to parse lockfile using an unsupported schema version (v{version}, but the latest supported version is v{supported})"
+        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
     )]
     UnparsableVersion {
         supported: u32,
@@ -319,8 +313,11 @@ pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
     /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
-    /// lockfile format. Version 2 adds logical negation to generated markers. Readers support
-    /// both versions, while writers use version 1 when standard marker syntax is sufficient.
+    /// lockfile format. A given uv version only supports a single major version of the lockfile
+    /// format.
+    ///
+    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
+    /// able to read lockfiles generated under version 1 or 3.
     version: u32,
     /// The revision of the lockfile format.
     ///
@@ -2656,13 +2653,11 @@ impl Lock {
         } else {
             lock
         };
-        let mut lock = if metadata_free {
+        Ok(if metadata_free {
             lock.without_package_metadata()
         } else {
             lock
-        };
-        lock.version = lock.marker_format_version();
-        Ok(lock)
+        })
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -2838,7 +2833,6 @@ impl Lock {
             .into_iter()
             .map(|marker| self.requires_python.complexify_markers(marker))
             .collect();
-        self.version = self.marker_format_version();
         self
     }
 
@@ -2956,47 +2950,6 @@ impl Lock {
     /// Returns the lockfile version.
     fn version(&self) -> u32 {
         self.version
-    }
-
-    /// Returns the minimum format version needed by the markers written to this lockfile.
-    fn marker_format_version(&self) -> u32 {
-        let is_extended = |marker: MarkerTree| marker.try_to_pep508().is_err();
-        if canonical_marker_trees(&self.fork_markers, &self.requires_python)
-            .into_iter()
-            .any(is_extended)
-            || self
-                .supported_environments
-                .iter()
-                .chain(&self.required_environments)
-                .any(|&marker| is_extended(self.requires_python.simplify_markers(marker)))
-        {
-            return EXTENDED_MARKERS_VERSION;
-        }
-        let environment = self
-            .requires_python
-            .simplify_markers(self.fork_markers_union());
-        for package in &self.packages {
-            if canonical_marker_trees(&package.fork_markers, &self.requires_python)
-                .into_iter()
-                .any(is_extended)
-                || package
-                    .dependencies
-                    .iter()
-                    .chain(package.optional_dependencies.values().flatten())
-                    .chain(package.dependency_groups.values().flatten())
-                    .any(|dependency| {
-                        is_extended(
-                            dependency
-                                .simplified_marker
-                                .as_simplified_marker_tree()
-                                .restrict(environment),
-                        )
-                    })
-            {
-                return EXTENDED_MARKERS_VERSION;
-            }
-        }
-        VERSION
     }
 
     /// Returns the lockfile revision.
@@ -3830,10 +3783,10 @@ impl Lock {
                 Ok(lock) => lock,
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
-                        && !(VERSION..=EXTENDED_MARKERS_VERSION).contains(&lock.version())
+                        && lock.version() != VERSION
                     {
                         return Err(LockParseError::UnparsableVersion {
-                            supported: EXTENDED_MARKERS_VERSION,
+                            supported: VERSION,
                             version: lock.version(),
                             source,
                         });
@@ -3843,9 +3796,9 @@ impl Lock {
             },
         };
 
-        if !(VERSION..=EXTENDED_MARKERS_VERSION).contains(&lock.version()) {
+        if lock.version() != VERSION {
             return Err(LockParseError::UnsupportedVersion {
-                supported: EXTENDED_MARKERS_VERSION,
+                supported: VERSION,
                 version: lock.version(),
             });
         }
@@ -6533,34 +6486,6 @@ impl ResolverManifest {
     }
 }
 
-/// A generated marker and whether its wire syntax requires lockfile version 2.
-#[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
-struct LockMarker {
-    marker: SimplifiedMarkerTree,
-    extended: bool,
-}
-
-impl<'de> serde::Deserialize<'de> for LockMarker {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value: String = serde::Deserialize::deserialize(deserializer)?;
-        let standard = MarkerTree::from_str(&value);
-        let extended = standard.is_err();
-        let marker = standard
-            .or_else(|_| MarkerTree::parse_extended(&value))
-            .map_err(serde::de::Error::custom)?;
-        Ok(Self {
-            marker: SimplifiedMarkerTree::new(
-                &RequiresPython::from_specifiers(VersionSpecifiers::default()),
-                marker,
-            ),
-            extended,
-        })
-    }
-}
-
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
@@ -6570,11 +6495,11 @@ struct LockWire {
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
-    fork_markers: Vec<LockMarker>,
+    fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
-    supported_environments: Vec<LockMarker>,
+    supported_environments: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "required-markers", default)]
-    required_environments: Vec<LockMarker>,
+    required_environments: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -6590,25 +6515,6 @@ impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Self, LockError> {
-        if wire.version < EXTENDED_MARKERS_VERSION
-            && (wire
-                .fork_markers
-                .iter()
-                .chain(&wire.supported_environments)
-                .chain(&wire.required_environments)
-                .any(|marker| marker.extended)
-                || wire.packages.iter().any(|package| {
-                    package.fork_markers.iter().any(|marker| marker.extended)
-                        || package
-                            .dependencies
-                            .iter()
-                            .chain(package.optional_dependencies.values().flatten())
-                            .chain(package.dependency_groups.values().flatten())
-                            .any(|dependency| dependency.marker.extended)
-                }))
-        {
-            return Err(LockErrorKind::ExtendedMarkersVersion.into());
-        }
         // Count the number of sources for each package name. When
         // there's only one source for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
@@ -6629,7 +6535,7 @@ impl TryFrom<LockWire> for Lock {
         let fork_markers = wire
             .fork_markers
             .into_iter()
-            .map(|simplified_marker| simplified_marker.marker.into_marker(&wire.requires_python))
+            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .map(UniversalMarker::from_combined)
             .collect::<Vec<_>>();
         let environment = SimplifiedMarkerTree::new(
@@ -6655,12 +6561,12 @@ impl TryFrom<LockWire> for Lock {
         let supported_environments = wire
             .supported_environments
             .into_iter()
-            .map(|simplified_marker| simplified_marker.marker.into_marker(&wire.requires_python))
+            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
         let required_environments = wire
             .required_environments
             .into_iter()
-            .map(|simplified_marker| simplified_marker.marker.into_marker(&wire.requires_python))
+            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
         let mut options_wire = wire.options;
         if options_wire.exclude_newer.exclude_newer_span.is_some() {
@@ -6685,6 +6591,7 @@ impl TryFrom<LockWire> for Lock {
             required_environments,
             fork_markers,
         )?;
+
         Ok(lock)
     }
 }
@@ -7517,7 +7424,7 @@ struct PackageWire {
     #[serde(default)]
     wheels: Vec<Wheel>,
     #[serde(default, rename = "resolution-markers")]
-    fork_markers: Vec<LockMarker>,
+    fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
@@ -7649,7 +7556,7 @@ impl PackageWire {
             fork_markers: self
                 .fork_markers
                 .into_iter()
-                .map(|simplified_marker| simplified_marker.marker.into_marker(requires_python))
+                .map(|simplified_marker| simplified_marker.into_marker(requires_python))
                 .map(UniversalMarker::from_combined)
                 .collect(),
             dependencies: unwire_deps(self.dependencies)?,
@@ -9409,7 +9316,7 @@ struct DependencyWire {
     #[serde(default)]
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
-    marker: LockMarker,
+    marker: SimplifiedMarkerTree,
 }
 
 impl DependencyWire {
@@ -9421,10 +9328,10 @@ impl DependencyWire {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
         let (simplified_marker, complexified_marker) =
-            if self.marker.marker.as_simplified_marker_tree().is_true() {
+            if self.marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
             } else {
-                let mut simplified_marker = self.marker.marker;
+                let mut simplified_marker = self.marker;
                 simplified_marker.and(environment);
                 let complexified_marker =
                     UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
@@ -9902,13 +9809,6 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
-    #[error("Logical negation in lockfile markers requires lockfile version 2")]
-    ExtendedMarkersVersion,
-    #[error("Cannot export markers for `{package}` as PEP 508")]
-    MarkerSerialization {
-        package: PackageName,
-        source: MarkerSerializationError,
-    },
     /// An error that occurs when collecting dependency-group settings.
     #[error(transparent)]
     DependencyGroups(#[from] DependencyGroupError),
@@ -10399,7 +10299,7 @@ fn simplified_universal_markers(
 ) -> Vec<String> {
     canonical_marker_trees(markers, requires_python)
         .into_iter()
-        .filter_map(MarkerTree::to_extended_string)
+        .filter_map(MarkerTree::try_to_string)
         .collect()
 }
 
