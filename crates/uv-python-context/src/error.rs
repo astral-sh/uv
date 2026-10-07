@@ -4,12 +4,11 @@ use uv_distribution_types::RequiresPython;
 use uv_pep440::Version;
 use uv_workspace::{RequiresPythonSources, dependency_groups::DependencyGroupError};
 
-use crate::commands::project::PythonRequirementConflicts;
-use crate::commands::project::python::format_requires_python_sources;
+use crate::{PythonRequirementConflicts, format_requires_python_sources};
 
 /// A failure while discovering or validating a project or script interpreter.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum PythonContextError {
+pub enum PythonContextError {
     #[error(
         "The requested interpreter resolved to Python {_0}, which is incompatible with the project's Python requirement: `{_1}`{_2}"
     )]

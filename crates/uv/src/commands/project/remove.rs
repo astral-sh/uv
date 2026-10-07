@@ -37,9 +37,10 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter,
+    ProjectInterpreter,
 };
 use uv_configuration::Modifications;
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.

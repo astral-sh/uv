@@ -78,7 +78,7 @@ pub(crate) mod pip;
 mod project;
 mod publish;
 mod pylock;
-mod python;
+pub(crate) use uv_python_commands as python;
 pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
 mod self_update;

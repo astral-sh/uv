@@ -28,7 +28,8 @@ use uv_workspace::dependency_groups::{
 use uv_workspace::pyproject::{BuildConstraintDependency, OverrideDependency};
 use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
-use crate::commands::project::{LockError, MissingLockfileSource, find_requires_python};
+use crate::commands::project::{LockError, MissingLockfileSource};
+use uv_python_context::find_requires_python;
 
 /// A target that can be resolved into a lockfile.
 #[derive(Debug, Copy, Clone)]

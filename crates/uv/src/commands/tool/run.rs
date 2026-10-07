@@ -57,10 +57,10 @@ use crate::commands::operations::resolution::loggers::{
 };
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{EnvironmentError, EnvironmentSpecification, resolve_names};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::error::ToolError;
 use crate::commands::tool::{Target, ToolRequest};
+use uv_python_context::PythonDownloadReporter;
 use uv_settings::ResolverInstallerSettings;
 use uv_settings::ResolverSettings;
 

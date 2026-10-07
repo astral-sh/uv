@@ -5808,7 +5808,6 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "indexmap",
  "indicatif",
  "indoc",
  "insta",
@@ -5878,6 +5877,8 @@ dependencies = [
  "uv-publish",
  "uv-pypi-types",
  "uv-python",
+ "uv-python-commands",
+ "uv-python-context",
  "uv-redacted",
  "uv-requirements",
  "uv-requirements-txt",
@@ -7228,6 +7229,70 @@ dependencies = [
  "windows",
  "windows-registry",
  "zstd 0.13.3",
+]
+
+[[package]]
+name = "uv-python-commands"
+version = "0.0.90"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "fs-err",
+ "futures",
+ "indexmap",
+ "itertools 0.14.0",
+ "owo-colors",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uv-cache",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-errors",
+ "uv-fs",
+ "uv-installer",
+ "uv-pep440",
+ "uv-platform",
+ "uv-platform-tags",
+ "uv-preview",
+ "uv-python",
+ "uv-python-context",
+ "uv-scripts",
+ "uv-settings",
+ "uv-shell",
+ "uv-trampoline-builder",
+ "uv-warnings",
+ "uv-workspace",
+]
+
+[[package]]
+name = "uv-python-context"
+version = "0.0.90"
+dependencies = [
+ "indicatif",
+ "itertools 0.14.0",
+ "owo-colors",
+ "thiserror",
+ "tracing",
+ "uv-cache",
+ "uv-cache-key",
+ "uv-client",
+ "uv-command-support",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-errors",
+ "uv-fs",
+ "uv-pep440",
+ "uv-python",
+ "uv-scripts",
+ "uv-settings",
+ "uv-static",
+ "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]

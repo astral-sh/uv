@@ -36,8 +36,8 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
     EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
-    ProjectPythonRequest, ScriptInterpreter,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_settings::FrozenSource;
 use uv_settings::LockCheck;
 use uv_settings::ResolverSettings;

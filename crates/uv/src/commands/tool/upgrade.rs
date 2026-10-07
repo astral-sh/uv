@@ -38,10 +38,10 @@ use crate::commands::project::{
     EnvironmentResolution, EnvironmentUpdate, resolve_environment, sync_environment,
     update_environment,
 };
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::finalize_tool_install;
 use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
 use uv_configuration::Modifications;
+use uv_python_context::PythonDownloadReporter;
 use uv_settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.

@@ -46,12 +46,13 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-performance-memory-allocator = { workspace = true, optional = true }
-uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
+uv-python-commands = { workspace = true }
+uv-python-context = { workspace = true }
 uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-requirements-txt = { workspace = true }
@@ -82,13 +83,11 @@ clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
 diskus = { workspace = true }
-dunce = { workspace = true }
 etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
 jiff = { workspace = true }
-indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
@@ -126,6 +125,7 @@ uv-version = { workspace = true }
 embed-manifest = { workspace = true }
 
 [dev-dependencies]
+uv-platform = { workspace = true }
 uv-publish = { workspace = true, features = ["test"] }
 uv-test = { workspace = true }
 
@@ -134,6 +134,7 @@ assert_fs = { workspace = true }
 backon = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
+dunce = { workspace = true }
 filetime = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 hex = { workspace = true }

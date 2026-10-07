@@ -6,6 +6,7 @@ use std::str::FromStr;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
+use crate::commands::project::EnvironmentError;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions, InstallTarget as InstallOptionTarget,
@@ -18,12 +19,10 @@ use uv_pypi_types::{
     DependencyGroupSpecifier, DependencyGroups, LenientRequirement, ResolverMarkerEnvironment,
     VerbatimParsedUrl,
 };
+use uv_python_context::{ProjectPythonRequirement, PythonRequirementSource};
 use uv_scripts::Pep723Script;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::{RequiresPythonDeclaration, RequiresPythonSources, VirtualProject, Workspace};
-
-use crate::commands::project::EnvironmentError;
-use crate::commands::project::python::{ProjectPythonRequirement, PythonRequirementSource};
 
 /// A target that can be installed from a lockfile.
 #[derive(Debug, Copy, Clone)]

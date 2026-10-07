@@ -7,7 +7,7 @@ use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
-use crate::commands::project::{EnvironmentError, LockError, ProjectError, PythonContextError};
+use crate::commands::project::{EnvironmentError, LockError, ProjectError};
 use crate::commands::python::install::InvalidUpgradeRequestError;
 use crate::commands::tool::common::NoExecutablesError;
 use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
@@ -45,7 +45,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<ExtrasWithoutSourceError>(cause, &mut hints);
         collect_hint::<ProjectError>(cause, &mut hints);
         collect_hint::<EnvironmentError>(cause, &mut hints);
-        collect_hint::<PythonContextError>(cause, &mut hints);
+        collect_hint::<uv_python_context::PythonContextError>(cause, &mut hints);
         collect_hint::<NoExecutablesError>(cause, &mut hints);
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
