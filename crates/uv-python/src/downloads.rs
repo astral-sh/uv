@@ -47,7 +47,6 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::PythonInstallationKey;
-use crate::managed::ManagedPythonInstallation;
 use crate::python_version::{BuildVersionError, python_build_version_from_env};
 use crate::{PythonDownloadMirrors, PythonVariant};
 use crate::{PythonRequest, PythonVersion, VersionRequest};
@@ -141,6 +140,45 @@ pub enum Error {
     NoPythonDownloadUrlFound,
     #[error(transparent)]
     SystemTime(#[from] SystemTimeError),
+}
+
+/// A failure while parsing or completing a managed Python download request.
+#[derive(Debug, thiserror::Error)]
+pub enum PythonDownloadRequestError {
+    #[error(transparent)]
+    ImplementationError(#[from] ImplementationError),
+    #[error("Invalid Python version: {0}")]
+    InvalidPythonVersion(String),
+    #[error("Invalid request key (empty request)")]
+    EmptyRequest,
+    #[error("Invalid request key (too many parts): {0}")]
+    TooManyParts(String),
+    #[error("Failed to parse request part")]
+    InvalidRequestPlatform(#[from] platform::Error),
+    #[error("Failed to determine the libc used on the current platform")]
+    LibcDetection(#[from] platform::LibcDetectionError),
+    #[error(transparent)]
+    BuildVersion(#[from] BuildVersionError),
+}
+
+impl From<PythonDownloadRequestError> for Error {
+    fn from(error: PythonDownloadRequestError) -> Self {
+        match error {
+            PythonDownloadRequestError::ImplementationError(error) => {
+                Self::ImplementationError(error)
+            }
+            PythonDownloadRequestError::InvalidPythonVersion(version) => {
+                Self::InvalidPythonVersion(version)
+            }
+            PythonDownloadRequestError::EmptyRequest => Self::EmptyRequest,
+            PythonDownloadRequestError::TooManyParts(value) => Self::TooManyParts(value),
+            PythonDownloadRequestError::InvalidRequestPlatform(error) => {
+                Self::InvalidRequestPlatform(error)
+            }
+            PythonDownloadRequestError::LibcDetection(error) => Self::LibcDetection(error),
+            PythonDownloadRequestError::BuildVersion(error) => Self::BuildVersion(error),
+        }
+    }
 }
 
 impl RetriableError for Error {
@@ -325,7 +363,7 @@ impl ArchRequest {
 }
 
 impl PythonDownloadRequest {
-    fn new(
+    pub(crate) fn new(
         version: Option<VersionRequest>,
         implementation: Option<ImplementationName>,
         arch: Option<ArchRequest>,
@@ -436,10 +474,12 @@ impl PythonDownloadRequest {
     /// Fill empty entries with default values.
     ///
     /// Platform information is pulled from the environment.
-    pub fn fill_platform(mut self) -> Result<Self, Error> {
+    pub fn fill_platform(mut self) -> Result<Self, PythonDownloadRequestError> {
         let platform = Platform::from_env().map_err(|err| match err {
-            platform::Error::LibcDetectionError(err) => Error::LibcDetection(err),
-            err => Error::InvalidRequestPlatform(err),
+            platform::Error::LibcDetectionError(err) => {
+                PythonDownloadRequestError::LibcDetection(err)
+            }
+            err => PythonDownloadRequestError::InvalidRequestPlatform(err),
         })?;
         if self.arch.is_none() {
             self.arch = Some(ArchRequest::Environment(platform.arch));
@@ -454,7 +494,7 @@ impl PythonDownloadRequest {
     }
 
     /// Fill the build field from the environment variable relevant for the [`ImplementationName`].
-    fn fill_build_from_env(mut self) -> Result<Self, Error> {
+    fn fill_build_from_env(mut self) -> Result<Self, PythonDownloadRequestError> {
         if self.build.is_some() {
             return Ok(self);
         }
@@ -466,7 +506,7 @@ impl PythonDownloadRequest {
         Ok(self)
     }
 
-    pub fn fill(mut self) -> Result<Self, Error> {
+    pub fn fill(mut self) -> Result<Self, PythonDownloadRequestError> {
         if self.implementation.is_none() {
             self.implementation = Some(ImplementationName::CPython);
         }
@@ -614,35 +654,6 @@ impl PythonDownloadRequest {
         true
     }
 
-    /// Whether this request is satisfied by a Python download.
-    fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
-        // First check the key
-        if !self.satisfied_by_key(download.key()) {
-            return false;
-        }
-
-        // Then check the build if specified
-        if let Some(ref requested_build) = self.build {
-            let Some(download_build) = download.build() else {
-                debug!(
-                    "Skipping download `{}`: a build version was requested but is not available for this download",
-                    download
-                );
-                return false;
-            };
-
-            if download_build != requested_build {
-                debug!(
-                    "Skipping download `{}`: requested build version `{}` does not match download build version `{}`",
-                    download, requested_build, download_build
-                );
-                return false;
-            }
-        }
-
-        true
-    }
-
     /// Whether this download request opts-in to pre-release Python versions.
     pub(crate) fn allows_prereleases(&self) -> bool {
         self.prereleases.unwrap_or_else(|| {
@@ -698,20 +709,6 @@ impl TryFrom<&PythonInstallationKey> for PythonDownloadRequest {
     }
 }
 
-impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
-    fn from(installation: &ManagedPythonInstallation) -> Self {
-        let key = installation.key();
-        Self::new(
-            Some(VersionRequest::from(&key.version())),
-            Some(installation.key_implementation()),
-            Some(ArchRequest::Explicit(*key.arch())),
-            Some(*key.os()),
-            Some(*key.libc()),
-            Some(key.prerelease.is_some()),
-        )
-    }
-}
-
 impl Display for PythonDownloadRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut parts = Vec::new();
@@ -744,7 +741,7 @@ impl Display for PythonDownloadRequest {
     }
 }
 impl FromStr for PythonDownloadRequest {
-    type Err = Error;
+    type Err = PythonDownloadRequestError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         #[derive(Debug, Clone)]
@@ -777,7 +774,7 @@ impl FromStr for PythonDownloadRequest {
             parts: P,
             part: Option<&'a str>,
             position: Position,
-            error: Option<Error>,
+            error: Option<PythonDownloadRequestError>,
             count: usize,
         }
 
@@ -803,7 +800,7 @@ impl FromStr for PythonDownloadRequest {
                 self.position = self.position.next();
             }
 
-            fn record_err(&mut self, err: Error) {
+            fn record_err(&mut self, err: PythonDownloadRequestError) {
                 // For now, we only record the first error encountered. We could record all of the
                 // errors for a given part, then pick the most appropriate one later.
                 self.error.get_or_insert(err);
@@ -811,7 +808,7 @@ impl FromStr for PythonDownloadRequest {
         }
 
         if s.is_empty() {
-            return Err(Error::EmptyRequest);
+            return Err(PythonDownloadRequestError::EmptyRequest);
         }
 
         let mut parts = s.split('-');
@@ -849,9 +846,9 @@ impl FromStr for PythonDownloadRequest {
                         state.next_part();
                         continue;
                     }
-                    match VersionRequest::from_str(part)
-                        .map_err(|_| Error::InvalidPythonVersion(part.to_string()))
-                    {
+                    match VersionRequest::from_str(part).map_err(|_| {
+                        PythonDownloadRequestError::InvalidPythonVersion(part.to_string())
+                    }) {
                         // Err(err) if !first_part => return Err(err),
                         Ok(val) => {
                             version = Some(val);
@@ -913,7 +910,7 @@ impl FromStr for PythonDownloadRequest {
                 }
                 Position::End => {
                     if state.count > 5 {
-                        return Err(Error::TooManyParts(s.to_string()));
+                        return Err(PythonDownloadRequestError::TooManyParts(s.to_string()));
                     }
 
                     // Throw the first error for the current part
@@ -981,7 +978,7 @@ impl ManagedPythonDownloadList {
         request: &PythonDownloadRequest,
     ) -> impl Iterator<Item = &ManagedPythonDownload> {
         self.iter_all()
-            .filter(move |download| request.satisfied_by_download(download))
+            .filter(move |download| download.matches_request(request))
     }
 
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
@@ -1614,6 +1611,35 @@ impl ManagedPythonDownload {
 
         Ok(vec![DisplaySafeUrl::parse(&self.url)?])
     }
+
+    /// Whether this download satisfies the requested Python and build.
+    fn matches_request(&self, request: &PythonDownloadRequest) -> bool {
+        // First check the key
+        if !request.satisfied_by_key(self.key()) {
+            return false;
+        }
+
+        // Then check the build if specified
+        if let Some(ref requested_build) = request.build {
+            let Some(download_build) = self.build() else {
+                debug!(
+                    "Skipping download `{}`: a build version was requested but is not available for this download",
+                    self
+                );
+                return false;
+            };
+
+            if download_build != requested_build {
+                debug!(
+                    "Skipping download `{}`: requested build version `{}` does not match download build version `{}`",
+                    self, requested_build, download_build
+                );
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 fn parse_json_downloads(
@@ -2063,7 +2089,7 @@ mod tests {
     fn test_python_download_request_from_str_too_many_parts() {
         let result = PythonDownloadRequest::from_str("cpython-3.12-linux-x86_64-gnu-extra");
 
-        assert_matches!(result, Err(Error::TooManyParts(_)));
+        assert_matches!(result, Err(PythonDownloadRequestError::TooManyParts(_)));
     }
 
     /// We don't allow an empty request.
@@ -2071,7 +2097,7 @@ mod tests {
     fn test_python_download_request_from_str_empty() {
         let result = PythonDownloadRequest::from_str("");
 
-        assert_matches!(result, Err(Error::EmptyRequest));
+        assert_matches!(result, Err(PythonDownloadRequestError::EmptyRequest));
     }
 
     /// Parse a request with all "any" segments.
@@ -2114,7 +2140,10 @@ mod tests {
     fn test_python_download_request_from_str_invalid_leading_segment() {
         let result = PythonDownloadRequest::from_str("foobar-3.14-windows");
 
-        assert_matches!(result, Err(Error::ImplementationError(_)));
+        assert_matches!(
+            result,
+            Err(PythonDownloadRequestError::ImplementationError(_))
+        );
     }
 
     /// Parse a request with segments in an invalid order.
@@ -2122,7 +2151,10 @@ mod tests {
     fn test_python_download_request_from_str_out_of_order() {
         let result = PythonDownloadRequest::from_str("3.12-cpython");
 
-        assert_matches!(result, Err(Error::InvalidRequestPlatform(_)));
+        assert_matches!(
+            result,
+            Err(PythonDownloadRequestError::InvalidRequestPlatform(_))
+        );
     }
 
     /// Parse a request with too many "any" segments.
@@ -2130,7 +2162,7 @@ mod tests {
     fn test_python_download_request_from_str_too_many_any() {
         let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
 
-        assert_matches!(result, Err(Error::TooManyParts(_)));
+        assert_matches!(result, Err(PythonDownloadRequestError::TooManyParts(_)));
     }
 
     /// Test that build filtering works correctly
@@ -2149,7 +2181,7 @@ mod tests {
 
         let downloads: Vec<_> = download_list
             .iter_all()
-            .filter(|d| request.satisfied_by_download(d))
+            .filter(|d| d.matches_request(&request))
             .collect();
 
         assert!(
@@ -2179,7 +2211,7 @@ mod tests {
         // Should find no matching downloads
         let downloads: Vec<_> = download_list
             .iter_all()
-            .filter(|d| request.satisfied_by_download(d))
+            .filter(|d| d.matches_request(&request))
             .collect();
 
         assert_eq!(downloads.len(), 0);

@@ -14,7 +14,8 @@ use tracing::{debug, warn};
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{
-    ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,
+    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
+    python_executable_dir,
 };
 use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
 
@@ -230,9 +231,7 @@ async fn do_uninstall(
         .collect();
 
     let remaining_minor_versions =
-        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-            remaining_installations.iter(),
-        );
+        ManagedPythonInstallation::highest_by_minor_version_key(remaining_installations.iter());
 
     for (_, installation) in remaining_minor_versions
         .iter()

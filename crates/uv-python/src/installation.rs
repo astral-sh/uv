@@ -3,7 +3,6 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
-use indexmap::IndexMap;
 use ref_cast::RefCast;
 use reqwest_retry::policies::ExponentialBackoff;
 use tracing::{debug, info};
@@ -235,6 +234,7 @@ impl PythonInstallation {
             .clone()
             .with_default_arch(arch.map(PythonArchitecture::into_inner))
             .fill()
+            .map_err(downloads::Error::from)
             .map(|request| download_list.find(&request));
 
         // Regardless of whether downloads are enabled, we want to determine if the download is
@@ -921,30 +921,6 @@ impl PythonInstallationMinorVersionKey {
     #[inline]
     pub fn ref_cast(key: &PythonInstallationKey) -> &Self {
         RefCast::ref_cast(key)
-    }
-
-    /// Takes an [`IntoIterator`] of [`ManagedPythonInstallation`]s and returns an [`FxHashMap`] from
-    /// [`PythonInstallationMinorVersionKey`] to the installation with highest [`PythonInstallationKey`]
-    /// for that minor version key.
-    #[inline]
-    pub fn highest_installations_by_minor_version_key<'a, I>(
-        installations: I,
-    ) -> IndexMap<Self, ManagedPythonInstallation>
-    where
-        I: IntoIterator<Item = &'a ManagedPythonInstallation>,
-    {
-        let mut minor_versions = IndexMap::default();
-        for installation in installations {
-            minor_versions
-                .entry(installation.minor_version_key().clone())
-                .and_modify(|high_installation: &mut ManagedPythonInstallation| {
-                    if installation.key() >= high_installation.key() {
-                        *high_installation = installation.clone();
-                    }
-                })
-                .or_insert_with(|| installation.clone());
-        }
-        minor_versions
     }
 }
 
