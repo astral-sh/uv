@@ -22,7 +22,9 @@ defaults with the repository's instructions and concrete constraints:
    layer and shared operations outside command-specific code. Prefer validated construction over
    checks every caller must remember. Use explicit modes instead of ambiguous booleans, types that
    express cardinality and ownership, and resolved configuration passed through appropriate
-   boundaries.
+   boundaries. Keep domain values structured in internal APIs and error types; defer formatting to
+   `Display` or another presentation boundary where practical. Look for premature conversion to
+   `String` that discards useful structure or makes callers responsible for diagnostic formatting.
 4. **Prefer readable Rust.** Favor direct matching, exhaustive handling, early returns, and
    established library operations. Look for unnecessary wrappers, buffers, hidden clones, and
    duplicated representations. Follow local naming, import, and error conventions. Explain the
