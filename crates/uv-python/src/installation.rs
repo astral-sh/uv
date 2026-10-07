@@ -27,8 +27,9 @@ use crate::downloads::{
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
-    Error, ImplementationName, Interpreter, MissingPythonHint, PythonDownloads, PythonPreference,
-    PythonSource, PythonVariant, PythonVersion, downloads,
+    Error, ImplementationName, Interpreter, MissingPythonHint, PythonArchitecture,
+    PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonSource, PythonVariant,
+    PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -108,10 +109,11 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         download_list: &ManagedPythonDownloadList,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let installation = Self::find_existing(request, environments, preference, cache)?;
+        let installation = Self::find_existing(request, environments, preference, arch, cache)?;
         installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
@@ -121,12 +123,14 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         cache: &Cache,
     ) -> Result<Self, Error> {
         Ok(find_python_installation(
             request,
             environments,
             preference,
+            arch,
             cache,
         )??)
     }
@@ -137,12 +141,12 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
-        python_install_mirror: Option<&str>,
-        pypy_install_mirror: Option<&str>,
+        mirrors: PythonDownloadMirrors<'_>,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         let downloads_enabled = preference.allows_managed()
@@ -152,12 +156,12 @@ impl PythonInstallation {
             request,
             environments,
             preference,
+            arch,
             downloads_enabled,
             client_builder,
             cache,
             reporter,
-            python_install_mirror,
-            pypy_install_mirror,
+            mirrors,
             python_downloads_json_url,
         )
         .await?;
@@ -179,17 +183,17 @@ impl PythonInstallation {
         request: Option<&PythonRequest>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
-        python_install_mirror: Option<&str>,
-        pypy_install_mirror: Option<&str>,
+        mirrors: PythonDownloadMirrors<'_>,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
-        let err = match Self::find_existing(request, environments, preference, cache) {
+        let err = match Self::find_existing(request, environments, preference, arch, cache) {
             Ok(installation) => {
                 installation
                     .download_and_warn_if_outdated_prerelease(
@@ -228,6 +232,7 @@ impl PythonInstallation {
 
         let download = download_request
             .clone()
+            .with_default_arch(arch.map(PythonArchitecture::into_inner))
             .fill()
             .map(|request| download_list.find(&request));
 
@@ -304,8 +309,7 @@ impl PythonInstallation {
             &retry_policy,
             cache,
             reporter,
-            python_install_mirror,
-            pypy_install_mirror,
+            mirrors,
         )
         .await?;
 
@@ -321,8 +325,7 @@ impl PythonInstallation {
         retry_policy: &ExponentialBackoff,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
-        python_install_mirror: Option<&str>,
-        pypy_install_mirror: Option<&str>,
+        mirrors: PythonDownloadMirrors<'_>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
@@ -337,8 +340,7 @@ impl PythonInstallation {
                 installations_dir,
                 &scratch_dir,
                 false,
-                python_install_mirror,
-                pypy_install_mirror,
+                mirrors,
                 reporter,
             )
             .await?;
@@ -348,7 +350,7 @@ impl PythonInstallation {
             DownloadResult::Fetched(path) => path,
         };
 
-        let installed = ManagedPythonInstallation::new(path, download);
+        let installed = ManagedPythonInstallation::new(path, download)?;
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;

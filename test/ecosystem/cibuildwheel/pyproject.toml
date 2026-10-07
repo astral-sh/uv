@@ -1,0 +1,259 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cibuildwheel"
+version = "4.1.0"
+description = "Build Python wheels on CI with minimal configuration."
+readme = "README.md"
+license = "BSD-2-Clause"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [
+    { name = "Joe Rickerby", email = "joerick@mac.com" },
+]
+keywords = [
+    "ci",
+    "linux",
+    "macos",
+    "packaging",
+    "pypi",
+    "wheel",
+    "windows",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Software Development :: Build Tools",
+]
+dependencies = [
+    "bashlex!=0.13",
+    "bracex",
+    "build>=1.0.0",
+    "certifi",
+    "dependency-groups>=1.2",
+    "filelock",
+    "humanize",
+    "packaging>=20.9",
+    "platformdirs",
+]
+
+[project.optional-dependencies]
+uv = ["uv"]
+
+[project.scripts]
+cibuildwheel = "cibuildwheel.__main__:main"
+
+[project.entry-points."validate_pyproject.tool_schema"]
+cibuildwheel = "cibuildwheel.schema:get_schema"
+
+[project.urls]
+Changelog = "https://github.com/pypa/cibuildwheel#changelog"
+Documentation = "https://cibuildwheel.pypa.io"
+Homepage = "https://github.com/pypa/cibuildwheel"
+
+[dependency-groups]
+docs = [
+    "jinja2>=3.1.2",
+    "mkdocs-include-markdown-plugin==7.1.8",
+    "mkdocs-intersphinx>=0.1.1; python_version >= '3.12'",
+    "mkdocs-macros-plugin>=1.4.1",
+    "mkdocs==1.6.1",
+    "pymdown-extensions",
+    "rich",
+]
+test = [
+    "build",
+    "filelock",
+    "jinja2",
+    "pytest-timeout",
+    "pytest-xdist",
+    "pytest-rerunfailures!=16.0",
+    "pytest>=9",
+    "setuptools",
+    "tomli_w",
+    "validate-pyproject",
+    "xdoctest",
+]
+dev = [
+    {include-group = "docs"},
+    {include-group = "test"},
+]
+
+
+[tool.pytest]
+minversion = "9.0"
+addopts = ["-ra", "--showlocals", "--xdoctest", "--ignore-glob=*venv*"]
+strict = true
+junit_family = "xunit2"
+filterwarnings = ["error"]
+log_level = "INFO"
+markers = [
+    "serial: tests that must *not* be run in parallel (deselect with '-m \"not serial\"')",
+    "ios: tests that run on iOS",
+    "android: tests that run on Android",
+    "pyodide: tests that run on Pyodide",
+]
+required_plugins = ["pytest-rerunfailures"]
+
+[tool.mypy]
+python_version = "3.11"
+files = [
+    "cibuildwheel/*.py",
+    "test/**/*.py",
+    "unit_test/**/*.py",
+    "bin/*.py",
+    "noxfile.py",
+]
+warn_unused_configs = true
+strict = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+warn_unreachable = false
+
+[[tool.mypy.overrides]]
+module = [
+    "setuptools._distutils", # needed even if only directly import setuptools._distutils.util
+    "setuptools._distutils.util",
+    "bashlex",
+    "bashlex.*",
+]
+ignore_missing_imports = true
+
+
+[tool.pylint]
+py-version = "3.11"
+jobs = "0"
+fail-on = ["E", "F"]
+fail-under = "9.8"
+max-positional-arguments = "7"
+reports.output-format = "colorized"
+messages_control.enable = [
+  "useless-suppression",
+]
+messages_control.disable = [
+  "abstract-class-instantiated",  # filelock triggers this
+  "duplicate-code",
+  "fixme",
+  "invalid-name",
+  "line-too-long",
+  "missing-class-docstring",
+  "missing-function-docstring",
+  "missing-module-docstring",
+  "no-else-break",
+  "no-else-return",
+  "protected-access",
+  "too-few-public-methods",
+  "too-many-arguments",
+  "too-many-branches",
+  "too-many-instance-attributes",
+  "too-many-lines",
+  "too-many-locals",
+  "too-many-nested-blocks",
+  "too-many-return-statements",
+  "too-many-statements",
+  "unsubscriptable-object",
+  "wrong-import-position",
+  "unused-argument",  # Handled by Ruff
+  "import-outside-toplevel",  # Handled by Ruff
+  "broad-exception-raised",  # Could be improved eventually
+  "consider-using-in",  # MyPy can't narrow "in"
+]
+
+[tool.ruff]
+show-fixes = true
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = [
+  "B",           # flake8-bugbear
+  "I",           # isort
+  "ARG",         # flake8-unused-arguments
+  "ANN",         # flake8-annotations
+  "C4",          # flake8-comprehensions
+  "EM",          # flake8-errmsg
+  "ICN",         # flake8-import-conventions
+  "ISC",         # flake8-implicit-str-concat
+  "G",           # flake8-logging-format
+  "PGH",         # pygrep-hooks
+  "PIE",         # flake8-pie
+  "PL",          # pylint
+  "PT",          # flake8-pytest-style
+  "PTH",         # flake8-use-pathlib
+  "RET",         # flake8-return
+  "RUF",         # Ruff-specific
+  "SIM",         # flake8-simplify
+  "TID251",      # flake8-tidy-imports.banned-api
+  "TID252",      # flake8-tidy-imports.relative-imports
+  "UP",          # pyupgrade
+  "YTT",         # flake8-2020
+  "EXE",         # flake8-executable
+  "PYI",         # flake8-pyi
+  "PERF101", "PERF102", "PERF401", "PERF402", "PERF403",  # A selection of perflint codes
+  "DTZ",         # flake8-datetimez
+  "FA",          # flake8-future-annotations
+  "FLY",         # flynt
+  "FURB",        # refurb
+  "LOG",         # flake8-logging
+  "Q",           # flake8-quotes
+  "SLOT",        # flake8-slots
+  "T10",         # flake8-debugger
+  "TC",          # flake8-type-checking
+]
+ignore = [
+  "PLR09",   # Design related pylint codes
+  "PLR2004", # Magic value in comparison
+  "RET504", "RET505", "RET508",  # else after control flow
+  "PT007",   # Lists of tuples in Pytest
+  "PYI025",  # Set as AbstractSet
+  "PTH123",  # open -> Path.open
+]
+flake8-unused-arguments.ignore-variadic-names = true
+flake8-tidy-imports.ban-relative-imports = "all"
+flake8-annotations.allow-star-arg-any = true
+flake8-annotations.mypy-init-return = true
+future-annotations = true
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.Mapping".msg = "Use collections.abc.Mapping instead."
+"typing.Callable".msg = "Use collections.abc.Callable instead."
+"typing.Iterator".msg = "Use collections.abc.Iterator instead."
+"typing.Sequence".msg = "Use collections.abc.Sequence instead."
+"typing.Set".msg = "Use collections.abc.Set instead."
+"typing.TYPE_CHECKING".msg = "Use TYPE_CHECKING=False instead"
+
+[tool.ruff.lint.per-file-ignores]
+"unit_test/*" = ["PLC1901", "TID252"]
+"test/*" = ["TID252"]
+"bin/*" = ["TID251"]
+"cibuildwheel/resources/install_certifi.py" = ["PTH"]
+
+[tool.repo-review]
+ignore = ["PC170", "PP303"]
+
+[tool.check-wheel-contents]
+ignore = [
+  "W002",  # constraints-*.txt are allowed to be duplicates of one another
+  "W004",  # "-" is fine for our iOS support files for now
+]
+
+[tool.codespell]
+ignore-words-list = [
+    "sur",
+    "assertin",
+    "Fo",
+]
+skip = [
+    '^docs/working-examples\.md',
+    'htmlcov',
+    'all_known_setup.yaml',
+]

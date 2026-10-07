@@ -839,26 +839,33 @@ impl MarkerTree {
         Self(self.0.not())
     }
 
-    /// Combine this marker tree with the one given via a conjunction.
-    pub fn and(&mut self, tree: Self) {
-        self.0 = INTERNER.lock().and(self.0, tree.0);
+    /// Returns a new marker tree that combines this one with the given one via a conjunction.
+    #[must_use]
+    pub fn and(self, tree: Self) -> Self {
+        if let Some(node) = self.0.and_trivial(tree.0) {
+            return Self(node);
+        }
+        Self(INTERNER.lock().and_nontrivial(self.0, tree.0))
     }
 
-    /// Combine this marker tree with the one given via a disjunction.
-    pub fn or(&mut self, tree: Self) {
-        self.0 = INTERNER.lock().or(self.0, tree.0);
+    /// Returns a new marker tree that combines this one with the given one via a disjunction.
+    #[must_use]
+    pub fn or(self, tree: Self) -> Self {
+        if let Some(node) = self.0.or_trivial(tree.0) {
+            return Self(node);
+        }
+        Self(INTERNER.lock().or_nontrivial(self.0, tree.0))
     }
 
-    /// Sets this to a marker equivalent to the implication of this one and the
-    /// given consequent.
+    /// Returns a marker equivalent to the implication of this one and the given consequent.
     ///
     /// If the marker set is always `true`, then it can be said that `self`
     /// implies `consequent`.
-    pub fn implies(&mut self, consequent: Self) {
+    #[must_use]
+    pub fn implies(self, consequent: Self) -> Self {
         // This could probably be optimized, but is clearly
         // correct, since logical implication is `-P or Q`.
-        *self = self.negate();
-        self.or(consequent);
+        self.negate().or(consequent)
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -869,7 +876,10 @@ impl MarkerTree {
     /// false negatives, i.e. it may not be able to detect that two markers are disjoint for
     /// complex expressions.
     pub fn is_disjoint(self, other: Self) -> bool {
-        INTERNER.lock().is_disjoint(self.0, other.0)
+        if let Some(disjoint) = self.0.is_disjoint_trivial(other.0) {
+            return disjoint;
+        }
+        INTERNER.lock().is_disjoint_nontrivial(self.0, other.0)
     }
 
     /// Returns the contents of this marker tree, if it contains at least one expression.
@@ -922,6 +932,16 @@ impl MarkerTree {
                     unreachable!()
                 };
                 MarkerTreeKind::String(StringMarkerTree {
+                    id: self.0,
+                    key: *key,
+                    map,
+                })
+            }
+            Variable::VersionString(key) => {
+                let Edges::Version { edges: ref map } = node.children else {
+                    unreachable!()
+                };
+                MarkerTreeKind::VersionString(VersionMarkerTree {
                     id: self.0,
                     key: *key,
                     map,
@@ -1071,6 +1091,16 @@ impl MarkerTree {
                     }
                 }
             }
+            MarkerTreeKind::VersionString(marker) => {
+                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
+                    return false;
+                };
+                for (range, tree) in marker.edges() {
+                    if range.contains(&version) {
+                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                    }
+                }
+            }
             MarkerTreeKind::In(marker) => {
                 return marker
                     .edge(marker.value().contains(env.get_string(marker.key())))
@@ -1115,6 +1145,9 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
+            MarkerTreeKind::VersionString(marker) => {
+                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
+            }
             MarkerTreeKind::String(marker) => marker
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
@@ -1141,6 +1174,9 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+            MarkerTreeKind::VersionString(marker) => marker
+                .edges()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
                 .children()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
@@ -1163,7 +1199,7 @@ impl MarkerTree {
     ///
     /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
     /// main conjunction.
-    pub fn top_level_extra(self) -> Option<MarkerExpression> {
+    fn top_level_extra(self) -> Option<MarkerExpression> {
         let mut extra_expression = None;
         for conjunction in self.to_dnf() {
             let found = conjunction.iter().find(|expression| {
@@ -1379,6 +1415,11 @@ impl MarkerTree {
                         imp(tree, f);
                     }
                 }
+                MarkerTreeKind::VersionString(kind) => {
+                    for (tree, _) in simplify::collect_edges(kind.edges()) {
+                        imp(tree, f);
+                    }
+                }
                 MarkerTreeKind::String(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.children()) {
                         imp(tree, f);
@@ -1466,6 +1507,8 @@ pub enum MarkerTreeKind<'a> {
     False,
     /// A version expression.
     Version(VersionMarkerTree<'a>),
+    /// A string-valued marker interpreted as a version within a platform-specific scope.
+    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString>),
     /// A string expression.
     String(StringMarkerTree<'a>),
     /// A string expression with the `in` operator.
@@ -1480,15 +1523,15 @@ pub enum MarkerTreeKind<'a> {
 
 /// A version marker node, such as `python_version < '3.7'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct VersionMarkerTree<'a> {
+pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion> {
     id: NodeId,
-    key: CanonicalMarkerValueVersion,
+    key: K,
     map: &'a [(Ranges<Version>, NodeId)],
 }
 
-impl VersionMarkerTree<'_> {
+impl<K: Copy> VersionMarkerTree<'_, K> {
     /// The key for this node.
-    pub fn key(&self) -> CanonicalMarkerValueVersion {
+    pub fn key(&self) -> K {
         self.key
     }
 
@@ -1500,13 +1543,13 @@ impl VersionMarkerTree<'_> {
     }
 }
 
-impl PartialOrd for VersionMarkerTree<'_> {
+impl<K: Copy + Ord> PartialOrd for VersionMarkerTree<'_, K> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for VersionMarkerTree<'_> {
+impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
@@ -1841,6 +1884,29 @@ mod test {
         s.parse().unwrap()
     }
 
+    #[test]
+    fn darwin_platform_release() {
+        let baseline = m("sys_platform == 'darwin' and platform_release == '24.0.0'");
+        assert!(!baseline.is_disjoint(m("platform_release >= '9.0.0'")));
+        assert!(baseline.is_disjoint(m("platform_release >= '25.0.0'")));
+        assert_eq!(
+            baseline,
+            m("sys_platform == 'darwin' and platform_release == '24'")
+        );
+
+        let env = env37()
+            .with_sys_platform("darwin")
+            .with_platform_release("24.10.0");
+        let marker = m("sys_platform == 'darwin' and platform_release >= '24.9.0'");
+        assert!(marker.evaluate(&env, &[]));
+        assert!(!marker.negate().evaluate(&env, &[]));
+        assert_eq!(marker, m(&marker.try_to_string().unwrap()));
+        assert_eq!(
+            marker.negate(),
+            m(&marker.negate().try_to_string().unwrap())
+        );
+    }
+
     fn env37() -> MarkerEnvironment {
         MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
             implementation_name: "",
@@ -1969,8 +2035,7 @@ mod test {
         let simplified = marker.restrict(environment);
         assert_eq!(simplified, m("python_version < '3.11'"));
 
-        let mut reconstructed = simplified;
-        reconstructed.and(environment);
+        let reconstructed = simplified.and(environment);
         assert_eq!(reconstructed, marker);
         assert_eq!(environment.restrict(environment), MarkerTree::TRUE);
 
@@ -1995,10 +2060,8 @@ mod test {
             let assumption = m(assumption);
             let simplified = marker.restrict(assumption);
 
-            let mut expected = marker;
-            expected.and(assumption);
-            let mut reconstructed = simplified;
-            reconstructed.and(assumption);
+            let expected = marker.and(assumption);
+            let reconstructed = simplified.and(assumption);
             assert_eq!(reconstructed, expected);
         }
     }
@@ -3263,6 +3326,39 @@ mod test {
     }
 
     #[test]
+    fn false_marker_roundtrip() -> serde_json::Result<()> {
+        let serialized = serde_json::to_string(&MarkerTree::FALSE.contents())?;
+        assert_snapshot!(serialized, @r#""python_version < '0'""#);
+        assert_eq!(
+            serde_json::from_str::<MarkerTree>(&serialized)?,
+            MarkerTree::FALSE,
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn python_version_minimum() {
+        for version in ["0", "0.0", "0.0.0"] {
+            assert_false(&format!("python_version < '{version}'"));
+            assert_false(&format!("'{version}' > python_version"));
+            assert_true(&format!("python_version >= '{version}'"));
+            assert_true(&format!("'{version}' <= python_version"));
+        }
+        assert_eq!(
+            m("python_version < '0' or sys_platform == 'win32'"),
+            m("sys_platform == 'win32'"),
+        );
+        assert_eq!(
+            m("python_version >= '0' and sys_platform == 'win32'"),
+            m("sys_platform == 'win32'"),
+        );
+        assert!(!m("python_version <= '0'").is_true());
+        assert!(!m("python_version > '0'").is_false());
+        assert!(!m("python_full_version < '0'").is_false());
+        assert!(!m("implementation_version < '0'").is_false());
+    }
+
+    #[test]
     fn test_is_false() {
         assert!(m("python_version < '3.10' and python_version >= '3.10'").is_false());
         assert!(
@@ -3272,7 +3368,7 @@ mod test {
         );
 
         assert!(!m("python_version < '3.10'").is_false());
-        assert!(!m("python_version < '0'").is_false());
+        assert!(m("python_version < '0'").is_false());
         assert!(!m("python_version < '3.10' and python_version >= '3.9'").is_false());
         assert!(!m("python_version < '3.10' or python_version >= '3.11'").is_false());
     }
@@ -3342,9 +3438,7 @@ mod test {
     }
 
     fn implies(antecedent: &str, consequent: &str) -> bool {
-        let mut marker = m(antecedent);
-        marker.implies(m(consequent));
-        marker.is_true()
+        m(antecedent).implies(m(consequent)).is_true()
     }
 
     #[test]

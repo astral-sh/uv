@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
 use std::io::Write;
@@ -12,51 +12,55 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
+    HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
+    Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    Verbatim,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
+    MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
+    RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
+use uv_lock::PylockToml;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::{
-    GroupsSpecification, LockedRequirements, RequirementsSource, RequirementsSpecification,
-    is_pylock_toml, read_pylock_toml_requirements, read_requirements_txt,
+    GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
+    InMemoryIndex, OptionsBuilder, Prerelease, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
-use uv_torch::{AmdGpuArchitecture, TorchMode, TorchSource, TorchStrategy};
-use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::locked_requirements::{
+    LockedRequirements, read_pylock_toml_requirements, read_requirements_txt,
+};
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, OutputWriter, diagnostics};
+use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -70,15 +74,16 @@ pub(crate) async fn pip_compile(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
-    build_constraints_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
+    minimum_libc_version: Option<MinimumLibcVersion>,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
     format: Option<PipCompileFormat>,
     resolution_mode: ResolutionMode,
-    prerelease_mode: PrereleaseMode,
+    prerelease: Prerelease,
     fork_strategy: ForkStrategy,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
@@ -120,6 +125,7 @@ pub(crate) async fn pip_compile(
     mut python: Option<String>,
     system: bool,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     concurrency: Concurrency,
     quiet: bool,
     cache: Cache,
@@ -159,7 +165,7 @@ pub(crate) async fn pip_compile(
         {
             if !is_pylock_toml(file_name) {
                 return Err(anyhow!(
-                    "Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `{file_name}` won't be recognized as a `pylock.toml` file in subsequent commands",
+                    "Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `{file_name}`",
                 ));
             }
         }
@@ -207,12 +213,14 @@ pub(crate) async fn pip_compile(
         mut override_dependencies,
         excludes,
         pylock,
+        pylock_groups: _,
         source_trees,
         groups,
         extras: used_extras,
         index_url,
         extra_index_urls,
         no_index,
+        require_hashes: _,
         find_links,
         no_binary,
         no_build,
@@ -251,16 +259,12 @@ pub(crate) async fn pip_compile(
         .collect();
 
     // Read build constraints.
-    let build_constraints: Vec<NameRequirementSpecification> =
+    let build_constraints = Constraints::from_specifications(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
-            .chain(
-                build_constraints_from_workspace
-                    .into_iter()
-                    .map(NameRequirementSpecification::from),
-            )
-            .collect();
+            .chain(build_constraints_from_workspace),
+    );
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -290,12 +294,12 @@ pub(crate) async fn pip_compile(
             Some(&request),
             environment_preference,
             python_preference,
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await
@@ -312,12 +316,12 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await
@@ -325,7 +329,7 @@ pub(crate) async fn pip_compile(
     .into_interpreter();
 
     debug!(
-        "Using Python {} interpreter at {} for builds",
+        "Using Python {} interpreter at `{}` for builds",
         interpreter.python_version(),
         interpreter.sys_executable().user_display().cyan()
     );
@@ -354,10 +358,9 @@ pub(crate) async fn pip_compile(
     // Create the shared state.
     let state = SharedState::default();
 
-    // If we're resolving against a different Python version, use a separate index. Source
-    // distributions will be built against the installed version, and so the index may contain
-    // different package priorities than in the top-level resolution.
-    let top_level_index = if python_version.is_some() {
+    // Universal or cross-version resolution ranks artifacts differently from build dependencies,
+    // which use the installed interpreter. Keep their policy-dependent version maps separate.
+    let top_level_index = if universal || python_version.is_some() {
         InMemoryIndex::default()
     } else {
         state.index().clone()
@@ -410,12 +413,12 @@ pub(crate) async fn pip_compile(
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
-    // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
+    // Collect, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.
     let hasher = if generate_hashes || matches!(format, PipCompileFormat::PylockToml) {
-        HashStrategy::Generate(HashGeneration::All)
+        HashStrategy::collect(HashCollection::All)
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     // Incorporate any index locations from the provided sources.
@@ -437,16 +440,8 @@ pub(crate) async fn pip_compile(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 python_platform
                     .map(TargetTriple::platform)
                     .as_ref()
@@ -492,13 +487,7 @@ pub(crate) async fn pip_compile(
     let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
-    };
+    let flat_index = FlatIndex::load(&client, &cache, &index_locations).await?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -514,14 +503,12 @@ pub(crate) async fn pip_compile(
         }
     };
 
-    // Don't enforce hashes in `pip compile`.
-    let build_hashes = HashStrategy::None;
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
-    );
-
+    // Verify hashes on pinned build constraints, if any.
+    let build_hashes = HashStrategy::from_constraints(
+        &build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        HashCheckingMode::Verify,
+    )?;
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -554,9 +541,19 @@ pub(crate) async fn pip_compile(
         preview,
     );
 
+    if universal
+        && minimum_libc_version.is_some()
+        && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
+    {
+        warn_user_once!(
+            "Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumLibcVersion
+        );
+    }
+
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
+        .prerelease(prerelease)
         .fork_strategy(fork_strategy)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer.clone())
@@ -564,10 +561,15 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments)
+        .minimum_libc_version(if universal {
+            minimum_libc_version
+        } else {
+            None
+        })
         .build();
 
     // Resolve the requirements.
-    let resolution = match operations::resolve(
+    let mut resolution = match operations::resolve(
         requirements,
         constraints,
         overrides,
@@ -575,11 +577,11 @@ pub(crate) async fn pip_compile(
         excludes,
         source_trees,
         project,
-        BTreeSet::default(),
+        BTreeMap::default(),
         &extras,
         &groups,
         preferences,
-        EmptyInstalledPackages,
+        None,
         &hasher,
         &Reinstall::None,
         &upgrade,
@@ -594,6 +596,7 @@ pub(crate) async fn pip_compile(
         &build_dispatch,
         &concurrency,
         options,
+        None,
         Box::new(DefaultResolveLogger),
         printer,
     )
@@ -601,11 +604,13 @@ pub(crate) async fn pip_compile(
     {
         Ok((resolution, _)) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
     };
+
+    if generate_hashes && preview.is_enabled(PreviewFeature::ArtifactHashFiltering) {
+        resolution.retain_allowed_distribution_hashes(&build_options);
+    }
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
@@ -635,7 +640,8 @@ pub(crate) async fn pip_compile(
         PipCompileFormat::RequirementsTxt => {
             if include_marker_expression {
                 if let Some(marker_env) = resolver_env.marker_environment() {
-                    let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
+                    let relevant_markers =
+                        resolution.marker_tree(top_level_index.distributions(), marker_env)?;
                     if let Some(relevant_markers) = relevant_markers.contents() {
                         writeln!(
                             writer,
@@ -759,13 +765,20 @@ pub(crate) async fn pip_compile(
             };
 
             // Convert the resolution to a `pylock.toml` file.
-            let export = PylockToml::from_resolution(
+            let mut export = PylockToml::from_resolution(
                 &resolution,
                 &no_emit_packages,
                 install_path,
                 tags.as_deref(),
                 &build_options,
             )?;
+
+            // Registries don't always provide hashes, but `packages.*.hashes` is a required
+            // key in PEP 751, so we have to download and hash files with missing hashes.
+            export
+                .generate_missing_hashes(&client, concurrency.downloads, install_path)
+                .await?;
+
             write!(writer, "{}", export.to_toml()?)?;
         }
     }
@@ -775,7 +788,7 @@ pub(crate) async fn pip_compile(
         .into_iter()
         .filter(|name| resolution.contains(name))
         .collect::<Vec<_>>();
-    if !excluded.is_empty() {
+    if include_annotations && !excluded.is_empty() {
         writeln!(writer)?;
         writeln!(
             writer,

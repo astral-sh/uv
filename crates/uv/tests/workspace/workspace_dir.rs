@@ -15,12 +15,9 @@ fn workspace_dir_simple() {
     let workspace = context.temp_dir.child("foo");
 
     uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/foo
-
-    ----- stderr -----
     "
     );
 }
@@ -35,23 +32,17 @@ fn workspace_dir_specific_package() {
 
     // root workspace
     uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/foo
-
-    ----- stderr -----
     "
     );
 
     // with --package bar
     uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/foo/bar
-
-    ----- stderr -----
     "
     );
 }
@@ -71,14 +62,76 @@ fn workspace_metadata_from_member() -> Result<()> {
     let member_dir = workspace.join("packages").join("bird-feeder");
 
     uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&member_dir), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/workspace
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
+}
+
+/// Test workspace discovery from a nested project that is ignored by a shallower member glob.
+#[test]
+fn workspace_dir_nested_gitignored_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    let project = workspace.child("packages").child("foo").child("nested");
+
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+    workspace
+        .child(".gitignore")
+        .write_str("packages/foo/nested/\n")?;
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&project), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/workspace/packages/foo/nested
+    "#);
+
+    Ok(())
+}
+
+/// Test workspace discovery from a nested project matched by a recursive member glob.
+#[test]
+fn workspace_dir_nested_recursive_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    let project = workspace.child("packages").child("foo").child("nested");
+
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/**/nested"]
+        "#,
+    )?;
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&project), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/workspace
+    "#);
 
     Ok(())
 }
@@ -87,10 +140,9 @@ fn workspace_metadata_from_member() -> Result<()> {
 /// discovery.
 #[test]
 fn workspace_dir_rejects_project_inside_cache() -> Result<()> {
-    let mut context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_cache_dir("workspace/cache");
     let workspace = context.temp_dir.child("workspace");
-    let cache_dir = workspace.child("cache");
-    let cached_project = cache_dir.child("cached-project");
+    let cached_project = context.cache_dir.child("cached-project");
 
     fs_err::create_dir_all(&cached_project)?;
     workspace.child("pyproject.toml").write_str(
@@ -107,15 +159,10 @@ fn workspace_dir_rejects_project_inside_cache() -> Result<()> {
         "#,
     )?;
 
-    context.cache_dir = cache_dir;
-
     uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&cached_project), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    error: The project directory `.` is inside the cache directory `[TEMP_DIR]/workspace/cache`
+    error: The project directory `.` is inside the cache directory `[CACHE_DIR]/`
     "
     );
 
@@ -133,10 +180,7 @@ fn workspace_dir_package_doesnt_exist() {
     let workspace = context.temp_dir.child("foo");
 
     uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Package `bar` not found in workspace.
     "
@@ -149,10 +193,7 @@ fn workspace_metadata_no_project() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.workspace_dir(), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
     "

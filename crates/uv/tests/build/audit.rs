@@ -11,6 +11,35 @@ use uv_test::packse::PackseServer;
 use uv_test::uv_snapshot;
 
 #[test]
+fn audit_offline() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.audit().arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    uv_snapshot!(context.filters(), context.audit().env(EnvVars::UV_OFFLINE, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {"
+        offline = true
+    "})?;
+
+    uv_snapshot!(context.filters(), context.audit(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn audit_invalid_service_url() {
     let context = uv_test::test_context!("3.12");
 
@@ -19,10 +48,7 @@ fn audit_invalid_service_url() {
         .arg("audit")
         .arg("--service-url")
         .arg("not-a-url"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: invalid value 'not-a-url' for '--service-url <SERVICE_URL>': relative URL without a base
 
@@ -58,16 +84,13 @@ fn audit_reuses_settings_workspace_discovery() -> Result<()> {
         .arg("--preview-features")
         .arg("audit")
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/member
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 0 packages
     ");
@@ -160,10 +183,7 @@ async fn audit_no_vulnerabilities() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -196,8 +216,7 @@ async fn audit_json_no_vulnerabilities() {
         .arg("--frozen")
         .arg("--service-url")
         .arg(server.uri()), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -211,8 +230,6 @@ async fn audit_json_no_vulnerabilities() {
       "vulnerabilities": [],
       "adverse_statuses": []
     }
-
-    ----- stderr -----
     "#);
 }
 
@@ -242,8 +259,7 @@ async fn audit_json_preview_warning() {
         .arg("--frozen")
         .arg("--service-url")
         .arg(server.uri()), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     {
       "schema": {
@@ -324,8 +340,7 @@ async fn audit_vulnerability_found() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -403,15 +418,12 @@ async fn audit_malformed_vulnerability_record() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: OSV returned a malformed vulnerability record for `PYSEC-2023-0001`
-      Caused by: error decoding response body for url (http://[LOCALHOST]/v1/vulns/PYSEC-2023-0001)
-      Caused by: expected value at line 1 column 56
+      cause: error decoding response body for url (http://[LOCALHOST]/v1/vulns/PYSEC-2023-0001)
+      cause: expected value at line 1 column 56
     ");
 }
 
@@ -443,10 +455,7 @@ async fn audit_no_dependencies() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 0 packages
@@ -500,8 +509,7 @@ async fn audit_best_id_selection() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -565,8 +573,7 @@ async fn audit_no_fix_versions() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -674,8 +681,7 @@ async fn audit_multiple_vulnerabilities_same_package() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -740,10 +746,7 @@ async fn audit_no_dev() {
         .arg("--no-dev")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -756,10 +759,7 @@ async fn audit_no_dev() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
@@ -804,10 +804,7 @@ async fn audit_extras() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
@@ -822,17 +819,14 @@ async fn audit_extras() {
         .arg("web")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
 
-/// Non-default dependency groups are included when explicitly requested.
+/// Dependency group filters limit the groups included in an audit.
 #[tokio::test]
 async fn audit_dependency_groups() {
     let context = uv_test::test_context!("3.12");
@@ -872,10 +866,7 @@ async fn audit_dependency_groups() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 3 packages
@@ -889,10 +880,7 @@ async fn audit_dependency_groups() {
         .arg("--no-dev")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
@@ -907,10 +895,7 @@ async fn audit_dependency_groups() {
         .arg("lint")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
@@ -925,10 +910,70 @@ async fn audit_dependency_groups() {
         .arg("lint")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
 
+/// `--no-default-groups` disables all implicit dependency groups in an audit.
+#[tokio::test]
+async fn audit_no_default_groups() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [dependency-groups]
+        dev = ["typing-extensions==4.10.0"]
+        lint = ["sniffio==1.3.1"]
+
+        [tool.uv]
+        default-groups = ["dev"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    // All groups are audited by default, including lint, which is not in default-groups.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 3 packages
+    ");
+
+    // Disabling implicit groups leaves only the project's dependencies.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--no-default-groups")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -993,8 +1038,7 @@ async fn audit_ignore_by_id() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -1022,10 +1066,7 @@ async fn audit_ignore_by_id() {
         .arg("PYSEC-2023-0001")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -1080,10 +1121,7 @@ async fn audit_ignore_by_alias() {
         .arg("CVE-2023-9999")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -1138,10 +1176,7 @@ async fn audit_ignore_until_fixed() {
         .arg("VULN-NO-FIX")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -1209,8 +1244,7 @@ async fn audit_ignore_until_fixed_with_fix() {
         .arg("PYSEC-2023-0001")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -1318,10 +1352,7 @@ async fn audit_ignore_until_fixed_with_fix_for_other_package() {
         .arg("PYSEC-2023-0001")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -1389,10 +1420,7 @@ async fn audit_ignore_config() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -1447,10 +1475,7 @@ async fn audit_ignore_until_fixed_config() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -1540,8 +1565,7 @@ async fn audit_ignore_partial() {
         .arg("VULN-A")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -1598,10 +1622,7 @@ async fn audit_ignore_unmatched() {
         .arg("CVE-XXXX-YYYY")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
@@ -1646,10 +1667,7 @@ async fn audit_ignore_until_fixed_unmatched() {
         .arg("CVE-XXXX-YYYY")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
@@ -1720,10 +1738,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
         .arg("CVE-DOES-NOT-EXIST")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability in the project
@@ -1791,10 +1806,7 @@ async fn audit_script_no_vulnerabilities() {
         .arg("script.py")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -1888,8 +1900,7 @@ async fn audit_script_vulnerability_found() {
         .arg("script.py")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -1950,10 +1961,7 @@ async fn audit_script_no_dependencies() {
         .arg("script.py")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 0 packages
@@ -1990,10 +1998,7 @@ async fn audit_script_frozen_missing_lockfile() {
         .arg("script.py")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `script.py.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -2072,10 +2077,7 @@ async fn audit_script_multiple_dependencies() {
         .arg("script.py")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
@@ -2162,10 +2164,7 @@ async fn audit_script_extras() {
         .arg("script.py")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 2 packages
@@ -2211,8 +2210,7 @@ async fn audit_project_status_deprecated_with_reason() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
 
     Adverse statuses:
@@ -2263,8 +2261,7 @@ async fn audit_project_status_archived_no_reason() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
 
     Adverse statuses:
@@ -2315,8 +2312,7 @@ async fn audit_project_status_quarantined() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
 
     Adverse statuses:
@@ -2367,10 +2363,7 @@ async fn audit_project_status_active_not_reported() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 1 package
@@ -2439,8 +2432,7 @@ async fn audit_vulnerability_and_project_status() {
         .arg("audit")
         .arg("--service-url")
         .arg(server.uri()), @r"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
 
     Vulnerabilities:
@@ -2517,8 +2509,7 @@ async fn audit_json_vulnerability_and_project_status() {
         .arg("--frozen")
         .arg("--service-url")
         .arg(server.uri()), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     {
       "schema": {
@@ -2556,8 +2547,6 @@ async fn audit_json_vulnerability_and_project_status() {
         }
       ]
     }
-
-    ----- stderr -----
     "#);
 }
 
@@ -2618,8 +2607,7 @@ async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
         .arg("--frozen")
         .arg("--service-url")
         .arg(server.uri()), @r#"
-    success: false
-    exit_code: 1
+    exit_code: 1 (failure)
     ----- stdout -----
     {
       "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
@@ -2753,8 +2741,6 @@ async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
       ],
       "version": "2.1.0"
     }
-
-    ----- stderr -----
     "#);
 
     Ok(())

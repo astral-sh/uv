@@ -1,0 +1,19 @@
+[project]
+name = "pyx-member-31"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "aiohttp==3.14.1",
+    "lxml==6.1.0",
+    "msgspec==0.21.1",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "inline-snapshot==0.32.6",
+    "pytest==9.0.3",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

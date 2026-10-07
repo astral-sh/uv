@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
+use uv_fs::normalize_path;
 use uv_git_types::GitUrl;
 
 use uv_normalize::PackageName;
@@ -107,6 +108,11 @@ impl VersionId {
 
     /// Create a new [`VersionId`] from an archive URL.
     pub fn from_archive(location: DisplaySafeUrl, subdirectory: Option<PathBuf>) -> Self {
+        // Use the same lexical normalization as the resolver's source comparison. Equivalent
+        // subdirectories must not lose their trusted hashes during lowering or lockfile reads.
+        let subdirectory = subdirectory
+            .map(|path| normalize_path(path).into_owned())
+            .filter(|path| !path.as_os_str().is_empty());
         Self::ArchiveUrl {
             location: CanonicalUrl::new(location),
             subdirectory,
@@ -238,6 +244,7 @@ impl From<&Self> for ResourceId {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use fs_err as fs;
@@ -320,11 +327,8 @@ mod tests {
         let file_url = DisplaySafeUrl::from_file_path(&file).unwrap();
         let directory_url = DisplaySafeUrl::from_file_path(&directory).unwrap();
 
-        assert!(matches!(VersionId::from_url(&file_url), VersionId::Path(_)));
-        assert!(matches!(
-            VersionId::from_url(&directory_url),
-            VersionId::Directory(_)
-        ));
+        assert_matches!(VersionId::from_url(&file_url), VersionId::Path(_));
+        assert_matches!(VersionId::from_url(&directory_url), VersionId::Directory(_));
 
         fs::remove_file(file).unwrap();
         fs::remove_dir_all(root).unwrap();
@@ -335,6 +339,6 @@ mod tests {
         let url =
             DisplaySafeUrl::parse("git+ftp://example.com/pkg.git@main#subdirectory=foo").unwrap();
 
-        assert!(matches!(VersionId::from_url(&url), VersionId::Unknown(_)));
+        assert_matches!(VersionId::from_url(&url), VersionId::Unknown(_));
     }
 }

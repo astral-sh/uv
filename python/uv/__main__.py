@@ -39,7 +39,9 @@ def _run() -> None:
 
         # Avoid emitting a traceback on interrupt
         try:
-            completed_process = subprocess.run([uv, *sys.argv[1:]], env=env)
+            completed_process = subprocess.run(
+                [uv, *sys.argv[1:]], env=env, check=False
+            )
         except KeyboardInterrupt:
             sys.exit(2)
 

@@ -1,8 +1,11 @@
 default_permissions = ":read-only"
 
 [permissions.issue-triage]
-description = "Read-only issue triage with GitHub API access."
+description = "Issue triage with temporary filesystem and GitHub API access."
 extends = ":read-only"
+
+[permissions.issue-triage.filesystem]
+":tmpdir" = "write"
 
 [permissions.issue-triage.network]
 enabled = true
@@ -28,13 +31,68 @@ enabled = true
 "github.com" = "allow"
 "pypi.org" = "allow"
 
-[permissions.pull-request-review]
-description = "Pull request review with workspace and GitHub API access."
+[permissions.create-bug-test]
+description = "Bug integration-test creation with workspace and dependency-registry access."
 extends = ":workspace"
 
-[permissions.pull-request-review.network]
+[permissions.create-bug-test.network]
 enabled = true
 
-[permissions.pull-request-review.network.domains]
+[permissions.create-bug-test.network.domains]
+"api.github.com" = "allow"
+"crates.io" = "allow"
+"files.pythonhosted.org" = "allow"
+"github.com" = "allow"
+"index.crates.io" = "allow"
+"pypi.org" = "allow"
+"static.crates.io" = "allow"
+"static.rust-lang.org" = "allow"
+
+[permissions.fix-reproduced-bug]
+description = "Reproduced bug fixes with workspace and dependency-registry access."
+extends = ":workspace"
+
+[permissions.fix-reproduced-bug.filesystem]
+":tmpdir" = "write"
+
+[permissions.fix-reproduced-bug.network]
+enabled = true
+
+[permissions.fix-reproduced-bug.network.domains]
+"api.github.com" = "allow"
+"crates.io" = "allow"
+"files.pythonhosted.org" = "allow"
+"github.com" = "allow"
+"index.crates.io" = "allow"
+"pypi.org" = "allow"
+"static.crates.io" = "allow"
+"static.rust-lang.org" = "allow"
+
+[permissions.workflow-failure]
+description = "Read-only workflow failure diagnosis with GitHub API access."
+extends = ":read-only"
+
+[permissions.workflow-failure.network]
+enabled = true
+
+[permissions.workflow-failure.network.domains]
+"api.github.com" = "allow"
+"github.com" = "allow"
+
+[permissions.pull-request-rebase]
+description = "Pull request rebase with workspace and Git metadata access."
+extends = ":workspace"
+
+[permissions.pull-request-rebase.filesystem.":workspace_roots"]
+".git" = "write"
+
+[permissions.pull-request-labels]
+description = "Read-only pull request label analysis with GitHub API access."
+extends = ":read-only"
+
+[permissions.pull-request-labels.network]
+enabled = true
+
+[permissions.pull-request-labels.network.domains]
 "api.github.com" = "allow"
 "github.com" = "allow"

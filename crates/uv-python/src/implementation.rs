@@ -12,7 +12,8 @@ pub enum Error {
     UnknownImplementation(String),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord, Hash, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ImplementationName {
     Pyodide,
     GraalPy,
@@ -21,7 +22,8 @@ pub enum ImplementationName {
     CPython,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd, Hash, serde::Serialize)]
+#[serde(untagged)]
 pub enum LenientImplementationName {
     Unknown(String),
     Known(ImplementationName),
@@ -148,6 +150,19 @@ impl From<&str> for LenientImplementationName {
 impl From<ImplementationName> for LenientImplementationName {
     fn from(implementation: ImplementationName) -> Self {
         Self::Known(implementation)
+    }
+}
+
+impl TryFrom<&LenientImplementationName> for ImplementationName {
+    type Error = Error;
+
+    fn try_from(implementation: &LenientImplementationName) -> Result<Self, Self::Error> {
+        match implementation {
+            LenientImplementationName::Known(implementation) => Ok(*implementation),
+            LenientImplementationName::Unknown(name) => {
+                Err(Error::UnknownImplementation(name.clone()))
+            }
+        }
     }
 }
 

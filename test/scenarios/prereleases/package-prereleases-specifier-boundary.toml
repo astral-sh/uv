@@ -1,15 +1,15 @@
 name = "package-prereleases-specifier-boundary"
-description = "The user requires a prerelease version of `a`. There are pre-releases on the boundary of their range."
+description = "An explicit pre-release specifier includes stable and pre-release candidates at the boundary of its range."
 
 [root]
 requires = ["a<0.2.0a2"]
 
 [expected]
 satisfiable = true
-explanation = "Since the user used a pre-release specifier, pre-releases at the boundary should be selected."
+explanation = "The stable candidate is preferred over pre-releases at the boundary of the range."
 
 [expected.packages]
-a = "0.2.0a1"
+a = "0.1.0"
 
 [packages.a.versions."0.1.0"]
 

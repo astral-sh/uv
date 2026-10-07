@@ -125,7 +125,7 @@ pub enum BearerAuthError {
 
 #[derive(Debug, Error, PartialEq)]
 pub enum LookupError {
-    #[error("Multiple credentials found for URL '{0}', specify which username to use")]
+    #[error("Multiple credentials found for URL `{0}`, specify which username to use")]
     AmbiguousUsername(DisplaySafeUrl),
 }
 

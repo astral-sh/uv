@@ -276,6 +276,17 @@ impl CachePolicy {
 }
 
 impl ArchivedCachePolicy {
+    /// Returns whether this cached response matches a request that permits stale data.
+    ///
+    /// This applies only the conditions from [`Self::before_request`] that produce
+    /// [`BeforeRequest::NoMatch`]. It intentionally skips freshness, `Vary`, and `no-cache`
+    /// checks because those produce [`BeforeRequest::Stale`], which an allow-stale caller accepts.
+    pub(crate) fn matches_stale_request(&self, request: &reqwest::Request) -> bool {
+        self.is_storable()
+            && self.request.uri == request.url().as_str()
+            && (request.method() == http::Method::GET || request.method() == http::Method::HEAD)
+    }
+
     /// Determines what caching behavior is correct given an existing
     /// `CachePolicy` and a new HTTP request for the resource managed by this
     /// cache policy. This is done as per [RFC 9111 S4].
@@ -307,7 +318,7 @@ impl ArchivedCachePolicy {
         // completely.
         if !self.is_storable() {
             tracing::trace!(
-                "Request {} does not match cache request {} because it isn't storable",
+                "Request `{}` does not match cache request `{}` because it isn't storable",
                 request.url(),
                 self.request.uri,
             );
@@ -320,7 +331,7 @@ impl ArchivedCachePolicy {
         // and..."
         if self.request.uri != request.url().as_str() {
             tracing::trace!(
-                "Request {} does not match cache URL of {}",
+                "Request `{}` does not match cache URL of `{}`",
                 request.url(),
                 self.request.uri,
             );
@@ -330,8 +341,8 @@ impl ArchivedCachePolicy {
         // be used for the presented request, and..."
         if request.method() != http::Method::GET && request.method() != http::Method::HEAD {
             tracing::trace!(
-                "Method {:?} for request {} is not supported by this cache",
-                request.method(),
+                "Method {} for request `{}` is not supported by this cache",
+                request.method().as_str(),
                 request.url(),
             );
             return BeforeRequest::NoMatch;
@@ -343,7 +354,7 @@ impl ArchivedCachePolicy {
         // conservatively require revalidation.
         if !self.vary.matches(request.headers()) {
             tracing::trace!(
-                "Request {} does not match cached request because of the 'Vary' header",
+                "Request `{}` does not match cached request because of the 'Vary' header",
                 request.url(),
             );
             self.set_revalidation_headers(request);
@@ -766,7 +777,7 @@ impl ArchivedCachePolicy {
             // [RFC 9111 S5.2.1.4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-5.2.1.4
             if reqcc.no_cache {
                 tracing::trace!(
-                    "Request to {} does not have a fresh cache entry because \
+                    "Request to `{}` does not have a fresh cache entry because \
                  it has a 'no-cache' cache-control directive",
                     request.url(),
                 );
@@ -780,7 +791,7 @@ impl ArchivedCachePolicy {
             if let Some(&max_age) = reqcc.max_age_seconds.as_ref() {
                 if age > max_age {
                     tracing::trace!(
-                        "Request to {} does not have a fresh cache entry because \
+                        "Request to `{}` does not have a fresh cache entry because \
                      the cached response's age is {} seconds and the max age \
                      allowed by the request is {} seconds",
                         request.url(),
@@ -800,7 +811,7 @@ impl ArchivedCachePolicy {
                 let time_to_live = freshness_lifetime.saturating_sub(unix_timestamp(now));
                 if time_to_live < min_fresh {
                     tracing::trace!(
-                        "Request to {} does not have a fresh cache entry because \
+                        "Request to `{}` does not have a fresh cache entry because \
                      the request set a 'min-fresh' cache-control directive, \
                      and its time-to-live is {} seconds but it needs to be \
                      at least {} seconds",
@@ -822,7 +833,7 @@ impl ArchivedCachePolicy {
             let allows_stale = self.allows_stale(now);
             if !allows_stale {
                 tracing::trace!(
-                    "Request to {} does not have a fresh cache entry because \
+                    "Request to `{}` does not have a fresh cache entry because \
                      its age is {} seconds, it is greater than or equal to the \
                      freshness lifetime of {} seconds and stale cached responses \
                      are not allowed",
@@ -1405,9 +1416,24 @@ fn parse_seconds(value: &[u8]) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::time::Duration;
 
     use super::*;
+
+    fn http_request(method: http::Method, uri: &str) -> reqwest::Request {
+        reqwest::Request::new(method, uri.parse().unwrap())
+    }
+
+    fn archived_cache_policy(
+        request: &reqwest::Request,
+        response: http::response::Builder,
+    ) -> OwnedArchive<CachePolicy> {
+        let response = reqwest::Response::from(response.body(Vec::new()).unwrap());
+        CachePolicyBuilder::new(request)
+            .build(&response)
+            .to_archived()
+    }
 
     /// A server or proxy is free to send an arbitrarily large `Age` header, up
     /// to `u64::MAX`. Combined with the resident age of a cached response, the
@@ -1438,5 +1464,57 @@ mod tests {
         let now = SystemTime::now() + Duration::from_secs(5);
         assert_eq!(archived.age(now), Duration::from_secs(u64::MAX));
         assert!(!archived.is_fresh(now, &request));
+    }
+
+    #[test]
+    fn stale_request_ignores_freshness_and_vary() {
+        let mut original = http_request(http::Method::GET, "https://example.com/");
+        original
+            .headers_mut()
+            .insert(http::header::ACCEPT, "application/json".parse().unwrap());
+        let archived = archived_cache_policy(
+            &original,
+            http::Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CACHE_CONTROL, "no-cache")
+                .header(http::header::VARY, "accept"),
+        );
+
+        let mut request = http_request(http::Method::GET, "https://example.com/");
+        request
+            .headers_mut()
+            .insert(http::header::ACCEPT, "text/html".parse().unwrap());
+
+        assert!(archived.matches_stale_request(&request));
+        assert_matches!(
+            archived.before_request(&mut request),
+            BeforeRequest::Stale(_)
+        );
+
+        let request = http_request(http::Method::HEAD, "https://example.com/");
+        assert!(archived.matches_stale_request(&request));
+    }
+
+    #[test]
+    fn stale_request_rejects_non_matching_cache_entries() {
+        let original = http_request(http::Method::GET, "https://example.com/");
+        let archived = archived_cache_policy(
+            &original,
+            http::Response::builder().status(http::StatusCode::OK),
+        );
+
+        let different_uri = http_request(http::Method::GET, "https://example.com/other");
+        assert!(!archived.matches_stale_request(&different_uri));
+
+        let unsupported_method = http_request(http::Method::POST, "https://example.com/");
+        assert!(!archived.matches_stale_request(&unsupported_method));
+
+        let unstorable = archived_cache_policy(
+            &original,
+            http::Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CACHE_CONTROL, "no-store"),
+        );
+        assert!(!unstorable.matches_stale_request(&original));
     }
 }
