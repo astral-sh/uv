@@ -247,6 +247,21 @@ impl TestContext {
         self.with_http_timeout("1").with_http_retries("1")
     }
 
+    /// Omit incidental HTTP retries from a snapshot that asserts the eventual error.
+    ///
+    /// Keep the final error and its causes. Context filters run before the standard timing filter.
+    #[must_use]
+    pub fn with_filtered_http_retries(self) -> Self {
+        self.with_filter((
+            r"(?m)^  cause: Request failed after [1-9]\d* retr(?:y|ies) in \d+\.\ds\r?\n",
+            "",
+        ))
+        .with_filter((
+            r"(?m)^error: Request failed after [1-9]\d* retr(?:y|ies) in \d+\.\ds\r?\n  cause: ",
+            "error: ",
+        ))
+    }
+
     /// Set the "concurrent installs" for all commands in this context.
     #[must_use]
     pub fn with_concurrent_installs(mut self, concurrent_installs: &str) -> Self {

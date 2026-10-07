@@ -8,7 +8,7 @@ use uv_test::uv_snapshot;
 
 #[tokio::test]
 async fn invalid_cloud_endpoint_urls() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let proxy = crate::pypi_proxy::start().await;
     let mut filters = context.filters();
     filters.push((r"UV_(S3|GCS|AZURE)_ENDPOINT_URL", "UV_[CLOUD]_ENDPOINT_URL"));

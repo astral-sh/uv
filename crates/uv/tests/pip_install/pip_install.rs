@@ -1187,7 +1187,7 @@ fn install_from_dev_stdin() -> Result<()> {
 /// Install a package from a remote `requirements.txt` into a virtual environment.
 #[tokio::test]
 async fn install_remote_requirements_txt() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let username = "user";
     let password = "password";
@@ -8803,7 +8803,7 @@ async fn registry_wheel_size_is_advisory() -> Result<()> {
 /// reading metadata from the wheel archive.
 #[tokio::test]
 async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = PackageServer::new(&"validation".parse()?).await;
     let wheel_filename = "validation-3.0.0-py3-none-any.whl";
     let wheel_path = context
@@ -8909,7 +8909,7 @@ fn require_hashes() -> Result<()> {
 #[test]
 fn require_hashes_build_dependencies() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -8937,7 +8937,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("hatchling[foo]==1.20.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000")?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--index-url").arg(server.index_url())
         .arg("--no-binary").arg("a")
         .arg("-r").arg("requirements.txt")
@@ -8996,7 +8996,7 @@ fn require_hashes_no_deps() -> Result<()> {
 /// Provide the wrong hash with `--require-hashes`.
 #[test]
 fn require_hashes_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -9015,7 +9015,7 @@ fn require_hashes_mismatch() -> Result<()> {
     "})?;
 
     // Raise an error.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
@@ -10142,7 +10142,7 @@ fn verify_hashes_missing_version() -> Result<()> {
 /// Provide the wrong hash with `--verify-hashes`.
 #[test]
 fn verify_hashes_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
@@ -10152,7 +10152,7 @@ fn verify_hashes_mismatch() -> Result<()> {
     "})?;
 
     // Raise an error.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
         .arg("-r")
         .arg("requirements.txt")
@@ -11962,11 +11962,11 @@ fn missing_subdirectory_git() -> Result<()> {
 
 #[test]
 fn missing_subdirectory_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -11982,11 +11982,11 @@ fn missing_subdirectory_url() -> Result<()> {
 // (Could be replaced with a checked-in hand-crafted corrupt wheel?)
 #[test]
 fn bad_crc32() -> Result<()> {
-    let context = uv_test::test_context!("3.11");
+    let context = uv_test::test_context!("3.11").with_filtered_http_retries();
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg("osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"), @"
     exit_code: 1 (failure)
@@ -12149,7 +12149,7 @@ fn static_metadata_source_tree() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/18778>
 #[test]
 fn direct_url_hash_source_tree_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
         [project]
@@ -16568,7 +16568,9 @@ fn config_settings_package() -> Result<()> {
 
 #[test]
 fn reject_invalid_archive_member_names() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-10-07T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-10-07T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheeldiff2==0.0.1"), @"
@@ -16584,7 +16586,9 @@ fn reject_invalid_archive_member_names() {
 
 #[test]
 fn reject_invalid_streaming_zip() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-07-10T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelstreamtest==0.0.1"), @"
@@ -16613,7 +16617,9 @@ fn reject_invalid_streaming_zip() {
 
 #[test]
 fn reject_invalid_double_zip() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-07-10T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelziptest==0.0.2"), @"
@@ -16629,7 +16635,7 @@ fn reject_invalid_double_zip() {
 
 #[test]
 fn reject_invalid_central_directory_offset() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16646,7 +16652,7 @@ fn reject_invalid_central_directory_offset() {
 
 #[test]
 fn reject_invalid_crc32_mismatch() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16662,7 +16668,7 @@ fn reject_invalid_crc32_mismatch() {
 
 #[test]
 fn reject_invalid_crc32_non_data_descriptor() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16678,7 +16684,7 @@ fn reject_invalid_crc32_non_data_descriptor() {
 
 #[test]
 fn reject_invalid_duplicate_extra_field() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16693,7 +16699,7 @@ fn reject_invalid_duplicate_extra_field() {
 
 #[test]
 fn reject_invalid_short_usize() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16709,7 +16715,7 @@ fn reject_invalid_short_usize() {
 
 #[test]
 fn reject_invalid_chained_extra_field() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16724,7 +16730,7 @@ fn reject_invalid_chained_extra_field() {
 
 #[test]
 fn reject_invalid_short_usize_zip64() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @"
@@ -18179,7 +18185,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
 
 #[test]
 fn fail_on_bz2_wheel() {
-    let context = uv_test::test_context!("3.14");
+    let context = uv_test::test_context!("3.14").with_filtered_http_retries();
     let vendor = FindLinksServer::vendor();
 
     uv_snapshot!(
@@ -18198,7 +18204,7 @@ fn fail_on_bz2_wheel() {
 
 #[test]
 fn fail_on_lzma_wheel() {
-    let context = uv_test::test_context!("3.14");
+    let context = uv_test::test_context!("3.14").with_filtered_http_retries();
     let vendor = FindLinksServer::vendor();
 
     uv_snapshot!(

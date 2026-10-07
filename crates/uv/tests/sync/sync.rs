@@ -12961,7 +12961,7 @@ fn mismatched_name_self_editable_package() -> Result<()> {
 /// A wheel is available in the cache, but was requested under the wrong name.
 #[test]
 fn mismatched_name_cached_wheel() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     // Cache the `iniconfig` wheel.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -13493,7 +13493,7 @@ fn sync_build_tag() -> Result<()> {
 
 #[test]
 fn url_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18699,7 +18699,7 @@ async fn sync_malware_check_disabled() {
 /// Ensure that a network error during the malware check fails the sync.
 #[tokio::test]
 async fn sync_malware_check_network_error() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml

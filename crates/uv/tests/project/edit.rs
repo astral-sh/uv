@@ -13937,7 +13937,7 @@ async fn add_auth_policy_always_with_credentials() -> Result<()> {
 /// doesn't require credentials will fail.
 #[test]
 fn add_auth_policy_always_without_credentials() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -13955,7 +13955,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.add().arg("anyio"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: https://pypi.org/simple/anyio/
@@ -13963,7 +13963,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
     "
     );
 
-    uv_snapshot!(context.pip_install().arg("black"), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg("black"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: https://pypi.org/simple/black/
@@ -13977,7 +13977,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
 /// no discoverable password will fail.
 #[test]
 fn add_auth_policy_always_with_username_no_password() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -13995,7 +13995,7 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.add().arg("anyio"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: https://pypi.org/simple/anyio/
@@ -14009,7 +14009,7 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
 /// in the URL, no authenticated requests will be allowed.
 #[tokio::test]
 async fn add_auth_policy_never_with_url_credentials() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");

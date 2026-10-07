@@ -1541,7 +1541,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_tool_dirs()
+        .with_filtered_http_retries();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1727,7 +1728,9 @@ async fn tool_upgrade_resolution_hints() -> Result<()> {
 /// source preference remains valid, while the index changes the advertised hash before upgrade.
 #[tokio::test]
 async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let context = uv_test::test_context!("3.12")
+        .with_tool_dirs()
+        .with_filtered_http_retries();
     let bin_dir = context.temp_dir.child("bin");
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
     let wheel = fs_err::read(

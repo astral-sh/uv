@@ -363,7 +363,7 @@ async fn audit_vulnerability_found() {
 /// Audit a project when OSV returns a malformed vulnerability record.
 #[tokio::test]
 async fn audit_malformed_vulnerability_record() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml

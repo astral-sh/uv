@@ -3573,13 +3573,13 @@ fn require_hashes_invalid_operator() -> Result<()> {
 /// Include the hash for _just_ the wheel with `--no-binary`.
 #[test]
 fn require_hashes_wheel_no_binary() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -3659,13 +3659,13 @@ fn require_hashes_source_no_binary() -> Result<()> {
 /// Include the hash for _just_ the source distribution, with `--binary-only`.
 #[test]
 fn require_hashes_source_only_binary() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--only-binary")
         .arg(":all:")
@@ -3690,13 +3690,13 @@ fn require_hashes_source_only_binary() -> Result<()> {
 /// Include the correct hash algorithm, but the wrong digest.
 #[test]
 fn require_hashes_wrong_digest() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
@@ -3719,13 +3719,13 @@ fn require_hashes_wrong_digest() -> Result<()> {
 /// Include the correct hash, but the wrong algorithm.
 #[test]
 fn require_hashes_wrong_algorithm() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5fcfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
@@ -3749,7 +3749,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
 /// Include the hash for a source distribution specified as a direct URL dependency.
 #[test]
 fn require_hashes_source_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3787,7 +3787,7 @@ fn require_hashes_source_url() -> Result<()> {
     requirements_txt
         .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @"
@@ -3810,13 +3810,13 @@ fn require_hashes_source_url() -> Result<()> {
 /// Include the _wrong_ hash for a source distribution specified as a direct URL dependency.
 #[test]
 fn require_hashes_source_url_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
@@ -3838,7 +3838,7 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
 /// Include the hash for a built distribution specified as a direct URL dependency.
 #[test]
 fn require_hashes_wheel_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -3876,7 +3876,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     requirements_txt
         .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @"
@@ -3919,13 +3919,13 @@ fn require_hashes_wheel_url() -> Result<()> {
 /// Include the _wrong_ hash for a built distribution specified as a direct URL dependency.
 #[test]
 fn require_hashes_wheel_url_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
@@ -4004,7 +4004,7 @@ fn require_hashes_source_tree() -> Result<()> {
 /// Include the hash for _just_ the wheel with `--only-binary`.
 #[test]
 fn require_hashes_re_download() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==4.0.0")?;
@@ -4026,7 +4026,7 @@ fn require_hashes_re_download() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes"), @"
@@ -4349,7 +4349,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
 /// Repeated direct URL requirements merge compatible hashes instead of overwriting them.
 #[test]
 fn require_hashes_repeated_hash() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     // Use the same hash in both cases.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -4402,7 +4402,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
             anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     " })?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--reinstall"), @"
@@ -4431,7 +4431,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
             anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     " })?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--reinstall"), @"
@@ -4603,7 +4603,7 @@ fn require_hashes_at_least_one() -> Result<()> {
 /// Using `--find-links`, but the registry doesn't provide us with a hash.
 #[test]
 fn require_hashes_find_links_no_hash() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = FindLinksServer::new(&context.workspace_root.join("test/links"));
     let index = PackseServer::empty();
 
@@ -4636,7 +4636,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         "basic-package==0.1.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
     )?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4665,7 +4665,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         "basic-package==0.1.0 --hash=sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4",
     )?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4693,7 +4693,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         "basic-package==0.1.0 --hash=sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4",
     )?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -4745,7 +4745,7 @@ fn require_hashes_find_links_valid_hash() -> Result<()> {
 /// Using `--find-links`, and the registry serves us an incorrect hash.
 #[test]
 fn require_hashes_find_links_invalid_hash() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -4753,7 +4753,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         "example-a-961b4c22==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
     )?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4778,7 +4778,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4848,7 +4848,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -4928,13 +4928,13 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
 /// Verify the index's wheel hash even when no explicit hash policy is requested.
 #[test]
 fn index_wheel_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     context
         .temp_dir
         .child("requirements.txt")
         .write_str("example-a-961b4c22==1.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--only-binary=:all:")
@@ -4963,7 +4963,7 @@ fn index_wheel_hash_mismatch() -> Result<()> {
 /// Using `--index-url`, and the registry serves us an incorrect hash.
 #[test]
 fn require_hashes_registry_invalid_hash() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -4971,7 +4971,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         "example-a-961b4c22==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
     )?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
@@ -4997,7 +4997,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
@@ -5069,7 +5069,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--refresh")
@@ -5143,13 +5143,15 @@ fn require_hashes_url_other_fragment() -> Result<()> {
 /// Include an invalid hash in the URL directly.
 #[test]
 fn require_hashes_url_invalid() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-29T00:00:00Z")
+        .with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
@@ -6202,7 +6204,7 @@ fn pep_751_validates_archive_size() -> Result<()> {
 #[test]
 fn pep_751_validates_remote_archive_size() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
         r#"
         lock-version = "1.0"
@@ -6275,7 +6277,7 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
 #[test]
 fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let wheel_url = server.file_url("a-1.0.0-py3-none-any.whl");
 
     context
@@ -6332,7 +6334,7 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
 #[test]
 fn pep_751_validates_cached_registry_wheel_size() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let pylock = formatdoc! {
         r#"
         lock-version = "1.0"
@@ -6393,7 +6395,7 @@ fn pep_751_validates_cached_registry_wheel_size() -> Result<()> {
 #[test]
 fn pep_751_validates_cached_registry_sdist_size() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let (_, hash) = server
         .files()
         .find(|(filename, _)| *filename == "a-1.0.0.tar.gz")
@@ -6458,7 +6460,7 @@ fn pep_751_validates_cached_registry_sdist_size() -> Result<()> {
 #[test]
 fn pep_751_validates_cached_url_sdist_size() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let (_, hash) = server
         .files()
         .find(|(filename, _)| *filename == "a-1.0.0.tar.gz")
