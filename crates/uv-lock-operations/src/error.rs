@@ -9,6 +9,7 @@ use uv_command_support::UvError;
 use uv_distribution::{LoweringError, MetadataError};
 use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError};
 use uv_errors::{Hinted, Hints};
+use uv_fs::Simplified;
 use uv_lock::{Lock, LockError as LockDataError, LockParseError};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -228,14 +229,20 @@ impl Hinted for LockError {
             Self::LockFormat(..) => Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
-            Self::MissingLockfile(source, _, command) => match source {
-                MissingLockfileSource::Frozen(_) => Hints::from(format!(
-                    "To create a lockfile, run `uv {command} --no-frozen`.",
-                )),
-                MissingLockfileSource::Locked(_) => Hints::from(format!(
-                    "To create a lockfile, run `uv {command} --no-locked`.",
-                )),
-            },
+            Self::MissingLockfile(source, _, command) => {
+                let flag = match source {
+                    MissingLockfileSource::Frozen(_) => "--no-frozen",
+                    MissingLockfileSource::Locked(_) => "--no-locked",
+                };
+                if let LockCommand::LockProject(project) = command {
+                    Hints::from(format!(
+                        "To create a lockfile, run `uv {command} {flag}` with `--project` set to `{}`.",
+                        project.simplified_display(),
+                    ))
+                } else {
+                    Hints::from(format!("To create a lockfile, run `uv {command} {flag}`."))
+                }
+            }
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }

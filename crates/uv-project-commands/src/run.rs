@@ -89,6 +89,7 @@ struct GistFile {
 #[expect(clippy::fn_params_excessive_bools)]
 pub async fn run(
     project_dir: &Path,
+    invocation_dir: Option<&Path>,
     script: Option<Pep723Item>,
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
@@ -764,7 +765,11 @@ pub async fn run(
 
                 let result = match Box::pin(
                     LockOperation::new(
-                        LockCommand::Run,
+                        if invocation_dir == Some(project_dir) {
+                            LockCommand::Lock
+                        } else {
+                            LockCommand::LockProject(project_dir.to_path_buf())
+                        },
                         mode,
                         &settings.resolver,
                         &client_builder,
