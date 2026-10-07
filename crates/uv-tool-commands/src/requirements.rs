@@ -21,6 +21,8 @@ use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
+use crate::error::ToolError;
+
 /// Resolve any [`UnresolvedRequirementSpecification`] into a fully-qualified [`Requirement`].
 pub(super) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
@@ -35,7 +37,7 @@ pub(super) async fn resolve_names(
     printer: Printer,
     preview: Preview,
     lfs: GitLfsSetting,
-) -> Result<Vec<Requirement>, uv_requirements::Error> {
+) -> Result<Vec<Requirement>, ToolError> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
         .into_iter()
@@ -100,8 +102,7 @@ pub(super) async fn resolve_names(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build()
-        .map_err(std::io::Error::other)?;
+        .build()?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -124,10 +125,11 @@ pub(super) async fn resolve_names(
         build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
-    )?;
+    )
+    .map_err(uv_requirements::Error::from)?;
     let flat_index = FlatIndex::load(&client, cache, index_locations)
         .await
-        .map_err(Box::new)?;
+        .map_err(|error| uv_requirements::Error::FlatIndex(Box::new(error)))?;
 
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
