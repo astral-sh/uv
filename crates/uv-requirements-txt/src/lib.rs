@@ -483,6 +483,7 @@ impl RequirementsTxt {
                     for constraint in sub_constraints.constraints {
                         data.constraints.push(constraint);
                     }
+                    data.require_hashes |= sub_constraints.require_hashes;
                 }
                 RequirementsTxtStatement::RequirementEntry(requirement_entry) => {
                     data.requirements.push(requirement_entry);
