@@ -119,7 +119,7 @@ pub enum ScriptInterpreter {
 }
 
 impl ScriptInterpreter {
-    /// Return the expected virtual environment path for the [`Pep723Script`].
+    /// Return the expected virtual environment path for the [`Pep723ItemRef`].
     ///
     /// If `--active` is set, the active virtual environment will be preferred.
     ///
@@ -221,7 +221,7 @@ impl ScriptInterpreter {
         }
     }
 
-    /// Discover the interpreter to use for the current [`Pep723Item`].
+    /// Discover the interpreter to use for the current [`Pep723ItemRef`].
     pub async fn discover(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
@@ -397,7 +397,7 @@ pub fn check_environment_compatibility(
     Ok(())
 }
 
-/// The resolved Python request and requirement for a [`Pep723Script`]
+/// The resolved Python request and requirement for a [`Pep723ItemRef`].
 #[derive(Debug, Clone)]
 struct ScriptPython {
     /// The source of the Python request.
@@ -411,7 +411,7 @@ struct ScriptPython {
 }
 
 impl ScriptPython {
-    /// Determine the [`ScriptPython`] for the current [`Pep723Script`].
+    /// Determine the [`ScriptPython`] for the current [`Pep723ItemRef`].
     async fn from_request(
         python_request: Option<PythonRequest>,
         script: Pep723ItemRef<'_>,
