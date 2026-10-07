@@ -29,13 +29,17 @@ use uv_platform_tags::{Platform, Tags, TagsError, TagsOptions};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_static::EnvVars;
 
+use crate::downloads::PythonDownloadRequest;
 use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
 use crate::pointer_size::PointerSize;
+use crate::virtualenv::virtualenv_python_executable;
+use crate::{ImplementationName, PythonPreference, PythonRequest};
 use crate::{
     Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
     VersionRequest, VirtualEnvironment,
 };
+use which::which;
 
 #[cfg(windows)]
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
@@ -449,7 +453,7 @@ impl Interpreter {
     }
 
     /// Return the patch version component of this Python version.
-    pub(crate) fn python_patch(&self) -> u8 {
+    fn python_patch(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
@@ -493,7 +497,7 @@ impl Interpreter {
 
     /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
     /// have this attribute, so it may be `None`.
-    pub(crate) fn sys_base_executable(&self) -> Option<&Path> {
+    fn sys_base_executable(&self) -> Option<&Path> {
         self.sys_base_executable.as_deref()
     }
 
@@ -734,6 +738,238 @@ impl Interpreter {
                 self.sys_prefix.user_display(),
             )
             .await
+        }
+    }
+
+    /// Check whether this interpreter satisfies the given variant.
+    fn matches_variant(&self, variant: PythonVariant) -> bool {
+        match variant {
+            PythonVariant::Default => {
+                // TODO(zanieb): Right now, we allow debug interpreters to be selected by default for
+                // backwards compatibility, but we may want to change this in the future.
+                if (self.python_major(), self.python_minor()) >= (3, 14) {
+                    // For Python 3.14+, the free-threaded build is not considered experimental
+                    // and can satisfy the default variant without opt-in
+                    true
+                } else {
+                    // In Python 3.13 and earlier, the free-threaded build is considered
+                    // experimental and requires explicit opt-in
+                    !self.gil_disabled()
+                }
+            }
+            PythonVariant::Debug => self.debug_enabled(),
+            PythonVariant::Freethreaded => self.gil_disabled(),
+            PythonVariant::FreethreadedDebug => self.gil_disabled() && self.debug_enabled(),
+            PythonVariant::Gil => !self.gil_disabled(),
+            PythonVariant::GilDebug => !self.gil_disabled() && self.debug_enabled(),
+        }
+    }
+
+    /// Check whether this interpreter satisfies the given implementation.
+    pub(crate) fn matches_implementation(&self, implementation: ImplementationName) -> bool {
+        match implementation {
+            ImplementationName::Pyodide => self.os().is_emscripten(),
+            _ => self
+                .implementation_name()
+                .eq_ignore_ascii_case(implementation.long_name()),
+        }
+    }
+
+    /// Check whether this interpreter satisfies the given request.
+    pub(crate) fn matches_version_request(&self, request: &VersionRequest) -> bool {
+        match request {
+            VersionRequest::Any => true,
+            // Do not use free-threaded interpreters by default
+            VersionRequest::Default => self.matches_variant(PythonVariant::Default),
+            VersionRequest::Major(major, variant) => {
+                self.python_major() == *major && self.matches_variant(*variant)
+            }
+            VersionRequest::MajorMinor(major, minor, variant) => {
+                (self.python_major(), self.python_minor()) == (*major, *minor)
+                    && self.matches_variant(*variant)
+            }
+            VersionRequest::MajorMinorPatch(major, minor, patch, variant) => {
+                (
+                    self.python_major(),
+                    self.python_minor(),
+                    self.python_patch(),
+                ) == (*major, *minor, *patch)
+                    // When a patch version is included, we treat it as a request for a stable
+                    // release
+                    && self.python_version().pre().is_none()
+                    && self.matches_variant(*variant)
+            }
+            VersionRequest::Range(specifiers, variant) => {
+                // If the specifier contains pre-releases, use the full version for comparison.
+                // Otherwise, strip pre-release so that, e.g., `>=3.14` matches `3.14.0rc3`.
+                let version = if specifiers
+                    .iter()
+                    .any(uv_pep440::VersionSpecifier::any_prerelease)
+                {
+                    Cow::Borrowed(self.python_version())
+                } else {
+                    Cow::Owned(self.python_version().only_release())
+                };
+                specifiers.contains(&version) && self.matches_variant(*variant)
+            }
+            VersionRequest::MajorMinorPrerelease(major, minor, prerelease, variant) => {
+                let version = self.python_version();
+                let Some(interpreter_prerelease) = version.pre() else {
+                    return false;
+                };
+                (
+                    self.python_major(),
+                    self.python_minor(),
+                    interpreter_prerelease,
+                ) == (*major, *minor, *prerelease)
+                    && self.matches_variant(*variant)
+            }
+            VersionRequest::MajorMinorPatchPrerelease(major, minor, patch, prerelease, variant) => {
+                let version = self.python_version();
+                let Some(interpreter_prerelease) = version.pre() else {
+                    return false;
+                };
+                (
+                    self.python_major(),
+                    self.python_minor(),
+                    self.python_patch(),
+                    interpreter_prerelease,
+                ) == (*major, *minor, *patch, *prerelease)
+                    && self.matches_variant(*variant)
+            }
+        }
+    }
+
+    /// Check whether this interpreter satisfies the given request.
+    pub(crate) fn matches_download_request(&self, request: &PythonDownloadRequest) -> bool {
+        let executable = self.sys_executable().display();
+        if let Some(version) = request.version()
+            && !self.matches_version_request(version)
+        {
+            let interpreter_version = self.python_version();
+            debug!(
+                "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
+            );
+            return false;
+        }
+        let platform = request.platform();
+        let interpreter_platform = uv_platform::Platform::from(self.platform());
+        if !platform.matches(&interpreter_platform) {
+            debug!(
+                "Skipping interpreter at `{executable}`: platform `{interpreter_platform}` does not match request `{platform}`",
+            );
+            return false;
+        }
+        if let Some(implementation) = request.implementation()
+            && !self.matches_implementation(*implementation)
+        {
+            debug!(
+                "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
+                self.implementation_name(),
+            );
+            return false;
+        }
+        true
+    }
+
+    /// Check whether this interpreter satisfies the given request.
+    pub fn matches_request(&self, request: &PythonRequest, cache: &Cache) -> bool {
+        /// Returns `true` if the two paths refer to the same interpreter executable.
+        fn is_same_executable(path1: &Path, path2: &Path) -> bool {
+            path1 == path2 || is_same_file(path1, path2).unwrap_or(false)
+        }
+
+        match request {
+            PythonRequest::Default | PythonRequest::Any => true,
+            PythonRequest::Version(version_request) => {
+                self.matches_version_request(version_request)
+            }
+            PythonRequest::Directory(directory) => {
+                // `sys.prefix` points to the environment root or `sys.executable` is the same
+                is_same_executable(directory, self.sys_prefix())
+                    || is_same_executable(
+                        virtualenv_python_executable(directory).as_path(),
+                        self.sys_executable(),
+                    )
+            }
+            PythonRequest::File(file) => {
+                // The interpreter satisfies the request both if it is the venv...
+                if is_same_executable(self.sys_executable(), file) {
+                    return true;
+                }
+                // ...or if it is the base interpreter the venv was created from.
+                if self
+                    .sys_base_executable()
+                    .is_some_and(|sys_base_executable| {
+                        is_same_executable(sys_base_executable, file)
+                    })
+                {
+                    return true;
+                }
+                // ...or, on Windows, if both interpreters have the same base executable. On
+                // Windows, interpreters are copied rather than symlinked, so a virtual environment
+                // created from within a virtual environment will _not_ evaluate to the same
+                // `sys.executable`, but will have the same `sys._base_executable`.
+                if cfg!(windows) {
+                    if let Ok(file_interpreter) = Self::query(file, cache) {
+                        if let (Some(file_base), Some(interpreter_base)) = (
+                            file_interpreter.sys_base_executable(),
+                            self.sys_base_executable(),
+                        ) {
+                            if is_same_executable(file_base, interpreter_base) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            PythonRequest::ExecutableName(name) => {
+                // First, see if we have a match in the venv ...
+                if self
+                    .sys_executable()
+                    .file_name()
+                    .is_some_and(|filename| filename == name.as_str())
+                {
+                    return true;
+                }
+                // ... or the venv's base interpreter (without performing IO), if that fails, ...
+                if self
+                    .sys_base_executable()
+                    .and_then(|executable| executable.file_name())
+                    .is_some_and(|file_name| file_name == name.as_str())
+                {
+                    return true;
+                }
+                // ... check in `PATH`. The name we find here does not need to be the
+                // name we install, so we can find `foopython` here which got installed as `python`.
+                if which(name)
+                    .ok()
+                    .as_ref()
+                    .and_then(|executable| executable.file_name())
+                    .is_some_and(|file_name| file_name == name.as_str())
+                {
+                    return true;
+                }
+                false
+            }
+            PythonRequest::Implementation(implementation) => {
+                self.matches_implementation(*implementation)
+            }
+            PythonRequest::ImplementationVersion(implementation, version) => {
+                self.matches_version_request(version)
+                    && self.matches_implementation(*implementation)
+            }
+            PythonRequest::Key(request) => self.matches_download_request(request),
+        }
+    }
+
+    /// Check whether this interpreter satisfies the given preference.
+    pub(crate) fn satisfies_preference(&self, preference: PythonPreference) -> bool {
+        match preference {
+            PythonPreference::OnlyManaged => self.is_managed(),
+            PythonPreference::OnlySystem => !self.is_managed(),
+            PythonPreference::Managed | PythonPreference::System => true,
         }
     }
 }

@@ -356,7 +356,7 @@ pub fn check_environment_compatibility(
         .or_else(|| python_arch.map(|_| &PythonRequest::Any))
         .map(|request| request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)));
     if let Some(request) = python_request {
-        if request.satisfied(environment.interpreter(), cache) {
+        if environment.interpreter().matches_request(&request, cache) {
             debug!("The {kind} environment's Python version satisfies the request: `{request}`");
         } else {
             return Err(EnvironmentIncompatibilityError::PythonRequest(
@@ -379,10 +379,12 @@ pub fn check_environment_compatibility(
         }
     }
 
-    if python_preference.allows_installation(&PythonInstallation::new(
+    if PythonInstallation::new(
         PythonSource::DiscoveredEnvironment,
         environment.interpreter().clone(),
-    )) {
+    )
+    .satisfies_preference(&python_preference)
+    {
         trace!(
             "The virtual environment's Python interpreter meets the Python preference: `{}`",
             python_preference

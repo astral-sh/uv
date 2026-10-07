@@ -167,7 +167,7 @@ pub async fn list(
             // Apply the original `PythonPreference` to discovered interpreters, since we may
             // have expanded it above.
             installations
-                .retain(|installation| python_preference.allows_installation(installation));
+                .retain(|installation| installation.satisfies_preference(&python_preference));
             Some(installations)
         }
         PythonListKinds::Downloads => None,

@@ -77,10 +77,10 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
     ) -> bool {
-        if !environments.allows_installation(self) {
+        if !self.satisfies_environment_preference(environments) {
             return false;
         }
-        if !version.matches_installation(self) {
+        if !self.matches_version_request(version) {
             debug!(
                 "Skipping interpreter at `{}` from {}: does not satisfy request `{version}`",
                 self.interpreter.sys_executable().user_display(),
@@ -88,7 +88,7 @@ impl PythonInstallation {
             );
             return false;
         }
-        if !preference.allows_installation(self) {
+        if !self.satisfies_preference(&preference) {
             return false;
         }
         true
@@ -547,6 +547,111 @@ impl PythonInstallation {
         self.warn_if_outdated_prerelease(request, &download_list);
 
         Ok(())
+    }
+
+    /// Check whether this installation satisfies the Python preference.
+    ///
+    /// Explicit sources, including provided paths and active environments, are accepted even
+    /// when their managed status conflicts with the preference.
+    pub fn satisfies_preference(&self, preference: &PythonPreference) -> bool {
+        let source = self.source;
+        let interpreter = &self.interpreter;
+
+        match preference {
+            PythonPreference::OnlyManaged => {
+                if interpreter.satisfies_preference(*preference) {
+                    true
+                } else if source.is_explicit() {
+                    debug!(
+                        "Allowing unmanaged Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
+                        interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only managed interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
+            // If not "only" a kind, any interpreter is okay
+            PythonPreference::Managed | PythonPreference::System => true,
+            PythonPreference::OnlySystem => {
+                if interpreter.satisfies_preference(*preference) {
+                    true
+                } else if source.is_explicit() {
+                    debug!(
+                        "Allowing managed Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
+                        interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only system interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
+        }
+    }
+
+    /// Check the environment preference using both the discovery source and queried interpreter.
+    ///
+    /// Source filtering alone cannot determine whether an interpreter is in a virtual environment.
+    pub(crate) fn satisfies_environment_preference(
+        &self,
+        preference: EnvironmentPreference,
+    ) -> bool {
+        match (
+            preference,
+            // Conda environments are not conformant virtual environments but we treat them as such.
+            self.interpreter.is_virtualenv() || (matches!(self.source, PythonSource::CondaPrefix)),
+        ) {
+            (EnvironmentPreference::Any, _) => true,
+            (EnvironmentPreference::OnlyVirtual, true) => true,
+            (EnvironmentPreference::OnlyVirtual, false) => {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: only virtual environments allowed",
+                    self.interpreter.sys_executable().display()
+                );
+                false
+            }
+            (EnvironmentPreference::ExplicitSystem, true) => true,
+            (EnvironmentPreference::ExplicitSystem, false) => {
+                if matches!(
+                    self.source,
+                    PythonSource::ProvidedPath | PythonSource::ParentInterpreter
+                ) {
+                    debug!(
+                        "Allowing explicitly requested system Python interpreter at `{}`",
+                        self.interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: system interpreter not explicitly requested",
+                        self.interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
+            (EnvironmentPreference::OnlySystem, true) => {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: system interpreter required",
+                    self.interpreter.sys_executable().display()
+                );
+                false
+            }
+            (EnvironmentPreference::OnlySystem, false) => true,
+        }
+    }
+
+    /// Check the version request after adjusting its defaults for this installation's source.
+    fn matches_version_request(&self, request: &VersionRequest) -> bool {
+        let request = request.clone().into_request_for_source(self.source);
+        self.interpreter.matches_version_request(&request)
     }
 }
 

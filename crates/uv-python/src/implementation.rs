@@ -4,8 +4,6 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::Interpreter;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Unknown Python implementation `{0}`")]
@@ -76,15 +74,6 @@ impl ImplementationName {
         match self {
             Self::Pyodide => "pyodide",
             _ => self.executable_name(),
-        }
-    }
-
-    pub(crate) fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
-        match self {
-            Self::Pyodide => interpreter.os().is_emscripten(),
-            _ => interpreter
-                .implementation_name()
-                .eq_ignore_ascii_case(self.long_name()),
         }
     }
 }

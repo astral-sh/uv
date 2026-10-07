@@ -1091,11 +1091,13 @@ async fn get_or_create_environment(
             let existing_environment = installed_tools
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
-                    python_request
-                        .as_ref()
-                        .unwrap_or(&PythonRequest::Any)
-                        .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
-                        .satisfied(environment.environment().interpreter(), cache)
+                    environment.environment().interpreter().matches_request(
+                        &python_request
+                            .as_ref()
+                            .unwrap_or(&PythonRequest::Any)
+                            .with_default_arch(python_arch.map(PythonArchitecture::into_inner)),
+                        cache,
+                    )
                 });
 
             // Check if the installed packages meet the requirements.

@@ -718,10 +718,10 @@ pub(super) async fn refine_interpreter(
     // If the user passed a `--python` request, and the refined interpreter is incompatible, we
     // can't use it.
     if let Some(python_request) = python_request {
-        if !python_request
-            .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
-            .satisfied(&interpreter, cache)
-        {
+        if !interpreter.matches_request(
+            &python_request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)),
+            cache,
+        ) {
             return Ok(None);
         }
     }

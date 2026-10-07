@@ -2,7 +2,6 @@ use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use regex::Regex;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use same_file::is_same_file;
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::env::consts::EXE_SUFFIX;
@@ -23,7 +22,7 @@ use uv_pep440::{
 use uv_platform::{Arch, Platform};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user_once, warn_user_with_chain};
-use which::{which, which_all};
+use which::which_all;
 
 use crate::downloads::{
     ArchRequest, ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest,
@@ -310,6 +309,24 @@ pub enum Error {
 
     #[error(transparent)]
     BuildVersion(#[from] crate::python_version::BuildVersionError),
+}
+
+/// A failure while parsing a Python version request.
+#[derive(Debug, thiserror::Error)]
+pub enum PythonRequestError {
+    #[error("Invalid version request: {0}")]
+    InvalidVersionRequest(String),
+    #[error("Requesting the 'latest' Python version is not yet supported")]
+    LatestVersionRequest,
+}
+
+impl From<PythonRequestError> for Error {
+    fn from(error: PythonRequestError) -> Self {
+        match error {
+            PythonRequestError::InvalidVersionRequest(value) => Self::InvalidVersionRequest(value),
+            PythonRequestError::LatestVersionRequest => Self::LatestVersionRequest,
+        }
+    }
 }
 
 impl uv_errors::Hinted for Error {
@@ -948,64 +965,9 @@ fn sort_installations_by_key<T, K: Ord>(
     }
 }
 
-/// Whether a [`Interpreter`] matches the [`EnvironmentPreference`].
-///
-/// This is the correct way to determine if an interpreter matches the preference. In contrast,
-/// [`source_satisfies_environment_preference`] only checks if a [`PythonSource`] **could** satisfy
-/// preference as a pre-filtering step. We cannot definitively know if a Python interpreter is in
-/// a virtual environment until we query it.
-fn interpreter_satisfies_environment_preference(
-    source: PythonSource,
-    interpreter: &Interpreter,
-    preference: EnvironmentPreference,
-) -> bool {
-    match (
-        preference,
-        // Conda environments are not conformant virtual environments but we treat them as such.
-        interpreter.is_virtualenv() || (matches!(source, PythonSource::CondaPrefix)),
-    ) {
-        (EnvironmentPreference::Any, _) => true,
-        (EnvironmentPreference::OnlyVirtual, true) => true,
-        (EnvironmentPreference::OnlyVirtual, false) => {
-            debug!(
-                "Ignoring Python interpreter at `{}`: only virtual environments allowed",
-                interpreter.sys_executable().display()
-            );
-            false
-        }
-        (EnvironmentPreference::ExplicitSystem, true) => true,
-        (EnvironmentPreference::ExplicitSystem, false) => {
-            if matches!(
-                source,
-                PythonSource::ProvidedPath | PythonSource::ParentInterpreter
-            ) {
-                debug!(
-                    "Allowing explicitly requested system Python interpreter at `{}`",
-                    interpreter.sys_executable().display()
-                );
-                true
-            } else {
-                debug!(
-                    "Ignoring Python interpreter at `{}`: system interpreter not explicitly requested",
-                    interpreter.sys_executable().display()
-                );
-                false
-            }
-        }
-        (EnvironmentPreference::OnlySystem, true) => {
-            debug!(
-                "Ignoring Python interpreter at `{}`: system interpreter required",
-                interpreter.sys_executable().display()
-            );
-            false
-        }
-        (EnvironmentPreference::OnlySystem, false) => true,
-    }
-}
-
 /// Returns true if a [`PythonSource`] could satisfy the [`EnvironmentPreference`].
 ///
-/// This is useful as a pre-filtering step. Use of [`EnvironmentPreference::allows_installation`]
+/// This is useful as a pre-filtering step. Use of [`PythonInstallation::satisfies_environment_preference`]
 /// is required to determine if an [`Interpreter`] satisfies the preference.
 ///
 /// The interpreter path is only used for debug messages.
@@ -1254,7 +1216,7 @@ fn find_python_installations_with_strategy<'a>(
                 Box::new(
                     python_installations_with_name(name, cache, strategy)
                         .filter_ok(move |installation| {
-                            environments.allows_installation(installation)
+                            installation.satisfies_environment_preference(environments)
                         })
                         .map_ok(Ok),
                 )
@@ -1321,7 +1283,11 @@ fn find_python_installations_with_strategy<'a>(
                 cache,
                 strategy,
             )
-            .filter_ok(|installation| implementation.matches_interpreter(&installation.interpreter))
+            .filter_ok(move |installation| {
+                installation
+                    .interpreter
+                    .matches_implementation(*implementation)
+            })
             .map_ok(Ok)
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
@@ -1339,8 +1305,10 @@ fn find_python_installations_with_strategy<'a>(
                     cache,
                     strategy,
                 )
-                .filter_ok(|installation| {
-                    implementation.matches_interpreter(&installation.interpreter)
+                .filter_ok(move |installation| {
+                    installation
+                        .interpreter
+                        .matches_implementation(*implementation)
                 })
                 .map_ok(Ok)
             })
@@ -1364,7 +1332,7 @@ fn find_python_installations_with_strategy<'a>(
                     strategy,
                 )
                 .filter_ok(move |installation| {
-                    request.satisfied_by_interpreter(&installation.interpreter)
+                    installation.interpreter.matches_download_request(request)
                 })
                 .map_ok(Ok)
             })
@@ -1877,29 +1845,6 @@ fn is_windows_store_shim(_path: &Path) -> bool {
 }
 
 impl PythonVariant {
-    fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
-        match self {
-            Self::Default => {
-                // TODO(zanieb): Right now, we allow debug interpreters to be selected by default for
-                // backwards compatibility, but we may want to change this in the future.
-                if (interpreter.python_major(), interpreter.python_minor()) >= (3, 14) {
-                    // For Python 3.14+, the free-threaded build is not considered experimental
-                    // and can satisfy the default variant without opt-in
-                    true
-                } else {
-                    // In Python 3.13 and earlier, the free-threaded build is considered
-                    // experimental and requires explicit opt-in
-                    !interpreter.gil_disabled()
-                }
-            }
-            Self::Debug => interpreter.debug_enabled(),
-            Self::Freethreaded => interpreter.gil_disabled(),
-            Self::FreethreadedDebug => interpreter.gil_disabled() && interpreter.debug_enabled(),
-            Self::Gil => !interpreter.gil_disabled(),
-            Self::GilDebug => !interpreter.gil_disabled() && interpreter.debug_enabled(),
-        }
-    }
-
     /// Return the executable suffix for the variant, e.g., `t` for `python3.13t`.
     ///
     /// Returns an empty string for the default Python variant.
@@ -2062,7 +2007,7 @@ impl PythonRequest {
     ///
     /// This can only return `Err` if `@` is used. Otherwise, if no match is found, it returns
     /// `Ok(None)`.
-    pub fn try_from_tool_name(value: &str) -> Result<Option<Self>, Error> {
+    pub fn try_from_tool_name(value: &str) -> Result<Option<Self>, PythonRequestError> {
         let lowercase_value = &value.to_ascii_lowercase();
         // Omitting the empty string from these lists excludes bare versions like "39".
         let abstract_version_prefixes = if cfg!(windows) {
@@ -2096,7 +2041,7 @@ impl PythonRequest {
         implementation_names: impl IntoIterator<Item = &'a str>,
         // the string to parse
         lowercase_value: &str,
-    ) -> Result<Option<Self>, Error> {
+    ) -> Result<Option<Self>, PythonRequestError> {
         for prefix in abstract_version_prefixes {
             if let Some(version_request) =
                 Self::try_split_prefix_and_version(prefix, lowercase_value)?
@@ -2142,9 +2087,11 @@ impl PythonRequest {
     fn try_split_prefix_and_version(
         prefix: &str,
         lowercase_value: &str,
-    ) -> Result<Option<VersionRequest>, Error> {
+    ) -> Result<Option<VersionRequest>, PythonRequestError> {
         if lowercase_value.starts_with('@') {
-            return Err(Error::InvalidVersionRequest(lowercase_value.to_string()));
+            return Err(PythonRequestError::InvalidVersionRequest(
+                lowercase_value.to_string(),
+            ));
         }
         let Some(rest) = lowercase_value.strip_prefix(prefix) else {
             return Ok(None);
@@ -2159,7 +2106,7 @@ impl PythonRequest {
             if after_at == "latest" {
                 // Handle `@latest` as a special case. It's still an error for now, but we plan to
                 // support it. TODO(zanieb): Add `PythonRequest::Latest`
-                return Err(Error::LatestVersionRequest);
+                return Err(PythonRequestError::LatestVersionRequest);
             }
             return after_at.parse().map(Some);
         }
@@ -2201,94 +2148,6 @@ impl PythonRequest {
                 .version
                 .as_ref()
                 .is_some_and(|request| request.prerelease().is_some()),
-        }
-    }
-
-    /// Check if a given interpreter satisfies the interpreter request.
-    pub fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
-        /// Returns `true` if the two paths refer to the same interpreter executable.
-        fn is_same_executable(path1: &Path, path2: &Path) -> bool {
-            path1 == path2 || is_same_file(path1, path2).unwrap_or(false)
-        }
-
-        match self {
-            Self::Default | Self::Any => true,
-            Self::Version(version_request) => version_request.matches_interpreter(interpreter),
-            Self::Directory(directory) => {
-                // `sys.prefix` points to the environment root or `sys.executable` is the same
-                is_same_executable(directory, interpreter.sys_prefix())
-                    || is_same_executable(
-                        virtualenv_python_executable(directory).as_path(),
-                        interpreter.sys_executable(),
-                    )
-            }
-            Self::File(file) => {
-                // The interpreter satisfies the request both if it is the venv...
-                if is_same_executable(interpreter.sys_executable(), file) {
-                    return true;
-                }
-                // ...or if it is the base interpreter the venv was created from.
-                if interpreter
-                    .sys_base_executable()
-                    .is_some_and(|sys_base_executable| {
-                        is_same_executable(sys_base_executable, file)
-                    })
-                {
-                    return true;
-                }
-                // ...or, on Windows, if both interpreters have the same base executable. On
-                // Windows, interpreters are copied rather than symlinked, so a virtual environment
-                // created from within a virtual environment will _not_ evaluate to the same
-                // `sys.executable`, but will have the same `sys._base_executable`.
-                if cfg!(windows) {
-                    if let Ok(file_interpreter) = Interpreter::query(file, cache) {
-                        if let (Some(file_base), Some(interpreter_base)) = (
-                            file_interpreter.sys_base_executable(),
-                            interpreter.sys_base_executable(),
-                        ) {
-                            if is_same_executable(file_base, interpreter_base) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-                false
-            }
-            Self::ExecutableName(name) => {
-                // First, see if we have a match in the venv ...
-                if interpreter
-                    .sys_executable()
-                    .file_name()
-                    .is_some_and(|filename| filename == name.as_str())
-                {
-                    return true;
-                }
-                // ... or the venv's base interpreter (without performing IO), if that fails, ...
-                if interpreter
-                    .sys_base_executable()
-                    .and_then(|executable| executable.file_name())
-                    .is_some_and(|file_name| file_name == name.as_str())
-                {
-                    return true;
-                }
-                // ... check in `PATH`. The name we find here does not need to be the
-                // name we install, so we can find `foopython` here which got installed as `python`.
-                if which(name)
-                    .ok()
-                    .as_ref()
-                    .and_then(|executable| executable.file_name())
-                    .is_some_and(|file_name| file_name == name.as_str())
-                {
-                    return true;
-                }
-                false
-            }
-            Self::Implementation(implementation) => implementation.matches_interpreter(interpreter),
-            Self::ImplementationVersion(implementation, version) => {
-                version.matches_interpreter(interpreter)
-                    && implementation.matches_interpreter(interpreter)
-            }
-            Self::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
     }
 
@@ -2508,7 +2367,7 @@ impl PythonSource {
 
     /// Whether this source is "explicit", e.g., it was directly provided by the user or is
     /// an active virtual environment.
-    fn is_explicit(self) -> bool {
+    pub(crate) fn is_explicit(self) -> bool {
         match self {
             Self::ProvidedPath
             | Self::ParentInterpreter
@@ -2570,69 +2429,6 @@ impl PythonPreference {
         }
     }
 
-    /// Returns `true` if the given interpreter is allowed by this preference.
-    ///
-    /// Unlike [`PythonPreference::allows_source`], which checks the [`PythonSource`], this checks
-    /// whether the interpreter's base prefix is in a managed location.
-    fn allows_interpreter(self, interpreter: &Interpreter) -> bool {
-        match self {
-            Self::OnlyManaged => interpreter.is_managed(),
-            Self::OnlySystem => !interpreter.is_managed(),
-            Self::Managed | Self::System => true,
-        }
-    }
-
-    /// Returns `true` if the given installation is allowed by this preference.
-    ///
-    /// Explicit sources (e.g., provided paths, active environments) are always allowed, even if
-    /// they conflict with the preference. We may want to invalidate the environment in some
-    /// cases, like in projects, but we can't distinguish between explicit requests for a
-    /// different Python preference or a persistent preference in a configuration file which
-    /// would result in overly aggressive invalidation.
-    pub fn allows_installation(self, installation: &PythonInstallation) -> bool {
-        let source = installation.source;
-        let interpreter = &installation.interpreter;
-
-        match self {
-            Self::OnlyManaged => {
-                if self.allows_interpreter(interpreter) {
-                    true
-                } else if source.is_explicit() {
-                    debug!(
-                        "Allowing unmanaged Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
-                        interpreter.sys_executable().display()
-                    );
-                    true
-                } else {
-                    debug!(
-                        "Ignoring Python interpreter at `{}`: only managed interpreters allowed",
-                        interpreter.sys_executable().display()
-                    );
-                    false
-                }
-            }
-            // If not "only" a kind, any interpreter is okay
-            Self::Managed | Self::System => true,
-            Self::OnlySystem => {
-                if self.allows_interpreter(interpreter) {
-                    true
-                } else if source.is_explicit() {
-                    debug!(
-                        "Allowing managed Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
-                        interpreter.sys_executable().display()
-                    );
-                    true
-                } else {
-                    debug!(
-                        "Ignoring Python interpreter at `{}`: only system interpreters allowed",
-                        interpreter.sys_executable().display()
-                    );
-                    false
-                }
-            }
-        }
-    }
-
     /// Returns a new preference when the `--system` flag is used.
     ///
     /// This will convert [`PythonPreference::Managed`] to [`PythonPreference::System`] when system
@@ -2674,19 +2470,6 @@ impl EnvironmentPreference {
             // For immutable operations, we allow discovery of the system environment
             (false, false) => Self::Any,
         }
-    }
-
-    /// Returns `true` if the given installation is allowed by this preference.
-    ///
-    /// In contrast, [`source_satisfies_environment_preference`] only checks if a
-    /// [`PythonSource`] **could** satisfy the preference as a pre-filtering step. We cannot
-    /// definitively know if a Python interpreter is in a virtual environment until we query it.
-    pub(crate) fn allows_installation(self, installation: &PythonInstallation) -> bool {
-        interpreter_satisfies_environment_preference(
-            installation.source,
-            &installation.interpreter,
-            self,
-        )
     }
 }
 
@@ -3097,7 +2880,7 @@ impl VersionRequest {
     /// [`VersionRequest::Any`] for sources that should allow non-default interpreters like
     /// free-threaded variants.
     #[must_use]
-    fn into_request_for_source(self, source: PythonSource) -> Self {
+    pub(crate) fn into_request_for_source(self, source: PythonSource) -> Self {
         match self {
             Self::Default => match source {
                 PythonSource::ParentInterpreter
@@ -3116,82 +2899,10 @@ impl VersionRequest {
         }
     }
 
-    /// Check if an installation matches the request, adjusting the request for the installation's
-    /// source.
-    pub(crate) fn matches_installation(&self, installation: &PythonInstallation) -> bool {
-        let request = self.clone().into_request_for_source(installation.source);
-        request.matches_interpreter(&installation.interpreter)
-    }
-
-    /// Check if a interpreter matches the request.
-    pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
-        match self {
-            Self::Any => true,
-            // Do not use free-threaded interpreters by default
-            Self::Default => PythonVariant::Default.matches_interpreter(interpreter),
-            Self::Major(major, variant) => {
-                interpreter.python_major() == *major && variant.matches_interpreter(interpreter)
-            }
-            Self::MajorMinor(major, minor, variant) => {
-                (interpreter.python_major(), interpreter.python_minor()) == (*major, *minor)
-                    && variant.matches_interpreter(interpreter)
-            }
-            Self::MajorMinorPatch(major, minor, patch, variant) => {
-                (
-                    interpreter.python_major(),
-                    interpreter.python_minor(),
-                    interpreter.python_patch(),
-                ) == (*major, *minor, *patch)
-                    // When a patch version is included, we treat it as a request for a stable
-                    // release
-                    && interpreter.python_version().pre().is_none()
-                    && variant.matches_interpreter(interpreter)
-            }
-            Self::Range(specifiers, variant) => {
-                // If the specifier contains pre-releases, use the full version for comparison.
-                // Otherwise, strip pre-release so that, e.g., `>=3.14` matches `3.14.0rc3`.
-                let version = if specifiers
-                    .iter()
-                    .any(uv_pep440::VersionSpecifier::any_prerelease)
-                {
-                    Cow::Borrowed(interpreter.python_version())
-                } else {
-                    Cow::Owned(interpreter.python_version().only_release())
-                };
-                specifiers.contains(&version) && variant.matches_interpreter(interpreter)
-            }
-            Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
-                let version = interpreter.python_version();
-                let Some(interpreter_prerelease) = version.pre() else {
-                    return false;
-                };
-                (
-                    interpreter.python_major(),
-                    interpreter.python_minor(),
-                    interpreter_prerelease,
-                ) == (*major, *minor, *prerelease)
-                    && variant.matches_interpreter(interpreter)
-            }
-            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, variant) => {
-                let version = interpreter.python_version();
-                let Some(interpreter_prerelease) = version.pre() else {
-                    return false;
-                };
-                (
-                    interpreter.python_major(),
-                    interpreter.python_minor(),
-                    interpreter.python_patch(),
-                    interpreter_prerelease,
-                ) == (*major, *minor, *patch, *prerelease)
-                    && variant.matches_interpreter(interpreter)
-            }
-        }
-    }
-
     /// Check if a version is compatible with the request.
     ///
-    /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfill the request.
+    /// This only rules out incompatible versions before querying an interpreter; full matching
+    /// must also check the interpreter's variant.
     fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
             Self::Any | Self::Default => true,
@@ -3233,8 +2944,8 @@ impl VersionRequest {
 
     /// Check if major and minor version segments are compatible with the request.
     ///
-    /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfill the request.
+    /// This only rules out incompatible versions before querying an interpreter; full matching
+    /// must also check the interpreter's variant.
     fn matches_major_minor(&self, major: u8, minor: u8) -> bool {
         match self {
             Self::Any | Self::Default => true,
@@ -3276,8 +2987,8 @@ impl VersionRequest {
     /// Check if major, minor, patch, and prerelease version segments are compatible with the
     /// request.
     ///
-    /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfill the request.
+    /// This only rules out incompatible versions before querying an interpreter; full matching
+    /// must also check the interpreter's variant.
     pub(crate) fn matches_major_minor_patch_prerelease(
         &self,
         major: u8,
@@ -3325,8 +3036,8 @@ impl VersionRequest {
 
     /// Check if a [`PythonInstallationKey`] is compatible with the request.
     ///
-    /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfill the request.
+    /// This only rules out incompatible versions before querying an interpreter; full matching
+    /// must also check the interpreter's variant.
     pub(crate) fn matches_installation_key(&self, key: &PythonInstallationKey) -> bool {
         self.matches_major_minor_patch_prerelease(key.major, key.minor, key.patch, key.prerelease())
     }
@@ -3487,15 +3198,15 @@ impl VersionRequest {
 }
 
 impl FromStr for VersionRequest {
-    type Err = Error;
+    type Err = PythonRequestError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         /// Extract the variant from the end of a version request string, returning the prefix and
         /// the variant type.
-        fn parse_variant(s: &str) -> Result<(&str, PythonVariant), Error> {
+        fn parse_variant(s: &str) -> Result<(&str, PythonVariant), PythonRequestError> {
             // This cannot be a valid version, just error immediately
             if s.chars().all(char::is_alphabetic) {
-                return Err(Error::InvalidVersionRequest(s.to_string()));
+                return Err(PythonRequestError::InvalidVersionRequest(s.to_string()));
             }
 
             let Some(mut start) = s.rfind(|c: char| c.is_ascii_digit()) else {
@@ -3536,18 +3247,18 @@ impl FromStr for VersionRequest {
 
         // We dont allow post or dev version here
         if version.post().is_some() || version.dev().is_some() {
-            return Err(Error::InvalidVersionRequest(s.to_string()));
+            return Err(PythonRequestError::InvalidVersionRequest(s.to_string()));
         }
 
         // We don't allow local version suffixes unless they're variants, in which case they'd
         // already be stripped.
         if !version.local().is_empty() {
-            return Err(Error::InvalidVersionRequest(s.to_string()));
+            return Err(PythonRequestError::InvalidVersionRequest(s.to_string()));
         }
 
         // Cast the release components into u8s since that's what we use in `VersionRequest`
         let Ok(release) = try_into_u8_slice(&version.release()) else {
-            return Err(Error::InvalidVersionRequest(s.to_string()));
+            return Err(PythonRequestError::InvalidVersionRequest(s.to_string()));
         };
 
         let prerelease = version.pre();
@@ -3557,7 +3268,7 @@ impl FromStr for VersionRequest {
             [major] => {
                 // Prereleases are not allowed here, e.g., `3rc1` doesn't make sense
                 if prerelease.is_some() {
-                    return Err(Error::InvalidVersionRequest(s.to_string()));
+                    return Err(PythonRequestError::InvalidVersionRequest(s.to_string()));
                 }
                 Ok(Self::Major(*major, variant))
             }
@@ -3584,7 +3295,7 @@ impl FromStr for VersionRequest {
                 }
                 Ok(Self::MajorMinorPatch(*major, *minor, *patch, variant))
             }
-            _ => Err(Error::InvalidVersionRequest(s.to_string())),
+            _ => Err(PythonRequestError::InvalidVersionRequest(s.to_string())),
         }
     }
 }
@@ -3621,12 +3332,12 @@ impl fmt::Display for PythonVariant {
 fn parse_version_specifiers_request(
     s: &str,
     variant: PythonVariant,
-) -> Result<VersionRequest, Error> {
+) -> Result<VersionRequest, PythonRequestError> {
     let Ok(specifiers) = VersionSpecifiers::from_str(s) else {
-        return Err(Error::InvalidVersionRequest(s.to_string()));
+        return Err(PythonRequestError::InvalidVersionRequest(s.to_string()));
     };
     if specifiers.is_empty() {
-        return Err(Error::InvalidVersionRequest(s.to_string()));
+        return Err(PythonRequestError::InvalidVersionRequest(s.to_string()));
     }
     Ok(VersionRequest::from_specifiers(specifiers, variant))
 }
@@ -3890,8 +3601,8 @@ mod tests {
 
     use super::{
         DiscoveryPreferences, EnvironmentPreference, Error, InterpreterError,
-        PythonExecutableGroup, PythonPreference, PythonSource, PythonVariant, QueryStrategy,
-        python_installations_from_executables, sort_installations_by_key,
+        PythonExecutableGroup, PythonPreference, PythonRequestError, PythonSource, PythonVariant,
+        QueryStrategy, python_installations_from_executables, sort_installations_by_key,
     };
 
     // Testing this at a higher level would necessitate relying on filesystem ordering.
@@ -4418,7 +4129,7 @@ mod tests {
         );
         assert_matches!(
             VersionRequest::from_str("3rc1"),
-            Err(Error::InvalidVersionRequest(_)),
+            Err(PythonRequestError::InvalidVersionRequest(_)),
             "Pre-release version requests require a minor version"
         );
         assert_eq!(
@@ -4450,24 +4161,24 @@ mod tests {
         );
         assert_matches!(
             VersionRequest::from_str("3.12-dev"),
-            Err(Error::InvalidVersionRequest(_)),
+            Err(PythonRequestError::InvalidVersionRequest(_)),
             "Development version segments are not allowed"
         );
         assert_matches!(
             VersionRequest::from_str("3.12+local"),
-            Err(Error::InvalidVersionRequest(_)),
+            Err(PythonRequestError::InvalidVersionRequest(_)),
             "Local version segments are not allowed"
         );
         assert_matches!(
             VersionRequest::from_str("3.12.post0"),
-            Err(Error::InvalidVersionRequest(_)),
+            Err(PythonRequestError::InvalidVersionRequest(_)),
             "Post version segments are not allowed"
         );
         assert!(
             // Test for overflow
             matches!(
                 VersionRequest::from_str("31000"),
-                Err(Error::InvalidVersionRequest(_))
+                Err(PythonRequestError::InvalidVersionRequest(_))
             )
         );
         assert_eq!(
@@ -4505,11 +4216,11 @@ mod tests {
         );
         assert_matches!(
             VersionRequest::from_str("3.13tt"),
-            Err(Error::InvalidVersionRequest(_))
+            Err(PythonRequestError::InvalidVersionRequest(_))
         );
         assert_matches!(
             VersionRequest::from_str("3.12²t"),
-            Err(Error::InvalidVersionRequest(_))
+            Err(PythonRequestError::InvalidVersionRequest(_))
         );
 
         // `==` specifiers are parsed as concrete version requests via `from_specifiers`

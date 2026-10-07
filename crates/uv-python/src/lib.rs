@@ -9,8 +9,8 @@ pub use crate::architecture::PythonArchitecture;
 use crate::discovery::find_python_installations;
 pub use crate::discovery::{
     EnvironmentPreference, Error as DiscoveryError, PythonDownloads, PythonNotFound,
-    PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
-    find_all_python_installations,
+    PythonPreference, PythonRequest, PythonRequestError, PythonSource, PythonVariant,
+    VersionRequest, find_all_python_installations,
 };
 pub use crate::environment::{
     Error as PythonEnvironmentError, InvalidEnvironmentKind, PythonEnvironment,
@@ -3533,12 +3533,20 @@ mod tests {
             python.interpreter().python_full_version().to_string(),
             "3.13.2"
         );
-        assert!(PythonRequest::parse("pyodide").satisfied(python.interpreter(), &context.cache));
         assert!(
-            PythonRequest::parse("pyodide@3.13").satisfied(python.interpreter(), &context.cache)
+            python
+                .interpreter()
+                .matches_request(&PythonRequest::parse("pyodide"), &context.cache)
         );
         assert!(
-            !PythonRequest::parse("pyodide@3.12").satisfied(python.interpreter(), &context.cache)
+            python
+                .interpreter()
+                .matches_request(&PythonRequest::parse("pyodide@3.13"), &context.cache)
+        );
+        assert!(
+            !python
+                .interpreter()
+                .matches_request(&PythonRequest::parse("pyodide@3.12"), &context.cache)
         );
 
         // We should prefer the native Python to the Pyodide Python
@@ -3557,9 +3565,15 @@ mod tests {
             python.interpreter().python_full_version().to_string(),
             "3.15.7"
         );
-        assert!(!PythonRequest::parse("pyodide").satisfied(python.interpreter(), &context.cache));
         assert!(
-            !PythonRequest::parse("pyodide@3.15").satisfied(python.interpreter(), &context.cache)
+            !python
+                .interpreter()
+                .matches_request(&PythonRequest::parse("pyodide"), &context.cache)
+        );
+        assert!(
+            !python
+                .interpreter()
+                .matches_request(&PythonRequest::parse("pyodide@3.15"), &context.cache)
         );
 
         Ok(())
