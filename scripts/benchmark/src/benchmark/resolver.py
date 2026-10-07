@@ -1232,7 +1232,7 @@ class UvProject(Suite):
         venv_dir = os.path.join(cwd, ".venv")
 
         return Command(
-            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=(f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"),
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
