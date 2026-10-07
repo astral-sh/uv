@@ -164,6 +164,12 @@ impl From<uv_python::Error> for EnvironmentError {
     }
 }
 
+impl From<uv_python::PythonEnvironmentError> for EnvironmentError {
+    fn from(error: uv_python::PythonEnvironmentError) -> Self {
+        Self::Python(Box::new(error.into()))
+    }
+}
+
 impl From<uv_python_context::PythonContextError> for EnvironmentError {
     fn from(error: uv_python_context::PythonContextError) -> Self {
         Self::PythonContext(Box::new(error))

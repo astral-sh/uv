@@ -200,8 +200,8 @@ fn existing_project_environment(
 ) -> Result<Option<PythonEnvironment>, EnvironmentError> {
     let environment = match PythonEnvironment::from_root(root, cache) {
         Ok(environment) => environment,
-        Err(uv_python::Error::MissingEnvironment(_)) => return Ok(None),
-        Err(uv_python::Error::InvalidEnvironment(inner)) => {
+        Err(uv_python::PythonEnvironmentError::MissingEnvironment(_)) => return Ok(None),
+        Err(uv_python::PythonEnvironmentError::InvalidEnvironment(inner)) => {
             match inner.kind {
                 InvalidEnvironmentKind::NotDirectory => {
                     return Err(EnvironmentError::InvalidProjectEnvironmentDir(
@@ -227,14 +227,16 @@ fn existing_project_environment(
             }
             return Ok(None);
         }
-        Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {
+        Err(uv_python::PythonEnvironmentError::Query(uv_python::InterpreterError::NotFound(_))) => {
             return Ok(None);
         }
-        Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
-            path,
-            unix,
-            venv: _,
-        }))) => {
+        Err(uv_python::PythonEnvironmentError::Query(uv_python::InterpreterError::BrokenLink(
+            BrokenLink {
+                path,
+                unix,
+                venv: _,
+            },
+        ))) => {
             if unix {
                 let target_path = fs_err::read_link(&path)?;
                 warn_user!(

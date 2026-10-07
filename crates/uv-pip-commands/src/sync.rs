@@ -28,7 +28,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonArchitecture, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, Target,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, Target, find_environment,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -192,9 +192,9 @@ pub async fn pip_sync(
         )
         .await?;
         report_interpreter(&installation, true, printer)?;
-        PythonEnvironment::from_installation(installation)
+        PythonEnvironment::from_interpreter(installation.into_interpreter())
     } else {
-        let environment = PythonEnvironment::find(
+        let environment = find_environment(
             &python
                 .as_deref()
                 .map(PythonRequest::parse)

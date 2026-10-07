@@ -12,7 +12,7 @@ use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDistKind, N
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
+use uv_python::{EnvironmentPreference, Prefix, PythonRequest, Target, find_environment};
 use uv_python::{PythonArchitecture, PythonPreference};
 
 use crate::reporters::report_target_environment;
@@ -35,7 +35,7 @@ pub fn pip_freeze(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
-    let environment = PythonEnvironment::find(
+    let environment = find_environment(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
