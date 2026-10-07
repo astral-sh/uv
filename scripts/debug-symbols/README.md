@@ -297,43 +297,64 @@ establish overall runtime equivalence.
 
 [Windows line-table PGO build, verification, and timings](https://github.com/astral-sh/uv/actions/runs/37352288394)
 
-### Linux and macOS PGO debug-level comparison
+### Native PGO debug-level comparison
 
-Full uv comparisons with `full`, `limited`, and `line-tables-only` used the same runner profiles, uv
-source, Rust toolchain, dependencies, optimization settings, and training corpus. Each run built a
-fresh no-debug baseline and trained independent PGO profiles.
+Comparisons with `full`, `limited`, and `line-tables-only` used the same uv source, Rust toolchain,
+dependencies, optimization settings, and training corpus. Each run built a fresh no-debug baseline
+and trained independent PGO profiles. Completed comparisons used the same runner profile for each
+platform. Windows measurements below used the 32 GB Namespace profile; the full-debug experiment on
+the 64 GB profile has not produced measurements.
 
-Combined instrumented build, training, and final build times were, using the no-debug baseline from
-each line-table run in this table. The limited runs' baselines are recorded separately below:
+Combined instrumented build, training, and final build wall times are paired with the no-debug
+baseline from the same run. Both Windows limited observations are shown:
 
-| Native target             | No debug | Line tables | Limited | Full debug info |
-| ------------------------- | -------: | ----------: | ------: | --------------: |
-| x86_64-unknown-linux-gnu  |  17m 24s |     19m 19s | 23m 26s |         26m 38s |
-| aarch64-unknown-linux-gnu |  23m 57s |      26m 6s |  25m 8s |         32m 38s |
-| aarch64-apple-darwin      |   15m 1s |     16m 39s | 16m 46s |         50m 31s |
+| Platform       | Debug level     | No-debug baseline |         Symbols build | Paired overhead |
+| -------------- | --------------- | ----------------: | --------------------: | --------------: |
+| Linux x86-64   | Line tables     |           17m 24s |               19m 19s |          +11.0% |
+| Linux x86-64   | Limited         |            21m 6s |               23m 26s |          +11.1% |
+| Linux x86-64   | Full            |           17m 22s |               26m 38s |          +53.3% |
+| Linux ARM64    | Line tables     |           23m 57s |                26m 6s |           +9.0% |
+| Linux ARM64    | Limited         |            23m 6s |                25m 8s |           +8.8% |
+| Linux ARM64    | Full            |           22m 53s |               32m 38s |          +42.6% |
+| macOS ARM64    | Line tables     |            15m 1s |               16m 39s |          +10.8% |
+| macOS ARM64    | Limited         |           14m 56s |               16m 46s |          +12.2% |
+| macOS ARM64    | Full            |            15m 1s |               50m 31s |         +236.5% |
+| Windows x86-64 | Line tables     |           30m 31s |               33m 13s |           +8.8% |
+| Windows x86-64 | Limited, first  |            30m 3s |               40m 30s |          +34.8% |
+| Windows x86-64 | Limited, repeat |           27m 25s |                33m 8s |          +20.9% |
+| Windows x86-64 | Full            |            25m 6s | Out of memory (32 GB) |    Not measured |
 
-The fresh baselines help account for differences between runners and runs:
+Line tables added roughly 9–11% to the measured PGO build and training pipeline on each native
+target. Windows limited overhead varied from 34.8% to 20.9%; the repeat does not establish a stable
+cost or isolate the cause. These observations are not timings of the production release workflow.
+They exclude runner queueing, setup, symbol processing, verification, and artifact upload. The Linux
+runs do not use manylinux containers, and production signing is not exercised.
 
-| Native target             | No-debug baseline in full run | No-debug baseline in line-table run | Full overhead over its baseline | Line-table overhead over its baseline |
-| ------------------------- | ----------------------------: | ----------------------------------: | ------------------------------: | ------------------------------------: |
-| x86_64-unknown-linux-gnu  |                       17m 22s |                             17m 24s |                           53.3% |                                 11.0% |
-| aarch64-unknown-linux-gnu |                       22m 53s |                             23m 57s |                           42.6% |                                  9.0% |
-| aarch64-apple-darwin      |                        15m 1s |                              15m 1s |                          236.5% |                                 10.8% |
+Uncompressed `uv` companion sizes are bytes. No-debug builds do not produce separate symbol
+companions. Windows limited sizes use the repeat; the first observation is retained below:
 
-Together with Windows's 8.8% overhead, line tables added roughly 9–11% to the measured PGO build and
-training pipeline on each native target. These are single cold observations, not repeated benchmarks
-or timings of the production release workflow. They exclude runner queueing, setup, symbol
-processing, verification, and artifact upload. The Linux runs do not use manylinux containers, and
-production signing is not exercised.
+| Platform       | No-debug symbols | Line-table symbols | Limited symbols | Full symbols |
+| -------------- | ---------------: | -----------------: | --------------: | -----------: |
+| Linux x86-64   |                0 |        197,367,616 |     292,576,848 |  681,367,000 |
+| Linux ARM64    |                0 |        210,404,032 |     305,129,584 |  700,826,864 |
+| macOS ARM64    |                0 |        225,785,082 |     337,300,065 |  696,890,788 |
+| Windows x86-64 |                0 |        150,409,216 |     150,392,832 | Not measured |
 
-Uncompressed `uv` companion sizes are recorded below. No-debug builds do not produce separate symbol
-companions:
+Shipped `uv` executable changes are bytes and percentages relative to each run's own no-debug
+baseline. Windows limited again uses the repeat; its first observation was +5,632 bytes (+0.014%):
 
-| Native target             | No-debug symbol bytes | Line-table symbol bytes | Limited symbol bytes | Full symbol bytes |
-| ------------------------- | --------------------: | ----------------------: | -------------------: | ----------------: |
-| x86_64-unknown-linux-gnu  |                     0 |             197,367,616 |          292,576,848 |       681,367,000 |
-| aarch64-unknown-linux-gnu |                     0 |             210,404,032 |          305,129,584 |       700,826,864 |
-| aarch64-apple-darwin      |                     0 |             225,785,082 |          337,300,065 |       696,890,788 |
+| Platform       | Line-table executable delta | Limited executable delta | Full executable delta |
+| -------------- | --------------------------: | -----------------------: | --------------------: |
+| Linux x86-64   |           -14,328 (-0.030%) |         +6,408 (+0.013%) |    +230,024 (+0.478%) |
+| Linux ARM64    |           -11,856 (-0.029%) |        -21,328 (-0.052%) |    +151,680 (+0.367%) |
+| macOS ARM64    |           +36,400 (+0.102%) |        +52,896 (+0.149%) |     +87,104 (+0.245%) |
+| Windows x86-64 |           -69,120 (-0.172%) |         -1,536 (-0.004%) |          Not measured |
+
+The Windows limited repeat's PDB was 40,960 bytes larger than the first observation (0.03%). Its
+executable delta changed from +5,632 to -1,536 bytes, and its wheel delta from +2,159 to +416 bytes.
+Separate PGO training and debug settings can change code generation; small size differences do not
+guarantee identical release binaries. Detailed wheel sizes and stage timings for both Windows
+limited observations appear below.
 
 Each line-table target passed Rust entry-point, AWS-LC, and jitterentropy source lookups; removing
 the companion symbols prevented those lookups. Embedded SBOM validation, wheel installation with
@@ -367,32 +388,34 @@ Rust 1.99.0, LLVM 23.1.1, and Maturin 1.15.0. Debug information was set to `limi
 instrumented and final symbols builds. Each baseline used `none`. Runner profiles, Cargo job limits,
 fat LTO, and the PGO training corpus matched the line-table comparisons.
 
-Combined instrumented build, training, and final build times, with each limited run's baseline:
+Combined instrumented build, training, and final build times, with each limited run's baseline.
+Windows uses the repeat; both Windows observations are detailed below:
 
 | Native target             | No debug | Limited | Limited overhead | Line-table overhead in its own run |
 | ------------------------- | -------: | ------: | ---------------: | ---------------------------------: |
 | x86_64-unknown-linux-gnu  |   21m 6s | 23m 26s |            11.1% |                              11.0% |
 | aarch64-unknown-linux-gnu |   23m 6s |  25m 8s |             8.8% |                               9.0% |
 | aarch64-apple-darwin      |  14m 56s | 16m 46s |            12.2% |                              10.8% |
-| x86_64-pc-windows-msvc    |   30m 3s | 40m 30s |            34.8% |                               8.8% |
+| x86_64-pc-windows-msvc    |  27m 25s |  33m 8s |            20.9% |                               8.8% |
 
 The Linux x86-64 no-debug baseline took 21.3% longer than in the line-table run; its limited build
 also took 21.4% longer than the line-table build. The paired overheads were nearly identical, so the
 raw timing difference does not establish an added cost from `limited`. Linux ARM64's baseline and
 symbols timings both decreased by roughly 3.5–3.7%. macOS baselines were within 0.6%.
 
-Windows completed on `namespace-profile-windows-2022-x86-64-16x32` with four Cargo jobs. The limited
-instrumented build and training took 30m 1s, and the final build took 10m 29s. Its combined symbols
-time was 22.0% longer than the line-table run despite a 1.5% shorter no-debug baseline. The Windows
-repeat below shows substantial timing variation, so this difference cannot be attributed entirely to
-the debug level. Full-debug PGO previously exhausted memory on this runner profile; there is no
-completed full-debug PGO timing or PDB size for comparison. Peak memory was not measured.
+Windows completed on `namespace-profile-windows-2022-x86-64-16x32` with four Cargo jobs. The
+repeat's limited instrumented build and training took 22m 29s, and the final build took 10m 40s. Its
+combined symbols time was within 0.3% of the line-table run, with a 10.2% shorter no-debug baseline.
+The first limited observation took 40m 30s overall and measured 34.8% paired overhead. The repeat's
+20.9% overhead shows substantial timing variation. Full-debug PGO previously exhausted memory on
+this runner profile; there is no completed full-debug PGO timing or PDB size for comparison. Peak
+memory was not measured.
 
 Limited `uv` symbols were 48.2%, 45.0%, and 49.4% larger than line tables on Linux x86-64, Linux
-ARM64, and macOS respectively. On Windows, `uv.pdb` was 150,351,872 bytes versus 150,409,216 bytes
-with line tables, a difference of only 0.04%. The limited `uvx.pdb` and `uvw.pdb` were each
-4,509,696 bytes. All sizes are uncompressed; symbol size alone does not establish which additional
-debugger capabilities are available.
+ARM64, and macOS respectively. In the Windows repeat, `uv.pdb` was 150,392,832 bytes versus
+150,409,216 bytes with line tables, a difference of only 0.01%. The limited `uvx.pdb` was 4,509,696
+bytes and `uvw.pdb` was 4,501,504 bytes. All sizes are uncompressed; symbol size alone does not
+establish which additional debugger capabilities are available.
 
 All targets passed Rust entry-point, AWS-LC, and jitterentropy source lookups and the negative
 checks with companions hidden. Embedded SBOM checks, wheel installation with exact executable
@@ -408,7 +431,7 @@ no-debug builds by:
 | x86_64-unknown-linux-gnu  |                      +6,408 |              +567 |
 | aarch64-unknown-linux-gnu |                     -21,328 |           -54,837 |
 | aarch64-apple-darwin      |                     +52,896 |           +12,661 |
-| x86_64-pc-windows-msvc    |                      +5,632 |            +2,159 |
+| x86_64-pc-windows-msvc    |                      -1,536 |              +416 |
 
 Separate PGO training and debug settings can affect code generation; these small differences do not
 guarantee identical release sizes. Every mode reported zero PGO profile mismatches. Missing profile
@@ -423,17 +446,19 @@ were:
 | x86_64-unknown-linux-gnu  |           12.615 |          12.608 |        10.425 |       10.262 |
 | aarch64-unknown-linux-gnu |           10.685 |          10.610 |         8.227 |        8.299 |
 | aarch64-apple-darwin      |           11.221 |          11.334 |         9.258 |        9.294 |
-| x86_64-pc-windows-msvc    |           32.777 |          32.379 |        22.111 |       21.527 |
+| x86_64-pc-windows-msvc    |           31.151 |          32.331 |        21.528 |       21.299 |
 
-All median differences were below 0.6 ms. These short workloads and single build observations do not
-establish overall runtime equivalence or precise production CI costs.
+All median differences were below 1.2 ms. These short workloads and limited build observations do
+not establish overall runtime equivalence or precise production CI costs.
 
 Completed limited uv jobs:
 
 - [Linux x86-64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430069)
 - [Linux ARM64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430665)
 - [macOS ARM64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430285)
-- [Windows x86-64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430170)
+- Windows x86-64
+  [first observation](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430170) and
+  [repeat](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112928391792)
 
 ### Windows limited PGO repeat
 
