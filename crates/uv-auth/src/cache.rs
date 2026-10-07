@@ -17,27 +17,43 @@ type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FetchUrl {
-    /// A full index URL
+    /// A configured index URL.
     Index(DisplaySafeUrl),
-    /// A realm URL
+    /// An authentication realm.
     Realm(Realm),
 }
 
 impl Display for FetchUrl {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::Index(index) => Display::fmt(index, f),
-            Self::Realm(realm) => Display::fmt(realm, f),
+            Self::Index(url) => Display::fmt(url, formatter),
+            Self::Realm(realm) => Display::fmt(realm, formatter),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum CredentialsCacheScope {
+    /// Cache credentials for the entire realm and the request URL.
+    Realm,
+    /// Do not add credentials to the eager authentication cache.
+    FetchOnly,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct FetchedCredentials {
+    pub(crate) credentials: Arc<Authentication>,
+    pub(crate) cache_scope: CredentialsCacheScope,
 }
 
 #[derive(Debug)] // All internal types are redacted.
 pub struct CredentialsCache {
     /// A cache per realm and username
     realms: RwLock<FxHashMap<(Realm, Username), Arc<Authentication>>>,
-    /// A cache tracking the result of realm or index URL fetches from external services
-    pub(crate) fetches: FxOnceMap<(FetchUrl, Username), Option<Arc<Authentication>>>,
+    /// Cached realm- or index-scoped provider lookups.
+    pub(crate) fetches: FxOnceMap<(FetchUrl, Username), Option<FetchedCredentials>>,
+    /// Cached subprocess keyring lookups.
+    pub(crate) keyring_fetches: FxOnceMap<(FetchUrl, Username), Option<FetchedCredentials>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
     urls: RwLock<UrlTrie<Arc<Authentication>>>,
 }
@@ -53,6 +69,7 @@ impl CredentialsCache {
     pub fn new() -> Self {
         Self {
             fetches: FxOnceMap::default(),
+            keyring_fetches: FxOnceMap::default(),
             realms: RwLock::new(FxHashMap::default()),
             urls: RwLock::new(UrlTrie::new()),
         }
@@ -159,7 +176,7 @@ impl CredentialsCache {
         // Insert an entry for requests with no username
         self.insert_realm((Realm::from(url), Username::none()), &credentials);
 
-        // Insert an entry for the URL
+        // Insert an entry for the URL.
         let mut urls = self.urls.write().unwrap();
         urls.insert(url, credentials);
     }
