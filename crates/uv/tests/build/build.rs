@@ -13,6 +13,7 @@ use std::env::current_dir;
 use std::path::Path;
 use url::Url;
 use uv_static::EnvVars;
+use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
 use uv_test::packse::generate_wheel;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
@@ -3787,6 +3788,73 @@ fn build_no_gitignore() -> Result<()> {
         .child(".gitignore")
         .assert(predicate::path::missing());
 
+    Ok(())
+}
+
+#[test]
+fn build_require_hashes_md5_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = FindLinksServer::vendor();
+    let url = format!("{}/flit_core-3.9.0-py3-none-any.whl", server.url());
+    context.temp_dir.child("project/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "A test project"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = [
+            "flit-core @ {url}#md5=c817750ae741d8f720b173a30f7b2085",
+            "unused @ https://example.com/unused-1.0.0-py3-none-any.whl#md5=00000000000000000000000000000000 ; python_version < '3'",
+        ]
+        build-backend = "flit_core.buildapi"
+
+        [tool.uv]
+        no-index = true
+    "#})?;
+
+    // An MD5 fragment cannot authorize a build dependency when hashes are required.
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .arg("--require-hashes"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: `md5` hashes are insecure and cannot be used with `--require-hashes` but no other hashes are available for: flit-core @ http://[LOCALHOST]/flit_core-3.9.0-py3-none-any.whl#md5=c817750ae741d8f720b173a30f7b2085
+    ");
+
+    // MD5 remains usable when only verifying supplied hashes.
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    // A secure hash from a constraint can authorize the same URL.
+    context.temp_dir.child("constraints.txt").write_str(&format!(
+        "flit-core @ {url} --hash=sha256:7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .arg("--require-hashes")
+        .args(["--build-constraint", "constraints.txt"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
     Ok(())
 }
 

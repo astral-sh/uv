@@ -12038,6 +12038,58 @@ fn static_metadata_source_tree() -> Result<()> {
     Ok(())
 }
 
+/// Extras must retain hashes for both base and optional dependencies.
+#[test]
+fn direct_url_hash_dependency_negative_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let vendor = FindLinksServer::vendor();
+    let dependency_url = format!("{}/flit_core-3.9.0-py3-none-any.whl", vendor.url());
+    let context = context.with_filter((
+        "7aada352fb0c7f5538c4fafeddf314d3a6a92ee8e2b1de70482329e42de70301",
+        "[HASH]",
+    ));
+
+    for marker in ["extra != 'foo'", "extra == 'bar' and extra != 'foo'"] {
+        let (filename, wheel) = generate_wheel(
+            &"parent".parse()?,
+            &"1.0.0".parse()?,
+            &[format!(
+                "flit-core @ {dependency_url}#sha256={} ; {marker}",
+                "0".repeat(64)
+            )
+            .parse()?],
+            &BTreeMap::from([("foo".parse()?, vec![]), ("bar".parse()?, vec![])]),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        fs::write(context.temp_dir.child(&filename), wheel)?;
+
+        allow_duplicates! {
+            // The direct requirement authorizes the URL; the parent supplies its expected hash.
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg(format!("{filename}[foo,bar]"))
+                .arg(&dependency_url)
+                .arg("--no-index")
+                .arg("--no-cache"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 2 packages in [TIME]
+            error: Failed to download `flit-core @ http://[LOCALHOST]/flit_core-3.9.0-py3-none-any.whl`
+              cause: Hash mismatch for `flit-core @ http://[LOCALHOST]/flit_core-3.9.0-py3-none-any.whl`
+
+                     Expected:
+                       sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+                     Computed:
+                       sha256:[HASH]
+            ");
+        }
+    }
+
+    Ok(())
+}
+
 /// Regression test for: <https://github.com/astral-sh/uv/issues/18778>
 #[test]
 fn direct_url_hash_source_tree_dependency() -> Result<()> {
