@@ -486,19 +486,9 @@ impl InternerGuard<'_> {
         value: bool,
     ) -> NodeId {
         if value {
-            self.restrict_version_string_ranges(
-                id,
-                comparison.key,
-                &comparison.version,
-                &comparison.string,
-            )
+            self.restrict_version_string_ranges(id, comparison.key, &comparison.ranges)
         } else {
-            self.restrict_version_string_ranges(
-                id,
-                comparison.key,
-                &comparison.version.complement(),
-                &comparison.string.complement(),
-            )
+            self.restrict_version_string_ranges(id, comparison.key, &comparison.ranges.complement())
         }
     }
 
@@ -507,8 +497,7 @@ impl InternerGuard<'_> {
         &mut self,
         id: NodeId,
         key: CanonicalMarkerValueString,
-        version: &Ranges<Version>,
-        string: &Ranges<ArcStr>,
+        ranges: &VersionStringRanges,
     ) -> NodeId {
         if matches!(id, NodeId::TRUE | NodeId::FALSE) {
             return id;
@@ -529,43 +518,25 @@ impl InternerGuard<'_> {
         else {
             return id;
         };
-        let high_version = version.intersection(&comparison.version);
-        let high_string = string.intersection(&comparison.string);
-        let low_version = version.intersection(&comparison.version.complement());
-        let low_string = string.intersection(&comparison.string.complement());
-        let high_possible = version_string_nonempty(&high_version, &high_string);
-        let low_possible = version_string_nonempty(&low_version, &low_string);
-        if !high_possible && !low_possible {
+        let high_ranges = ranges.intersection(&comparison.ranges);
+        let low_ranges = ranges.intersection(&comparison.ranges.complement());
+        let high_empty = high_ranges.is_empty();
+        let low_empty = low_ranges.is_empty();
+        if high_empty && low_empty {
             return NodeId::FALSE;
         }
-        if !high_possible {
-            return self.restrict_version_string_ranges(
-                original_low.negate(id),
-                key,
-                &low_version,
-                &low_string,
-            );
+        if high_empty {
+            return self.restrict_version_string_ranges(original_low.negate(id), key, &low_ranges);
         }
-        if !low_possible {
+        if low_empty {
             return self.restrict_version_string_ranges(
                 original_high.negate(id),
                 key,
-                &high_version,
-                &high_string,
+                &high_ranges,
             );
         }
-        let high = self.restrict_version_string_ranges(
-            original_high.negate(id),
-            key,
-            &high_version,
-            &high_string,
-        );
-        let low = self.restrict_version_string_ranges(
-            original_low.negate(id),
-            key,
-            &low_version,
-            &low_string,
-        );
+        let high = self.restrict_version_string_ranges(original_high.negate(id), key, &high_ranges);
+        let low = self.restrict_version_string_ranges(original_low.negate(id), key, &low_ranges);
         if high == original_high.negate(id) && low == original_low.negate(id) {
             return id;
         }
@@ -609,27 +580,7 @@ impl InternerGuard<'_> {
         if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
             return self.and(xi, yi).is_false();
         }
-        if matches!(x.var, Variable::VersionString(_))
-            || matches!(y.var, Variable::VersionString(_))
-        {
-            return self.and(xi, yi).is_false();
-        }
-
-        // Perform Shannon Expansion of the higher order variable.
-        match x.var.cmp(&y.var) {
-            // X is higher order than Y, Y must be disjoint with every child of X.
-            Ordering::Less => x
-                .children
-                .nodes()
-                .all(|x| self.disjointness(x.negate(xi), yi)),
-            // Y is higher order than X, X must be disjoint with every child of Y.
-            Ordering::Greater => y
-                .children
-                .nodes()
-                .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisfiable.
-            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
-        }
+        self.disjointness(xi, yi)
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -1395,8 +1346,7 @@ pub(crate) struct VersionString {
     pub(crate) key: CanonicalMarkerValueString,
     pub(crate) operator: MarkerOperator,
     pub(crate) value: ArcStr,
-    version: Ranges<Version>,
-    string: Ranges<ArcStr>,
+    ranges: VersionStringRanges,
 }
 
 impl VersionString {
@@ -1460,8 +1410,7 @@ impl VersionString {
                 key,
                 operator,
                 value,
-                version,
-                string,
+                ranges: VersionStringRanges { version, string },
             },
             positive,
         ))
@@ -1469,27 +1418,57 @@ impl VersionString {
 
     /// Evaluates the numeric comparison or its lexicographic fallback.
     pub(crate) fn evaluate(&self, value: &str) -> bool {
+        self.ranges.contains(value)
+    }
+}
+
+/// A set of release values, partitioned into versions and opaque strings.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct VersionStringRanges {
+    version: Ranges<Version>,
+    string: Ranges<ArcStr>,
+}
+
+impl VersionStringRanges {
+    /// Intersects the version and opaque-string domains independently.
+    fn intersection(&self, other: &Self) -> Self {
+        Self {
+            version: self.version.intersection(&other.version),
+            string: self.string.intersection(&other.string),
+        }
+    }
+
+    /// Complements both domains.
+    fn complement(&self) -> Self {
+        Self {
+            version: self.version.complement(),
+            string: self.string.complement(),
+        }
+    }
+
+    /// Tests membership in the domain selected by the release value.
+    fn contains(&self, value: &str) -> bool {
         if let Ok(version) = value.parse::<Version>() {
             self.version.contains(&version)
         } else {
             self.string.contains(value)
         }
     }
-}
 
-/// Returns whether either comparison domain can contain an environment value.
-fn version_string_nonempty(version: &Ranges<Version>, string: &Ranges<ArcStr>) -> bool {
-    !version.is_empty()
-        || string.iter().any(|(lower, upper)| {
-            // A valid version spelling cannot be an opaque environment value.
-            if let (Bound::Included(lower), Bound::Included(upper)) = (lower, upper)
-                && lower == upper
-            {
-                lower.parse::<Version>().is_err()
-            } else {
-                true
-            }
-        })
+    /// Returns whether neither domain can contain an environment value.
+    fn is_empty(&self) -> bool {
+        self.version.is_empty()
+            && self.string.iter().all(|(lower, upper)| {
+                // A valid version spelling cannot be an opaque environment value.
+                if let (Bound::Included(lower), Bound::Included(upper)) = (lower, upper)
+                    && lower == upper
+                {
+                    lower.parse::<Version>().is_ok()
+                } else {
+                    false
+                }
+            })
+    }
 }
 
 impl PartialOrd for VersionString {
