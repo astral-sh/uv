@@ -9,6 +9,16 @@ Unreleased.
 
 ### Breaking changes
 
+- **Honor `--require-hashes` in included constraints files**
+  ([#22275](https://github.com/astral-sh/uv/pull/22275))
+
+  Previously, uv ignored `--require-hashes` in constraints files included with `-c` from a
+  requirements file. Now, uv honors the directive and requires hashes for all requirements in the
+  installation. Installs that previously succeeded can now fail if a requirement is missing a hash.
+
+  Add the missing hashes to your requirements, or remove the `--require-hashes` directive from the
+  included constraints file if hash checking is not intended.
+
 - **Prefer native Python on Windows ARM64** ([#22100](https://github.com/astral-sh/uv/pull/22100))
 
   Previously, native ARM64 builds of uv preferred emulated `x86_64` Python installations because native wheel support was limited, now uv prefers ARM64 (a.k.a. `aarch64`) interpreters across Python versions. This follows the ecosystem-wide transition including [CPython](https://discuss.python.org/t/python-on-windows-arm64/104524), the official Windows [Python install manager](https://discuss.python.org/t/python-install-manager-26-4/108846), and GitHub's [actions/setup-python](https://github.com/actions/setup-python#supported-architectures).
