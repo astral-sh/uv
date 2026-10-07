@@ -99,10 +99,9 @@ pub(super) async fn load_persisted_credentials(
         }
         credentials.push(credential);
     }
-    Ok(LoadedCredentials {
-        credentials: PersistedCredentials(credentials),
-        legacy: false,
-    })
+    Ok(LoadedCredentials::Persisted(PersistedCredentials(
+        credentials,
+    )))
 }
 
 /// Store one credential while holding its realm write lock.

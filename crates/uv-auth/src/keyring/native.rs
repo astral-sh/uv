@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    future::Future,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, LazyLock, Mutex, Weak},
@@ -7,7 +8,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock as AsyncRwLock};
-use tracing::{instrument, trace, warn};
+use tracing::{Instrument, instrument, trace, warn};
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_redacted::DisplaySafeUrl;
@@ -83,6 +84,19 @@ impl RealmWriteGuard {
     fn realm(&self) -> &Realm {
         &self.realm
     }
+
+    /// Keep the write lock until an update finishes, even if its caller is cancelled.
+    ///
+    /// Keyring backends can use blocking OS calls that outlive a cancelled future. The update
+    /// owns its guard in a separate task so another writer cannot overtake those calls.
+    async fn run<F>(self, update: impl FnOnce(Self) -> F + Send + 'static) -> Result<(), Error>
+    where
+        F: Future<Output = Result<(), Error>> + Send,
+    {
+        tokio::spawn(async move { update(self).await }.in_current_span())
+            .await
+            .map_err(Error::NativeTask)?
+    }
 }
 
 /// Credentials persisted for one authentication realm.
@@ -90,11 +104,25 @@ impl RealmWriteGuard {
 #[serde(transparent)]
 pub(super) struct PersistedCredentials(Vec<PersistentCredential>);
 
-/// Credentials loaded from a realm, including an overlapping legacy password.
-pub(super) struct LoadedCredentials {
-    credentials: PersistedCredentials,
-    /// The entry contains a legacy password and needs to be rewritten as a collection.
-    legacy: bool,
+/// Credentials loaded for a realm before legacy migration.
+#[derive(Debug)]
+pub(super) enum LoadedCredentials {
+    /// A collection of credentials persisted for the realm.
+    Persisted(PersistedCredentials),
+    /// A legacy password stored under the collection's keyring entry.
+    #[cfg(not(target_os = "windows"))]
+    Legacy(PersistentCredential),
+}
+
+impl LoadedCredentials {
+    /// Include an overlapping legacy password when reading or updating a collection.
+    fn into_credentials(self) -> PersistedCredentials {
+        match self {
+            Self::Persisted(credentials) => credentials,
+            #[cfg(not(target_os = "windows"))]
+            Self::Legacy(credential) => PersistedCredentials(vec![credential]),
+        }
+    }
 }
 
 impl PersistedCredentials {
@@ -143,43 +171,51 @@ impl LegacyGuardRef<'_> {
 
 /// Store credentials for an exact service in the platform keyring.
 #[instrument(skip(credentials))]
-pub(super) async fn store(service: &Service, credentials: &Credentials) -> Result<(), Error> {
+pub(super) async fn store(service: Service, credentials: Credentials) -> Result<(), Error> {
     let realm = Realm::from(service.url());
     let guard = acquire_realm_write(&realm).await?;
-    platform::store_persisted_credential(
-        &guard,
-        &PersistentCredential {
-            service: service.clone(),
-            credentials: credentials.clone(),
-        },
-    )
-    .await
+    guard
+        .run(move |guard| async move {
+            platform::store_persisted_credential(
+                &guard,
+                &PersistentCredential {
+                    service,
+                    credentials,
+                },
+            )
+            .await
+        })
+        .await
 }
 
 /// Remove credentials for an exact service and username from the platform keyring.
 #[instrument]
-pub(super) async fn remove(service: &Service, username: &str) -> Result<(), Error> {
+pub(super) async fn remove(service: Service, username: String) -> Result<(), Error> {
     let realm = Realm::from(service.url());
     let realm_guard = acquire_realm_write(&realm).await?;
 
-    let mut removed_legacy = false;
-    for service_name in legacy_removal_service_names(service.url()) {
-        if platform::is_persisted_entry(&realm, &service_name, username) {
-            continue;
-        }
-        let legacy_guard = acquire_legacy_write(&service_name).await?;
-        removed_legacy |= system_remove_legacy(&legacy_guard, username).await?;
-    }
+    realm_guard
+        .run(move |realm_guard| async move {
+            let mut removed_legacy = false;
+            for service_name in legacy_removal_service_names(service.url()) {
+                if platform::is_persisted_entry(&realm, &service_name, &username) {
+                    continue;
+                }
+                let legacy_guard = acquire_legacy_write(&service_name).await?;
+                removed_legacy |= system_remove_legacy(&legacy_guard, &username).await?;
+            }
 
-    let username = Username::from(Some(username.to_string()));
-    let removed_persisted =
-        platform::remove_persisted_credential(&realm_guard, service, &username).await?;
+            let username = Username::from(Some(username));
+            let removed_persisted =
+                platform::remove_persisted_credential(&realm_guard, &service, &username).await?;
 
-    if removed_persisted || removed_legacy {
-        Ok(())
-    } else {
-        Err(Error::Keyring(uv_keyring::Error::NoEntry))
-    }
+            if removed_persisted || removed_legacy {
+                Ok(())
+            } else {
+                Err(Error::Keyring(uv_keyring::Error::NoEntry))
+            }
+        })
+        .await
 }
 
 /// Fetch the best matching credentials, migrating a legacy entry when safe.
@@ -190,21 +226,25 @@ pub(super) async fn fetch(
 ) -> Result<Option<Credentials>, Error> {
     let realm = Realm::from(url);
     let legacy_match = {
-        let mut realm_guard = acquire_realm_read(&realm).await?;
-        let mut loaded =
+        let realm_guard = acquire_realm_read(&realm).await?;
+        let loaded =
             platform::load_persisted_credentials(RealmGuardRef::Read(&realm_guard)).await?;
 
-        if loaded.legacy {
+        #[cfg(not(target_os = "windows"))]
+        let (_realm_guard, loaded) = if let LoadedCredentials::Legacy(_) = loaded {
             drop(realm_guard);
             if let Err(err) = migrate_legacy_collection(&realm).await {
                 warn!("Failed to migrate legacy credentials in realm {realm}: {err}");
             }
-            realm_guard = acquire_realm_read(&realm).await?;
-            loaded =
+            let realm_guard = acquire_realm_read(&realm).await?;
+            let loaded =
                 platform::load_persisted_credentials(RealmGuardRef::Read(&realm_guard)).await?;
-        }
+            (realm_guard, loaded)
+        } else {
+            (realm_guard, loaded)
+        };
 
-        if let Some(credentials) = loaded.credentials.select(url, username)? {
+        if let Some(credentials) = loaded.into_credentials().select(url, username)? {
             return Ok(Some(credentials.clone()));
         }
 
@@ -245,16 +285,19 @@ pub(super) async fn fetch(
 }
 
 /// Rewrite an overlapping legacy entry without deleting its replacement.
+#[cfg(not(target_os = "windows"))]
 async fn migrate_legacy_collection(realm: &Realm) -> Result<(), Error> {
     let guard = acquire_realm_write(realm).await?;
-    let loaded = platform::load_persisted_credentials(RealmGuardRef::Write(&guard)).await?;
-    // Re-read under the write lock so a concurrent update or logout is not overwritten.
-    if loaded.legacy {
-        for credential in loaded.credentials.iter() {
-            platform::store_persisted_credential(&guard, credential).await?;
-        }
-    }
-    Ok(())
+    guard
+        .run(|guard| async move {
+            let loaded = platform::load_persisted_credentials(RealmGuardRef::Write(&guard)).await?;
+            // Re-read under the write lock so a concurrent update or logout is not overwritten.
+            if let LoadedCredentials::Legacy(credential) = loaded {
+                platform::store_persisted_credential(&guard, &credential).await?;
+            }
+            Ok(())
+        })
+        .await
 }
 
 /// Migrate an unchanged legacy credential into persisted realm storage.
@@ -264,10 +307,6 @@ async fn migrate_legacy_credential(
     service_name: &str,
     credentials: &Credentials,
 ) -> Result<(), Error> {
-    let Some(username) = credentials.username() else {
-        return Ok(());
-    };
-
     let service = if service_name.contains("://") {
         Service::from_str(service_name)
     } else {
@@ -283,32 +322,46 @@ async fn migrate_legacy_credential(
     }
 
     let realm_guard = acquire_realm_write(realm).await?;
-    let legacy_guard = acquire_legacy_write(service_name).await?;
-    let Some(current_password) =
-        system_fetch_legacy(LegacyGuardRef::Write(&legacy_guard), username).await?
-    else {
-        return Ok(());
-    };
-    if credentials.password() != Some(current_password.as_str()) {
-        return Ok(());
-    }
+    let service_name = service_name.to_string();
+    let credentials = credentials.clone();
+    realm_guard
+        .run(move |realm_guard| async move {
+            let Some(username) = credentials.username() else {
+                return Ok(());
+            };
+            let legacy_guard = acquire_legacy_write(&service_name).await?;
+            let Some(current_password) =
+                system_fetch_legacy(LegacyGuardRef::Write(&legacy_guard), username).await?
+            else {
+                return Ok(());
+            };
+            if credentials.password() != Some(current_password.as_str()) {
+                return Ok(());
+            }
 
-    let credential = PersistentCredential {
-        service,
-        credentials: Credentials::basic(Some(username.to_string()), Some(current_password)),
-    };
-    let persisted_credentials =
-        platform::load_persisted_credentials(RealmGuardRef::Write(&realm_guard)).await?;
-    if persisted_credentials.credentials.iter().any(|persisted| {
-        persisted.service == credential.service
-            && persisted.credentials.to_username() == credential.credentials.to_username()
-    }) {
-        system_remove_legacy(&legacy_guard, username).await?;
-        return Ok(());
-    }
-    platform::store_persisted_credential(&realm_guard, &credential).await?;
-    system_remove_legacy(&legacy_guard, username).await?;
-    Ok(())
+            let credential = PersistentCredential {
+                service,
+                credentials: Credentials::basic(Some(username.to_string()), Some(current_password)),
+            };
+            let persisted_credentials =
+                platform::load_persisted_credentials(RealmGuardRef::Write(&realm_guard)).await?;
+            if persisted_credentials
+                .into_credentials()
+                .iter()
+                .any(|persisted| {
+                    persisted.service == credential.service
+                        && persisted.credentials.to_username()
+                            == credential.credentials.to_username()
+                })
+            {
+                system_remove_legacy(&legacy_guard, username).await?;
+                return Ok(());
+            }
+            platform::store_persisted_credential(&realm_guard, &credential).await?;
+            system_remove_legacy(&legacy_guard, username).await?;
+            Ok(())
+        })
+        .await
 }
 
 /// Return legacy service names in lookup order.
@@ -518,7 +571,56 @@ async fn system_remove_legacy(guard: &LegacyWriteGuard, username: &str) -> Resul
 
 #[cfg(test)]
 mod tests {
+    use tokio::sync::oneshot;
+
     use super::*;
+
+    #[tokio::test]
+    async fn cancelled_update_holds_its_write_lock_until_finished()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("credentials.lock");
+        let process = Arc::new(AsyncRwLock::new(()));
+        let guard = RealmWriteGuard {
+            realm: Realm::from(&DisplaySafeUrl::parse("https://example.com")?),
+            _process: process.clone().write_owned().await,
+            _file: LockedFile::acquire(&path, LockedFileMode::Exclusive, "test credentials")
+                .await?,
+        };
+        let (started, started_rx) = oneshot::channel();
+        let (finish, finish_rx) = oneshot::channel();
+        let (finished, finished_rx) = oneshot::channel();
+        let caller = tokio::spawn(guard.run(move |guard| async move {
+            started.send(()).expect("caller is waiting for the update");
+            finish_rx.await.expect("caller will finish the update");
+            drop(guard);
+            finished.send(()).expect("caller is waiting for completion");
+            Ok(())
+        }));
+
+        started_rx.await?;
+        caller.abort();
+        assert!(
+            caller
+                .await
+                .expect_err("caller was cancelled")
+                .is_cancelled()
+        );
+        assert!(process.try_write().is_err());
+        assert!(
+            LockedFile::acquire_no_wait(&path, LockedFileMode::Exclusive, "test credentials")
+                .is_none()
+        );
+
+        finish.send(()).expect("update is still running");
+        finished_rx.await?;
+        assert!(process.try_write().is_ok());
+        assert!(
+            LockedFile::acquire_no_wait(&path, LockedFileMode::Exclusive, "test credentials")
+                .is_some()
+        );
+        Ok(())
+    }
 
     #[test]
     fn lock_path_is_pure() {

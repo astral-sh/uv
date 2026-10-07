@@ -34,6 +34,9 @@ pub enum Error {
     #[error("Failed to acquire lock for native credential store")]
     NativeLock(#[source] LockedFileError),
 
+    #[error("Failed to update the native credential store")]
+    NativeTask(#[source] tokio::task::JoinError),
+
     #[error("Invalid service URL for native credential storage")]
     InvalidService(#[source] ServiceParseError),
 
@@ -118,7 +121,7 @@ impl KeyringProvider {
         let service = Service::try_from(url).map_err(Error::InvalidService)?;
 
         match &self.backend {
-            KeyringProviderBackend::Native => native::store(&service, credentials).await,
+            KeyringProviderBackend::Native => native::store(service, credentials.clone()).await,
             KeyringProviderBackend::Subprocess => Err(Error::StoreUnsupported(self.backend.name())),
             #[cfg(test)]
             KeyringProviderBackend::Dummy(_) => Err(Error::StoreUnsupported(self.backend.name())),
@@ -134,7 +137,7 @@ impl KeyringProvider {
         let service = Service::try_from(url).map_err(Error::InvalidService)?;
 
         match &self.backend {
-            KeyringProviderBackend::Native => native::remove(&service, username).await,
+            KeyringProviderBackend::Native => native::remove(service, username.to_string()).await,
             KeyringProviderBackend::Subprocess => {
                 Err(Error::RemoveUnsupported(self.backend.name()))
             }

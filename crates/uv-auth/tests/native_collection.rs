@@ -1,4 +1,9 @@
-#![cfg(target_os = "macos")]
+#![cfg(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "openbsd"
+))]
 
 use std::assert_matches;
 use std::net::TcpListener;

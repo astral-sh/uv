@@ -1,3 +1,6 @@
+#[cfg(feature = "native-auth")]
+use std::process::Stdio;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
@@ -1794,25 +1797,65 @@ fn logout_text_store_multiple_usernames() {
 
 #[test]
 #[cfg(feature = "native-auth")]
-fn native_auth_lock_directory_ignores_credentials_override() {
+fn native_auth_lock_directory_ignores_credentials_override() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]).with_real_home();
     let service = "native-lock-directory.example.com";
-    let username = "native-lock-user";
-    let _cleanup = NativeCredentialCleanup::new(&context, &[(service, username)]);
+    let _cleanup =
+        NativeCredentialCleanup::new(&context, &[(service, "first"), (service, "second")]);
+    let first_directory = context.temp_dir.child("first");
+    let second_directory = context.temp_dir.child("second");
 
-    context
+    // Both processes update the same realm even with different credential directories.
+    let first = context
         .auth_login()
         .arg(service)
         .arg("--username")
-        .arg(username)
+        .arg("first")
         .arg("--password")
-        .arg("lock-password")
+        .arg("first-password")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
-        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str())
-        .assert()
-        .success();
+        .env(EnvVars::UV_CREDENTIALS_DIR, first_directory.as_os_str())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let second = context
+        .auth_login()
+        .arg(service)
+        .arg("--username")
+        .arg("second")
+        .arg("--password")
+        .arg("second-password")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .env(EnvVars::UV_CREDENTIALS_DIR, second_directory.as_os_str())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
 
-    assert!(!context.temp_dir.child("native").exists());
+    first.wait_with_output()?.assert().success();
+    second.wait_with_output()?.assert().success();
+    assert!(!first_directory.exists());
+    assert!(!second_directory.exists());
+
+    uv_snapshot!(context.auth_token()
+        .arg(service)
+        .arg("--username")
+        .arg("first")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    first-password
+    ");
+    uv_snapshot!(context.auth_token()
+        .arg(service)
+        .arg("--username")
+        .arg("second")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    second-password
+    ");
+
+    Ok(())
 }
 
 #[test]
