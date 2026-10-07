@@ -68,8 +68,10 @@ pub enum Error {
     FlatIndex(#[from] uv_client::FlatIndexError),
     #[error(transparent)]
     ClientBuild(#[from] uv_client::ClientBuildError),
-    #[error(transparent)]
-    BuildPlan(anyhow::Error),
+    #[error("Pass `--wheel` explicitly to build a wheel from a source distribution")]
+    WheelFromSdistRequiresFlag,
+    #[error("Building an `--sdist` from a source distribution is not supported")]
+    SdistFromSdist,
     #[error(transparent)]
     Extract(#[from] uv_extract::Error),
     #[error(transparent)]
@@ -673,7 +675,7 @@ async fn build_package(
     prepare_output_directory(&output_dir, gitignore).await?;
 
     // Determine the build plan.
-    let plan = BuildPlan::determine(&source, sdist, wheel).map_err(Error::BuildPlan)?;
+    let plan = BuildPlan::determine(&source, sdist, wheel)?;
 
     // Check if the build backend is matching uv version that allows calling in the uv build backend
     // directly.
@@ -1491,21 +1493,17 @@ enum BuildPlan {
 }
 
 impl BuildPlan {
-    fn determine(source: &AnnotatedSource, sdist: bool, wheel: bool) -> Result<Self> {
+    fn determine(source: &AnnotatedSource, sdist: bool, wheel: bool) -> Result<Self, Error> {
         Ok(match &source.source {
             Source::File(_) => {
                 // We're building from a file, which must be a source distribution.
                 match (sdist, wheel) {
                     (false, true) => Self::WheelFromSdist,
                     (false, false) => {
-                        return Err(anyhow::anyhow!(
-                            "Pass `--wheel` explicitly to build a wheel from a source distribution"
-                        ));
+                        return Err(Error::WheelFromSdistRequiresFlag);
                     }
                     (true, _) => {
-                        return Err(anyhow::anyhow!(
-                            "Building an `--sdist` from a source distribution is not supported"
-                        ));
+                        return Err(Error::SdistFromSdist);
                     }
                 }
             }
