@@ -14354,6 +14354,62 @@ fn python_platform() -> Result<()> {
     Ok(())
 }
 
+/// An explicit target platform has an empty `platform_release`, which compares as a string.
+#[test]
+fn python_platform_empty_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = generate_wheel(
+        &"included".parse()?,
+        &"1".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    wheels.child(filename).write_binary(&wheel)?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc! {r"
+        included==1 ; platform_release != '24'
+        excluded ; platform_release == '24'
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform").arg("macos")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    included==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform").arg("linux")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    included==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Resolve a specific source distribution via a Git HTTPS dependency.
 #[test]
 #[cfg(feature = "test-git")]

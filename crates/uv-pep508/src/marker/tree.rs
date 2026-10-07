@@ -12,7 +12,7 @@ use version_ranges::Ranges;
 use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
-use super::algebra::{Edges, INTERNER, NodeId, Variable};
+use super::algebra::{Edges, INTERNER, NodeId, Variable, VersionString};
 use super::simplify;
 #[cfg(test)]
 use crate::Pep508ErrorSource;
@@ -937,14 +937,14 @@ impl MarkerTree {
                     map,
                 })
             }
-            Variable::VersionString(key) => {
-                let Edges::Version { edges: ref map } = node.children else {
+            Variable::VersionString(comparison) => {
+                let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
                 };
-                MarkerTreeKind::VersionString(VersionMarkerTree {
-                    id: self.0,
-                    key: *key,
-                    map,
+                MarkerTreeKind::VersionString(VersionStringMarkerTree {
+                    comparison,
+                    high: high.negate(self.0),
+                    low: low.negate(self.0),
                 })
             }
             Variable::In { key, value } => {
@@ -1092,14 +1092,9 @@ impl MarkerTree {
                 }
             }
             MarkerTreeKind::VersionString(marker) => {
-                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
-                    return false;
-                };
-                for (range, tree) in marker.edges() {
-                    if range.contains(&version) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
-                    }
-                }
+                return marker
+                    .edge(marker.comparison.evaluate(env.get_string(marker.key())))
+                    .evaluate_reporter_impl(env, extras, reporter);
             }
             MarkerTreeKind::In(marker) => {
                 return marker
@@ -1145,9 +1140,9 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
-            MarkerTreeKind::VersionString(marker) => {
-                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
-            }
+            MarkerTreeKind::VersionString(marker) => marker
+                .children()
+                .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::String(marker) => marker
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
@@ -1175,7 +1170,7 @@ impl MarkerTree {
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::VersionString(marker) => marker
-                .edges()
+                .children()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
                 .children()
@@ -1416,7 +1411,7 @@ impl MarkerTree {
                     }
                 }
                 MarkerTreeKind::VersionString(kind) => {
-                    for (tree, _) in simplify::collect_edges(kind.edges()) {
+                    for (_, tree) in kind.children() {
                         imp(tree, f);
                     }
                 }
@@ -1507,8 +1502,8 @@ pub enum MarkerTreeKind<'a> {
     False,
     /// A version expression.
     Version(VersionMarkerTree<'a>),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString>),
+    /// A version comparison with a string fallback within a platform-specific scope.
+    VersionString(VersionStringMarkerTree<'a>),
     /// A string expression.
     String(StringMarkerTree<'a>),
     /// A string expression with the `in` operator.
@@ -1554,6 +1549,61 @@ impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
         self.key()
             .cmp(&other.key())
             .then_with(|| self.edges().cmp(other.edges()))
+    }
+}
+
+/// A version comparison that falls back to comparing strings when the environment value is opaque.
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct VersionStringMarkerTree<'a> {
+    comparison: &'a VersionString,
+    high: NodeId,
+    low: NodeId,
+}
+
+impl VersionStringMarkerTree<'_> {
+    /// The key for this comparison.
+    pub fn key(&self) -> CanonicalMarkerValueString {
+        self.comparison.key
+    }
+
+    /// The edges of this node, corresponding to the result of the comparison.
+    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+        [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
+    }
+
+    /// Returns the marker expression selecting the given edge.
+    pub(crate) fn expression(&self, value: bool) -> MarkerExpression {
+        MarkerExpression::String {
+            key: self.key().into(),
+            operator: if value {
+                self.comparison.operator
+            } else {
+                self.comparison
+                    .operator
+                    .negate()
+                    .expect("version-string comparisons support negation")
+            },
+            value: self.comparison.value.clone(),
+        }
+    }
+
+    /// Returns the subtree associated with the given comparison result.
+    fn edge(&self, value: bool) -> MarkerTree {
+        MarkerTree(if value { self.high } else { self.low })
+    }
+}
+
+impl PartialOrd for VersionStringMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VersionStringMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.comparison
+            .cmp(other.comparison)
+            .then_with(|| self.children().cmp(other.children()))
     }
 }
 
