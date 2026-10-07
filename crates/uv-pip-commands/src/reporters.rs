@@ -36,20 +36,20 @@ pub(crate) fn report_target_environment(
     );
 
     let Ok(target) = std::path::absolute(&root) else {
-        debug!(target: "uv_install_operations", "{}", message);
+        debug!("{}", message);
         return Ok(());
     };
 
     // Do not report environments in the cache
     if target.starts_with(cache.root()) {
-        debug!(target: "uv_install_operations", "{}", message);
+        debug!("{}", message);
         return Ok(());
     }
 
     // Do not report tool environments
     if let Ok(tools) = InstalledTools::from_settings() {
         if target.starts_with(tools.root()) {
-            debug!(target: "uv_install_operations", "{}", message);
+            debug!("{}", message);
             return Ok(());
         }
     }
@@ -57,7 +57,7 @@ pub(crate) fn report_target_environment(
     // Do not report a default environment path
     if let Ok(default) = std::path::absolute(PathBuf::from(".venv")) {
         if target == default {
-            debug!(target: "uv_install_operations", "{}", message);
+            debug!("{}", message);
             return Ok(());
         }
     }
