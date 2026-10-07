@@ -350,7 +350,7 @@ class Poetry(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line)
+                Requirement(line.strip())
                 for line in fp
                 if not line.lstrip().startswith("#") and len(line.strip()) > 0
             ]
@@ -376,13 +376,9 @@ class Poetry(Suite):
             pyproject = tomli.load(fp)
 
         # Add the dependencies to the pyproject.toml.
-        for requirement in requirements:
-            version = str(requirement.specifier) if requirement.specifier else "*"
-            if requirement.extras:
-                entry = {"version": version, "extras": sorted(requirement.extras)}
-            else:
-                entry = version
-            pyproject["tool"]["poetry"]["dependencies"][requirement.name] = entry
+        pyproject["project"]["dependencies"] += [
+            str(requirement) for requirement in requirements
+        ]
 
         with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
             tomli_w.dump(pyproject, fp)
@@ -464,11 +460,7 @@ class Poetry(Suite):
             pyproject = tomli.load(fp)
 
         # Add the dependencies to the pyproject.toml.
-        pyproject["tool"]["poetry"]["dependencies"].update(
-            {
-                INCREMENTAL_REQUIREMENT: "*",
-            }
-        )
+        pyproject["project"]["dependencies"].append(INCREMENTAL_REQUIREMENT)
 
         with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
             tomli_w.dump(pyproject, fp)
@@ -491,7 +483,6 @@ class Poetry(Suite):
                 f"POETRY_DATA_DIR={data_dir}",
                 self.path,
                 "lock",
-                "--no-update",
                 "--directory",
                 cwd,
             ],
@@ -528,7 +519,6 @@ class Poetry(Suite):
                 f"POETRY_DATA_DIR={data_dir}",
                 self.path,
                 "lock",
-                "--no-update",
                 "--directory",
                 cwd,
             ],
@@ -634,7 +624,7 @@ class Pdm(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line)
+                Requirement(line.strip())
                 for line in fp
                 if not line.lstrip().startswith("#") and len(line.strip()) > 0
             ]
@@ -1031,7 +1021,7 @@ class UvProject(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line)
+                Requirement(line.strip())
                 for line in fp
                 if not line.lstrip().startswith("#") and len(line.strip()) > 0
             ]
