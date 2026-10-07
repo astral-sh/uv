@@ -1,6 +1,38 @@
 // Don't optimize the alloc crate away due to it being otherwise unused.
 // https://github.com/rust-lang/rust/issues/64402
+#[cfg(not(codspeed))]
 extern crate uv_performance_memory_allocator;
+
+#[cfg(codspeed)]
+mod allocator {
+    use std::alloc::{GlobalAlloc, Layout, System};
+
+    #[global_allocator]
+    static GLOBAL: AlwaysMoveAllocator = AlwaysMoveAllocator;
+
+    /// Use the default [`GlobalAlloc::realloc`] implementation to always allocate, copy, and free.
+    /// Growing allocations in place makes simulated CLI construction depend on heap layout.
+    struct AlwaysMoveAllocator;
+
+    // SAFETY: Allocation and deallocation delegate to `System` with the caller's pointer and layout.
+    #[expect(unsafe_code)]
+    unsafe impl GlobalAlloc for AlwaysMoveAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            // SAFETY: The caller provides a valid, non-zero allocation layout.
+            unsafe { System.alloc(layout) }
+        }
+
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            // SAFETY: The caller provides a valid, non-zero allocation layout.
+            unsafe { System.alloc_zeroed(layout) }
+        }
+
+        unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+            // SAFETY: The caller provides a live allocation from `System` and its original layout.
+            unsafe { System.dealloc(pointer, layout) }
+        }
+    }
+}
 
 use std::hint::black_box;
 
