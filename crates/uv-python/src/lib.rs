@@ -20,6 +20,7 @@ pub use crate::installation::{
 pub use crate::interpreter::{
     BrokenLink, Error as InterpreterError, Interpreter, canonicalize_executable,
 };
+pub use crate::mirrors::PythonDownloadMirrors;
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;
 pub use crate::python_version::{BuildVersionError, PythonVersion};
@@ -42,6 +43,7 @@ pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
+mod mirrors;
 mod pointer_size;
 mod prefix;
 mod python_version;
@@ -228,8 +230,8 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        PythonArchitecture, PythonDownloads, PythonNotFound, PythonRequest, PythonSource,
-        PythonVersion, find_all_python_installations, find_python_installations,
+        PythonArchitecture, PythonDownloadMirrors, PythonDownloads, PythonNotFound, PythonRequest,
+        PythonSource, PythonVersion, find_all_python_installations, find_python_installations,
         implementation::ImplementationName, installation::PythonInstallation,
         managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
     };
@@ -868,9 +870,7 @@ mod tests {
                     &client_builder,
                     &context.cache,
                     None,
-                    None,
-                    None,
-                    None,
+                    PythonDownloadMirrors::default(),
                     missing_downloads.path().to_str(),
                 ))
         })?;
@@ -1515,9 +1515,7 @@ mod tests {
                 &client_builder,
                 cache,
                 None,
-                None,
-                None,
-                None,
+                PythonDownloadMirrors::default(),
                 None,
             ))
     }
