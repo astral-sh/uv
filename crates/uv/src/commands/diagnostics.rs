@@ -8,7 +8,7 @@ use version_ranges::Ranges;
 use uv_distribution_types::{DerivationChain, DerivationStep};
 use uv_errors::{Hinted, Hints};
 use uv_normalize::PackageName;
-use uv_pep440::{Version, strip_local_version_sentinels};
+use uv_pep440::{Version, display_version_ranges, strip_local_version_sentinels};
 
 use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
@@ -129,6 +129,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
         if let Some(range) =
             range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
         {
+            let range = display_version_ranges(&range);
             if let Some(extra) = &step.extra {
                 if let Some(version) = step.version.as_ref() {
                     // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)
@@ -234,6 +235,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
     }
     if let Some(range) = range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
     {
+        let range = display_version_ranges(&range);
         message = format!("{message} `{}{}`", name.cyan(), range.cyan());
     } else {
         message = format!("{message} `{}`", name.cyan());
