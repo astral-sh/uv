@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use fs_err as fs;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use thiserror::Error;
 use tracing::{debug, warn};
@@ -27,7 +28,9 @@ use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, LauncherKind, WindowMode, windows_python_launcher};
 
 use crate::discovery::VersionRequest;
-use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
+use crate::downloads::{
+    ArchRequest, Error as DownloadError, ManagedPythonDownload, PythonDownloadRequest,
+};
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
@@ -475,7 +478,7 @@ impl ManagedPythonInstallation {
     }
 
     /// Return the implementation in the key without interpreting Emscripten as Pyodide.
-    pub(crate) fn key_implementation(&self) -> ImplementationName {
+    fn key_implementation(&self) -> ImplementationName {
         self.implementation
     }
 
@@ -711,6 +714,30 @@ impl ManagedPythonInstallation {
     #[cfg(windows)]
     pub(crate) fn sha256(&self) -> Option<&str> {
         self.sha256.as_ref().map(Digest::as_str)
+    }
+
+    /// Takes an [`IntoIterator`] of [`ManagedPythonInstallation`]s and returns an [`IndexMap`] from
+    /// [`PythonInstallationMinorVersionKey`] to the installation with highest [`PythonInstallationKey`]
+    /// for that minor version key.
+    #[inline]
+    pub fn highest_by_minor_version_key<'a, I>(
+        installations: I,
+    ) -> IndexMap<PythonInstallationMinorVersionKey, Self>
+    where
+        I: IntoIterator<Item = &'a Self>,
+    {
+        let mut minor_versions = IndexMap::default();
+        for installation in installations {
+            minor_versions
+                .entry(installation.minor_version_key().clone())
+                .and_modify(|high_installation: &mut Self| {
+                    if installation.key() >= high_installation.key() {
+                        *high_installation = installation.clone();
+                    }
+                })
+                .or_insert_with(|| installation.clone());
+        }
+        minor_versions
     }
 }
 
@@ -1003,6 +1030,20 @@ impl fmt::Display for ManagedPythonInstallation {
 pub fn python_executable_dir() -> Result<PathBuf, Error> {
     uv_dirs::user_executable_directory(Some(EnvVars::UV_PYTHON_BIN_DIR))
         .ok_or(Error::NoExecutableDirectory)
+}
+
+impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
+    fn from(installation: &ManagedPythonInstallation) -> Self {
+        let key = installation.key();
+        Self::new(
+            Some(VersionRequest::from(&key.version())),
+            Some(installation.key_implementation()),
+            Some(ArchRequest::Explicit(*key.arch())),
+            Some(*key.os()),
+            Some(*key.libc()),
+            Some(key.prerelease.is_some()),
+        )
+    }
 }
 
 #[cfg(test)]

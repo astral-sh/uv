@@ -32,8 +32,8 @@ use uv_python::managed::{
 };
 use uv_python::{
     ConfigDiscovery, ImplementationName, Interpreter, PythonArchitecture, PythonDownloads,
-    PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
+    PythonInstallationKey, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionFilePreference, VersionRequest,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_shell::Shell;
@@ -714,13 +714,12 @@ async fn perform_install(
         }
     }
 
-    let minor_versions =
-        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-            installations
-                .iter()
-                .copied()
-                .chain(existing_installations.iter()),
-        );
+    let minor_versions = ManagedPythonInstallation::highest_by_minor_version_key(
+        installations
+            .iter()
+            .copied()
+            .chain(existing_installations.iter()),
+    );
 
     for installation in minor_versions.values() {
         installation.ensure_minor_version_link()?;

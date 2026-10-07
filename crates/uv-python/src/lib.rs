@@ -205,6 +205,12 @@ impl From<PythonNotFound> for Error {
     }
 }
 
+impl From<downloads::PythonDownloadRequestError> for Error {
+    fn from(error: downloads::PythonDownloadRequestError) -> Self {
+        Self::Download(error.into())
+    }
+}
+
 impl From<PythonEnvironmentError> for Error {
     fn from(error: PythonEnvironmentError) -> Self {
         match error {
