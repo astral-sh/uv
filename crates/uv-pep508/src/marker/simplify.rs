@@ -92,10 +92,40 @@ fn collect_dnf(
             }
         }
         MarkerTreeKind::VersionString(marker) => {
-            for (value, tree) in marker.children() {
-                path.push(marker.expression(value));
-                collect_dnf(tree, dnf, path);
-                path.pop();
+            for (tree, range) in collect_edges(marker.edges()) {
+                // Exact version exclusions also match opaque releases. Keep them as
+                // inequalities instead of rewriting them as ordered comparisons.
+                if let Some(excluded) = range_inequality(&range) {
+                    let current = path.len();
+                    for version in excluded {
+                        path.push(MarkerExpression::String {
+                            key: marker.key().into(),
+                            operator: MarkerOperator::NotEqual,
+                            value: ArcStr::from(version.to_string()),
+                        });
+                    }
+
+                    collect_dnf(tree, dnf, path);
+                    path.truncate(current);
+                    continue;
+                }
+
+                for (lower, upper) in range.iter() {
+                    let current = path.len();
+                    let lower = lower.map(|version| ArcStr::from(version.to_string()));
+                    let upper = upper.map(|version| ArcStr::from(version.to_string()));
+                    for (operator, value) in
+                        MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
+                    {
+                        path.push(MarkerExpression::String {
+                            key: marker.key().into(),
+                            operator,
+                            value,
+                        });
+                    }
+                    collect_dnf(tree, dnf, path);
+                    path.truncate(current);
+                }
             }
         }
         MarkerTreeKind::String(marker) => {

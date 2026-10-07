@@ -232,7 +232,7 @@ impl ResolverOutput {
                 }
                 MarkerTreeKind::VersionString(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
-                    for (_, tree) in marker.children() {
+                    for (_, tree) in marker.edges() {
                         add_marker_params_from_tree(tree, set);
                     }
                 }
