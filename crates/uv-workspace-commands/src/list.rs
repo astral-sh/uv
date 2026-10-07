@@ -2,8 +2,8 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-
 use owo_colors::OwoColorize;
+
 use uv_cache::Cache;
 use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
@@ -13,7 +13,7 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 /// List workspace members or PEP 723 scripts.
-pub(crate) async fn list(
+pub async fn list(
     project_dir: &Path,
     paths: bool,
     scripts: bool,

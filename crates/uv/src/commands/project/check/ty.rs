@@ -14,11 +14,11 @@ use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::ColorChoice;
 use uv_fs::Simplified;
 use uv_pep440::Version;
-use uv_scripts::{ScriptDiscoveryError, find_scripts};
 use uv_shell::shlex_posix;
 use uv_static::EnvVars;
 
 use crate::commands::reporters::BinaryDownloadReporter;
+use uv_scripts::{ScriptDiscoveryError, find_scripts};
 use uv_settings::{FrozenSource, LockCheck};
 
 /// Run a type check powered by ty.

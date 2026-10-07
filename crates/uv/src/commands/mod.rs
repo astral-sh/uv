@@ -80,7 +80,7 @@ mod self_update;
 pub(crate) use uv_tool_commands as tool;
 mod venv;
 mod version;
-mod workspace;
+pub(crate) use uv_workspace_commands as workspace;
 
 #[cfg(test)]
 mod error_tests {
