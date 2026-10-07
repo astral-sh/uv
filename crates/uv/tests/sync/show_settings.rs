@@ -519,6 +519,8 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
                             force_relative: false,
                         },
                     ),
+                    artifact_base_url: None,
+                    proxy_for: None,
                     explicit: false,
                     default: false,
                     origin: Some(
@@ -1253,6 +1255,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: true,
     +                    origin: Some(
@@ -1408,6 +1412,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: true,
     +                    origin: Some(
@@ -1474,7 +1480,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in"), @"
     ...
-                         ),
+                         proxy_for: None,
                          explicit: false,
                          default: true,
     -                    origin: Some(
@@ -1568,6 +1574,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: false,
     +                    origin: None,
@@ -1605,6 +1613,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: true,
     +                    origin: None,
@@ -1660,6 +1670,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: false,
     +                    origin: Some(
@@ -1752,6 +1764,8 @@ fn resolve_find_links() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: false,
     +                    origin: None,
@@ -1875,6 +1889,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: false,
     +                    origin: None,
@@ -1912,6 +1928,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: false,
     +                    origin: None,
@@ -2324,6 +2342,8 @@ fn resolve_both() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: true,
     +                    origin: Some(
@@ -2459,6 +2479,8 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: true,
     +                    origin: Some(
@@ -2806,6 +2828,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: true,
     +                    origin: None,
@@ -3252,6 +3276,8 @@ fn index_priority() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: true,
     +                    origin: Some(
@@ -3291,6 +3317,8 @@ fn index_priority() -> anyhow::Result<()> {
     +                            force_relative: false,
     +                        },
     +                    ),
+    +                    artifact_base_url: None,
+    +                    proxy_for: None,
     +                    explicit: false,
     +                    default: false,
     +                    origin: Some(
@@ -3333,8 +3361,8 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--default-index")
         .arg("https://cli.pypi.org/simple"), @"
     ...
-                             },
-                         ),
+                         artifact_base_url: None,
+                         proxy_for: None,
                          explicit: false,
     -                    default: false,
     +                    default: true,
@@ -3353,8 +3381,8 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--index")
         .arg("https://cli.pypi.org/simple"), @"
     ...
-                             },
-                         ),
+                         artifact_base_url: None,
+                         proxy_for: None,
                          explicit: false,
     -                    default: true,
     +                    default: false,
@@ -3389,8 +3417,8 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("--extra-index-url")
         .arg("https://cli.pypi.org/simple"), @"
     ...
-                             },
-                         ),
+                         artifact_base_url: None,
+                         proxy_for: None,
                          explicit: false,
     -                    default: true,
     +                    default: false,
@@ -3967,6 +3995,7 @@ fn preview_features() {
     +            MinimumLibcVersion,
     +            BuildDependencyCheck,
     +            BuildLazyImports,
+    +            ProxyIndex,
     +        ],
          },
          python_preference: Managed,

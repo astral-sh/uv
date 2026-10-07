@@ -2061,7 +2061,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PublishSettings::resolve(args, filesystem);
+            let args = PublishSettings::resolve(args, filesystem)?;
             show_settings!(args);
 
             let PublishSettings {

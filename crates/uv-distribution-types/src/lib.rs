@@ -87,6 +87,7 @@ pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::proxy_index::*;
 pub use crate::requested::*;
 pub use crate::requirement::*;
 pub use crate::requires_python::*;
@@ -122,6 +123,7 @@ mod minimum_libc_version;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
+mod proxy_index;
 mod requested;
 mod requirement;
 mod requires_python;
@@ -236,7 +238,7 @@ pub enum SourceDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistryBuiltWheel {
     pub filename: WheelFilename,
-    pub file: Box<File>,
+    pub file: Box<RegistryFile>,
     pub index: IndexUrl,
     /// Whether the recorded size must be validated when the wheel is downloaded.
     pub size_is_authoritative: bool,
@@ -313,7 +315,7 @@ pub struct GitPathBuiltDist {
 pub struct RegistrySourceDist {
     pub name: PackageName,
     pub version: Version,
-    pub file: Box<File>,
+    pub file: Box<RegistryFile>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: SourceDistExtension,
     pub index: IndexUrl,
@@ -664,7 +666,7 @@ impl Dist {
     }
 
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
-    pub fn file(&self) -> Option<&File> {
+    pub fn file(&self) -> Option<&RegistryFile> {
         match self {
             Self::Built(built) => built.file(),
             Self::Source(source) => source.file(),
@@ -716,7 +718,7 @@ impl BuiltDist {
     }
 
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
-    pub fn index(&self) -> Option<&IndexUrl> {
+    fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Registry(registry) => Some(&registry.best_wheel().index),
             Self::DirectUrl(_) => None,
@@ -726,7 +728,7 @@ impl BuiltDist {
     }
 
     /// Returns the [`File`] instance, if this distribution is from a registry.
-    fn file(&self) -> Option<&File> {
+    fn file(&self) -> Option<&RegistryFile> {
         match self {
             Self::Registry(registry) => Some(&registry.best_wheel().file),
             Self::DirectUrl(_) | Self::Path(_) | Self::GitPath(_) => None,
@@ -757,7 +759,7 @@ impl SourceDist {
     }
 
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
-    fn file(&self) -> Option<&File> {
+    fn file(&self) -> Option<&RegistryFile> {
         match self {
             Self::Registry(registry) => Some(&registry.file),
             Self::DirectUrl(_)
@@ -1211,7 +1213,7 @@ impl DistributionMetadata for Dist {
     }
 }
 
-impl RemoteSource for File {
+impl<Url> RemoteSource for File<Url> {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         Ok(Cow::Borrowed(&self.filename))
     }
@@ -1469,7 +1471,17 @@ impl Identifier for DisplaySafeUrl {
     }
 }
 
-impl Identifier for File {
+impl Identifier for CanonicalArtifactUrl {
+    fn distribution_id(&self) -> DistributionId {
+        self.location().distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.location().resource_id()
+    }
+}
+
+impl Identifier for RegistryFile {
     fn distribution_id(&self) -> DistributionId {
         self.hashes
             .first()

@@ -35,14 +35,14 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
-    FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
-    MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    ArchiveHashPolicy, BuiltDist, CanonicalArtifactUrl, DependencyMetadata, DirectUrlBuiltDist,
+    DirectUrlSourceDist, DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan,
+    ExcludeNewerValue, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist,
+    GitPathSourceDist, HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl,
+    MetadataHashPolicy, MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL,
+    PathBuiltDist, PathSourceDist, ProxyIndexError, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -2471,7 +2471,8 @@ impl Lock {
     /// retain their incoming edges even if they resolve to no dependencies, and Git packages
     /// retain their declaration metadata for offline source discovery.
     ///
-    /// Returns an error if an artifact does not advertise its index's required algorithm.
+    /// Returns an error if a proxied artifact has no hash or an artifact does not
+    /// advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
         manifest: ResolverManifest,
@@ -2550,6 +2551,32 @@ impl Lock {
                     None,
                 )
             });
+
+            if let Some(index) = dist.index()
+                && let Some(route) = index_locations.proxy_route_for(index)
+                && let Some(filename) = package
+                    .wheels
+                    .iter()
+                    .find_map(|wheel| wheel.hash.is_none().then(|| wheel.filename.to_string()))
+                    .or_else(|| {
+                        package
+                            .sdist
+                            .as_ref()
+                            .filter(|sdist| sdist.hash().is_none())
+                            .and_then(SourceDist::filename)
+                            .map(Cow::into_owned)
+                    })
+            {
+                let mut physical = route.effective_url().url().clone();
+                physical.remove_credentials();
+
+                return Err(ProxyIndexError::MissingHash {
+                    package: package.id.name.clone(),
+                    filename,
+                    physical: Box::new(physical),
+                }
+                .into());
+            }
 
             package.add_dependencies(
                 DependencyContext::Production,
@@ -7118,7 +7145,9 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(file_url.clone()),
+                    url: CanonicalArtifactUrl::from_location(FileLocation::AbsoluteUrl(
+                        file_url.clone(),
+                    )),
                     yanked: None,
                 });
 
@@ -7193,7 +7222,7 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: file_url,
+                    url: CanonicalArtifactUrl::from_location(file_url),
                     yanked: None,
                 });
 
@@ -8580,7 +8609,7 @@ impl SourceDist {
 
         match &reg_dist.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                let url = normalize_file_location(&reg_dist.file.url)
+                let url = normalize_file_location(reg_dist.file.url.location())
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 let size = reg_dist.file.size;
@@ -8633,7 +8662,7 @@ impl SourceDist {
                         },
                     }))
                 } else {
-                    let url = normalize_file_location(&reg_dist.file.url)
+                    let url = normalize_file_location(reg_dist.file.url.location())
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
                     let size = reg_dist.file.size;
@@ -8914,7 +8943,7 @@ impl Wheel {
     ) -> Result<Self, LockError> {
         let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                let url = normalize_file_location(&wheel.file.url)
+                let url = normalize_file_location(wheel.file.url.location())
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 WheelWireSource::Url { url }
@@ -8934,7 +8963,7 @@ impl Wheel {
                         .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
-                    let url = normalize_file_location(&wheel.file.url)
+                    let url = normalize_file_location(wheel.file.url.location())
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
                     WheelWireSource::Url { url }
@@ -9028,7 +9057,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: file_location,
+                    url: CanonicalArtifactUrl::from_location(file_location),
                     yanked: None,
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -9071,7 +9100,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: file_location,
+                    url: CanonicalArtifactUrl::from_location(file_location),
                     yanked: None,
                 });
                 let index = IndexUrl::from(
@@ -9816,6 +9845,9 @@ enum LockErrorKind {
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
     InvalidScopedOverride(#[from] ScopedOverrideSourceError),
+    /// An error that occurs when a proxy route or its selected lock artifacts are invalid.
+    #[error(transparent)]
+    ProxyIndex(#[from] ProxyIndexError),
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
