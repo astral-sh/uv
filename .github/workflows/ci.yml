@@ -28,9 +28,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: aarch64-apple-darwin
-            runner: namespace-profile-macos-15
-            python-architecture: arm64
+          - target: x86_64-pc-windows-msvc
+            runner: namespace-profile-windows-2022-x86-64-16x32
+            python-architecture: x64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
