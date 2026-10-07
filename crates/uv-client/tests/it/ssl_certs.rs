@@ -551,30 +551,22 @@ async fn test_expired_cert_rejected() -> Result<()> {
     Ok(())
 }
 
-/// TLS protocol failures that are not certificate errors remain retryable.
+/// Any fatal TLS alert is treated as fatal, including non-certificate alerts such as
+/// `internal_error`. An aborted handshake is a deterministic failure, not a transient one that a
+/// retry could recover.
 #[tokio::test]
-async fn test_non_certificate_tls_errors_are_retried() -> Result<()> {
+async fn test_non_certificate_tls_alerts_are_not_retried() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
     let server_task = tokio::spawn(async move {
-        for _ in 0..4 {
-            let (mut stream, _) = listener.accept().await?;
-            // A fatal TLS `internal_error` alert.
-            send_tls_alert(&mut stream, 0x50).await?;
-        }
+        let (mut stream, _) = listener.accept().await?;
+        // A fatal TLS `internal_error` alert.
+        send_tls_alert(&mut stream, 0x50).await?;
         Ok::<_, anyhow::Error>(())
     });
 
     let response = send_request(addr, false, None).await;
-    let Err(reqwest_middleware::Error::Middleware(middleware_error)) = response else {
-        panic!("expected middleware error, got: {response:?}");
-    };
-    let Some(reqwest_retry::RetryError::WithRetries { retries, .. }) =
-        middleware_error.downcast_ref::<reqwest_retry::RetryError>()
-    else {
-        panic!("expected retries after a non-certificate TLS error, got: {middleware_error:?}");
-    };
-    assert_eq!(*retries, 3);
+    assert_fatal_reqwest_error(&response);
     server_task.await??;
     Ok(())
 }
