@@ -40,8 +40,8 @@ use uv_workspace::{
     DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
 };
 
-use crate::project::edit::ProjectEdit;
-use crate::project::lock::LockEvent;
+use crate::edit::ProjectEdit;
+use crate::lock::LockEvent;
 
 /// A dependency requirement selected for upgrading.
 struct UpgradableRequirement {

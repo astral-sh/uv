@@ -38,7 +38,7 @@ use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::project::edit::{EditTarget, ProjectEdit, PythonTarget};
+use crate::edit::{EditTarget, ProjectEdit, PythonTarget};
 
 /// Remove one or more packages from the project requirements.
 pub async fn remove(
