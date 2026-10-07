@@ -550,53 +550,88 @@ observations' reports and outputs were retained separately.
 `dd77ecdf26cf3d0ca3867be2f77bd8a8925a023d`, compares a fresh no-debug baseline with full debug using
 one codegen unit for both modes and their PGO training. Rust 1.99.0, LLVM 23.1.1, Maturin 1.15.0,
 optimization level 3, fat LTO, Cargo job counts, and runner profiles match the earlier comparisons.
-The codegen-unit count is the intentional optimization change. Linux x86-64 is complete; Linux
-ARM64, macOS ARM64, and Windows x86-64 are still running as of October 7, 2026, 21:28 UTC.
+The codegen-unit count is the intentional optimization change. Both Linux targets and macOS are
+complete; Windows x86-64 is still running as of October 7, 2026, 21:38 UTC.
 
-Combined wall times below include instrumented compilation, training, and the final build and wheel.
-Each cell is no debug → full debug, with overhead against that run's own baseline:
+Combined wall times include instrumented compilation, training, and the final build and wheel. Each
+cell is no debug → full debug, with overhead against that run's own baseline:
 
-| Native target            |           16 codegen units |            1 codegen unit |
-| ------------------------ | -------------------------: | ------------------------: |
-| x86_64-unknown-linux-gnu | 17m 22s → 26m 38s (+53.3%) | 14m 9s → 20m 51s (+47.4%) |
+| Platform     |           16 codegen units |             1 codegen unit |
+| ------------ | -------------------------: | -------------------------: |
+| Linux x86-64 | 17m 22s → 26m 38s (+53.3%) |  14m 9s → 20m 51s (+47.4%) |
+| Linux ARM64  | 22m 53s → 32m 38s (+42.6%) |  19m 6s → 27m 17s (+42.8%) |
+| macOS ARM64  | 15m 1s → 50m 31s (+236.5%) | 12m 26s → 31m 7s (+150.4%) |
 
 The one-unit stages, with the same baseline → full convention, were:
 
-| Native target            | Instrumented build and training |   Final build and wheel |
-| ------------------------ | ------------------------------: | ----------------------: |
-| x86_64-unknown-linux-gnu |       8m 58s → 12m 48s (+42.9%) | 5m 11s → 8m 3s (+55.3%) |
+| Platform     | Instrumented build and training |     Final build and wheel |
+| ------------ | ------------------------------: | ------------------------: |
+| Linux x86-64 |       8m 58s → 12m 48s (+42.9%) |   5m 11s → 8m 3s (+55.3%) |
+| Linux ARM64  |       12m 8s → 16m 48s (+38.5%) | 6m 58s → 10m 29s (+50.4%) |
+| macOS ARM64  |      7m 59s → 21m 52s (+173.6%) | 4m 26s → 9m 15s (+108.6%) |
 
 Sizes below are bytes. Executable and wheel cells show no debug → full debug and their paired delta.
 Companion symbols are uncompressed and excluded from the wheel:
 
-| Native target            |                              Stripped `uv` |                            Processed wheel | Full `uv` symbols |
-| ------------------------ | -----------------------------------------: | -----------------------------------------: | ----------------: |
-| x86_64-unknown-linux-gnu | 39,926,920 → 39,950,384 (+23,464; +0.059%) | 17,304,686 → 17,321,965 (+17,279; +0.100%) |       574,947,544 |
+| Platform     |                              Stripped `uv` |                            Processed wheel | Full `uv` symbols |
+| ------------ | -----------------------------------------: | -----------------------------------------: | ----------------: |
+| Linux x86-64 | 39,926,920 → 39,950,384 (+23,464; +0.059%) | 17,304,686 → 17,321,965 (+17,279; +0.100%) |       574,947,544 |
+| Linux ARM64  | 33,588,408 → 33,626,024 (+37,616; +0.112%) |  16,374,577 → 16,384,058 (+9,481; +0.058%) |       587,737,968 |
+| macOS ARM64  | 29,418,800 → 29,488,544 (+69,744; +0.237%) | 14,869,827 → 14,897,987 (+28,160; +0.189%) |       571,731,223 |
 
-Compared with the earlier 16-unit full-debug build, the Linux full-debug pipeline took 21.7% less
-time, the stripped `uv` binary was 17.3% smaller, its wheel was 13.9% smaller, and its separate
-symbols were 15.6% smaller (681,367,000 → 574,947,544 bytes). The no-debug pipeline was also 18.6%
-faster and its executable was 17.0% smaller. These are comparisons with historical runs, including
-variation in runner load, caches, and training workloads. They do not isolate a causal timing effect
-or establish repeatability. Full debug's paired overhead remains higher than the earlier 16-unit
-line-table and limited observations (+11.0% and +11.1%); comparing their absolute times with this
-run would also change the codegen-unit setting.
+Changes from the earlier 16-unit full-debug builds to the one-unit full-debug builds were:
 
-Rust, AWS-LC, and jitterentropy source lookups, negative lookups with symbols hidden, matching ELF
-build IDs, SBOM retention, wheel installation, executable hashes, and smoke checks passed. Both
-modes reported 18 missing-profile warnings confined to `uvx`, with zero profile mismatches. `uvx`'s
-companion symbols were 2,114,776 bytes. Downloaded executable/profile hashes, wheel contents, symbol
-sizes, artifact digest, and benchmark output hashes were verified. Final `uv` compiler commands
-explicitly contain `codegen-units=1`; instrumented training inherits the same Cargo profile
-environment, although its log does not print individual compiler commands.
+| Platform     | Build and training | Stripped `uv` |  Wheel | Full symbols |
+| ------------ | -----------------: | ------------: | -----: | -----------: |
+| Linux x86-64 |             -21.7% |        -17.3% | -13.9% |       -15.6% |
+| Linux ARM64  |             -16.4% |        -19.0% | -14.2% |       -16.1% |
+| macOS ARM64  |             -38.4% |        -17.1% | -13.3% |       -18.0% |
 
-Twenty cached resolutions per mode produced identical outputs. Median baseline/full times were
-8.579/8.605 ms for Jupyter (+0.3%) and 6.873/6.932 ms for Trio (+0.9%). These short workloads do not
-establish overall runtime equivalence. Earlier 16-unit full-debug medians were 8.582/8.915 ms and
-7.229/7.123 ms, respectively; comparisons across runs also include runner variation.
+The no-debug pipelines also became faster: 18.6% on Linux x86-64, 16.6% on Linux ARM64, and 17.2% on
+macOS. These historical comparisons include variation in runner load, caches, and training
+workloads; they do not isolate a causal timing effect or establish repeatability. Full debug's
+paired overhead remains higher than the earlier 16-unit line-table and limited observations
+(8.8–12.2% on these platforms). Comparing their absolute times with this run would also change the
+codegen-unit setting. Full symbol files remain larger than the earlier line-table and limited files.
 
-The successful
-[Linux job](https://github.com/astral-sh/uv/actions/runs/37684681738/job/113009336877) uploaded
-[artifact 11512143673](https://github.com/astral-sh/uv/actions/runs/37684681738/artifacts/11512143673)
-at 21:24:19 UTC on October 7, 2026. Reports, outputs, and provenance are retained separately with
-the `pgo-linux-full-cgu1` prefix.
+All three targets passed Rust, AWS-LC, and jitterentropy source lookups, negative lookups with
+symbols hidden, matching ELF build IDs or Mach-O UUIDs, SBOM retention, wheel installation,
+executable hashes, and smoke checks. macOS signatures also passed verification, including a local
+check of the downloaded files. Downloaded executable/profile hashes, wheel contents, symbol sizes,
+artifact digests, and benchmark output hashes were verified. Final `uv` compiler commands explicitly
+contain `codegen-units=1`; instrumented training inherits the same Cargo profile environment,
+although its log does not print individual compiler commands. `uvx` companion sizes were 2,114,776
+bytes on Linux x86-64, 2,281,248 on Linux ARM64, and 2,727,501 on macOS.
+
+Both Linux targets reported 18 missing-profile warnings per mode, confined to `uvx`. macOS reported
+2,367 per mode, including uv dependency functions, compared with 5,888/6,000 in the earlier full
+comparison and 5,888/5,883 in the line-table and limited comparisons. All modes reported zero
+profile mismatches. The smaller warning count does not prove better training coverage: codegen units
+change the generated functions and diagnostics. The macOS profile coverage caveat above still
+applies.
+
+Twenty cached resolutions per mode produced identical outputs. Median baseline → full times in
+milliseconds were:
+
+| Platform     |                 Jupyter |                  Trio |
+| ------------ | ----------------------: | --------------------: |
+| Linux x86-64 |   8.579 → 8.605 (+0.3%) | 6.873 → 6.932 (+0.9%) |
+| Linux ARM64  | 10.941 → 10.730 (-1.9%) | 8.272 → 8.211 (-0.7%) |
+| macOS ARM64  | 10.901 → 11.047 (+1.3%) | 9.062 → 9.203 (+1.6%) |
+
+These short workloads do not establish overall runtime equivalence. The earlier 16-unit full-debug
+Jupyter/Trio symbol-build medians were 8.915/7.123 ms on Linux x86-64, 11.482/8.804 ms on Linux
+ARM64, and 13.525/13.449 ms on macOS; comparisons across runs also include runner variation.
+
+Reports, outputs, and provenance are retained separately with each platform's `pgo-*-full-cgu1`
+prefix. Verified attempt-1 uploads on October 7, 2026:
+
+- [Linux x86-64 job](https://github.com/astral-sh/uv/actions/runs/37684681738/job/113009336877):
+  [artifact 11512143673](https://github.com/astral-sh/uv/actions/runs/37684681738/artifacts/11512143673),
+  21:24:19 UTC.
+- [Linux ARM64 job](https://github.com/astral-sh/uv/actions/runs/37684681738/job/113009337147):
+  [artifact 11513356214](https://github.com/astral-sh/uv/actions/runs/37684681738/artifacts/11513356214),
+  21:35:56 UTC.
+- [macOS ARM64 job](https://github.com/astral-sh/uv/actions/runs/37684681738/job/113009336560):
+  [artifact 11513205740](https://github.com/astral-sh/uv/actions/runs/37684681738/artifacts/11513205740),
+  21:32:29 UTC.
