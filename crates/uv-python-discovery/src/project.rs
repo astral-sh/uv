@@ -14,7 +14,7 @@ use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
 use uv_pep440::TildeVersionSpecifier;
-use uv_python_interpreter::Interpreter;
+use uv_python_interpreter::{Interpreter, RequestedInterpreter};
 use uv_python_types::{
     EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
@@ -31,11 +31,16 @@ use crate::PythonSelectionError;
 /// requirement, including the selected dependency groups. Warning-only commands and existing
 /// environments preserved by `--no-sync` do not use this type.
 #[derive(Debug)]
-pub struct CompatibleProjectPython(Interpreter);
+pub struct CompatibleProjectPython(RequestedInterpreter);
 
 impl CompatibleProjectPython {
     /// Consume the compatible interpreter for use by the environment or resolver APIs.
     pub fn into_interpreter(self) -> Interpreter {
+        self.0.into_interpreter()
+    }
+
+    /// Retain the resolved request for environment creation.
+    pub fn into_requested_interpreter(self) -> RequestedInterpreter {
         self.0
     }
 }
@@ -196,7 +201,10 @@ impl ProjectPythonRequest {
         interpreter: Interpreter,
     ) -> Result<CompatibleProjectPython, PythonSelectionError> {
         self.check(&interpreter)?;
-        Ok(CompatibleProjectPython(interpreter))
+        Ok(CompatibleProjectPython(RequestedInterpreter::new(
+            interpreter,
+            self.python_request.clone().unwrap_or_default(),
+        )))
     }
 
     /// Find or download an interpreter for the resolved request, then check project compatibility.

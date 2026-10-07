@@ -5,7 +5,7 @@ use uv_static::EnvVars;
 
 pub use managed::{
     Error, ManagedPythonInstallation, ManagedPythonInstallations, PythonExecutable,
-    PythonMinorVersionLink, compare_build_versions, create_link_to_executable,
+    PythonMinorVersionLink, UpgradePolicy, compare_build_versions, create_link_to_executable,
     platform_key_from_env, python_executable_dir, replace_link_to_executable,
 };
 

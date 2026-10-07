@@ -10,6 +10,7 @@ use uv_dispatch::PlatformState;
 use uv_install_operations::loggers::InstallLogger;
 use uv_resolve_operations::loggers::ResolveLogger;
 use uv_settings::ResolverInstallerSettings;
+use uv_virtualenv::UpgradePolicy;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
@@ -253,7 +254,7 @@ impl CachedEnvironment {
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             true,
             uv_virtualenv::Seed::Disabled,
-            false,
+            UpgradePolicy::Fixed,
         )?;
 
         sync_environment(

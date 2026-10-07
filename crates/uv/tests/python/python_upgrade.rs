@@ -1,3 +1,6 @@
+use std::path::PathBuf;
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
@@ -5,7 +8,7 @@ use assert_fs::prelude::PathChild;
 use insta::assert_snapshot;
 use uv_python_managed::platform_key_from_env;
 use uv_static::EnvVars;
-use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
+use uv_test::{LATEST_PYTHON_3_12, TestContext, uv_snapshot};
 
 #[test]
 fn python_upgrade() {
@@ -764,4 +767,93 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
     ");
 
     Ok(())
+}
+
+// A script environment must retain a patch pin discovered from a version file.
+#[test]
+fn python_script_honors_patch_version_file() -> Result<()> {
+    let (context, python) = script_interpreter_after_upgrade(Some("3.10.17"), ">=3.10")?;
+
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.10.17
+    ");
+
+    Ok(())
+}
+
+// A script environment must retain an exact patch requirement from its inline metadata.
+#[test]
+fn python_script_honors_patch_requires_python() -> Result<()> {
+    let (context, python) = script_interpreter_after_upgrade(None, "==3.10.17")?;
+
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.10.17
+    ");
+
+    Ok(())
+}
+
+// A minor-version request from a version file permits transparent patch upgrades.
+#[test]
+fn python_script_upgrades_minor_version_file() -> Result<()> {
+    let (context, python) = script_interpreter_after_upgrade(Some("3.10"), ">=3.10,<3.11")?;
+
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.10.[LATEST]
+    ");
+
+    Ok(())
+}
+
+// A script's inline metadata can permit transparent patch upgrades without a version file.
+#[test]
+fn python_script_upgrades_requires_python() -> Result<()> {
+    let (context, python) = script_interpreter_after_upgrade(None, ">=3.10,<3.11")?;
+
+    uv_snapshot!(context.filters(), Command::new(python).arg("--version"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.10.[LATEST]
+    ");
+
+    Ok(())
+}
+
+/// Create a script environment, then upgrade its managed Python installation.
+///
+/// Return the cached executable so assertions cannot rediscover Python or recreate the environment.
+fn script_interpreter_after_upgrade(
+    pin: Option<&str>,
+    requires_python: &str,
+) -> Result<(TestContext, PathBuf)> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
+    context.python_install().arg("3.10.17").assert().success();
+    if let Some(pin) = pin {
+        context.temp_dir.child(".python-version").write_str(pin)?;
+    }
+    context.temp_dir.child("script.py").write_str(&format!(
+        r#"# /// script
+# requires-python = "{requires_python}"
+# dependencies = []
+# ///
+import sys
+print(sys.executable)
+"#,
+    ))?;
+    let output = context.run().arg("script.py").assert().success();
+    let python = PathBuf::from(std::str::from_utf8(&output.get_output().stdout)?.trim());
+
+    context.python_upgrade().arg("3.10").assert().success();
+
+    Ok((context, python))
 }

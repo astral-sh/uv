@@ -5,6 +5,7 @@ use thiserror::Error;
 
 use uv_fs::Simplified;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
+pub use uv_python_managed::UpgradePolicy;
 
 pub use virtualenv::{ClearNonVirtualenv, OnExisting, RemovalReason, Seed};
 
@@ -85,7 +86,7 @@ pub fn create_venv(
     on_existing: OnExisting,
     relocatable: bool,
     seed: Seed,
-    upgradeable: bool,
+    upgrade_policy: UpgradePolicy,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
@@ -96,7 +97,7 @@ pub fn create_venv(
         on_existing,
         relocatable,
         seed,
-        upgradeable,
+        upgrade_policy,
     )?;
 
     // Create the corresponding `PythonEnvironment`.

@@ -3,6 +3,7 @@
 mod environment;
 mod interpreter;
 mod pointer_size;
+mod requested;
 mod virtualenv;
 
 pub use environment::{
@@ -14,6 +15,7 @@ pub use interpreter::{
     StatusCodeError, UnexpectedResponseError, canonicalize_executable,
 };
 pub use pointer_size::PointerSize;
+pub use requested::RequestedInterpreter;
 pub use virtualenv::{
     Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment, virtualenv_python_executable,
 };

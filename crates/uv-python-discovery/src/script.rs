@@ -15,7 +15,7 @@ use uv_configuration::ActiveEnvironment;
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_pep440::Version;
-use uv_python_interpreter::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment, RequestedInterpreter};
 use uv_python_types::{
     EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
     PythonSource, PythonVariant, VersionRequest,
@@ -119,7 +119,7 @@ fn validate_script_requires_python(
 #[expect(clippy::large_enum_variant)]
 pub enum ScriptInterpreter {
     /// An interpreter to use to create a new script environment.
-    Interpreter(Interpreter),
+    Interpreter(RequestedInterpreter),
     /// An interpreter from an existing script environment.
     Environment(PythonEnvironment),
 }
@@ -296,13 +296,16 @@ impl ScriptInterpreter {
             warn_user!("{err}");
         }
 
-        Ok(Self::Interpreter(interpreter))
+        Ok(Self::Interpreter(RequestedInterpreter::new(
+            interpreter,
+            python_request.unwrap_or_default(),
+        )))
     }
 
-    /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
+    /// Consume the script selection and return its [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         match self {
-            Self::Interpreter(interpreter) => interpreter,
+            Self::Interpreter(requested) => requested.into_interpreter(),
             Self::Environment(venv) => venv.into_interpreter(),
         }
     }
