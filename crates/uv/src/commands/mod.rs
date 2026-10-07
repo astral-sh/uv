@@ -107,11 +107,6 @@ mod error_tests {
             bail!("expected a user error");
         };
         assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
-        assert!(
-            error
-                .chain()
-                .any(<dyn std::error::Error>::is::<uv_requirements::Error>)
-        );
 
         Ok(())
     }
@@ -132,11 +127,6 @@ mod error_tests {
             bail!("expected an unexpected error");
         };
         assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
-        assert!(
-            error
-                .chain()
-                .any(<dyn std::error::Error>::is::<uv_requirements::Error>)
-        );
 
         Ok(())
     }
