@@ -414,7 +414,7 @@ pub async fn remove(
 /// A dependency was not found in the expected dependency type, but may exist elsewhere.
 #[derive(Debug, thiserror::Error)]
 #[error("The dependency `{package}` could not be found in {}", dependency_type.toml_table_name())]
-pub struct DependencyNotFoundError {
+pub(crate) struct DependencyNotFoundError {
     package: PackageName,
     dependency_type: DependencyType,
     /// Other dependency types where this package was found.

@@ -87,8 +87,6 @@ mod error_tests {
     use insta::assert_snapshot;
 
     use uv_command_support::UvError;
-    use uv_environment_operations::EnvironmentError;
-    use uv_project_commands::project::ProjectError;
     use uv_resolve_operations::Error as ResolveError;
 
     #[test]
@@ -156,21 +154,6 @@ mod error_tests {
         };
         assert_snapshot!(format!("{error:#}"), @"cache write failed");
         assert!(error.downcast_ref::<ResolveError>().is_some());
-
-        Ok(())
-    }
-
-    #[test]
-    fn project_requirements_use_operation_classification() -> anyhow::Result<()> {
-        let error = EnvironmentError::Requirements(uv_requirements::Error::Io(Error::new(
-            ErrorKind::NotFound,
-            "requirements failure",
-        )));
-
-        // A project wrapper retains the requirements error's classification.
-        let UvError::User(_) = UvError::from(ProjectError::from(error)) else {
-            bail!("expected a user error");
-        };
 
         Ok(())
     }

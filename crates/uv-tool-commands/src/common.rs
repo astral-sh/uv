@@ -54,7 +54,7 @@ use uv_resolve_operations::{Error as ResolveError, resolution_markers, resolutio
 
 /// An error raised when a tool package provides no executables.
 #[derive(Debug, Error)]
-pub enum NoExecutablesError {
+pub(crate) enum NoExecutablesError {
     /// A dependency was requested as a source of tool executables.
     #[error("No executables are provided by package `{package}`")]
     Dependency { package: PackageName },

@@ -1,4 +1,4 @@
-pub use error::ProjectError;
+pub(crate) use error::ProjectError;
 
 pub mod add;
 pub mod audit;

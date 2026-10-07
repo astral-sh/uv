@@ -79,7 +79,7 @@ enum ToolRunUsageContext {
 /// A tool resolution failure with context for correcting a likely invocation mistake.
 #[derive(Debug, thiserror::Error)]
 #[error("Failed to run tool")]
-pub struct ToolRunUsageError {
+pub(crate) struct ToolRunUsageError {
     #[source]
     cause: anyhow::Error,
     context: ToolRunUsageContext,
@@ -1280,7 +1280,7 @@ async fn get_or_create_environment(
 
 /// A Python script was passed to `uvx` / `--from`, which doesn't support scripts.
 #[derive(Debug, thiserror::Error)]
-pub enum ToolRunScriptError {
+pub(crate) enum ToolRunScriptError {
     /// Script path passed to `--from`.
     #[error("It looks like you provided a Python script to `--from`, which is not supported")]
     FromScript {

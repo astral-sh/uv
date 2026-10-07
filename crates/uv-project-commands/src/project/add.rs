@@ -70,7 +70,7 @@ use uv_resolve_operations::reporters::ResolverReporter;
 /// A failed dependency addition, with `uv add`-specific recovery context.
 #[derive(Debug, thiserror::Error)]
 #[error("Failed to add dependencies")]
-pub struct AddDependencyError {
+pub(crate) struct AddDependencyError {
     #[source]
     cause: anyhow::Error,
     standard_library_package: Option<PackageName>,

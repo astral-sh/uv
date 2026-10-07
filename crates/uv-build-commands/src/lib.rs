@@ -1,5 +1,8 @@
 //! Commands for building Python distributions.
 
+mod diagnostics;
+pub use diagnostics::error_hints;
+
 use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -57,7 +60,7 @@ use uv_python_context::{PythonContextError, PythonDownloadReporter, find_require
 use uv_settings::ResolverSettings;
 
 #[derive(Debug, Error)]
-pub enum Error {
+pub(crate) enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]

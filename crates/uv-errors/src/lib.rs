@@ -21,6 +21,16 @@ pub trait Hinted {
     }
 }
 
+/// If `cause` can be downcast to `T`, collect its hints.
+pub fn collect_hint<T: Hinted + Error + 'static>(
+    cause: &(dyn Error + 'static),
+    hints: &mut Hints<'static>,
+) {
+    if let Some(inner) = cause.downcast_ref::<T>() {
+        hints.extend(inner.hints());
+    }
+}
+
 /// The display order of a user-facing hint.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HintOrdering {

@@ -1,5 +1,8 @@
 //! Commands for inspecting and modifying Python environments.
 
+mod diagnostics;
+pub use diagnostics::error_hints;
+
 pub mod check;
 pub mod compile;
 pub mod freeze;

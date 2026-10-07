@@ -58,7 +58,7 @@ use uv_resolve_operations::{resolution_markers, resolution_tags};
 /// The interpreter is externally managed and cannot be modified.
 #[derive(Debug, Error)]
 #[error("{message}")]
-pub struct ExternallyManagedError {
+pub(crate) struct ExternallyManagedError {
     message: String,
     root: PathBuf,
     system: bool,

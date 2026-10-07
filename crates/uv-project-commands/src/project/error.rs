@@ -9,7 +9,7 @@ use uv_workspace::WorkspaceError;
 
 /// A failure from project metadata, editing, or a shared workflow.
 #[derive(thiserror::Error, Debug)]
-pub enum ProjectError {
+pub(crate) enum ProjectError {
     #[error("Failed to parse `pyproject.toml`")]
     PyprojectTomlParse(#[source] uv_workspace::pyproject::PyprojectTomlError),
 
@@ -72,5 +72,31 @@ impl Hinted for ProjectError {
             | Self::Io(_)
             | Self::Anyhow(_) => Hints::none(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Error, ErrorKind};
+
+    use anyhow::bail;
+    use uv_command_support::UvError;
+    use uv_environment_operations::EnvironmentError;
+
+    use super::ProjectError;
+
+    #[test]
+    fn project_requirements_use_operation_classification() -> anyhow::Result<()> {
+        let error = EnvironmentError::Requirements(uv_requirements::Error::Io(Error::new(
+            ErrorKind::NotFound,
+            "requirements failure",
+        )));
+
+        // A project wrapper retains the requirements error's classification.
+        let UvError::User(_) = UvError::from(ProjectError::from(error)) else {
+            bail!("expected a user error");
+        };
+
+        Ok(())
     }
 }

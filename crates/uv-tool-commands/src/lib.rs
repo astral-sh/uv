@@ -1,3 +1,6 @@
+mod diagnostics;
+pub use diagnostics::error_hints;
+
 use std::str::FromStr;
 
 use tracing::debug;
@@ -17,8 +20,6 @@ pub mod run;
 pub mod uninstall;
 pub mod update_shell;
 pub mod upgrade;
-
-pub use common::NoExecutablesError;
 
 /// A request to run or install a tool (e.g., `uvx ruff@latest`).
 #[derive(Debug, Clone, PartialEq, Eq)]

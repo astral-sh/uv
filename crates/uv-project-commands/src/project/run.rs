@@ -2153,7 +2153,7 @@ fn copy_entrypoint(
 /// `uv run` was invoked recursively too many times.
 #[derive(Debug, thiserror::Error)]
 #[error("`uv run` was recursively invoked {depth} times which exceeds the limit of {max}")]
-pub struct RecursionLimitError {
+pub(crate) struct RecursionLimitError {
     depth: u32,
     max: u32,
 }

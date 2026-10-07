@@ -388,7 +388,7 @@ pub async fn project_version(
 /// A [`WorkspaceError`] that may carry a hint to use `uv self version`.
 #[derive(Debug, Error)]
 #[error("{err}")]
-pub struct MissingProjectVersionError {
+pub(crate) struct MissingProjectVersionError {
     err: WorkspaceError,
 }
 

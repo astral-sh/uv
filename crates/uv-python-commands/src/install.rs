@@ -160,7 +160,7 @@ enum InstallErrorKind {
 
 #[derive(Debug, thiserror::Error)]
 #[error("`{command}` only accepts minor versions, got: {request}")]
-pub struct InvalidUpgradeRequestError {
+pub(crate) struct InvalidUpgradeRequestError {
     command: PythonUpgradeSource,
     request: String,
     from_version_file: bool,

@@ -1,5 +1,8 @@
 //! Project command implementations.
 
+mod diagnostics;
+pub use diagnostics::error_hints;
+
 use std::path::PathBuf;
 
 use uv_scripts::Pep723Script;

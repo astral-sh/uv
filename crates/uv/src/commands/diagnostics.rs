@@ -1,17 +1,8 @@
-use crate::commands::pip::install::ExternallyManagedError;
-use crate::commands::project::ProjectError;
-use crate::commands::project::add::AddDependencyError;
-use crate::commands::project::remove::DependencyNotFoundError;
-use crate::commands::project::run::RecursionLimitError;
-use crate::commands::project::version::MissingProjectVersionError;
-use crate::commands::python::install::InvalidUpgradeRequestError;
-use crate::commands::tool::NoExecutablesError;
-use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
-use uv_build_commands::Error as BuildError;
 use uv_command_support::Printer;
 use uv_resolve_operations::ExtrasWithoutSourceError;
 
-use uv_errors::{Hinted, Hints};
+use uv_errors::{Hints, collect_hint};
+
 /// Format an error chain with the default user-facing hints and output settings.
 pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::fmt::Result {
     uv_errors::write_error_chain_with_options(
@@ -21,16 +12,15 @@ pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::f
     )
 }
 
-/// Walk an error chain and collect hint strings from all known error types.
-///
-/// This is the central "hint for error" function. It walks the full error chain
-/// (via `anyhow::Error::chain`) and tries to downcast each error to known types
-/// that implement [`Hinted`]. All hint rendering logic should be consolidated here.
+/// Walk an error chain and combine command-owned and shared workflow hints.
 pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut hints = Hints::none();
     for cause in err.chain() {
-        collect_hint::<AddDependencyError>(cause, &mut hints);
-        collect_hint::<ToolRunUsageError>(cause, &mut hints);
+        hints.extend(uv_project_commands::error_hints(cause));
+        hints.extend(uv_tool_commands::error_hints(cause));
+        hints.extend(uv_pip_commands::error_hints(cause));
+        hints.extend(uv_python_commands::error_hints(cause));
+        hints.extend(uv_build_commands::error_hints(cause));
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
@@ -38,18 +28,9 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_lock_operations::LockError>(cause, &mut hints);
         collect_hint::<uv_resolve_operations::Error>(cause, &mut hints);
         collect_hint::<uv_install_operations::Error>(cause, &mut hints);
-        collect_hint::<ToolRunScriptError>(cause, &mut hints);
-        collect_hint::<RecursionLimitError>(cause, &mut hints);
-        collect_hint::<DependencyNotFoundError>(cause, &mut hints);
         collect_hint::<ExtrasWithoutSourceError>(cause, &mut hints);
-        collect_hint::<ProjectError>(cause, &mut hints);
         collect_hint::<uv_environment_operations::EnvironmentError>(cause, &mut hints);
         collect_hint::<uv_python_context::PythonContextError>(cause, &mut hints);
-        collect_hint::<NoExecutablesError>(cause, &mut hints);
-        collect_hint::<ExternallyManagedError>(cause, &mut hints);
-        collect_hint::<MissingProjectVersionError>(cause, &mut hints);
-        collect_hint::<InvalidUpgradeRequestError>(cause, &mut hints);
-        collect_hint::<BuildError>(cause, &mut hints);
         collect_hint::<uv_build_backend::Error>(cause, &mut hints);
         collect_hint::<uv_build_frontend::Error>(cause, &mut hints);
         collect_hint::<uv_python::Error>(cause, &mut hints);
@@ -69,22 +50,11 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     hints
 }
 
-/// If `cause` can be downcast to `T`, collect its hints.
-fn collect_hint<T: Hinted + std::error::Error + 'static>(
-    cause: &(dyn std::error::Error + 'static),
-    hints: &mut Hints<'static>,
-) {
-    if let Some(inner) = cause.downcast_ref::<T>() {
-        hints.extend(inner.hints());
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use insta::assert_debug_snapshot;
 
     use uv_lock_operations::LockError;
-    use uv_project_commands::project::ProjectError;
     use uv_settings::{LockedFlag, LockedSource};
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
@@ -113,23 +83,6 @@ mod tests {
 
         // Command context retains the lockfile's regeneration hint.
         let error = anyhow::Error::new(error).context("Failed to check the lockfile");
-
-        let hints = hints_for_error(&error);
-        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
-        [
-            "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
-        ]
-        "#);
-    }
-
-    #[test]
-    fn collects_lock_hints_through_project_errors() {
-        let error =
-            LockError::LockFormat("uv.lock".into(), 3, LockedSource::Cli(LockedFlag::Check));
-
-        // Project and command context retain the lockfile's regeneration hint.
-        let error =
-            anyhow::Error::new(ProjectError::from(error)).context("Failed to check the lockfile");
 
         let hints = hints_for_error(&error);
         assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"

@@ -1,5 +1,8 @@
 //! Commands for discovering and managing Python installations.
 
+mod diagnostics;
+pub use diagnostics::error_hints;
+
 pub mod dir;
 pub mod find;
 pub mod install;
