@@ -26,7 +26,7 @@ use uv_command_support::Printer;
 use uv_settings::ResolverInstallerSettings;
 
 /// Audit selected installed tools, or every installed tool if no names are provided.
-pub(crate) async fn audit(
+pub async fn audit(
     names: Vec<PackageName>,
     output_format: AuditOutputFormat,
     service: VulnerabilityServiceFormat,

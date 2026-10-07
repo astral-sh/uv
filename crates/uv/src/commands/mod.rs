@@ -77,7 +77,7 @@ pub(crate) use uv_python_commands as python;
 pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
 mod self_update;
-mod tool;
+pub(crate) use uv_tool_commands as tool;
 mod venv;
 mod version;
 mod workspace;

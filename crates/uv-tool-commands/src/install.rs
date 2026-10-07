@@ -1,20 +1,19 @@
 use std::fmt::Write;
 use std::str::FromStr;
-use uv_command_support::{ExitStatus, Printer, UvError};
+use uv_dispatch::PlatformState;
 use uv_distribution_types::RequirementScope;
-use uv_lock_operations::LockValidationError;
+use uv_python_context::PythonDownloadReporter;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
-use uv_environment_operations::EnvironmentError;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyMode, DependencyModifiers, DryRun, Excludes, GitLfsSetting,
-    HashCheckingMode, Overrides, Reinstall, TargetTriple, Upgrade,
+    HashCheckingMode, Modifications, Overrides, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -37,28 +36,29 @@ use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::tool::common::{
+use uv_lock_operations::LockValidationError;
+
+use crate::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
     tool_environment_spec,
 };
-use crate::commands::tool::error::ToolLockError;
-use crate::commands::tool::requirements::resolve_names;
-use crate::commands::tool::{Target, ToolRequest};
-use uv_configuration::Modifications;
-use uv_dispatch::PlatformState;
+use crate::error::ToolLockError;
+use crate::requirements::resolve_names;
+use crate::{Target, ToolRequest};
+use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_environment_operations::{
-    EnvironmentResolution, EnvironmentSpecification, resolve_environment, sync_environment,
-    update_environment,
+    EnvironmentError, EnvironmentResolution, EnvironmentSpecification, resolve_environment,
+    sync_environment, update_environment,
 };
 use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_python_context::PythonDownloadReporter;
+use uv_resolve_operations as operations;
 use uv_resolve_operations::latest::LatestClient;
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
-pub(crate) async fn install(
+pub async fn install(
     package: String,
     editable: bool,
     from: Option<String>,
@@ -156,7 +156,7 @@ pub(crate) async fn install(
     .into_interpreter();
 
     let receipt_build_constraints =
-        uv_resolve_operations::read_constraints(build_constraints, &client_builder).await?;
+        operations::read_constraints(build_constraints, &client_builder).await?;
     let build_constraints =
         Constraints::from_specifications(receipt_build_constraints.iter().cloned());
 

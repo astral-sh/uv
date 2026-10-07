@@ -9,7 +9,6 @@ use rustc_hash::FxHashMap;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::Concurrency;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, RequiresPython};
@@ -20,13 +19,15 @@ use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
+use uv_command_support::ExitStatus;
+use uv_command_support::Printer;
 use uv_resolve_operations::latest::LatestClient;
 use uv_resolve_operations::reporters::LatestVersionReporter;
 use uv_settings::ResolverInstallerSettings;
 
 /// List installed tools.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn list(
+pub async fn list(
     show_paths: bool,
     show_version_specifiers: bool,
     show_with: bool,

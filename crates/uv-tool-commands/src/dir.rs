@@ -3,13 +3,14 @@ use std::fmt::Write;
 use anyhow::Context;
 use owo_colors::OwoColorize;
 
-use uv_command_support::Printer;
 use uv_fs::Simplified;
 use uv_preview::Preview;
 use uv_tool::{InstalledTools, tool_executable_dir};
 
+use uv_command_support::Printer;
+
 /// Show the tool directory.
-pub(crate) fn dir(bin: bool, _preview: Preview, printer: Printer) -> anyhow::Result<()> {
+pub fn dir(bin: bool, _preview: Preview, printer: Printer) -> anyhow::Result<()> {
     if bin {
         let executable_directory = tool_executable_dir()?;
         writeln!(

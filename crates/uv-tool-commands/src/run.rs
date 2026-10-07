@@ -3,10 +3,9 @@ use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
-use uv_command_support::child::read_env_files;
-use uv_command_support::child::run_to_completion;
-use uv_command_support::{ExitStatus, Printer, UvError};
+use uv_dispatch::PlatformState;
 use uv_distribution_types::RequirementScope;
+use uv_environment_operations::environment::CachedEnvironment;
 
 use anyhow::{Context, bail};
 use console::Term;
@@ -14,7 +13,6 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
-use uv_environment_operations::EnvironmentError;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -47,17 +45,21 @@ use uv_tool::{InstalledTools, entrypoint_paths};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
-use crate::commands::tool::error::ToolError;
-use crate::commands::tool::requirements::resolve_names;
-use crate::commands::tool::{Target, ToolRequest};
-use uv_dispatch::PlatformState;
-use uv_environment_operations::EnvironmentSpecification;
-use uv_environment_operations::environment::CachedEnvironment;
+use uv_command_support::{
+    ExitStatus, Printer, UvError, child::read_env_files, child::run_to_completion,
+};
+
+use crate::common::{ToolPython, matching_packages, refine_interpreter};
+use crate::error::ToolError;
+use crate::requirements::resolve_names;
+use crate::{Target, ToolRequest};
+use uv_environment_operations::{EnvironmentError, EnvironmentSpecification};
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_context::PythonDownloadReporter;
+use uv_resolve_operations as operations;
 use uv_resolve_operations::latest::LatestClient;
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::ResolverInstallerSettings;
 use uv_settings::ResolverSettings;
 
@@ -77,7 +79,7 @@ enum ToolRunUsageContext {
 /// A tool resolution failure with context for correcting a likely invocation mistake.
 #[derive(Debug, thiserror::Error)]
 #[error("Failed to run tool")]
-pub(crate) struct ToolRunUsageError {
+pub struct ToolRunUsageError {
     #[source]
     cause: anyhow::Error,
     context: ToolRunUsageContext,
@@ -124,7 +126,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn run(
+pub async fn run(
     command: Option<Vec<OsString>>,
     from: Option<String>,
     with: &[RequirementsSource],
@@ -371,7 +373,7 @@ pub(crate) async fn run(
             | ToolError::Environment(EnvironmentError::Requirements(err)),
         ) => {
             return Err(UvError::from(
-                uv_resolve_operations::Error::Requirements(err).with_resolution_context("`--with`"),
+                operations::Error::Requirements(err).with_resolution_context("`--with`"),
             )
             .into());
         }
@@ -833,7 +835,7 @@ async fn get_or_create_environment(
     .into_interpreter();
 
     let build_constraints = Constraints::from_specifications(
-        uv_resolve_operations::read_constraints(build_constraints, client_builder).await?,
+        operations::read_constraints(build_constraints, client_builder).await?,
     );
 
     let from = match request {
@@ -1124,16 +1126,8 @@ async fn get_or_create_environment(
                     .into_inner();
 
                     // Determine the markers and tags to use for the resolution.
-                    let markers = uv_resolve_operations::resolution_markers(
-                        None,
-                        python_platform.as_ref(),
-                        &interpreter,
-                    );
-                    let tags = uv_resolve_operations::resolution_tags(
-                        None,
-                        python_platform.as_ref(),
-                        &interpreter,
-                    )?;
+                    let markers = resolution_markers(None, python_platform.as_ref(), &interpreter);
+                    let tags = resolution_tags(None, python_platform.as_ref(), &interpreter)?;
 
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(environment.environment())?;
@@ -1286,7 +1280,7 @@ async fn get_or_create_environment(
 
 /// A Python script was passed to `uvx` / `--from`, which doesn't support scripts.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ToolRunScriptError {
+pub enum ToolRunScriptError {
     /// Script path passed to `--from`.
     #[error("It looks like you provided a Python script to `--from`, which is not supported")]
     FromScript {
