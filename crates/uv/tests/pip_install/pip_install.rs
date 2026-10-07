@@ -7549,6 +7549,57 @@ async fn install_package_basic_auth_from_keyring() {
     context.assert_command("import anyio").success();
 }
 
+/// Keyring passwords can end in whitespace; only the emitted line ending should be removed.
+#[tokio::test]
+async fn install_requirements_basic_auth_from_keyring_trailing_whitespace() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .and(basic_auth("public", "heron \t"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--requirement")
+        .arg(format!("http://public@{}/requirements.txt", server.address()))
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .env(
+            EnvVars::KEYRING_TEST_CREDENTIALS,
+            format!(r#"{{"{}": {{"public": "heron \t"}}}}"#, server.address()),
+        )
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Keyring request for public@http://[LOCALHOST]/requirements.txt
+    Keyring request for public@[LOCALHOST]
+    warning: Requirements file `http://****@[LOCALHOST]/requirements.txt` does not contain any dependencies
+    Checked in [TIME]
+    ");
+}
+
 /// Install a package from an index that requires authentication
 /// but the keyring has the wrong password
 #[tokio::test]
