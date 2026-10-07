@@ -1,6 +1,6 @@
 [package]
 name = "uv-python"
-version = "0.0.62"
+version = "0.0.90"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -27,6 +27,7 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
+uv-macros = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform = { workspace = true }
@@ -68,6 +69,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
 rayon = { workspace = true }
+zstd = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }
@@ -89,3 +91,4 @@ test-log = { workspace = true }
 uv-static = { workspace = true }
 
 serde_json = { workspace = true }
+zstd = { workspace = true }

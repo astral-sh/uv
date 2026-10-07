@@ -21,11 +21,13 @@ use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
-use uv_distribution_types::{Index, IndexName, RequirementSource};
-use uv_fs::{PortablePathBuf, relative_to};
+use uv_distribution_types::{
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+};
+use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
-use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -35,6 +37,8 @@ use uv_pypi_types::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_toml::deserialize_unique_map;
+
+use crate::DefaultGroupsError;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -90,6 +94,44 @@ pub struct PyProjectToml {
 }
 
 impl PyProjectToml {
+    /// Return whether this manifest explicitly defines a workspace root.
+    pub fn is_workspace_root(&self) -> bool {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .is_some_and(|uv| uv.workspace.is_some())
+    }
+
+    /// Return explicitly configured default groups without validating the group names.
+    ///
+    /// `None` means the setting is absent, so uv uses `dev`; an empty list disables defaults.
+    pub fn configured_default_groups(&self) -> Option<&DefaultGroups> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.default_groups.as_ref())
+    }
+
+    /// Return the default dependency groups, validating explicitly configured group names.
+    pub(crate) fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
+        if let Some(defaults) = self.configured_default_groups() {
+            if let DefaultGroups::List(defaults) = defaults {
+                for group in defaults {
+                    if !self
+                        .dependency_groups
+                        .as_ref()
+                        .is_some_and(|groups| groups.contains_key(group))
+                    {
+                        return Err(DefaultGroupsError::MissingGroup(group.clone()));
+                    }
+                }
+            }
+            Ok(defaults.clone())
+        } else {
+            Ok(DefaultGroups::from_groups(vec![DEV_DEPENDENCIES.clone()]))
+        }
+    }
+
     /// Parse a `PyProjectToml` from a raw TOML string.
     #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
     pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
@@ -288,6 +330,43 @@ where
 /// An override dependency before source lowering.
 pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
 
+/// A build constraint, optionally accompanied by archive hashes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum BuildConstraintDependency {
+    /// A PEP 508 requirement without additional hashes.
+    Requirement(uv_pep508::Requirement<VerbatimParsedUrl>),
+    /// A PEP 508 requirement and its archive hashes.
+    WithHashes {
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        hashes: Vec<String>,
+    },
+}
+
+impl BuildConstraintDependency {
+    /// Return the requirement and any hashes attached to it.
+    pub fn into_parts(self) -> (uv_pep508::Requirement<VerbatimParsedUrl>, Vec<String>) {
+        match self {
+            Self::Requirement(requirement) => (requirement, Vec::new()),
+            Self::WithHashes {
+                requirement,
+                hashes,
+            } => (requirement, hashes),
+        }
+    }
+}
+
+impl From<BuildConstraintDependency> for NameRequirementSpecification {
+    fn from(value: BuildConstraintDependency) -> Self {
+        let (requirement, hashes) = value.into_parts();
+        Self {
+            requirement: requirement.into(),
+            hashes,
+        }
+    }
+}
+
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
 #[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
@@ -397,7 +476,7 @@ pub struct ToolUv {
             default-groups = ["docs"]
         "#
     )]
-    pub default_groups: Option<DefaultGroups>,
+    default_groups: Option<DefaultGroups>,
 
     /// Additional settings for `dependency-groups`.
     ///
@@ -561,24 +640,19 @@ pub struct ToolUv {
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
+    ///
+    /// Hashes can be included to verify downloaded build dependency archives. To provide hashes,
+    /// use a table with `requirement` and `hashes`. uv records these hashes in `uv.lock`.
     #[option(
         default = "[]",
-        value_type = "list[str]",
+        value_type = "list[str | dict]",
         example = r#"
             # Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
             # on setuptools.
             build-constraint-dependencies = ["setuptools==60.0.0"]
         "#
     )]
-    pub(crate) build_constraint_dependencies:
-        Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
 
     /// A list of supported environments against which to resolve dependencies.
     ///
@@ -607,7 +681,7 @@ pub struct ToolUv {
 
     /// A list of required platforms, for packages that lack source distributions.
     ///
-    /// When a package does not have a source distribution, it's availability will be limited to
+    /// When a package does not have a source distribution, its availability will be limited to
     /// the platforms supported by its built distributions (wheels). For example, if a package only
     /// publishes wheels for Linux, then it won't be installable on macOS or Windows.
     ///
@@ -647,6 +721,37 @@ pub struct ToolUv {
         "#
     )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
+
+    /// The minimum libc versions to support when resolving for Linux.
+    ///
+    /// During universal resolution, wheels must support the configured libc versions to satisfy
+    /// `required-environments`. For example, `{ glibc = "2.31" }` accepts `manylinux_2_17` wheels
+    /// as coverage, but not `manylinux_2_34` wheels. Both are retained in the lockfile so installation
+    /// can select the best wheel for the current machine. An omitted libc is not required.
+    ///
+    /// Use `required-environments` to specify the Linux architectures to support. Each configured
+    /// libc version needs compatible wheels for those environments. Generic Linux wheels do not
+    /// constrain libc and can satisfy either implementation. Packages with a usable source
+    /// distribution can still be selected.
+    ///
+    /// This setting is respected by `uv lock` and `uv pip compile --universal`.
+    ///
+    /// This option is in preview and may change in any future release. Use
+    /// `--preview-features minimum-libc-version` or configure
+    /// `preview-features = ["minimum-libc-version"]` to disable the warning.
+    #[option(
+        default = "None",
+        value_type = "dict[str, str]",
+        example = r#"
+            preview-features = ["minimum-libc-version"]
+            required-environments = [
+                "sys_platform == 'linux' and platform_machine == 'x86_64'",
+                "sys_platform == 'linux' and platform_machine == 'aarch64'",
+            ]
+            minimum-libc-version = { glibc = "2.31" }
+        "#
+    )]
+    pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).
@@ -1110,8 +1215,7 @@ impl TryFrom<SourcesWire> for Sources {
                             return Err(SourceError::MissingMarkers);
                         };
 
-                        let mut hint = lhs.negate();
-                        hint.and(rhs);
+                        let hint = lhs.negate().and(rhs);
                         let hint = hint
                             .contents()
                             .map(|contents| contents.to_string())
@@ -1223,9 +1327,12 @@ pub enum Source {
     },
     /// A dependency on another package in the workspace.
     Workspace {
+        /// `true` selects the current workspace. A string selects another workspace discovered
+        /// from the given path.
+        ///
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
-        workspace: bool,
+        workspace: WorkspaceReference,
         /// Whether the package should be installed as editable. Defaults to `true`.
         editable: Option<bool>,
         #[serde(
@@ -1237,6 +1344,15 @@ pub enum Source {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
     },
+}
+
+/// A reference to either the current workspace or a workspace discovered from a path.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
+#[serde(untagged)]
+pub enum WorkspaceReference {
+    Bool(bool),
+    Path(PortablePathBuf),
 }
 
 /// A custom deserialization implementation for [`Source`]. This is roughly equivalent to
@@ -1260,7 +1376,7 @@ impl<'de> Deserialize<'de> for Source {
             editable: Option<bool>,
             package: Option<bool>,
             index: Option<IndexName>,
-            workspace: Option<bool>,
+            workspace: Option<WorkspaceReference>,
             #[serde(
                 skip_serializing_if = "uv_pep508::marker::ser::is_empty",
                 serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1623,7 +1739,7 @@ pub enum SourceError {
     UnusedEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
-    #[error("Path contains invalid characters: `{}`", _0.display())]
+    #[error("Path contains invalid characters: {}", _0.display())]
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.")]
     OverlappingMarkers(String, String, String),
@@ -1635,7 +1751,7 @@ pub enum SourceError {
     EmptySources,
 }
 
-impl uv_errors::Hint for SourceError {
+impl uv_errors::Hinted for SourceError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::OverlappingMarkers(_, rhs, replacement) => {
@@ -1726,7 +1842,7 @@ impl Source {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
                     Ok(Some(Self::Workspace {
-                        workspace: true,
+                        workspace: WorkspaceReference::Bool(true),
                         editable,
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1761,12 +1877,13 @@ impl Source {
                 }
             }
             RequirementSource::Registry { index: None, .. } => return Ok(None),
-            RequirementSource::Path { install_path, .. } => Self::Path {
+            RequirementSource::Path {
+                install_path, url, ..
+            } => Self::Path {
                 editable: None,
                 package: None,
                 path: PortablePathBuf::from(
-                    relative_to(&install_path, root)
-                        .or_else(|_| std::path::absolute(&install_path))
+                    try_relative_to_if(&install_path, root, url.prefers_relative())
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
@@ -1777,13 +1894,13 @@ impl Source {
             RequirementSource::Directory {
                 install_path,
                 editable: is_editable,
+                url,
                 ..
             } => Self::Path {
                 editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
-                    relative_to(&install_path, root)
-                        .or_else(|_| std::path::absolute(&install_path))
+                    try_relative_to_if(&install_path, root, url.prefers_relative())
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),

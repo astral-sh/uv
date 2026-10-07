@@ -14,7 +14,8 @@ use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest, Target,
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonEnvironment, PythonPreference,
+    PythonRequest, Target,
 };
 
 use crate::commands::ExitStatus;
@@ -23,6 +24,7 @@ use crate::printer::Printer;
 
 /// Show information about one or more installed packages.
 pub(crate) fn pip_show(
+    python_arch: Option<PythonArchitecture>,
     mut packages: Vec<PackageName>,
     strict: bool,
     dependency_metadata: &DependencyMetadata,
@@ -51,19 +53,20 @@ pub(crate) fn pip_show(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
+        python_arch,
         cache,
     )?;
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
         debug!(
-            "Using `--target` directory at {}",
+            "Using `--target` directory at `{}`",
             target.root().user_display()
         );
         environment.with_target(target)?
     } else if let Some(prefix) = prefix {
         debug!(
-            "Using `--prefix` directory at {}",
+            "Using `--prefix` directory at `{}`",
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?

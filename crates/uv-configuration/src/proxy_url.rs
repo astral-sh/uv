@@ -9,9 +9,7 @@ use url::Url;
 
 use uv_redacted::DisplaySafeUrl;
 
-/// A validated proxy URL.
-///
-/// This type validates that the [`Url`] is valid for a [`reqwest::Proxy`] on construction.
+/// A proxy URL with a supported scheme and a host.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProxyUrl(DisplaySafeUrl);
 
@@ -29,13 +27,10 @@ impl ProxyUrl {
     }
 
     /// Constructs a [`reqwest::Proxy`] from this [`ProxyUrl`] for the given [`ProxyUrlKind`].
-    pub fn as_proxy(&self, kind: ProxyUrlKind) -> Proxy {
-        // SAFETY: Constructing a [`Proxy`] from a [`Url`] is infallible.
+    pub fn as_proxy(&self, kind: ProxyUrlKind) -> Result<Proxy, reqwest::Error> {
         match kind {
-            ProxyUrlKind::Http => Proxy::http(self.0.as_str())
-                .expect("Constructing a proxy from a url should never fail"),
-            ProxyUrlKind::Https => Proxy::https(self.0.as_str())
-                .expect("Constructing a proxy from a url should never fail"),
+            ProxyUrlKind::Http => Proxy::http(self.0.as_str()),
+            ProxyUrlKind::Https => Proxy::https(self.0.as_str()),
         }
     }
 }
@@ -88,7 +83,13 @@ impl TryFrom<Url> for ProxyUrl {
     fn try_from(url: Url) -> Result<Self, Self::Error> {
         let url = DisplaySafeUrl::from_url(url);
         match url.scheme() {
-            "http" | "https" | "socks5" | "socks5h" => Ok(Self(url)),
+            "http" | "https" | "socks5" | "socks5h" => {
+                // Reqwest can reinterpret a hostless SOCKS URL as an HTTP proxy.
+                if !url.has_host() {
+                    return Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost));
+                }
+                Ok(Self(url))
+            }
             scheme => Err(ProxyUrlError::InvalidScheme {
                 scheme: scheme.to_string(),
                 url,
@@ -139,6 +140,8 @@ impl schemars::JsonSchema for ProxyUrl {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -199,7 +202,7 @@ mod tests {
     #[test]
     fn parse_invalid_proxy_urls() {
         let result = "ftp://proxy.example.com:8080".parse::<ProxyUrl>();
-        assert!(matches!(result, Err(ProxyUrlError::InvalidScheme { .. })));
+        assert_matches!(result, Err(ProxyUrlError::InvalidScheme { .. }));
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
             @"invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h"
@@ -207,7 +210,7 @@ mod tests {
 
         // Invalid URL (spaces are not allowed)
         let result = "not a url".parse::<ProxyUrl>();
-        assert!(matches!(result, Err(ProxyUrlError::InvalidUrl(_))));
+        assert_matches!(result, Err(ProxyUrlError::InvalidUrl(_)));
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
             @"invalid proxy URL: invalid international domain name"
@@ -215,18 +218,30 @@ mod tests {
 
         // Empty string
         let result = "".parse::<ProxyUrl>();
-        assert!(matches!(result, Err(ProxyUrlError::InvalidUrl(_))));
+        assert_matches!(result, Err(ProxyUrlError::InvalidUrl(_)));
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
             @"invalid proxy URL: empty host"
         );
 
         let result = "file:///path/to/file".parse::<ProxyUrl>();
-        assert!(matches!(result, Err(ProxyUrlError::InvalidScheme { .. })));
+        assert_matches!(result, Err(ProxyUrlError::InvalidScheme { .. }));
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
             @"invalid proxy URL scheme `file` in `file:///path/to/file`: expected http, https, socks5, or socks5h"
         );
+    }
+
+    #[test]
+    fn proxy_url_without_host() -> Result<(), ProxyUrlError> {
+        for input in ["socks5h:///proxy", "socks5:foo"] {
+            let url = Url::parse(input)?;
+            assert_matches!(
+                ProxyUrl::try_from(url),
+                Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost))
+            );
+        }
+        Ok(())
     }
 
     #[test]

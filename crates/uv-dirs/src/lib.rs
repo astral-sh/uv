@@ -134,7 +134,7 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
     let default = "/etc/xdg";
     let config_dirs = value.filter(|s| !s.is_empty()).unwrap_or(default);
 
-    for dir in config_dirs.split(':').take_while(|s| !s.is_empty()) {
+    for dir in config_dirs.split(':').filter(|s| !s.is_empty()) {
         let uv_toml_path = Path::new(dir).join("uv").join("uv.toml");
         if uv_toml_path.is_file() {
             return Some(uv_toml_path);
@@ -238,6 +238,68 @@ mod test {
             ))
             .unwrap(),
             first_config.path()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn test_locate_system_config_xdg_empty_entries() -> Result<(), FixtureError> {
+        let context = assert_fs::TempDir::new()?;
+        let config = context.child("uv").child("uv.toml");
+        config.write_str("")?;
+        let missing = context.child("missing");
+
+        let directory = context.to_string_lossy();
+        let missing = missing.to_string_lossy();
+        for value in [
+            format!(":{directory}"),
+            format!("{missing}::{directory}"),
+            format!("{missing}:::{directory}"),
+            format!("{directory}:"),
+            format!("{missing}::{directory}::"),
+        ] {
+            assert_eq!(
+                locate_system_config_xdg(Some(&value)),
+                Some(config.path().to_path_buf()),
+                "{value}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn test_locate_system_config_xdg_empty_entries_precedence() -> Result<(), FixtureError> {
+        let context = assert_fs::TempDir::new()?;
+        let first = context.child("first");
+        let first_config = first.child("uv").child("uv.toml");
+        first_config.write_str("")?;
+        let second = context.child("second");
+        let second_config = second.child("uv").child("uv.toml");
+        second_config.write_str("")?;
+        let missing = context.child("missing");
+
+        let first = first.to_string_lossy();
+        let second = second.to_string_lossy();
+        let missing = missing.to_string_lossy();
+        for value in [
+            format!(":{first}:{second}"),
+            format!("{missing}::{first}:{second}"),
+            format!("{first}::{second}"),
+            format!("::{first}:::{second}::"),
+        ] {
+            assert_eq!(
+                locate_system_config_xdg(Some(&value)),
+                Some(first_config.path().to_path_buf()),
+                "{value}"
+            );
+        }
+        assert_eq!(
+            locate_system_config_xdg(Some(&format!("::{second}::{first}::"))),
+            Some(second_config.path().to_path_buf())
         );
 
         Ok(())

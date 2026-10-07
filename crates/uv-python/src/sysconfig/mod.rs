@@ -145,12 +145,10 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
     fn update_prefix(s: &str, real_prefix: &Path) -> String {
         s.split_whitespace()
             .map(|part| {
-                if let Some(rest) = part.strip_prefix("/install") {
-                    if rest.is_empty() {
-                        real_prefix.display().to_string()
-                    } else {
-                        real_prefix.join(&rest[1..]).display().to_string()
-                    }
+                if part == "/install" {
+                    real_prefix.display().to_string()
+                } else if let Some(rest) = part.strip_prefix("/install/") {
+                    real_prefix.join(rest).display().to_string()
                 } else {
                     part.to_string()
                 }

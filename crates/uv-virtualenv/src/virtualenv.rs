@@ -15,17 +15,16 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
 use crate::{Error, Prompt};
-use uv_fs::{CWD, Simplified, cachedir};
+use uv_fs::{CWD, PythonExt, Simplified, cachedir};
 use uv_platform_tags::Os;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{
-    ManagedPythonInstallation, PythonMinorVersionLink, replace_link_to_executable,
+    ManagedPythonInstallation, PythonExecutable, PythonMinorVersionLink, replace_link_to_executable,
 };
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
-use uv_warnings::warn_user_once;
 
 /// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -33,6 +32,7 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate.csh", include_str!("activator/activate.csh")),
     ("activate.fish", include_str!("activator/activate.fish")),
     ("activate.nu", include_str!("activator/activate.nu")),
+    ("activate.xsh", include_str!("activator/activate.xsh")),
     ("activate.ps1", include_str!("activator/activate.ps1")),
     ("activate.bat", include_str!("activator/activate.bat")),
     ("deactivate.bat", include_str!("activator/deactivate.bat")),
@@ -149,16 +149,6 @@ pub(crate) fn create(
                     {
                         match clear_non_virtualenv {
                             ClearNonVirtualenv::Allow => {}
-                            ClearNonVirtualenv::Warn => {
-                                warn_user_once!(
-                                    "The `--clear` option will remove the existing directory at `{}` \
-                                    even though it is not a virtual environment. \
-                                    This will become an error in a future release. \
-                                    Use `--force` to suppress this warning, or \
-                                    `--preview-features venv-safe-clear` to error on this now.",
-                                    location.user_display()
-                                );
-                            }
                             ClearNonVirtualenv::Error => {
                                 return Err(Error::ClearNonVirtualenv {
                                     path: location.to_path_buf(),
@@ -236,7 +226,7 @@ pub(crate) fn create(
                     "symlink directory"
                 };
                 debug!(
-                    "Using {} {} instead of base Python path: {}",
+                    "Using {} `{}` instead of base Python path `{}`",
                     debug_symlink_term,
                     &minor_version_link.symlink_directory.display(),
                     &base_python.display()
@@ -315,18 +305,33 @@ pub(crate) fn create(
     if cfg!(windows) {
         if using_minor_version_link {
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
-            replace_link_to_executable(target.as_path(), &executable_target)
-                .map_err(Error::Python)?;
-            let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
-            replace_link_to_executable(targetw.as_path(), &executable_target)
-                .map_err(Error::Python)?;
+            replace_link_to_executable(
+                target.as_path(),
+                PythonExecutable::console(&executable_target),
+            )
+            .map_err(Error::Python)?;
+            let windowed_executable_name = WindowsExecutable::Pythonw.exe(interpreter);
+            let targetw = scripts.join(&windowed_executable_name);
+            let windowed_executable_target =
+                executable_target.with_file_name(windowed_executable_name);
+            replace_link_to_executable(
+                targetw.as_path(),
+                PythonExecutable::windowed(&windowed_executable_target),
+            )
+            .map_err(Error::Python)?;
             if interpreter.gil_disabled() {
                 let targett = scripts.join(WindowsExecutable::PythonMajorMinort.exe(interpreter));
-                replace_link_to_executable(targett.as_path(), &executable_target)
-                    .map_err(Error::Python)?;
+                replace_link_to_executable(
+                    targett.as_path(),
+                    PythonExecutable::console(&executable_target),
+                )
+                .map_err(Error::Python)?;
                 let targetwt = scripts.join(WindowsExecutable::PythonwMajorMinort.exe(interpreter));
-                replace_link_to_executable(targetwt.as_path(), &executable_target)
-                    .map_err(Error::Python)?;
+                replace_link_to_executable(
+                    targetwt.as_path(),
+                    PythonExecutable::windowed(&windowed_executable_target),
+                )
+                .map_err(Error::Python)?;
             }
         } else if matches!(
             interpreter.platform().os(),
@@ -335,8 +340,11 @@ pub(crate) fn create(
             // For PyEmscripten, link only `python.exe`.
             // This should not be copied as `python.exe` is a wrapper that launches Pyodide.
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
-            replace_link_to_executable(target.as_path(), &executable_target)
-                .map_err(Error::Python)?;
+            replace_link_to_executable(
+                target.as_path(),
+                PythonExecutable::console(&executable_target),
+            )
+            .map_err(Error::Python)?;
         } else {
             // Always copy `python.exe`.
             copy_launcher_windows(
@@ -508,13 +516,24 @@ pub(crate) fn create(
             _ => escape_posix_for_single_quotes(location_string),
         };
 
+        let virtual_prompt = prompt.as_deref().unwrap_or_default();
+        let virtual_prompt = match *name {
+            "activate.xsh" => Cow::Owned(format!(
+                r#"b"{}".decode("utf-8")"#,
+                virtual_prompt.as_bytes().escape_ascii(),
+            )),
+            _ => Cow::Borrowed(virtual_prompt),
+        };
+
+        let bin_name = match *name {
+            "activate.xsh" => Cow::Owned(bin_name.escape_for_python()),
+            _ => Cow::Borrowed(bin_name),
+        };
+
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
-            .replace("{{ BIN_NAME }}", bin_name)
-            .replace(
-                "{{ VIRTUAL_PROMPT }}",
-                prompt.as_deref().unwrap_or_default(),
-            )
+            .replace("{{ BIN_NAME }}", &bin_name)
+            .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
             .replace("{{ PATH_SEP }}", path_sep)
             .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
         fs_err::write(scripts.join(name), activator)?;
@@ -644,8 +663,6 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
 pub enum ClearNonVirtualenv {
     /// Allow clearing a non-virtual environment directory.
     Allow,
-    /// Warn before clearing a non-virtual environment directory.
-    Warn,
     /// Refuse to clear a non-virtual environment directory.
     Error,
 }

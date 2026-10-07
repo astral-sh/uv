@@ -9,23 +9,23 @@ use thiserror::Error;
 use tracing::warn;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, NoSources,
+    ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
+    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildRequires, Index, IndexLocations,
-    PackageConfigSettings, Requirement,
+    ConfigSettings, DependencyMetadata, ExtraBuildRequires, IndexLocations, PackageConfigSettings,
+    Requirement,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
-    PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
@@ -41,14 +41,13 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
-    LinkErrorReporting, WorkspacePython, centralized_environment_root,
-    centralized_environments_enabled, is_centralized_environment_link, lock_project_environment,
-    update_project_environment_link, validate_project_requires_python,
+    LinkErrorReporting, ProjectEnvironmentTarget, ProjectPythonRequest,
+    centralized_environment_root, centralized_environments_enabled,
+    is_centralized_environment_reference, lock_project_environment,
+    update_project_environment_link,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-
-use super::project::default_dependency_groups;
 
 #[derive(Error, Debug)]
 enum VenvError {
@@ -57,9 +56,6 @@ enum VenvError {
 
     #[error("Failed to install seed packages into virtual environment")]
     Seed(#[source] AnyErrorBuild),
-
-    #[error("Failed to extract interpreter tags for installing seed packages")]
-    Tags(#[source] uv_platform_tags::TagsError),
 
     #[error("Failed to resolve `--find-links` entry")]
     FlatIndex(#[source] uv_client::FlatIndexError),
@@ -72,6 +68,7 @@ pub(crate) async fn venv(
     python_request: Option<PythonRequest>,
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
@@ -131,7 +128,12 @@ pub(crate) async fn venv(
         .as_ref()
         .map(VirtualProject::workspace)
         .filter(|workspace| path.is_none() && workspace.install_path() == project_dir)
-        .map(|workspace| (workspace, workspace.environment_selection(Some(false))));
+        .map(|workspace| {
+            (
+                workspace,
+                workspace.environment_selection(ActiveEnvironment::Ignore),
+            )
+        });
 
     let centralized_workspace = project_environment
         .as_ref()
@@ -143,15 +145,11 @@ pub(crate) async fn venv(
     // If the default dependency-groups demand a higher requires-python
     // we should bias an empty venv to that to avoid churn.
     let default_groups = match &project {
-        Some(project) => default_dependency_groups(project.pyproject_toml())?,
+        Some(project) => project.default_groups()?,
         None => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
-    let WorkspacePython {
-        source,
-        python_request,
-        requires_python,
-    } = WorkspacePython::from_request(
+    let project_python = ProjectPythonRequest::from_request(
         python_request,
         project.as_ref().map(VirtualProject::workspace),
         &groups,
@@ -163,15 +161,15 @@ pub(crate) async fn venv(
     // Locate the Python interpreter to use in the environment
     let interpreter = {
         let python = PythonInstallation::find_or_download(
-            python_request.as_ref(),
+            project_python.python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
             python_preference,
+            python_arch,
             python_downloads,
             client_builder,
             cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
@@ -179,13 +177,19 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
-    let upgradeable = python_request
+    let upgradeable = project_python
+        .python_request
         .as_ref()
         .is_none_or(|request| !request.includes_patch());
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {
-        centralized_environment_root(workspace, &interpreter, upgradeable, cache)
+        centralized_environment_root(
+            ProjectEnvironmentTarget::from(workspace),
+            &interpreter,
+            upgradeable,
+            cache,
+        )
     } else {
         path.or_else(|| {
             project_environment.as_ref().map(|(_, selection)| {
@@ -198,19 +202,8 @@ pub(crate) async fn venv(
     };
 
     // Check if the discovered Python version is incompatible with the current workspace
-    if let Some(requires_python) = requires_python {
-        match validate_project_requires_python(
-            &interpreter,
-            project.as_ref().map(VirtualProject::workspace),
-            &groups,
-            &requires_python,
-            &source,
-        ) {
-            Ok(()) => {}
-            Err(err) => {
-                warn_user!("{err}");
-            }
-        }
+    if let Err(err) = project_python.check(&interpreter) {
+        warn_user!("{err}");
     }
 
     let with_seed = match seed {
@@ -236,7 +229,7 @@ pub(crate) async fn venv(
 
     // Lock the project environment to avoid synchronization issues.
     let _lock = if let Some((workspace, _)) = project_environment.as_ref() {
-        lock_project_environment(workspace)
+        lock_project_environment(ProjectEnvironmentTarget::from(*workspace))
             .await
             .inspect_err(|err| {
                 warn!("Failed to acquire project environment lock: {err}");
@@ -252,10 +245,19 @@ pub(crate) async fn venv(
             OnExisting::Remove(RemovalReason::ManagedEnvironment)
         }
         OnExisting::Prompt | OnExisting::Remove(_)
-            if is_centralized_environment_link(&path, cache) =>
+            if is_centralized_environment_reference(&path, cache) =>
         {
             // Remove `.venv` without following it into the cache.
-            uv_fs::remove_symlink(&path).map_err(|err| VenvError::Creation(err.into()))?;
+            uv_fs::remove_virtualenv(&path).map_err(|err| VenvError::Creation(err.into()))?;
+            on_existing
+        }
+        OnExisting::Allow
+            if fs_err::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file())
+                && is_centralized_environment_reference(&path, cache) =>
+        {
+            // TODO(tk): Revisit after PEP 832.
+            // Ignore uv-owned path files when creating a local environment.
+            uv_fs::remove_virtualenv(&path).map_err(|err| VenvError::Creation(err.into()))?;
             on_existing
         }
         _ => on_existing,
@@ -289,20 +291,9 @@ pub(crate) async fn venv(
             .build()?;
 
         // Resolve the flat indexes from `--find-links`.
-        let flat_index = {
-            let tags = interpreter.tags().map_err(VenvError::Tags)?;
-            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-            let entries = client
-                .fetch_all(index_locations.flat_indexes().map(Index::url))
-                .await
-                .map_err(VenvError::FlatIndex)?;
-            FlatIndex::from_entries(
-                entries,
-                Some(tags),
-                &HashStrategy::None,
-                &BuildOptions::new(NoBinary::None, NoBuild::All),
-            )
-        };
+        let flat_index = FlatIndex::load(&client, cache, index_locations)
+            .await
+            .map_err(VenvError::FlatIndex)?;
 
         // Initialize any shared state.
         let state = SharedState::default();
@@ -380,7 +371,11 @@ pub(crate) async fn venv(
 
     // Determine the appropriate environment path.
     let scripts = if let Some(workspace) = centralized_workspace
-        && update_project_environment_link(&venv, workspace, LinkErrorReporting::User)
+        && update_project_environment_link(
+            &venv,
+            ProjectEnvironmentTarget::from(workspace),
+            LinkErrorReporting::User,
+        )
         && let Ok(suffix) = venv.scripts().strip_prefix(&path)
     {
         workspace.install_path().join(".venv").join(suffix)

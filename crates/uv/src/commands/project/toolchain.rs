@@ -2,9 +2,9 @@ use anyhow::Result;
 
 use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
 use uv_distribution_types::Resolution;
+use uv_lock::{Lock, SelectedDependency};
 use uv_normalize::{GroupName, PackageName};
 use uv_python::Interpreter;
-use uv_resolver::{Lock, SelectedDependency};
 use uv_workspace::VirtualProject;
 
 use crate::commands::pip::{resolution_markers, resolution_tags};

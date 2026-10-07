@@ -37,10 +37,10 @@ pub(crate) async fn format(
     no_project: bool,
 ) -> Result<ExitStatus> {
     // Check if the format feature is in preview
-    if !preview.is_enabled(PreviewFeature::Format) {
+    if !preview.is_enabled(PreviewFeature::FormatCommand) {
         warn_user!(
             "`uv format` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::Format
+            PreviewFeature::FormatCommand
         );
     }
 

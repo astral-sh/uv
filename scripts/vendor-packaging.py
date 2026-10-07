@@ -11,6 +11,9 @@ Example:
 # /// script
 # requires-python = ">=3.12"
 # dependencies = []
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 from __future__ import annotations

@@ -2,41 +2,55 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anstream::print;
-use anyhow::{Error, Result};
+use anyhow::{Error, Result, bail};
 use futures::StreamExt;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::TreeFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, DependencyGroups, TargetTriple};
+use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple};
+use uv_dispatch::UniversalState;
 use uv_distribution_types::IndexCapabilities;
+use uv_lock::{PackageMap, TreeDisplay, TreeJsonTarget};
 use uv_normalize::DefaultGroups;
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
-use uv_resolver::{PackageMap, TreeDisplay, TreeJsonTarget};
+use uv_python::{
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+    PythonVersion,
+};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
+use crate::commands::project::discovery::DiscoveredProject;
+use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
+    ScriptInterpreter,
 };
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::FrozenSource;
 use crate::settings::LockCheck;
 use crate::settings::ResolverSettings;
 
-/// Run a command.
+/// A tree reads an existing workspace lock or resolves a project or script manifest.
+#[derive(Clone, Copy)]
+enum TreeSource<'a> {
+    Manifest(LockTarget<'a>),
+    Lockfile(&'a FrozenWorkspace),
+}
+
+/// Display the dependency tree for a project, script, or frozen workspace.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
@@ -60,6 +74,7 @@ pub(crate) async fn tree(
     client_builder: &BaseClientBuilder<'_>,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -76,49 +91,68 @@ pub(crate) async fn tree(
     }
 
     // Find the project requirements.
-    let virtual_project;
-    let target = if let Some(script) = script.as_ref() {
-        LockTarget::Script(script)
+    let project;
+    let source = if let Some(script) = script.as_ref() {
+        TreeSource::Manifest(LockTarget::Script(script))
     } else {
-        virtual_project = VirtualProject::discover(
+        project = DiscoveredProject::discover(
             project_dir,
             &DiscoveryOptions::default(),
+            None,
+            frozen,
+            preview,
             cache,
             workspace_cache,
         )
         .await?;
-        LockTarget::Workspace(virtual_project.workspace())
+        match &project {
+            DiscoveredProject::Manifest(project) => {
+                TreeSource::Manifest(LockTarget::Workspace(project.workspace()))
+            }
+            DiscoveredProject::Lockfile(workspace) => {
+                if outdated {
+                    bail!("`--outdated` is not supported without a `pyproject.toml`");
+                }
+                TreeSource::Lockfile(workspace)
+            }
+        }
     };
 
     // Determine the groups to include.
-    let default_groups = match target {
-        LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
-        LockTarget::Script(_) => DefaultGroups::default(),
+    let groups = match source {
+        TreeSource::Manifest(LockTarget::Workspace(workspace)) => {
+            groups.with_defaults(workspace.default_groups()?)
+        }
+        TreeSource::Manifest(LockTarget::Script(_)) => {
+            groups.with_defaults(DefaultGroups::default())
+        }
+        TreeSource::Lockfile(workspace) => workspace
+            .resolve_groups(&groups, workspace.lock().root().map(uv_lock::Package::name))?,
     };
-    let groups = groups.with_defaults(default_groups);
 
     // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
     let interpreter = if frozen.is_some() && universal {
         None
     } else {
-        Some(match target {
-            LockTarget::Script(script) => ScriptInterpreter::discover(
+        Some(match source {
+            TreeSource::Manifest(LockTarget::Script(script)) => ScriptInterpreter::discover(
                 script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(false),
+                ActiveEnvironment::Ignore,
                 cache,
                 printer,
             )
             .await?
             .into_interpreter(),
-            LockTarget::Workspace(workspace) => {
-                let workspace_python = WorkspacePython::from_request(
+            TreeSource::Manifest(LockTarget::Workspace(workspace)) => {
+                let project_python = ProjectPythonRequest::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(workspace),
                     &groups,
@@ -127,15 +161,52 @@ pub(crate) async fn tree(
                 )
                 .await?;
                 ProjectInterpreter::discover(
-                    workspace,
-                    &groups,
-                    workspace_python,
+                    ProjectEnvironmentTarget::from(workspace),
+                    project_python,
                     client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
-                    false,
-                    Some(false),
+                    ProjectEnvironmentPolicy::Optional,
+                    ActiveEnvironment::Ignore,
+                    cache,
+                    printer,
+                )
+                .await?
+                .into_interpreter()
+            }
+            TreeSource::Lockfile(workspace) => {
+                let root = workspace.root();
+                let lock = workspace.lock();
+                let discovery_dir = if project_dir.starts_with(root) {
+                    project_dir
+                } else {
+                    root
+                };
+                let project_python = ProjectPythonRequest::from_lockfile(
+                    python.as_deref().map(PythonRequest::parse),
+                    InstallTarget::Lockfile {
+                        root,
+                        project_name: lock.root().map(uv_lock::Package::name),
+                        selection: PackageSelection::Workspace,
+                        lock,
+                    },
+                    &groups,
+                    discovery_dir,
+                    config_discovery,
+                )
+                .await?;
+                ProjectInterpreter::discover(
+                    ProjectEnvironmentTarget::Lockfile { root, lock },
+                    project_python,
+                    client_builder,
+                    python_preference,
+                    python_arch,
+                    python_downloads,
+                    &install_mirrors,
+                    ProjectEnvironmentPolicy::Optional,
+                    ActiveEnvironment::Ignore,
                     cache,
                     printer,
                 )
@@ -145,46 +216,44 @@ pub(crate) async fn tree(
         })
     };
 
-    // Determine the lock mode.
-    let mode = if let Some(frozen_source) = frozen {
-        LockMode::Frozen(frozen_source.into())
-    } else if let LockCheck::Enabled(lock_check) = lock_check {
-        LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
-    } else if matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file() {
-        // If we're locking a script, avoid creating a lockfile if it doesn't already exist.
-        LockMode::DryRun(interpreter.as_ref().unwrap())
-    } else {
-        LockMode::Write(interpreter.as_ref().unwrap())
-    };
-
-    // Initialize any shared state.
-    let state = UniversalState::default();
-
     // Update the lockfile, if necessary.
-    let lock = match Box::pin(
-        LockOperation::new(
-            mode,
-            &settings,
-            client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .execute(target),
-    )
-    .await
-    {
-        Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+    let resolved_lock;
+    let lock = match source {
+        TreeSource::Lockfile(workspace) => workspace.lock(),
+        TreeSource::Manifest(target) => {
+            let mode = if let Some(frozen_source) = frozen {
+                LockMode::Frozen(frozen_source.into())
+            } else if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
+            } else if matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file() {
+                // If we're locking a script, avoid creating a lockfile if it doesn't already exist.
+                LockMode::DryRun(interpreter.as_ref().unwrap())
+            } else {
+                LockMode::Write(interpreter.as_ref().unwrap())
+            };
+            let state = UniversalState::default();
+            resolved_lock = match Box::pin(
+                LockOperation::new(
+                    mode,
+                    &settings,
+                    client_builder,
+                    &state,
+                    Box::new(DefaultResolveLogger),
+                    &concurrency,
+                    cache,
+                    workspace_cache,
+                    printer,
+                    preview,
+                )
+                .execute(target),
+            )
+            .await
+            {
+                Ok(result) => result.into_lock(),
+                Err(err) => return Err(UvError::from(err).into()),
+            };
+            &resolved_lock
         }
-        Err(err) => return Err(err.into()),
     };
 
     // Determine the markers to use for resolution.
@@ -197,14 +266,17 @@ pub(crate) async fn tree(
     });
 
     // If necessary, look up the latest version of each package.
-    let latest = if outdated {
+    let latest = if let TreeSource::Manifest(target) = source
+        && outdated
+    {
+        let install_path = target.install_path();
         // Filter to packages that are derived from a registry.
         let packages = lock
             .packages()
             .iter()
             .filter_map(|package| {
                 // TODO(charlie): We would need to know the format here.
-                let index = match package.index(target.install_path()) {
+                let index = match package.index(install_path) {
                     Ok(Some(index)) => index,
                     Ok(None) => return None,
                     Err(err) => return Some(Err(err)),
@@ -257,7 +329,7 @@ pub(crate) async fn tree(
             let client = LatestClient {
                 client: &client,
                 capabilities: &capabilities,
-                prerelease: lock.prerelease_mode(),
+                prerelease: lock.prerelease(),
                 exclude_newer,
                 index_locations,
                 requires_python: Some(lock.requires_python()),
@@ -301,7 +373,7 @@ pub(crate) async fn tree(
 
     // Render the tree.
     let tree = TreeDisplay::new(
-        &lock,
+        lock,
         markers.as_ref(),
         &latest,
         depth.into(),
@@ -318,11 +390,13 @@ pub(crate) async fn tree(
         TreeFormat::Json => writeln!(
             printer.stdout_important(),
             "{}",
-            tree.to_json(match target {
-                LockTarget::Workspace(workspace) => {
+            tree.to_json(match source {
+                TreeSource::Manifest(LockTarget::Workspace(workspace)) => {
                     TreeJsonTarget::Workspace(workspace.install_path())
                 }
-                LockTarget::Script(script) => TreeJsonTarget::Script(&script.path),
+                TreeSource::Manifest(LockTarget::Script(script)) =>
+                    TreeJsonTarget::Script(&script.path),
+                TreeSource::Lockfile(workspace) => TreeJsonTarget::Workspace(workspace.root()),
             })?
         )?,
     }

@@ -4,6 +4,7 @@ use thiserror::Error;
 #[cfg(test)]
 use uv_static::EnvVars;
 
+pub use crate::architecture::PythonArchitecture;
 #[cfg(all(test, unix))]
 use crate::discovery::find_python_installations;
 pub use crate::discovery::{
@@ -19,6 +20,7 @@ pub use crate::installation::{
 pub use crate::interpreter::{
     BrokenLink, Error as InterpreterError, Interpreter, canonicalize_executable,
 };
+pub use crate::mirrors::PythonDownloadMirrors;
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;
 pub use crate::python_version::{BuildVersionError, PythonVersion};
@@ -30,6 +32,7 @@ pub use crate::version_files::{
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
+mod architecture;
 mod discovery;
 pub mod downloads;
 mod environment;
@@ -40,6 +43,7 @@ pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
+mod mirrors;
 mod pointer_size;
 mod prefix;
 mod python_version;
@@ -174,7 +178,7 @@ impl std::fmt::Display for MissingPythonHint {
     }
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::MissingPython(_, Some(hint)) => uv_errors::Hints::from(hint.to_string()),
@@ -203,9 +207,13 @@ impl From<PythonNotFound> for Error {
 // TODO(zanieb): We should write a mock interpreter script that works on Windows
 #[cfg(all(test, unix))]
 mod tests {
+    use std::assert_matches;
     use std::{
         env,
         ffi::{OsStr, OsString},
+        fs::Permissions,
+        io,
+        os::unix::fs::PermissionsExt,
         path::{Path, PathBuf},
         str::FromStr,
     };
@@ -222,8 +230,8 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        PythonDownloads, PythonNotFound, PythonRequest, PythonSource, PythonVersion,
-        find_all_python_installations, find_python_installations,
+        PythonArchitecture, PythonDownloadMirrors, PythonDownloads, PythonNotFound, PythonRequest,
+        PythonSource, PythonVersion, find_all_python_installations, find_python_installations,
         implementation::ImplementationName, installation::PythonInstallation,
         managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
     };
@@ -660,6 +668,95 @@ mod tests {
     }
 
     #[test]
+    fn find_python_default_arch() -> Result<()> {
+        let mut context = TestContext::new()?;
+        let version = PythonVersion::from_str("3.14.1").expect("valid Python version");
+        let x86_64 = context
+            .new_search_path_directory("x86_64")?
+            .join("python3.14");
+        let aarch64 = context
+            .new_search_path_directory("aarch64")?
+            .join("python3.14");
+        for executable in [&x86_64, &aarch64] {
+            TestContext::create_mock_interpreter(
+                executable,
+                &version,
+                ImplementationName::CPython,
+                true,
+                false,
+            )?;
+        }
+        let script = fs_err::read_to_string(&aarch64)?;
+        fs_err::write(&aarch64, script.replace("x86_64", "aarch64"))?;
+        let arch = Some("aarch64".parse()?);
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("3.14"),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                arch,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), aarch64);
+
+        // Relaxing the requested Python version still requires the selected architecture.
+        for request in ["3.14.99", "3.99"] {
+            let installation = context.run(|| {
+                find_best_python_installation_no_download(
+                    &PythonRequest::parse(request),
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    arch,
+                    &context.cache,
+                )
+            })?;
+            assert_eq!(installation.interpreter().sys_executable(), aarch64);
+        }
+
+        let installations = context.run(|| {
+            find_all_python_installations(
+                &PythonRequest::parse("3.14"),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                arch,
+                &context.cache,
+            )
+        })?;
+        assert_eq!(
+            installations
+                .iter()
+                .map(|installation| installation.interpreter().sys_executable())
+                .collect::<Vec<_>>(),
+            vec![aarch64.as_path()]
+        );
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse("cpython-3.14-linux-x86_64-gnu"),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                arch,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), x86_64);
+
+        let installation = context.run(|| {
+            find_python_installation(
+                &PythonRequest::File(x86_64.clone()),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                arch,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(installation.interpreter().sys_executable(), x86_64);
+        Ok(())
+    }
+
+    #[test]
     fn find_python_empty_path() -> Result<()> {
         let mut context = TestContext::new()?;
 
@@ -669,11 +766,13 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         });
-        assert!(
-            matches!(result, Ok(Err(PythonNotFound { .. }))),
+        assert_matches!(
+            result,
+            Ok(Err(PythonNotFound { .. })),
             "With an empty path, no Python installation should be detected got {result:?}"
         );
 
@@ -683,11 +782,13 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         });
-        assert!(
-            matches!(result, Ok(Err(PythonNotFound { .. }))),
+        assert_matches!(
+            result,
+            Ok(Err(PythonNotFound { .. })),
             "With an unset path, no Python installation should be detected got {result:?}"
         );
 
@@ -707,11 +808,13 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         });
-        assert!(
-            matches!(result, Ok(Err(PythonNotFound { .. }))),
+        assert_matches!(
+            result,
+            Ok(Err(PythonNotFound { .. })),
             "With a non-executable Python, no Python installation should be detected; got {result:?}"
         );
 
@@ -728,17 +831,16 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         })??;
-        assert!(
-            matches!(
-                interpreter,
-                PythonInstallation {
-                    source: PythonSource::SearchPathFirst,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            interpreter,
+            PythonInstallation {
+                source: PythonSource::SearchPathFirst,
+                interpreter: _
+            },
             "We should find the valid executable; got {interpreter:?}"
         );
 
@@ -763,24 +865,22 @@ mod tests {
                     None,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     PythonDownloads::Never,
                     &client_builder,
                     &context.cache,
                     None,
-                    None,
-                    None,
+                    PythonDownloadMirrors::default(),
                     missing_downloads.path().to_str(),
                 ))
         })?;
 
-        assert!(
-            matches!(
-                interpreter,
-                PythonInstallation {
-                    source: PythonSource::SearchPathFirst,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            interpreter,
+            PythonInstallation {
+                source: PythonSource::SearchPathFirst,
+                interpreter: _
+            },
             "We should find the local Python without reading download metadata; got {interpreter:?}"
         );
         assert_eq!(
@@ -836,17 +936,16 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         })??;
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPath,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPath,
+                interpreter: _
+            },
             "We should skip the bad executables in favor of the good one; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python_path);
@@ -868,6 +967,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             );
 
@@ -955,6 +1055,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1040,14 +1141,16 @@ mod tests {
                     &PythonRequest::File(cpython_312.clone()),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??
             .key()
             .to_string();
         let key_request = PythonRequest::parse(&key);
-        assert!(
-            matches!(key_request, PythonRequest::Key(_)),
+        assert_matches!(
+            key_request,
+            PythonRequest::Key(_),
             "Expected an installation key request, got {key_request:?}"
         );
 
@@ -1070,6 +1173,7 @@ mod tests {
                     &request,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &sequential_cache,
                 ) {
                     match result {
@@ -1084,6 +1188,7 @@ mod tests {
                     &request,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &parallel_cache,
                 )?;
                 Ok::<_, discovery::Error>((sequential, parallel))
@@ -1124,11 +1229,13 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         });
-        assert!(
-            matches!(result, Err(discovery::Error::Query(..))),
+        assert_matches!(
+            result,
+            Err(discovery::Error::Query(..)),
             "If only Python 2 is available, we should report the interpreter query error; got {result:?}"
         );
 
@@ -1160,17 +1267,16 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
+                None,
                 &context.cache,
             )
         })??;
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPath,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPath,
+                interpreter: _
+            },
             "We should skip the Python 2 installation and find the Python 3 interpreter; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python3.path());
@@ -1191,6 +1297,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1212,6 +1319,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1237,6 +1345,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1262,6 +1371,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1284,18 +1394,17 @@ mod tests {
                 &PythonRequest::parse("3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
 
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPath,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPath,
+                interpreter: _
+            },
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -1317,18 +1426,17 @@ mod tests {
                 &PythonRequest::parse("3.11.2"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
 
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPath,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPath,
+                interpreter: _
+            },
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -1350,11 +1458,13 @@ mod tests {
                 &PythonRequest::parse("3.9"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not find a python; got {result:?}"
         );
 
@@ -1371,11 +1481,13 @@ mod tests {
                 &PythonRequest::parse("3.11.9"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not find a python; got {result:?}"
         );
 
@@ -1386,6 +1498,7 @@ mod tests {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        arch: Option<PythonArchitecture>,
         cache: &Cache,
     ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
@@ -1397,12 +1510,12 @@ mod tests {
                 request,
                 environments,
                 preference,
+                arch,
                 false,
                 &client_builder,
                 cache,
                 None,
-                None,
-                None,
+                PythonDownloadMirrors::default(),
                 None,
             ))
     }
@@ -1417,18 +1530,17 @@ mod tests {
                 &PythonRequest::parse("3.11.3"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
 
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPath,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPath,
+                interpreter: _
+            },
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -1450,18 +1562,17 @@ mod tests {
                 &PythonRequest::parse("3.11.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
 
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPath,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPath,
+                interpreter: _
+            },
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -1486,17 +1597,16 @@ mod tests {
                     &PythonRequest::parse("3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })?;
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPathFirst,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPathFirst,
+                interpreter: _
+            },
             "We should skip the active environment in favor of the requested version; got {python:?}"
         );
 
@@ -1516,17 +1626,16 @@ mod tests {
                     &PythonRequest::parse("3.10.2"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })?;
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::ActiveEnvironment,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::ActiveEnvironment,
+                interpreter: _
+            },
             "We should prefer the active environment after relaxing; got {python:?}"
         );
         assert_eq!(
@@ -1550,6 +1659,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -1575,6 +1685,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -1602,6 +1713,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1629,13 +1741,15 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
         )?;
 
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not allow the non-virtual environment; got {result:?}"
         );
 
@@ -1653,6 +1767,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlySystem,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1681,6 +1796,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1693,7 +1809,8 @@ mod tests {
             "We should find the conda environment when name matches"
         );
 
-        // When CONDA_DEFAULT_ENV is "base", it should always be treated as base environment
+        // A special Conda environment name only identifies the base environment when its path
+        // does not match the environment name.
         let result = context.run_with_vars_and_preview(
             &[
                 (EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str())),
@@ -1705,45 +1822,48 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
         )?;
 
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not allow the base environment when looking for virtual environments"
         );
 
-        // With the `special-conda-env-names` preview feature, "base" is not special-cased
-        // and uses path-based heuristics instead. When the directory name matches the env name,
-        // it should be treated as a child environment.
-        let base_dir = context.tempdir.child("base");
-        TestContext::mock_conda_prefix(&base_dir, "3.12.6")?;
-        let python = context
-            .run_with_vars_and_preview(
-                &[
-                    (EnvVars::CONDA_PREFIX, Some(base_dir.as_os_str())),
-                    (EnvVars::CONDA_DEFAULT_ENV, Some(&OsString::from("base"))),
-                    (EnvVars::CONDA_ROOT, None),
-                ],
-                &[PreviewFeature::SpecialCondaEnvNames],
-                || {
-                    find_python_installation(
-                        &PythonRequest::Default,
-                        EnvironmentPreference::OnlyVirtual,
-                        PythonPreference::OnlySystem,
-                        &context.cache,
-                    )
-                },
-            )?
-            .unwrap();
+        // When the directory name matches a special Conda environment name, it should be treated
+        // as a child environment.
+        for (name, version) in [("base", "3.12.6"), ("root", "3.12.7")] {
+            let environment = context.tempdir.child(name);
+            TestContext::mock_conda_prefix(&environment, version)?;
+            let python = context
+                .run_with_vars(
+                    &[
+                        (EnvVars::CONDA_PREFIX, Some(environment.as_os_str())),
+                        (EnvVars::CONDA_DEFAULT_ENV, Some(&OsString::from(name))),
+                        (EnvVars::CONDA_ROOT, None),
+                    ],
+                    || {
+                        find_python_installation(
+                            &PythonRequest::Default,
+                            EnvironmentPreference::OnlyVirtual,
+                            PythonPreference::OnlySystem,
+                            None,
+                            &context.cache,
+                        )
+                    },
+                )?
+                .unwrap();
 
-        assert_eq!(
-            python.interpreter().python_full_version().to_string(),
-            "3.12.6",
-            "With special-conda-env-names preview, 'base' named env in matching dir should be treated as child"
-        );
+            assert_eq!(
+                python.interpreter().python_full_version().to_string(),
+                version,
+                "We should find the child Conda environment named {name}"
+            );
+        }
 
         // When environment name matches directory name, it should be treated as a child environment
         let myenv_dir = context.tempdir.child("myenv");
@@ -1760,6 +1880,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1791,13 +1912,15 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
         )?;
 
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "Base environment detected via _CONDA_ROOT should be excluded from virtual environments; got {result:?}"
         );
 
@@ -1821,6 +1944,7 @@ mod tests {
                         &PythonRequest::Default,
                         EnvironmentPreference::OnlyVirtual,
                         PythonPreference::OnlySystem,
+                        None,
                         &context.cache,
                     )
                 },
@@ -1851,6 +1975,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1883,6 +2008,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1903,6 +2029,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -1929,6 +2056,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1946,6 +2074,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -1974,6 +2103,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -2011,6 +2141,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2038,6 +2169,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2062,6 +2194,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::ExplicitSystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2086,6 +2219,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2110,6 +2244,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2147,6 +2282,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2174,6 +2310,7 @@ mod tests {
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -2190,6 +2327,7 @@ mod tests {
                     &PythonRequest::parse("3.12"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })??;
@@ -2206,6 +2344,7 @@ mod tests {
                     &PythonRequest::parse("3.12.3"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })?;
@@ -2227,11 +2366,13 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not find an python; got {result:?}"
         );
 
@@ -2243,14 +2384,75 @@ mod tests {
                     &PythonRequest::parse("3.12.3"),
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
         )?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not find an python; got {result:?}"
         );
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn find_python_does_not_traverse_broken_child_virtualenv() -> Result<()> {
+        let context = TestContext::new()?;
+
+        let parent_venv = context.tempdir.child(".venv");
+        TestContext::mock_venv(&parent_venv, "3.12.0")?;
+        let child_venv = context.workdir.child(".venv");
+        fs_err::os::unix::fs::symlink(context.workdir.child("missing"), &child_venv)?;
+
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlyVirtual,
+                PythonPreference::OnlySystem,
+                None,
+                &context.cache,
+            )
+        });
+        assert_matches!(
+                &result,
+                Err(discovery::Error::VirtualEnv(
+                    crate::virtualenv::Error::MissingPyVenvCfg(path)
+                )) if path == child_venv.path()
+            ,
+            "A broken symlink at `.venv` should be eagerly rejected; got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_propagates_virtualenv_metadata_errors() -> Result<()> {
+        let context = TestContext::new()?;
+
+        let permissions = fs_err::metadata(&context.workdir)?.permissions();
+        fs_err::set_permissions(&context.workdir, Permissions::from_mode(0o000))?;
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlyVirtual,
+                PythonPreference::OnlySystem,
+                None,
+                &context.cache,
+            )
+        });
+        fs_err::set_permissions(&context.workdir, permissions)?;
+
+        assert_matches!(
+                &result,
+                Err(discovery::Error::VirtualEnv(crate::virtualenv::Error::Io(error)))
+                    if error.kind() == io::ErrorKind::PermissionDenied
+            ,
+            "A virtual environment metadata error should not be ignored; got {result:?}"
+        );
+
         Ok(())
     }
 
@@ -2264,6 +2466,7 @@ mod tests {
                 &PythonRequest::parse("foobar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2278,11 +2481,13 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not find it without a specific request"
         );
 
@@ -2291,11 +2496,13 @@ mod tests {
                 &PythonRequest::parse("3.10.0"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not find it via a matching version request"
         );
 
@@ -2319,6 +2526,7 @@ mod tests {
                 &PythonRequest::parse("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2334,6 +2542,7 @@ mod tests {
                 &PythonRequest::parse("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2363,6 +2572,7 @@ mod tests {
                 &PythonRequest::parse(python_path.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2378,6 +2588,7 @@ mod tests {
                 &PythonRequest::parse(python_path.to_str().unwrap()),
                 EnvironmentPreference::ExplicitSystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2393,6 +2604,7 @@ mod tests {
                 &PythonRequest::parse(python_path.to_str().unwrap()),
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2408,6 +2620,7 @@ mod tests {
                 &PythonRequest::parse(python_path.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2431,6 +2644,7 @@ mod tests {
                 &PythonRequest::parse("../foo/.venv"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2445,6 +2659,7 @@ mod tests {
                 &PythonRequest::parse(venv.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2468,6 +2683,7 @@ mod tests {
                 &PythonRequest::parse(context.tempdir.child("bar").to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2487,6 +2703,7 @@ mod tests {
                     &PythonRequest::parse(venv.to_str().unwrap()),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             },
@@ -2515,6 +2732,7 @@ mod tests {
                 &PythonRequest::parse("../proj/.venv"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2536,11 +2754,13 @@ mod tests {
                 &PythonRequest::parse("./foo/bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not find the file; got {result:?}"
         );
 
@@ -2565,6 +2785,7 @@ mod tests {
                 &PythonRequest::parse("bar"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2580,11 +2801,13 @@ mod tests {
                 &PythonRequest::parse("bar"),
                 EnvironmentPreference::ExplicitSystem,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not allow a system interpreter; got {result:?}"
         );
 
@@ -2606,6 +2829,7 @@ mod tests {
                     &PythonRequest::parse("bar"),
                     EnvironmentPreference::ExplicitSystem,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -2630,11 +2854,13 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not find the pypy interpreter if not named `python` or requested; got {result:?}"
         );
 
@@ -2646,6 +2872,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2660,6 +2887,7 @@ mod tests {
                 &PythonRequest::parse("pypy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2685,6 +2913,7 @@ mod tests {
                 &PythonRequest::parse("pypy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2699,6 +2928,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2724,6 +2954,7 @@ mod tests {
                 &PythonRequest::parse("pypy3.10"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2750,6 +2981,7 @@ mod tests {
                 &PythonRequest::parse("pypy@3.10"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2776,6 +3008,7 @@ mod tests {
                 &PythonRequest::parse(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2802,6 +3035,7 @@ mod tests {
                 &PythonRequest::parse(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2828,6 +3062,7 @@ mod tests {
                 &PythonRequest::parse(">= 3.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2855,11 +3090,13 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
-        assert!(
-            matches!(result, Err(PythonNotFound { .. })),
+        assert_matches!(
+            result,
+            Err(PythonNotFound { .. }),
             "We should not the graalpy interpreter if not named `python` or requested; got {result:?}"
         );
 
@@ -2876,6 +3113,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2890,6 +3128,7 @@ mod tests {
                 &PythonRequest::parse("graalpy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2915,6 +3154,7 @@ mod tests {
                 &PythonRequest::parse("graalpy"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2929,6 +3169,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -2966,6 +3207,7 @@ mod tests {
                     &PythonRequest::parse("pypy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -2983,6 +3225,7 @@ mod tests {
                     &PythonRequest::parse("pypy"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3024,6 +3267,7 @@ mod tests {
                     &PythonRequest::parse("pypy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3041,6 +3285,7 @@ mod tests {
                     &PythonRequest::parse("default"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3077,6 +3322,7 @@ mod tests {
                     &PythonRequest::parse("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3099,6 +3345,7 @@ mod tests {
                     &PythonRequest::parse("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3121,6 +3368,7 @@ mod tests {
                     &PythonRequest::parse("graalpy@3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
+                    None,
                     &context.cache,
                 )
             })
@@ -3159,18 +3407,17 @@ mod tests {
                 &PythonRequest::parse("3.13t"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
 
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPathFirst,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPathFirst,
+                interpreter: _
+            },
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -3211,18 +3458,17 @@ mod tests {
                 &PythonRequest::parse("3.13"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
 
-        assert!(
-            matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPathFirst,
-                    interpreter: _
-                }
-            ),
+        assert_matches!(
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPathFirst,
+                interpreter: _
+            },
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -3250,6 +3496,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })?;
@@ -3264,6 +3511,7 @@ mod tests {
                 &PythonRequest::Any,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;
@@ -3280,6 +3528,7 @@ mod tests {
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
+                None,
                 &context.cache,
             )
         })??;

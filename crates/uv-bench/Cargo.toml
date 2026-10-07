@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.62"
+version = "0.0.90"
 description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }
@@ -33,6 +33,16 @@ name = "uv_pep440"
 path = "benches/uv_pep440.rs"
 harness = false
 
+[[bench]]
+name = "uv_pypi_types"
+path = "benches/uv_pypi_types.rs"
+harness = false
+
+[[bench]]
+name = "uv_python"
+path = "benches/uv_python.rs"
+harness = false
+
 [dev-dependencies]
 uv = { workspace = true }
 uv-cache = { workspace = true }
@@ -57,18 +67,18 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-async_zip = { workspace = true }
-astral-tokio-tar = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 clap = { workspace = true }
 criterion = { version = "5.0.1", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
+fastrand = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 jiff = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tar-codec = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
-
-[features]
-static = ["uv-extract/static"]

@@ -1,61 +1,131 @@
+use std::collections::hash_map::Entry;
+
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, ResolvedDist};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
+use crate::ResolveError;
 use crate::candidate_selector::Candidate;
+use crate::resolver::RegisteredMetadata;
 
 #[derive(Clone, Debug)]
-struct FilePin {
-    /// The concrete distribution chosen for installation and locking.
-    dist: ResolvedDist,
-    /// The concrete distribution whose metadata was used during resolution.
-    metadata_id: DistributionId,
+enum FilePin<'index> {
+    Registry {
+        /// The concrete distribution chosen for installation and locking.
+        dist: ResolvedDist,
+        /// The concrete distribution whose metadata is used during resolution.
+        metadata: PinMetadata<'index>,
+    },
+    Url(RegisteredMetadata<'index>),
 }
 
-/// A set of package versions pinned to specific files.
-///
-/// For example, given `Flask==3.0.0`, the [`FilePins`] would contain a mapping from `Flask` to
-/// `3.0.0` to the specific wheel or source distribution archive that was pinned for installation,
-/// along with the concrete distribution whose metadata was used during resolution.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), FilePin>);
+#[derive(Clone, Debug)]
+enum PinMetadata<'index> {
+    /// Proxy selection and direct-only resolution do not require a metadata request.
+    Unrequested(DistributionId),
+    Registered(RegisteredMetadata<'index>),
+}
 
-// Inserts are common (every time we select a version) while reads are rare (converting the
-// final resolution).
-impl FilePins {
-    /// Pin a candidate package.
+/// The artifacts and metadata selected for package versions within a fork.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FilePins<'index>(FxHashMap<(PackageName, Version), FilePin<'index>>);
+
+impl<'index> FilePins<'index> {
+    /// Pin a registry candidate, registering its metadata at most once in this fork.
     ///
-    /// Within a single fork, the same `(name, version)` always resolves to the same distribution,
-    /// so we skip construction when an entry already exists.
-    pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
-        self.0
+    /// Within a fork, each `(name, version)` selects the same artifact. Proxy packages may pin it
+    /// before its real package is selected; upgrade that pin when metadata is requested.
+    pub(crate) fn insert(
+        &mut self,
+        candidate: &Candidate,
+        dist: &CompatibleDist,
+        request: Option<impl FnOnce() -> Result<RegisteredMetadata<'index>, ResolveError>>,
+    ) -> Result<(), ResolveError> {
+        match self
+            .0
             .entry((candidate.name().clone(), candidate.version().clone()))
-            .or_insert_with(|| FilePin {
-                dist: dist.for_installation().to_owned(),
-                metadata_id: dist.for_resolution().distribution_id(),
-            });
+        {
+            Entry::Occupied(mut entry) => {
+                if let Some(request) = request
+                    && let FilePin::Registry {
+                        metadata: metadata @ PinMetadata::Unrequested(_),
+                        ..
+                    } = entry.get_mut()
+                {
+                    *metadata = PinMetadata::Registered(request()?);
+                }
+            }
+            Entry::Vacant(entry) => {
+                let metadata = if let Some(request) = request {
+                    PinMetadata::Registered(request()?)
+                } else {
+                    PinMetadata::Unrequested(dist.for_resolution().distribution_id())
+                };
+                entry.insert(FilePin::Registry {
+                    dist: dist.for_installation().to_owned(),
+                    metadata,
+                });
+            }
+        }
+        Ok(())
     }
 
-    /// Return the pinned file for the given package name and version, if it exists.
-    pub(crate) fn get(
+    /// Retain the metadata used to select a URL package's version.
+    pub(crate) fn insert_url(
+        &mut self,
+        name: &PackageName,
+        version: &Version,
+        metadata: RegisteredMetadata<'index>,
+    ) {
+        self.0
+            .entry((name.clone(), version.clone()))
+            .or_insert(FilePin::Url(metadata));
+    }
+
+    /// Return the pinned registry artifact, if one exists.
+    pub(crate) fn get(&self, name: &PackageName, version: &Version) -> Option<&ResolvedDist> {
+        match self.0.get(&(name.clone(), version.clone()))? {
+            FilePin::Registry { dist, .. } => Some(dist),
+            FilePin::Url(_) => None,
+        }
+    }
+
+    /// Return the metadata registered when selecting this package version.
+    pub(crate) fn metadata(
         &self,
         name: &PackageName,
-        version: &uv_pep440::Version,
-    ) -> Option<&ResolvedDist> {
-        self.0
-            .get(&(name.clone(), version.clone()))
-            .map(|pin| &pin.dist)
+        version: &Version,
+    ) -> Option<&RegisteredMetadata<'index>> {
+        match self.0.get(&(name.clone(), version.clone()))? {
+            FilePin::Registry {
+                metadata: PinMetadata::Registered(metadata),
+                ..
+            }
+            | FilePin::Url(metadata) => Some(metadata),
+            FilePin::Registry {
+                metadata: PinMetadata::Unrequested(_),
+                ..
+            } => None,
+        }
     }
 
-    /// Return the pinned distribution and its metadata id in a single lookup.
+    /// Return the pinned registry artifact and its metadata identity in a single lookup.
     pub(crate) fn dist_and_id(
         &self,
         name: &PackageName,
-        version: &uv_pep440::Version,
+        version: &Version,
     ) -> Option<(&ResolvedDist, &DistributionId)> {
-        self.0
-            .get(&(name.clone(), version.clone()))
-            .map(|pin| (&pin.dist, &pin.metadata_id))
+        match self.0.get(&(name.clone(), version.clone()))? {
+            FilePin::Registry { dist, metadata } => Some((
+                dist,
+                match metadata {
+                    PinMetadata::Unrequested(id) => id,
+                    PinMetadata::Registered(metadata) => metadata.id(),
+                },
+            )),
+            FilePin::Url(_) => None,
+        }
     }
 }

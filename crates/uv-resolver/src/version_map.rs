@@ -9,11 +9,11 @@ use tracing::{instrument, trace};
 
 use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
-use uv_distribution_filename::{DistFilename, WheelFilename};
+use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
-    WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, MinimumLibcVersion,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -55,8 +55,8 @@ impl VersionMap {
         available_version_cutoff: Option<Timestamp>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
-        let mut stable = false;
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
         // Create stubs for each entry in simple metadata. The full conversion
@@ -66,7 +66,6 @@ impl VersionMap {
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
 
-            stable |= version.is_stable();
             local |= version.is_local();
             debug_assert!(
                 entries
@@ -89,13 +88,12 @@ impl VersionMap {
         // If a set of flat distributions have been given, linearly merge the
         // already sorted flat entries with the archive-ordered simple vector.
         if let Some(flat_index) = flat_index {
-            stable |= flat_index.iter().any(|(version, _)| version.is_stable());
             map = map.merge_flat(flat_index);
         }
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
+                package_name: package_name.clone(),
                 map,
-                stable,
                 local,
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
@@ -107,6 +105,7 @@ impl VersionMap {
                 requires_python,
                 included_version_cutoff,
                 available_version_cutoff,
+                minimum_libc_version,
             }),
         }
     }
@@ -117,22 +116,16 @@ impl VersionMap {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
-        let mut stable = false;
-        let mut local = false;
-        let mut map = BTreeMap::new();
-
-        for (version, prioritized_dist) in
-            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
-        {
-            stable |= version.is_stable();
-            local |= version.is_local();
-            map.insert(version, prioritized_dist);
-        }
-
-        Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
-        }
+        FlatDistributions::from_entries(
+            flat_metadata,
+            tags,
+            hasher,
+            build_options,
+            minimum_libc_version,
+        )
+        .into()
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
@@ -253,6 +246,18 @@ impl VersionMap {
         }
     }
 
+    /// Return an iterator over the versions that can be considered for selection.
+    ///
+    /// Unlike [`Self::iter`], this skips lazy registry versions whose files are all excluded by
+    /// an upload-time cutoff without materializing their distributions. Files without an upload
+    /// time remain included so that materialization can emit the appropriate warning.
+    pub(crate) fn iter_included(
+        &self,
+        range: &Ranges<Version>,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle<'_>)> {
+        self.iter(range).filter(|(_, dist)| dist.is_included())
+    }
+
     /// Return the [`Hashes`] for the given version, if any.
     pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
         match self.inner {
@@ -274,14 +279,6 @@ impl VersionMap {
         }
     }
 
-    /// Returns `true` if the map contains at least one stable (non-pre-release) version.
-    pub(crate) fn stable(&self) -> bool {
-        match self.inner {
-            VersionMapInner::Eager(ref map) => map.stable,
-            VersionMapInner::Lazy(ref map) => map.stable,
-        }
-    }
-
     /// Returns `true` if the map contains at least one local version (e.g., `2.6.0+cpu`).
     pub(crate) fn local(&self) -> bool {
         match self.inner {
@@ -293,11 +290,10 @@ impl VersionMap {
 
 impl From<FlatDistributions> for VersionMap {
     fn from(flat_index: FlatDistributions) -> Self {
-        let stable = flat_index.iter().any(|(version, _)| version.is_stable());
         let local = flat_index.iter().any(|(version, _)| version.is_local());
         let map = flat_index.into();
         Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
+            inner: VersionMapInner::Eager(VersionMapEager { map, local }),
         }
     }
 }
@@ -327,6 +323,18 @@ enum VersionMapDistHandleInner<'a> {
 }
 
 impl<'a> VersionMapDistHandle<'a> {
+    /// Returns whether this distribution can be considered for selection.
+    fn is_included(&self) -> bool {
+        match self.inner {
+            VersionMapDistHandleInner::Eager(_) => true,
+            VersionMapDistHandleInner::Lazy { lazy, dist } => match (&dist.flat, &dist.simple) {
+                (Some(_), _) => true,
+                (None, Some(simple)) => lazy.any_file_materializable(simple),
+                (None, None) => false,
+            },
+        }
+    }
+
     /// Returns a prioritized distribution from this handle.
     pub(crate) fn prioritized_dist(&self) -> Option<&'a PrioritizedDist> {
         match self.inner {
@@ -358,8 +366,6 @@ enum VersionMapInner {
 struct VersionMapEager {
     /// A map from version to distribution.
     map: BTreeMap<Version, PrioritizedDist>,
-    /// Whether the version map contains at least one stable (non-pre-release) version.
-    stable: bool,
     /// Whether the version map contains at least one local version.
     local: bool,
 }
@@ -466,10 +472,10 @@ impl VersionMapLazyIndex {
 /// provide substantial savings in some cases.
 #[derive(Debug)]
 struct VersionMapLazy {
+    /// The normalized package name used to reconstruct cached wheel filenames.
+    package_name: PackageName,
     /// An immutable archive-order index from version to possibly-initialized distribution.
     map: VersionMapLazyIndex,
-    /// Whether the version map contains at least one stable (non-pre-release) version.
-    stable: bool,
     /// Whether the version map contains at least one local version.
     local: bool,
     /// The raw simple metadata from which `PrioritizedDist`s should
@@ -495,6 +501,8 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
+    /// The libc baselines required during universal resolution.
+    minimum_libc_version: Option<MinimumLibcVersion>,
 }
 
 impl VersionMapLazy {
@@ -505,7 +513,7 @@ impl VersionMapLazy {
             .get(version)
             .and_then(|entry| entry.dist.simple.as_ref())
             .and_then(|simple| self.simple_metadata.datum(simple.datum_index))
-            .and_then(|datum| datum.metadata.as_ref())?;
+            .and_then(|datum| datum.metadata.as_deref())?;
         Some(
             rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(archived)
                 .expect("archived metadata always deserializes"),
@@ -546,10 +554,9 @@ impl VersionMapLazy {
         files
             .wheels
             .iter()
-            .map(|wheel| &wheel.file)
-            .chain(files.source_dists.iter().map(|sdist| &sdist.file))
+            .chain(files.source_dists.iter())
             .any(|file| {
-                let upload_time = file.upload_time_utc_ms.as_ref().map(|t| t.to_native());
+                let upload_time = file.upload_time_utc_ms();
                 let excluded = if let Some(cutoff) = &self.included_version_cutoff {
                     upload_time.is_none_or(|t| t >= cutoff.as_millisecond())
                 } else if let Some(cutoff) = &self.available_version_cutoff {
@@ -558,6 +565,32 @@ impl VersionMapLazy {
                     false
                 };
                 !excluded
+            })
+    }
+
+    /// Returns whether a version should be materialized during candidate selection.
+    ///
+    /// Missing upload times are retained here, even for `included_version_cutoff`, since
+    /// materializing them is what emits the corresponding `exclude-newer` warning.
+    fn any_file_materializable(&self, simple: &SimplePrioritizedDist) -> bool {
+        let Some(cutoff) = self
+            .included_version_cutoff
+            .as_ref()
+            .or(self.available_version_cutoff.as_ref())
+        else {
+            return true;
+        };
+        let Some(datum) = self.simple_metadata.datum(simple.datum_index) else {
+            return false;
+        };
+        datum
+            .files
+            .wheels
+            .iter()
+            .chain(datum.files.source_dists.iter())
+            .any(|file| {
+                file.upload_time_utc_ms()
+                    .is_none_or(|upload_time| upload_time < cutoff.as_millisecond())
             })
     }
 
@@ -594,7 +627,7 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, file) in files.all() {
+            for (filename, file) in files.all(&self.package_name) {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
@@ -612,7 +645,7 @@ impl VersionMapLazy {
                         }
                         None => {
                             warn_user_once!(
-                                "{} is missing an upload date, but user provided: {included_version_cutoff}",
+                                "`{}` is missing an upload date, but user provided: {included_version_cutoff}",
                                 file.filename,
                             );
                             (true, None)
@@ -654,13 +687,18 @@ impl VersionMapLazy {
                             filename,
                             file: Box::new(file),
                             index: self.index.clone(),
+                            size_is_authoritative: false,
                         };
-                        priority_dist.insert_built(dist, hashes, compatibility);
+                        priority_dist.insert_built(
+                            dist,
+                            hashes,
+                            compatibility,
+                            self.minimum_libc_version,
+                        );
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
-                            &filename.name,
-                            &filename.version,
+                            &filename,
                             hashes.as_slice(),
                             yanked,
                             excluded,
@@ -673,6 +711,7 @@ impl VersionMapLazy {
                             file: Box::new(file),
                             index: self.index.clone(),
                             wheels: vec![],
+                            size_is_authoritative: false,
                         };
                         priority_dist.insert_source(dist, hashes, compatibility);
                     }
@@ -689,18 +728,12 @@ impl VersionMapLazy {
 
     fn source_dist_compatibility(
         &self,
-        name: &PackageName,
-        version: &Version,
+        filename: &SourceDistFilename,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
-        // Check if builds are disabled
-        if self.no_build {
-            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
@@ -708,17 +741,36 @@ impl VersionMapLazy {
             ));
         }
 
+        // Check if builds are disabled
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
+        }
+
         // Check if yanked
         if let Some(yanked) = yanked {
-            if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
+            if yanked.is_yanked()
+                && !self
+                    .allowed_yanks
+                    .contains(&filename.name, &filename.version)
+            {
                 return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
                     yanked.clone(),
                 ));
             }
         }
 
+        // Check if the filename is PEP 625-compliant.
+        // TODO: Strengthen this check more; right now we allow `.zip`
+        // (which is not compliant) and we don't strictly
+        // enforce the formatting rules for the name or version.
+        if !filename.extension.is_pep625_compliant() {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NotPep625Filename);
+        }
+
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(name, version);
+        let hash_policy = self
+            .hasher
+            .archive_policy_for_package(&filename.name, &filename.version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched
@@ -745,14 +797,14 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
-        // Check if binaries are disabled
-        if self.no_binary {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
+        }
+
+        // Check if binaries are disabled
+        if self.no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
 
         // Check if yanked
@@ -782,7 +834,7 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(name, version);
+        let hash_policy = self.hasher.archive_policy_for_package(name, version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched
