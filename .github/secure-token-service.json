@@ -155,6 +155,16 @@
     {
       "caller": "uv-dev",
       "environment": "automations",
+      "caller_ref": "refs/pull/*/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "pull-request-code-quality-review.yml",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv-dev",
+      "environment": "automations",
       "caller_workflow": "pull-request-conflicts.yml",
       "reusable_workflow": "rebase-conflicted-pull-request.yml",
       "on": ["push", "workflow_dispatch"],
