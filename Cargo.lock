@@ -6019,6 +6019,7 @@ dependencies = [
  "uv-cache",
  "uv-cli",
  "uv-client",
+ "uv-command-support",
  "uv-configuration",
  "uv-dispatch",
  "uv-distribution",
