@@ -1,6 +1,9 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["stdlibs"]
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 """Generate the normalized standard-library package lookup used by `uv add`."""

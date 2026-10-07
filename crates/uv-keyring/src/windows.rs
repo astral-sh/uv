@@ -522,6 +522,8 @@ impl std::error::Error for Error {
 #[cfg(feature = "native-auth")]
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     use crate::Entry;
@@ -650,8 +652,9 @@ mod tests {
     #[test]
     fn test_invalid_parameter() {
         let credential = WinCredential::new_with_target(Some(""), "service", "user");
-        assert!(
-            matches!(credential, Err(ErrorCode::Invalid(_, _))),
+        assert_matches!(
+            credential,
+            Err(ErrorCode::Invalid(_, _)),
             "Created entry with empty target"
         );
     }
@@ -692,8 +695,9 @@ mod tests {
         let cred = WinCredential::new_with_target(None, &name, &name)
             .expect("Can't create credential for attribute test");
         let entry = Entry::new_with_credential(Box::new(cred.clone()));
-        assert!(
-            matches!(entry.get_attributes().await, Err(ErrorCode::NoEntry)),
+        assert_matches!(
+            entry.get_attributes().await,
+            Err(ErrorCode::NoEntry),
             "Read missing credential in attribute test",
         );
         let mut in_map: HashMap<&str, &str> = HashMap::new();
@@ -702,11 +706,9 @@ mod tests {
         in_map.insert("target_alias", "target alias value");
         in_map.insert("comment", "comment value");
         in_map.insert("username", "username value");
-        assert!(
-            matches!(
-                entry.update_attributes(&in_map).await,
-                Err(ErrorCode::NoEntry)
-            ),
+        assert_matches!(
+            entry.update_attributes(&in_map).await,
+            Err(ErrorCode::NoEntry),
             "Updated missing credential in attribute test",
         );
         // create the credential and test again
@@ -721,8 +723,9 @@ mod tests {
         assert_eq!(out_map["target_alias"], cred.target_alias);
         assert_eq!(out_map["comment"], cred.comment);
         assert_eq!(out_map["username"], cred.username);
-        assert!(
-            matches!(entry.update_attributes(&in_map).await, Ok(())),
+        assert_matches!(
+            entry.update_attributes(&in_map).await,
+            Ok(()),
             "Couldn't update attributes in attribute test",
         );
         let after_map = entry
@@ -738,8 +741,9 @@ mod tests {
             .delete_credential()
             .await
             .unwrap_or_else(|err| panic!("Can't delete credential for attribute test: {err:?}"));
-        assert!(
-            matches!(entry.get_attributes().await, Err(ErrorCode::NoEntry)),
+        assert_matches!(
+            entry.get_attributes().await,
+            Err(ErrorCode::NoEntry),
             "Read deleted credential in attribute test",
         );
     }
@@ -778,9 +782,6 @@ mod tests {
             .delete_credential()
             .await
             .expect("Couldn't delete get-credential");
-        assert!(matches!(
-            entry.get_password().await,
-            Err(ErrorCode::NoEntry)
-        ));
+        assert_matches!(entry.get_password().await, Err(ErrorCode::NoEntry));
     }
 }

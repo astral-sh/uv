@@ -238,7 +238,7 @@ async fn ensure_cached_artifact(artifact: &VendorArtifact, path: &Path) -> Resul
     })?;
     temp.write_all(&bytes)
         .with_context(|| format!("failed to write `{}`", artifact.filename))?;
-    temp.as_file_mut()
+    temp.as_file()
         .sync_all()
         .with_context(|| format!("failed to sync `{}`", artifact.filename))?;
 
@@ -276,7 +276,7 @@ fn artifact_lock_path(path: &Path) -> Result<PathBuf> {
 }
 
 fn verify_bytes(artifact: &VendorArtifact, bytes: &[u8]) -> Result<()> {
-    let actual = format!("{:x}", Sha256::digest(bytes));
+    let actual = hex::encode(Sha256::digest(bytes));
     if actual == artifact.sha256 {
         Ok(())
     } else {

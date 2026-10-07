@@ -30,6 +30,7 @@ pub(crate) use pip::show::pip_show;
 pub(crate) use pip::sync::pip_sync;
 pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
+pub(crate) use project::ProjectError;
 pub(crate) use project::add::add;
 pub(crate) use project::audit::audit;
 pub(crate) use project::check::check;
@@ -42,7 +43,7 @@ pub(crate) use project::run::{ParsedRunCommand, RunCommand, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
 pub(crate) use project::upgrade::upgrade;
-pub(crate) use project::version::{project_version, self_version};
+pub(crate) use project::version::project_version;
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
@@ -55,6 +56,7 @@ pub(crate) use python::uninstall::uninstall as python_uninstall;
 pub(crate) use python::update_shell::update_shell as python_update_shell;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
+pub(crate) use tool::audit::audit as tool_audit;
 pub(crate) use tool::dir::dir as tool_dir;
 pub(crate) use tool::install::install as tool_install;
 pub(crate) use tool::list::list as tool_list;
@@ -71,6 +73,7 @@ use uv_installer::{compile_files, compile_tree};
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
+pub(crate) use version::self_version;
 pub(crate) use workspace::dir::dir;
 pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
@@ -88,6 +91,8 @@ mod cache_size;
 pub(crate) mod diagnostics;
 mod editable;
 mod help;
+mod install_report;
+mod locked_requirements;
 pub(crate) mod pip;
 mod project;
 mod publish;
@@ -97,7 +102,9 @@ pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
+mod update_shell;
 mod venv;
+mod version;
 mod workspace;
 
 /// The process status for a command that completed without a final error to render.
@@ -123,6 +130,10 @@ pub(crate) enum UvError {
     #[error(transparent)]
     User(anyhow::Error),
 
+    /// An error caused by invalid command-line arguments.
+    #[error(transparent)]
+    Argument(anyhow::Error),
+
     /// An unexpected internal or environmental error.
     #[error(transparent)]
     Unexpected(anyhow::Error),
@@ -134,9 +145,111 @@ impl UvError {
         Self::User(error.into())
     }
 
+    /// Create an argument error.
+    pub(crate) fn argument(error: anyhow::Error) -> Self {
+        Self::Argument(error)
+    }
+
     /// Create an unexpected error.
     pub(crate) fn unexpected(error: anyhow::Error) -> Self {
         Self::Unexpected(error)
+    }
+
+    /// Add command-specific context to a user error without changing unexpected errors.
+    fn map_user(self, context: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
+        match self {
+            Self::User(error) => Self::User(context(error)),
+            Self::Argument(error) => Self::Argument(error),
+            Self::Unexpected(error) => Self::Unexpected(error),
+        }
+    }
+}
+
+impl From<project::ProjectError> for UvError {
+    fn from(error: project::ProjectError) -> Self {
+        match error {
+            error @ (project::ProjectError::LockMismatch(..)
+            | project::ProjectError::LockFormat(..)
+            | project::ProjectError::MissingLockfile(..)
+            | project::ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
+            project::ProjectError::Operation(error) => Self::from(error),
+            project::ProjectError::Requirements(error) => {
+                Self::from(pip::operations::Error::Requirements(error))
+            }
+            error => Self::unexpected(error.into()),
+        }
+    }
+}
+
+impl From<pip::operations::Error> for UvError {
+    fn from(error: pip::operations::Error) -> Self {
+        let error = error.with_default_resolution_context();
+        if error.is_user_failure() {
+            Self::user(error)
+        } else {
+            Self::unexpected(error.into())
+        }
+    }
+}
+
+#[cfg(test)]
+mod error_tests {
+    use std::io::{Error, ErrorKind};
+
+    use anyhow::bail;
+    use insta::{allow_duplicates, assert_snapshot};
+
+    use super::{UvError, pip, project};
+
+    #[test]
+    fn contextual_operations_keep_their_classification_and_cause() -> anyhow::Result<()> {
+        for (kind, user_failure) in [
+            (ErrorKind::NotFound, true),
+            (ErrorKind::PermissionDenied, false),
+        ] {
+            let error = pip::operations::Error::Requirements(uv_requirements::Error::Io(
+                Error::new(kind, "requirements failure"),
+            ));
+            let error = UvError::from(
+                error
+                    .with_resolution_context("script")
+                    .with_resolution_context("tool"),
+            );
+            let ((UvError::User(error), true) | (UvError::Unexpected(error), false)) =
+                (error, user_failure)
+            else {
+                bail!("operation classification changed with context");
+            };
+            allow_duplicates! {
+                assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
+            }
+            assert!(error.downcast_ref::<pip::operations::Error>().is_some());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn resolution_context_leaves_other_errors_unchanged() -> anyhow::Result<()> {
+        let error = pip::operations::Error::Io(Error::new(
+            ErrorKind::PermissionDenied,
+            "cache write failed",
+        ));
+        let UvError::Unexpected(error) = UvError::from(error.with_resolution_context("tool"))
+        else {
+            bail!("operation classification changed with context");
+        };
+        assert_snapshot!(format!("{error:#}"), @"cache write failed");
+        assert!(error.downcast_ref::<pip::operations::Error>().is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn project_requirements_use_operation_classification() {
+        let error = project::ProjectError::Requirements(uv_requirements::Error::Io(Error::new(
+            ErrorKind::NotFound,
+            "requirements failure",
+        )));
+        assert!(matches!(UvError::from(error), UvError::User(_)));
     }
 }
 
@@ -144,16 +257,14 @@ impl UvError {
 ///
 /// These values intentionally do not mutate uv's process environment and cannot mutate
 /// the current uv process' settings.
-fn read_env_files<'a>(
-    env_file: impl DoubleEndedIterator<Item = &'a PathBuf>,
-) -> anyhow::Result<Vec<(String, String)>> {
+fn read_env_files(env_files: &[PathBuf]) -> anyhow::Result<Vec<(String, String)>> {
     let mut environment = Vec::new();
 
-    for env_file_path in env_file.rev().map(PathBuf::as_path) {
+    for env_file_path in env_files.iter().rev().map(PathBuf::as_path) {
         let iter = match dotenvy::from_path_iter(env_file_path) {
             Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 bail!(
-                    "No environment file found at: `{}`",
+                    "No environment file found at: {}",
                     env_file_path.simplified_display()
                 );
             }
@@ -215,7 +326,7 @@ fn read_env_files<'a>(
 
         if parsed {
             debug!(
-                "Read environment file at: `{}`",
+                "Read environment file at: {}",
                 env_file_path.simplified_display()
             );
         }

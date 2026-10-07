@@ -35,7 +35,9 @@ requires_python = ">=0"
 [packages.forkleaf.versions."1.1.0"]
 requires_python = ">=3.11"
 
+[testgen]
+kind = "compile"
+
 [resolver_options]
-test = "compile"
 resolution = "lowest"
 universal = true

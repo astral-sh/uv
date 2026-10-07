@@ -96,7 +96,7 @@ pub(crate) fn main(args: &Args) -> Result<()> {
             Mode::Write => {
                 println!("Updating: {}", template.test_file());
                 fs_err::write(&path, output.as_bytes())
-                    .with_context(|| format!("failed to write {}", path.display()))?;
+                    .with_context(|| format!("failed to write `{}`", path.display()))?;
 
                 if args.no_snapshot_update {
                     println!("Skipping snapshots for {}", template.test_name());
@@ -140,7 +140,7 @@ fn load_scenarios_from(scenarios_dir: &Path) -> Result<Vec<ScenarioCase>> {
         .map(|path| {
             let scenario = Scenario::from_path(&path)?;
             let relative = path.strip_prefix(scenarios_dir).with_context(|| {
-                format!("scenario path was outside {}", scenarios_dir.display())
+                format!("scenario path was outside `{}`", scenarios_dir.display())
             })?;
             Ok(ScenarioCase {
                 scenario,
@@ -162,21 +162,26 @@ fn scenarios_for_template(
 ) -> Vec<&ScenarioCase> {
     scenarios
         .iter()
-        .filter(|case| match case.scenario.resolver_options.test {
-            Some(ScenarioTest::Install) => template == TemplateKind::Install,
-            Some(ScenarioTest::Compile) => template == TemplateKind::Compile,
-            Some(ScenarioTest::Lock) => template == TemplateKind::Lock,
-            None => match template {
-                TemplateKind::Install => {
-                    !case.scenario.resolver_options.universal
-                        && case.scenario.resolver_options.python.is_none()
-                }
-                TemplateKind::Compile => {
-                    !case.scenario.resolver_options.universal
-                        && case.scenario.resolver_options.python.is_some()
-                }
-                TemplateKind::Lock => case.scenario.resolver_options.universal,
-            },
+        .filter(|case| {
+            if case.scenario.testgen.disable {
+                return false;
+            }
+            match case.scenario.testgen.kind {
+                Some(ScenarioTest::Install) => template == TemplateKind::Install,
+                Some(ScenarioTest::Compile) => template == TemplateKind::Compile,
+                Some(ScenarioTest::Lock) => template == TemplateKind::Lock,
+                None => match template {
+                    TemplateKind::Install => {
+                        !case.scenario.resolver_options.universal
+                            && case.scenario.resolver_options.python.is_none()
+                    }
+                    TemplateKind::Compile => {
+                        !case.scenario.resolver_options.universal
+                            && case.scenario.resolver_options.python.is_some()
+                    }
+                    TemplateKind::Lock => case.scenario.resolver_options.universal,
+                },
+            }
         })
         .collect()
 }
@@ -188,7 +193,7 @@ fn format_rust_file(path: &Path) -> Result<()> {
         .status()
         .context("failed to run rustfmt")?;
     if !status.success() {
-        bail!("rustfmt failed for {}", path.display());
+        bail!("rustfmt failed for `{}`", path.display());
     }
     Ok(())
 }
@@ -200,9 +205,9 @@ fn format_rust_source(output: &str) -> Result<String> {
         .context("failed to create temporary directory for rustfmt")?;
     let path = temporary_directory.path().join("scenarios.rs");
     fs_err::write(&path, output.as_bytes())
-        .with_context(|| format!("failed to write {}", path.display()))?;
+        .with_context(|| format!("failed to write `{}`", path.display()))?;
     format_rust_file(&path)?;
-    fs_err::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))
+    fs_err::read_to_string(&path).with_context(|| format!("failed to read `{}`", path.display()))
 }
 
 fn check_generated_file(path: &Path, output: &str) -> Result<()> {
@@ -219,14 +224,14 @@ fn check_generated_file(path: &Path, output: &str) -> Result<()> {
                 Ok(())
             } else {
                 let comparison = StrComparison::new(&current, &output);
-                bail!("{filename} changed, please run `{GENERATED_WITH}`:\n{comparison}");
+                bail!("`{filename}` changed, please run `{GENERATED_WITH}`:\n{comparison}");
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            bail!("{filename} not found, please run `{GENERATED_WITH}`");
+            bail!("`{filename}` not found, please run `{GENERATED_WITH}`");
         }
         Err(error) => {
-            bail!("{filename} changed, please run `{GENERATED_WITH}`:\n{error}");
+            bail!("`{filename}` changed, please run `{GENERATED_WITH}`:\n{error}");
         }
     }
 }
@@ -1000,6 +1005,40 @@ mod tests {
     }
 
     #[test]
+    fn scenario_can_skip_generated_tests() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        fs_err::write(
+            temporary_directory.path().join("skip.toml"),
+            r#"
+name = "skip"
+
+[root]
+requires = []
+
+[expected]
+satisfiable = true
+
+[testgen]
+disable = true
+kind = "compile"
+"#,
+        )
+        .expect("scenario should be written");
+
+        let scenarios =
+            load_scenarios_from(temporary_directory.path()).expect("scenario should parse");
+        assert_eq!(scenarios.len(), 1);
+        for template in [
+            TemplateKind::Install,
+            TemplateKind::Compile,
+            TemplateKind::Lock,
+        ] {
+            assert!(scenarios_for_template(template, &scenarios).is_empty());
+        }
+    }
+
+    #[test]
     fn stale_generated_file_is_an_error() {
         let temporary_directory =
             tempfile::tempdir().expect("temporary directory should be created");
@@ -1020,7 +1059,7 @@ mod tests {
                 .lines()
                 .next()
                 .expect("error should include a summary"),
-            "[TEMP_DIR]/scenario.rs changed, please run `cargo dev generate-scenario-tests`:"
+            "`[TEMP_DIR]/scenario.rs` changed, please run `cargo dev generate-scenario-tests`:"
         );
     }
 

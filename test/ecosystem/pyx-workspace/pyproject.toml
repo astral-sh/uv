@@ -1,0 +1,56 @@
+[project]
+name = "pyx-ecosystem"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]
+
+[tool.uv.workspace]
+members = ["members/*"]
+
+[tool.uv.sources]
+pyx-member-01 = { workspace = true }
+pyx-member-02 = { workspace = true }
+pyx-member-03 = { workspace = true }
+pyx-member-04 = { workspace = true }
+pyx-member-05 = { workspace = true }
+pyx-member-06 = { workspace = true }
+pyx-member-07 = { workspace = true }
+pyx-member-08 = { workspace = true }
+pyx-member-09 = { workspace = true }
+pyx-member-10 = { workspace = true }
+pyx-member-11 = { workspace = true }
+pyx-member-12 = { workspace = true }
+pyx-member-13 = { workspace = true }
+pyx-member-14 = { workspace = true }
+pyx-member-15 = { workspace = true }
+pyx-member-16 = { workspace = true }
+pyx-member-17 = { workspace = true }
+pyx-member-18 = { workspace = true }
+pyx-member-19 = { workspace = true }
+pyx-member-20 = { workspace = true }
+pyx-member-21 = { workspace = true }
+pyx-member-22 = { workspace = true }
+pyx-member-23 = { workspace = true }
+pyx-member-24 = { workspace = true }
+pyx-member-25 = { workspace = true }
+pyx-member-26 = { workspace = true }
+pyx-member-27 = { workspace = true }
+pyx-member-28 = { workspace = true }
+pyx-member-29 = { workspace = true }
+pyx-member-30 = { workspace = true }
+pyx-member-31 = { workspace = true }
+pyx-member-32 = { workspace = true }
+pyx-member-33 = { workspace = true }
+pyx-member-34 = { workspace = true }
+pyx-member-35 = { workspace = true }
+pyx-member-36 = { workspace = true }
+pyx-member-37 = { workspace = true }

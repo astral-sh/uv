@@ -28,7 +28,13 @@ pub(crate) async fn wheel_metadata(
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default()
             .read_timeout(environment.http_read_timeout)
-            .connect_timeout(environment.http_connect_timeout),
+            .connect_timeout(environment.http_connect_timeout)
+            .metadata_range_request(
+                environment
+                    .require_metadata_range_requests
+                    .unwrap_or_default()
+                    .into(),
+            ),
         cache,
     )
     .build()?;
@@ -47,6 +53,7 @@ pub(crate) async fn wheel_metadata(
                 filename,
                 location: Box::new(archive.url),
                 url: args.url,
+                size: None,
             }),
             &resolver,
             &capabilities,

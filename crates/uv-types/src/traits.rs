@@ -111,9 +111,8 @@ pub trait BuildContext {
     /// Return a reference to any pre-defined static metadata.
     fn dependency_metadata(&self) -> &DependencyMetadata;
 
-    /// Whether source distribution building or pre-built wheels is disabled.
+    /// Whether building source distributions or installing pre-built wheels is disabled.
     ///
-    /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
 
@@ -166,6 +165,9 @@ pub trait BuildContext {
     /// `uv_build::SourceBuild::setup`.
     ///
     /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.
+    ///
+    /// Callers are responsible for enforcing [`BuildOptions`] for the source distribution itself.
+    /// Build dependencies are still resolved and installed using [`Self::build_options`].
     ///
     /// `version_id` is for error reporting only.
     /// `dist` is for safety checks and may be null for editable builds.
@@ -265,10 +267,10 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
 /// Resolution and installation may need to build packages, while the build frontend needs to
 /// resolve and install for the PEP 517 build environment.
 ///
-/// Usually, [`anyhow::Error`] is opaque error type of choice. In this case though, we error type
-/// that we can inspect on whether it's a build backend error with [`IsBuildBackendError`], and
+/// Usually, [`anyhow::Error`] is the opaque error type of choice. Here, the error type must also
+/// classify user failures and build backend failures through [`IsBuildBackendError`], and
 /// [`anyhow::Error`] does not allow attaching more traits. The next choice would be
-/// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but [`thiserror`]
+/// `Box<dyn IsBuildBackendError>`, but [`thiserror`]
 /// complains about the internal `AsDynError` not being implemented when being used as `#[source]`.
 /// This struct is an otherwise transparent error wrapper that thiserror recognizes.
 pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
@@ -301,7 +303,7 @@ impl std::error::Error for AnyErrorBuild {
     }
 }
 
-impl uv_errors::Hint for AnyErrorBuild {
+impl uv_errors::Hinted for AnyErrorBuild {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.0.hints()
     }
