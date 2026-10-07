@@ -327,6 +327,9 @@ pub enum PreviewFeature {
     LockfileFormatCheck,
     /// Combines equivalent dependency declarations when writing lockfiles.
     LockfileNormalization,
+    /// Writes version 2 lockfiles. Highly experimental: the format may change incompatibly in
+    /// patch releases.
+    LockfileV2,
     /// Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
     LockWithoutMetadata,
     /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.

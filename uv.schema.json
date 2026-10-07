@@ -1882,6 +1882,7 @@
             "index-hash-algorithm",
             "lockfile-format-check",
             "lockfile-normalization",
+            "lockfile-v2",
             "lock-without-metadata",
             "tar-codec",
             "index-by-name",

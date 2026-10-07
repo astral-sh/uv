@@ -173,12 +173,12 @@ pub(crate) async fn audit(
             ) => {
                 if explicit_tool {
                     bail!(
-                        "The lockfile for tool `{name}` at `{}` uses an unsupported schema version (v{version}, but only v{supported} is supported)",
+                        "The lockfile for tool `{name}` at `{}` uses an unsupported schema version (v{version}, but versions up to v{supported} are supported)",
                         lock_path.user_display()
                     );
                 }
                 warn_user!(
-                    "Skipping tool `{name}` because its lockfile at `{}` uses an unsupported schema version (v{version}, but only v{supported} is supported)",
+                    "Skipping tool `{name}` because its lockfile at `{}` uses an unsupported schema version (v{version}, but versions up to v{supported} are supported)",
                     lock_path.user_display()
                 );
                 continue;
