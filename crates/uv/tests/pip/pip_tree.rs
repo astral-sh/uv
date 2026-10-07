@@ -693,13 +693,7 @@ fn with_editable() {
     "
     );
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.pip_tree(), @"
+    uv_snapshot!(context.filters(), context.pip_tree(), @"
     exit_code: 0 (success)
     ----- stdout -----
     hatchling-editable v0.1.0

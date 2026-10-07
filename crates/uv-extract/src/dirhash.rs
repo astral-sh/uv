@@ -71,6 +71,16 @@ use std::pin::{Pin, pin};
 use rayon::prelude::*;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+use uv_threads::initialize_rayon_once;
+
+mod archive;
+mod seek;
+
+pub(crate) use archive::UnzipOutput;
+pub(crate) use archive::directory_tree_from_extracted;
+pub use archive::{DirectoryDigest, HashedFile, UnhashedFile};
+pub(crate) use seek::{unzip, unzip_and_hash};
+
 // Read repeatedly until the whole buffer is full, similar to `read_exact`. But if EOF is
 // encountered, return `Ok(n)` with a short length instead of reporting an error.
 async fn read_exact_or_eof(
@@ -102,10 +112,23 @@ where
     R: AsyncRead,
     W: AsyncWrite,
 {
+    blake3_copy_with_buffer(reader, writer, &mut Vec::new()).await
+}
+
+/// Copy and hash bytes with a reusable 64 KiB buffer, allocating it on the first call.
+pub(crate) async fn blake3_copy_with_buffer<R, W>(
+    reader: R,
+    writer: W,
+    buffer: &mut Vec<u8>,
+) -> io::Result<(u64, blake3::Hash)>
+where
+    R: AsyncRead,
+    W: AsyncWrite,
+{
     let mut reader = pin!(reader);
     let mut writer = pin!(writer);
     let mut hasher = blake3::Hasher::new();
-    let mut buffer = [0; 1 << 16]; // 64 KiB
+    buffer.resize(1 << 16, 0); // 64 KiB
     let mut total = 0u64;
     // BLAKE3 is fastest when hashing power-of-two sized buffers. That maximizes the time we spend
     // in the wide SIMD part of the implementation (which wants between 4 and 16 KiB at a time
@@ -113,7 +136,7 @@ where
     // short inputs. Hash as many full 64 KiB buffers as we can, and then one possibly-short buffer
     // when we reach EOF.
     loop {
-        let bytes_read = read_exact_or_eof(reader.as_mut(), &mut buffer).await?;
+        let bytes_read = read_exact_or_eof(reader.as_mut(), buffer).await?;
         if bytes_read == 0 {
             break; // EOF reached with no bytes. Skip unnecessary calls to `update` and `write_all`.
         }
@@ -217,7 +240,7 @@ fn canonical_path_to_symlink(symlink_path: &Path) -> Result<PathBuf, DirhashErro
 /// `dirhash_path` will traverse symlinks, including links that lead outside of `path`. However, if
 /// it encounters a symlink cycle, it will return an error.
 pub fn dirhash_path(path: &Path) -> Result<blake3::Hash, DirhashError> {
-    uv_configuration::initialize_rayon_once();
+    initialize_rayon_once();
     let seen_symlinks = SeenSymlinks::new();
     dirhash_path_inner(path, &seen_symlinks)
 }
@@ -493,6 +516,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::assert_matches;
+
     use super::*;
     use std::cmp;
     use std::task::{Context, Poll};
@@ -649,7 +675,7 @@ mod tests {
         fs_err::create_dir(root.join("dir2/inner"))?;
         symlink("../../dir1", root.join("dir2/inner/dir_link"))?;
         let error = super::dirhash_path(root).unwrap_err();
-        std::assert_matches!(error, super::DirhashError::SymlinkCycle { .. });
+        assert_matches!(error, super::DirhashError::SymlinkCycle { .. });
         Ok(())
     }
 
@@ -667,7 +693,7 @@ mod tests {
     async fn test_blake3_copy() -> io::Result<()> {
         let input = b"hello";
         let mut output = Vec::new();
-        let (bytes_read, hash) = Box::pin(super::blake3_copy(&input[..], &mut output)).await?;
+        let (bytes_read, hash) = super::blake3_copy(&input[..], &mut output).await?;
         assert_eq!(bytes_read, input.len() as u64);
         assert_eq!(input, &output[..]);
         assert_eq!(hash, blake3::hash(input));
@@ -676,10 +702,26 @@ mod tests {
         paint_input(&mut big_input);
         let mut big_output = Vec::new();
         let (big_bytes_read, big_hash) =
-            Box::pin(super::blake3_copy(&big_input[..], &mut big_output)).await?;
+            super::blake3_copy(&big_input[..], &mut big_output).await?;
         assert_eq!(big_bytes_read, big_input.len() as u64);
         assert_eq!(big_input, big_output);
         assert_eq!(big_hash, blake3::hash(&big_input));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_blake3_copy_reuses_buffer() -> io::Result<()> {
+        let mut input = vec![0; 64_000 * 3];
+        paint_input(&mut input);
+        let mut buffer = Vec::new();
+        for input in [input.as_slice(), b"hello", b""] {
+            let mut output = Vec::new();
+            let (bytes_read, hash) =
+                super::blake3_copy_with_buffer(input, &mut output, &mut buffer).await?;
+            assert_eq!(bytes_read, input.len() as u64);
+            assert_eq!(input, output);
+            assert_eq!(hash, blake3::hash(input));
+        }
         Ok(())
     }
 
@@ -707,8 +749,7 @@ mod tests {
         let mut input = vec![0; 64_000 * 3];
         paint_input(&mut input);
         let mut output = Vec::new();
-        let (bytes_read, hash) =
-            Box::pin(super::blake3_copy(ShortReader(&input), &mut output)).await?;
+        let (bytes_read, hash) = super::blake3_copy(ShortReader(&input), &mut output).await?;
         assert_eq!(bytes_read, input.len() as u64);
         assert_eq!(input, &output[..]);
         assert_eq!(hash, blake3::hash(&input));
@@ -765,13 +806,10 @@ mod tests {
     }
 
     // `../test_vectors/test_vectors.json` contains a series of input trees and hashes, which is
-    // generated by `../test_vectors/generate.py`. The hashes come from an independent Python
-    // implementation in that script, so here we're testing *both* that we don't drift from the
-    // checked-in values, *and* that implementations in two different languages agree. This tests
-    // both `dirhash_path` and `DirhashTree`, so we're really testing that three different
-    // implementations agree.
-    #[tokio::test]
-    async fn test_vectors_json() -> anyhow::Result<()> {
+    // generated by `cargo dev generate-dirhash-test-vectors`. This tests both `dirhash_path` and
+    // `DirhashTree` against the committed hashes.
+    #[test]
+    fn test_vectors_json() -> anyhow::Result<()> {
         let test_vectors: Vec<JsonTestVector> =
             serde_json::from_str(include_str!("../test_vectors/test_vectors.json"))?;
         for JsonTestVector { input, dirhash } in &test_vectors {
@@ -781,7 +819,11 @@ mod tests {
             walk_test_vector_input(
                 input, &mut tree, &tempdir, None, /* the relative path starts empty */
             )?;
+
+            // Check the root dirhash from the `DirhashTree`.
             assert_eq!(dirhash.as_str(), tree.hash().to_hex().as_str());
+
+            // Check `dirhash_path`.
             assert_eq!(
                 dirhash.as_str(),
                 dirhash_path(tempdir.path())?.to_hex().as_str(),

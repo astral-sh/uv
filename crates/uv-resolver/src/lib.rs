@@ -1,40 +1,31 @@
-pub use dependency_mode::DependencyMode;
 pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError};
-pub use exclude_newer::{
-    ExcludeNewer, ExcludeNewerChange, ExcludeNewerOverrideChange, ExcludeNewerPackage,
-    ExcludeNewerPackageChange, ExcludeNewerPackageEntry, ExcludeNewerValueChange,
-    ExcludeNewerValueWithSpanRef, serialize_exclude_newer_package_with_spans,
-};
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
-pub use fork_strategy::ForkStrategy;
-pub use lock::{
-    CanonicalLockError, DependencySelection, Installable, InstallableRootKind, Lock, LockError,
-    LockParseError, Metadata, Package, PackageMap, PylockToml, PylockTomlError,
-    PylockTomlErrorKind, PythonReport, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
-    SelectedDependency, TreeDisplay, TreeJsonTarget, cyclonedx_json, implicit_constraints_marker,
-};
 pub use manifest::Manifest;
-pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
-pub use prerelease::{Prerelease, PrereleaseMode, PrereleasePackage, PrereleasePackageEntry};
 pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
-pub use resolution::{
-    AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,
-};
-pub use resolution_mode::ResolutionMode;
+pub use resolution::{ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput};
 pub use resolver::{
     DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
     Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
 };
-pub(crate) use universal_marker::ConflictMarker;
 pub use universal_marker::UniversalMarker;
 pub use upgrade::UpgradePackages;
+pub use uv_configuration::{
+    AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerChange, ExcludeNewerOverrideChange,
+    ExcludeNewerPackage, ExcludeNewerPackageChange, ExcludeNewerPackageEntry,
+    ExcludeNewerValueChange, ExcludeNewerValueWithSpanRef, ForkStrategy, Prerelease,
+    PrereleaseMode, PrereleasePackage, PrereleasePackageEntry, ResolutionMode,
+    serialize_exclude_newer_package_with_spans,
+};
 pub use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
+pub use uv_resolver_types::{Flexibility, Options, OptionsBuilder};
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
+
+use uv_resolver_types::{graph_ops, universal_marker};
 
 /// A custom `HashSet` using `hashbrown`.
 ///
@@ -46,20 +37,14 @@ type FxHashbrownSet<T> = hashbrown::HashSet<T, rustc_hash::FxBuildHasher>;
 type FxHashbrownMap<K, V> = hashbrown::HashMap<K, V, rustc_hash::FxBuildHasher>;
 
 mod candidate_selector;
-mod dependency_mode;
 mod dependency_provider;
 mod error;
-mod exclude_newer;
 mod exclusions;
 mod flat_index;
 mod fork_indexes;
-mod fork_strategy;
 mod fork_urls;
-mod graph_ops;
-mod lock;
 mod manifest;
 mod marker;
-mod options;
 mod pins;
 mod preferences;
 mod prerelease;
@@ -69,7 +54,6 @@ mod redirect;
 mod resolution;
 mod resolution_mode;
 mod resolver;
-mod universal_marker;
 mod upgrade;
 mod version_map;
 mod yanks;

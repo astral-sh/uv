@@ -193,13 +193,12 @@ impl PythonVersionFile {
                 );
                 let versions = content
                     .lines()
+                    .map(str::trim)
                     .filter(|line| {
                         // Skip comments and empty lines.
-                        let trimmed = line.trim();
-                        !(trimmed.is_empty() || trimmed.starts_with('#'))
+                        !(line.is_empty() || line.starts_with('#'))
                     })
-                    .map(ToString::to_string)
-                    .map(|version| PythonRequest::parse(&version))
+                    .map(PythonRequest::parse)
                     .filter(|request| {
                         if let PythonRequest::ExecutableName(name) = request {
                             warn_user_once!(
@@ -240,7 +239,10 @@ impl PythonVersionFile {
 
     /// Returns `true` if the version file is a global version file.
     pub fn is_global(&self) -> bool {
-        Self::global().is_some_and(|global| self.path() == global.path())
+        user_uv_config_dir().is_some_and(|directory| {
+            self.path() == directory.join(PYTHON_VERSION_FILENAME)
+                || self.path() == directory.join(PYTHON_VERSIONS_FILENAME)
+        })
     }
 
     /// Return the first request declared in the file, if any.

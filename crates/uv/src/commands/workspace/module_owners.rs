@@ -7,31 +7,33 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
 use uv_installer::SitePackages;
+use uv_lock::{Installable, Metadata};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
-use uv_resolver::{Installable, Metadata};
 use uv_settings::MalwareCheckSettings;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::DefaultInstallLogger;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{resolution_markers, resolution_tags};
-use crate::commands::project::UniversalState;
 use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::sync::do_sync;
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverSettings};
 
 /// Map importable modules to package IDs, optionally syncing all locked extras and groups first.
 ///
-/// This uses a sufficient (inexact) sync so required distributions are available to inspect
-/// without removing unrelated packages from an existing environment. Only distributions in the
-/// selected resolution are assigned package IDs, so those unrelated packages are not reported.
+/// By default, synchronization is sufficient (inexact), so required distributions are available
+/// to inspect without removing unrelated packages from an existing environment. Exact
+/// synchronization removes those unrelated packages instead. Only distributions in the selected
+/// resolution are assigned package IDs.
 pub(crate) async fn collect_module_owners(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
@@ -43,14 +45,15 @@ pub(crate) async fn collect_module_owners(
     workspace_cache: &WorkspaceCache,
     preview: Preview,
     malware_settings: &MalwareCheckSettings,
-    sync: bool,
+    sync: Option<Modifications>,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let (extras, groups) = target_selection(target);
-    let Some(package_ids) = selected_package_ids(target, venv, &extras, &groups, settings)? else {
+    let package_ids = selected_package_ids(target, venv, &extras, &groups, settings)?;
+    if package_ids.is_none() && !matches!(sync, Some(Modifications::Exact)) {
         return Ok(BTreeMap::new());
-    };
+    }
 
-    if sync {
+    if let Some(modifications) = sync {
         let reinstall = Reinstall::None;
         let installer_settings = InstallerSettingsRef {
             index_locations: &settings.index_locations,
@@ -77,7 +80,7 @@ pub(crate) async fn collect_module_owners(
             &groups,
             None,
             InstallOptions::default(),
-            Modifications::Sufficient,
+            modifications,
             None,
             installer_settings,
             client_builder,
@@ -90,10 +93,14 @@ pub(crate) async fn collect_module_owners(
             DryRun::Disabled,
             Printer::Silent,
             preview,
-            malware_settings,
+            MalwareCheckContext::from(malware_settings),
         )
         .await?;
     }
+
+    let Some(package_ids) = package_ids else {
+        return Ok(BTreeMap::new());
+    };
 
     find_module_owners_in_environment(venv, &package_ids)
 }
@@ -169,6 +176,7 @@ fn target_selection(
         InstallTarget::Project { .. }
         | InstallTarget::Projects { .. }
         | InstallTarget::Workspace { .. }
+        | InstallTarget::Lockfile { .. }
         | InstallTarget::NonProjectWorkspace { .. } => (
             ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default()),
             DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default()),

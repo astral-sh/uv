@@ -6,11 +6,14 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, ExcludeDependency, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage, ForkStrategy,
+    IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode, PrereleasePackage,
+    ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexLocations, IndexUrl, IndexUrlError, Origin,
+    ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
+    Index, IndexLocations, IndexUrl, IndexUrlError, MinimumLibcVersion, Origin,
     PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
@@ -19,15 +22,12 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{
-    AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan,
-    ExcludeNewerValue, ForkStrategy, PrereleaseMode, PrereleasePackage, ResolutionMode,
-    serialize_exclude_newer_package_with_spans,
-};
 use uv_torch::TorchMode;
-use uv_workspace::pyproject::{ExtraBuildDependencies, OverrideDependency};
+use uv_workspace::pyproject::{
+    BuildConstraintDependency, ExtraBuildDependencies, OverrideDependency,
+};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{EnvironmentOptions, FilesystemOptions};
@@ -157,13 +157,16 @@ pub struct Options {
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub required_environments: Option<SupportedEnvironments>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub minimum_libc_version: Option<MinimumLibcVersion>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -1250,8 +1253,9 @@ pub struct ResolverInstallerSchema {
     /// Don't build source distributions.
     ///
     /// When enabled, uv will reuse cached wheels from previously built source distributions, but
-    /// operations that require building a source distribution will exit with an error. uv may
-    /// still build editable requirements, and their build backends may run arbitrary Python code.
+    /// operations that require building a source distribution will exit with an error. First-party
+    /// packages, such as projects in the workspace, will still be built. uv will also still build
+    /// editable requirements, and their build backends may run arbitrary Python code.
     #[option(
         default = "false",
         value_type = "bool",
@@ -1261,6 +1265,8 @@ pub struct ResolverInstallerSchema {
     )]
     pub no_build: Option<bool>,
     /// Don't build source distributions for a specific package.
+    ///
+    /// First-party packages, such as projects in the workspace, will still be built.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -1352,6 +1358,22 @@ pub struct PythonInstallMirrors {
         "#
     )]
     pub pypy_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed GraalPy installations.
+    ///
+    /// By default, managed GraalPy installations are downloaded from [GitHub](https://github.com/oracle/graalpython/releases).
+    /// This variable can be set to a mirror URL to use a different source for GraalPy installations.
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g., `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            graalpy-install-mirror = "https://github.com/oracle/graalpython/releases/download"
+        "#
+    )]
+    pub graalpy_install_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     #[option(
@@ -1366,11 +1388,21 @@ pub struct PythonInstallMirrors {
 }
 
 impl PythonInstallMirrors {
+    /// Return the mirrors to use for managed Python downloads.
+    pub fn mirrors(&self) -> PythonDownloadMirrors<'_> {
+        PythonDownloadMirrors {
+            cpython: self.python_install_mirror.as_deref(),
+            pypy: self.pypy_install_mirror.as_deref(),
+            graalpy: self.graalpy_install_mirror.as_deref(),
+        }
+    }
+
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
         Self {
             python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
             pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            graalpy_install_mirror: self.graalpy_install_mirror.or(other.graalpy_install_mirror),
             python_downloads_json_url: self
                 .python_downloads_json_url
                 .or(other.python_downloads_json_url),
@@ -2610,6 +2642,7 @@ struct OptionsWire {
     // install_mirror: PythonInstallMirrors,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    graalpy_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
 
     // #[serde(flatten)]
@@ -2632,9 +2665,10 @@ struct OptionsWire {
     override_dependencies: Option<Vec<OverrideDependency>>,
     exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
+    minimum_libc_version: Option<MinimumLibcVersion>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2670,6 +2704,7 @@ impl TryFrom<OptionsWire> for Options {
             python_downloads,
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             python_downloads_json_url,
             concurrent_downloads,
             concurrent_builds,
@@ -2718,6 +2753,7 @@ impl TryFrom<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
+            minimum_libc_version,
             conflicts,
             publish_url,
             trusted_publishing,
@@ -2800,9 +2836,11 @@ impl TryFrom<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
+            minimum_libc_version,
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
+                graalpy_install_mirror,
                 python_downloads_json_url,
             },
             conflicts,

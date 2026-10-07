@@ -33,7 +33,6 @@ use uv_cli::{
     TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
 use uv_client::BaseClientBuilder;
-use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
@@ -47,6 +46,7 @@ use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
+use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -69,7 +69,7 @@ pub(crate) mod printer;
 pub(crate) mod settings;
 
 /// Construct the shared HTTP client builder from the resolved global settings.
-pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
+fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
         globals.network_settings.system_certs,
@@ -79,6 +79,7 @@ pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBui
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
+    .metadata_range_request(globals.network_settings.metadata_range_request)
     .cache_read_concurrency(globals.concurrency.cache_reads)
     .http_proxy(globals.network_settings.http_proxy.clone())
     .https_proxy(globals.network_settings.https_proxy.clone())
@@ -116,7 +117,7 @@ struct ExternallyInstalledError {
 }
 
 #[cfg(not(feature = "self-update"))]
-impl uv_errors::Hint for ExternallyInstalledError {
+impl uv_errors::Hinted for ExternallyInstalledError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(source) = &self.install_source {
             uv_errors::Hints::from(format!(
@@ -130,22 +131,9 @@ impl uv_errors::Hint for ExternallyInstalledError {
     }
 }
 
+#[instrument(skip_all)]
 #[doc(hidden)]
 pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
-    Box::pin(run_with_workspace_cache(
-        cli,
-        global_initialization,
-        WorkspaceCache::default(),
-    ))
-    .await
-}
-
-#[instrument(name = "run", skip_all)]
-async fn run_with_workspace_cache(
-    cli: Cli,
-    global_initialization: GlobalInitialization,
-    workspace_cache: WorkspaceCache,
-) -> Result<ExitStatus> {
     let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
 
     // Configure color before resolving settings so argument errors retain their styling.
@@ -178,7 +166,10 @@ async fn run_with_workspace_cache(
         }) = **command
     {
         Some(ParsedRunCommand::from_args(
-            command, module, script, gui_script,
+            command.as_slice(),
+            module,
+            script,
+            gui_script,
         )?)
     } else {
         None
@@ -320,6 +311,7 @@ async fn run_with_workspace_cache(
         cli.top_level.cache_args.no_cache,
         cli.top_level.cache_args.cache_dir.clone(),
     )?;
+    let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
         if config_file
             .file_name()
@@ -361,11 +353,15 @@ async fn run_with_workspace_cache(
     // If the target is a PEP 723 script, parse it.
     let (run_script, run_command) = if let Some(parsed_run_command) = parsed_run_command {
         let (script, run_command) = parsed_run_command
-            .resolve(
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            )
+            .resolve(&|| {
+                let settings = GlobalSettings::resolve(
+                    &cli.top_level.global_args,
+                    filesystem.as_ref(),
+                    &environment,
+                    None,
+                )?;
+                Ok(base_client_builder(&settings))
+            })
             .await?;
         (script, Some(run_command))
     } else {
@@ -487,14 +483,22 @@ async fn run_with_workspace_cache(
     };
 
     // If the target is a PEP 723 script, merge the metadata into the filesystem metadata.
-    let filesystem = script
+    let script_filesystem = script
         .as_ref()
         .map(Pep723Item::metadata)
         .and_then(|metadata| metadata.tool.as_ref())
         .and_then(|tool| tool.uv.as_ref())
         .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
-        .map(FilesystemOptions::from)
-        .combine(filesystem);
+        .map(FilesystemOptions::from);
+    let script_filesystem = if let Some(Pep723Item::Script(script)) = script.as_ref() {
+        let script_dir = script.path.parent().expect("script path has no parent");
+        script_filesystem
+            .map(|options| options.relative_to(script_dir))
+            .transpose()?
+    } else {
+        script_filesystem
+    };
+    let filesystem = script_filesystem.combine(filesystem);
 
     let custom_certificate_file = match &*cli.command {
         Commands::Pip(PipNamespace { cert, .. }) => cert.as_deref(),
@@ -566,24 +570,16 @@ async fn run_with_workspace_cache(
 
     anstream::ColorChoice::write_global(globals.color.into());
 
-    if global_initialization.needs_initialization() {
-        miette::set_hook(Box::new(|_| {
-            Box::new(
-                miette::MietteHandlerOpts::new()
-                    .break_words(false)
-                    .word_separator(textwrap::WordSeparator::AsciiSpace)
-                    .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                    .wrap_lines(std::env::var(EnvVars::UV_NO_WRAP).is_err())
-                    .build(),
-            )
-        }))?;
-    }
-
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
+    RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 
     // Write out any resolved settings.
     macro_rules! show_settings {
+        () => {
+            if globals.show_settings {
+                return Ok(ExitStatus::Success);
+            }
+        };
         ($arg:expr) => {
             if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
@@ -664,7 +660,6 @@ async fn run_with_workspace_cache(
                 args.username,
                 args.password,
                 args.token,
-                client_builder,
                 printer,
                 globals.preview,
             )
@@ -677,14 +672,7 @@ async fn run_with_workspace_cache(
             let args = settings::AuthLogoutSettings::resolve(args);
             show_settings!(args);
 
-            commands::auth_logout(
-                args.service,
-                args.username,
-                client_builder,
-                printer,
-                globals.preview,
-            )
-            .await
+            commands::auth_logout(args.service, args.username, printer, globals.preview).await
         }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Token(args),
@@ -693,19 +681,12 @@ async fn run_with_workspace_cache(
             let args = settings::AuthTokenSettings::resolve(args);
             show_settings!(args);
 
-            commands::auth_token(
-                args.service,
-                args.username,
-                client_builder,
-                printer,
-                globals.preview,
-            )
-            .await
+            commands::auth_token(args.service, args.username, printer, globals.preview).await
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::Dir(args),
+            command: AuthCommand::Dir,
         }) => {
-            commands::auth_dir(args.service.as_ref(), printer)?;
+            commands::auth_dir(printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Auth(AuthNamespace {
@@ -719,9 +700,7 @@ async fn run_with_workspace_cache(
             }
 
             match args.command {
-                AuthHelperCommand::Get => {
-                    commands::auth_helper(client_builder, globals.preview, printer).await
-                }
+                AuthHelperCommand::Get => commands::auth_helper(globals.preview, printer).await,
             }
         }
         Commands::Help(args) => commands::help(
@@ -793,6 +772,7 @@ async fn run_with_workspace_cache(
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.required_environments,
+                args.minimum_libc_version,
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),
@@ -840,6 +820,7 @@ async fn run_with_workspace_cache(
                 args.settings.python,
                 args.settings.system,
                 globals.python_preference,
+                globals.python_arch,
                 globals.concurrency,
                 globals.quiet > 0,
                 cache,
@@ -930,10 +911,12 @@ async fn run_with_workspace_cache(
                 args.settings.prefix,
                 args.settings.sources,
                 globals.python_preference,
+                globals.python_arch,
                 globals.concurrency,
                 cache,
                 workspace_cache,
                 args.dry_run,
+                args.output_format,
                 printer,
                 globals.preview,
             ))
@@ -1006,7 +989,7 @@ async fn run_with_workspace_cache(
                             }) = &url.parsed_url
                             {
                                 debug!(
-                                    "Marking explicit source tree for reinstall: `{}`",
+                                    "Marking explicit source tree for reinstall: {}",
                                     install_path.display()
                                 );
                                 args.settings.reinstall = args
@@ -1021,7 +1004,7 @@ async fn run_with_workspace_cache(
                             &requirement.url.parsed_url
                         {
                             debug!(
-                                "Marking explicit source tree for reinstall: `{}`",
+                                "Marking explicit source tree for reinstall: {}",
                                 install_path.display()
                             );
                             args.settings.reinstall =
@@ -1093,10 +1076,12 @@ async fn run_with_workspace_cache(
                 args.settings.target,
                 args.settings.prefix,
                 globals.python_preference,
+                globals.python_arch,
                 globals.concurrency,
                 cache,
                 workspace_cache,
                 args.dry_run,
+                args.output_format,
                 printer,
                 globals.preview,
             ))
@@ -1126,6 +1111,7 @@ async fn run_with_workspace_cache(
                     .collect::<Result<Vec<_>, _>>()?,
             );
             commands::pip_uninstall(
+                globals.python_arch,
                 &sources,
                 args.settings.python,
                 args.settings.system,
@@ -1152,6 +1138,7 @@ async fn run_with_workspace_cache(
             let cache = cache.init().await?;
 
             commands::pip_freeze(
+                globals.python_arch,
                 args.exclude_editable,
                 &args.exclude,
                 args.settings.strict,
@@ -1179,6 +1166,7 @@ async fn run_with_workspace_cache(
             let cache = cache.init().await?;
 
             commands::pip_list(
+                globals.python_arch,
                 args.editable,
                 &args.exclude,
                 &args.format,
@@ -1213,6 +1201,7 @@ async fn run_with_workspace_cache(
             let cache = cache.init().await?;
 
             commands::pip_show(
+                globals.python_arch,
                 args.package,
                 args.settings.strict,
                 &args.settings.dependency_metadata,
@@ -1231,11 +1220,13 @@ async fn run_with_workspace_cache(
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipTreeSettings::resolve(args, filesystem, environment)?;
+            show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init().await?;
 
             commands::pip_tree(
+                globals.python_arch,
                 args.show_version_specifiers,
                 args.depth,
                 &args.prune,
@@ -1271,6 +1262,7 @@ async fn run_with_workspace_cache(
             let cache = cache.init().await?;
 
             commands::pip_check(
+                globals.python_arch,
                 args.settings.python.as_deref(),
                 args.settings.system,
                 args.settings.python_version.as_ref(),
@@ -1301,10 +1293,14 @@ async fn run_with_workspace_cache(
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
-        }) => commands::cache_dir(&cache, printer),
+        }) => {
+            show_settings!();
+            commands::cache_dir(&cache, printer)
+        }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Size(args),
         }) => {
+            show_settings!(args);
             let output_format = if args.human {
                 CacheSizeOutputFormat::Human
             } else {
@@ -1337,6 +1333,7 @@ async fn run_with_workspace_cache(
 
             commands::build_frontend(
                 &project_dir,
+                args.skip_dependency_check,
                 args.src,
                 args.package,
                 args.all_packages,
@@ -1357,6 +1354,7 @@ async fn run_with_workspace_cache(
                 &client_builder.subcommand(vec!["build".to_owned()]),
                 config_discovery,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 &cache,
@@ -1426,6 +1424,7 @@ async fn run_with_workspace_cache(
                 python_request,
                 args.settings.install_mirrors,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 args.settings.link_mode,
                 &args.settings.index_locations,
@@ -1624,6 +1623,7 @@ async fn run_with_workspace_cache(
                 invocation_source,
                 args.isolated,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1725,6 +1725,7 @@ async fn run_with_workspace_cache(
                 args.settings,
                 client_builder.subcommand(vec!["tool".to_owned(), "install".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1809,6 +1810,7 @@ async fn run_with_workspace_cache(
                 args.filesystem,
                 client_builder.subcommand(vec!["tool".to_owned(), "upgrade".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1816,6 +1818,7 @@ async fn run_with_workspace_cache(
                 &workspace_cache,
                 printer,
                 globals.preview,
+                commands::diagnostics::write_error_chain,
             ))
             .await
         }
@@ -1862,10 +1865,9 @@ async fn run_with_workspace_cache(
                 args.all_arches,
                 args.show_urls,
                 args.output_format,
-                args.python_downloads_json_url,
-                args.python_install_mirror,
-                args.pypy_install_mirror,
+                args.install_mirrors,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),
                 &cache,
@@ -1892,11 +1894,10 @@ async fn run_with_workspace_cache(
                 args.bin,
                 args.registry,
                 args.force,
-                args.python_install_mirror,
-                args.pypy_install_mirror,
-                args.python_downloads_json_url,
+                args.install_mirrors,
                 client_builder.subcommand(vec!["python".to_owned(), "install".to_owned()]),
                 args.default,
+                globals.python_arch,
                 globals.python_downloads,
                 config_discovery,
                 args.compile_bytecode,
@@ -1927,11 +1928,10 @@ async fn run_with_workspace_cache(
                 args.bin,
                 args.registry,
                 args.force,
-                args.python_install_mirror,
-                args.pypy_install_mirror,
-                args.python_downloads_json_url,
+                args.install_mirrors,
                 client_builder.subcommand(vec!["python".to_owned(), "upgrade".to_owned()]),
                 args.default,
+                globals.python_arch,
                 globals.python_downloads,
                 config_discovery,
                 args.compile_bytecode,
@@ -1956,6 +1956,7 @@ async fn run_with_workspace_cache(
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonFindSettings::resolve(args, filesystem, environment)?;
+            show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1968,6 +1969,7 @@ async fn run_with_workspace_cache(
                     // TODO(zsol): is this the right thing to do here?
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     globals.python_preference,
+                    globals.python_arch,
                     globals.python_downloads,
                     config_discovery,
                     &cache,
@@ -1984,6 +1986,7 @@ async fn run_with_workspace_cache(
                     args.system,
                     config_discovery,
                     globals.python_preference,
+                    globals.python_arch,
                     args.python_downloads_json_url.as_deref(),
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     &cache,
@@ -1998,6 +2001,7 @@ async fn run_with_workspace_cache(
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonPinSettings::resolve(args, filesystem, environment)?;
+            show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -2007,6 +2011,7 @@ async fn run_with_workspace_cache(
                 args.request,
                 args.resolved,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 args.no_project,
                 args.global,
@@ -2056,7 +2061,6 @@ async fn run_with_workspace_cache(
                 password,
                 dry_run,
                 no_attestations,
-                direct,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
@@ -2079,8 +2083,6 @@ async fn run_with_workspace_cache(
                 index_locations,
                 dry_run,
                 no_attestations,
-                direct,
-                globals.preview,
                 &cache,
                 printer,
             )
@@ -2113,7 +2115,6 @@ async fn run_with_workspace_cache(
                     &project_dir,
                     args.lock_check,
                     args.frozen,
-                    args.dry_run,
                     args.refresh,
                     args.sync,
                     args.active,
@@ -2124,6 +2125,7 @@ async fn run_with_workspace_cache(
                     client_builder.subcommand(vec!["workspace".to_owned(), "metadata".to_owned()]),
                     script,
                     globals.python_preference,
+                    globals.python_arch,
                     globals.python_downloads,
                     globals.concurrency,
                     config_discovery,
@@ -2135,6 +2137,7 @@ async fn run_with_workspace_cache(
                 .await
             }
             WorkspaceCommand::Dir(args) => {
+                show_settings!(args);
                 commands::dir(
                     args.package,
                     &project_dir,
@@ -2145,6 +2148,7 @@ async fn run_with_workspace_cache(
                 .await
             }
             WorkspaceCommand::List(args) => {
+                show_settings!(args);
                 commands::list(
                     &project_dir,
                     args.paths,
@@ -2310,6 +2314,7 @@ async fn run_project(
                 args.no_workspace,
                 &client_builder.subcommand(vec!["init".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 config_discovery,
                 &cache,
@@ -2375,6 +2380,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["run".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2431,6 +2437,7 @@ async fn run_project(
                 args.python_platform,
                 args.install_mirrors,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 args.settings,
                 client_builder.subcommand(vec!["sync".to_owned()]),
@@ -2489,6 +2496,7 @@ async fn run_project(
                 client_builder.subcommand(vec!["lock".to_owned()]),
                 script,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -2501,7 +2509,7 @@ async fn run_project(
         }
         ProjectCommand::Upgrade(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::UpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::UpgradeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -2518,6 +2526,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["upgrade".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -2574,7 +2583,7 @@ async fn run_project(
                             }) = &url.parsed_url
                             {
                                 debug!(
-                                    "Marking explicit source tree for reinstall: `{}`",
+                                    "Marking explicit source tree for reinstall: {}",
                                     install_path.display()
                                 );
                                 args.settings.reinstall = args
@@ -2589,7 +2598,7 @@ async fn run_project(
                             &requirement.url.parsed_url
                         {
                             debug!(
-                                "Marking explicit source tree for reinstall: `{}`",
+                                "Marking explicit source tree for reinstall: {}",
                                 install_path.display()
                             );
                             args.settings.reinstall =
@@ -2652,6 +2661,7 @@ async fn run_project(
                 client_builder.subcommand(vec!["add".to_owned()]),
                 script,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2702,6 +2712,7 @@ async fn run_project(
                 client_builder.subcommand(vec!["remove".to_owned()]),
                 script,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2753,6 +2764,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["version".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2802,6 +2814,7 @@ async fn run_project(
                 &client_builder.subcommand(vec!["tree".to_owned()]),
                 script,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -2836,6 +2849,7 @@ async fn run_project(
                 args.hashes,
                 args.install_options,
                 args.output_file,
+                args.batch,
                 args.extras,
                 args.groups,
                 args.editable,
@@ -2851,6 +2865,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["export".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -2918,6 +2933,7 @@ async fn run_project(
                 args.lock_check,
                 args.frozen,
                 args.no_sync,
+                args.no_install_project,
                 args.isolated,
                 args.all_packages,
                 args.package,
@@ -2928,14 +2944,17 @@ async fn run_project(
                 args.settings,
                 args.ty_version,
                 args.show_version,
+                args.show_command,
                 script,
                 client_builder.subcommand(vec!["check".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
                 &cache,
                 workspace_cache,
+                globals.color,
                 printer,
                 globals.preview,
                 args.no_project,
@@ -2971,6 +2990,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["audit".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -3086,12 +3106,6 @@ where
         cli.top_level.global_args.no_progress,
     );
 
-    // Initialize the cache before spawning `main2`. Constructing its `papaya` map initializes
-    // `seize`, which registers a process-wide memory barrier on Linux. Once multiple threads share
-    // the address space, registration waits for an RCU (read-copy-update) grace period; while the
-    // process is single-threaded, it takes the kernel's inexpensive fast path instead.
-    let workspace_cache = WorkspaceCache::default();
-
     // See `min_stack_size` doc comment about `main2`
     let min_stack_size = min_stack_size();
     let main2 = move || {
@@ -3101,11 +3115,7 @@ where
             .build()
             .expect("Failed building the Runtime");
         // Box the large main future to avoid stack overflows.
-        let result = runtime.block_on(Box::pin(run_with_workspace_cache(
-            cli,
-            GlobalInitialization::Initialize,
-            workspace_cache,
-        )));
+        let result = runtime.block_on(Box::pin(run(cli, GlobalInitialization::Initialize)));
         // Avoid waiting for pending tasks to complete.
         //
         // The resolver may have kicked off HTTP requests during resolution that

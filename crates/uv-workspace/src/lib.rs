@@ -1,5 +1,6 @@
 pub use workspace::{
-    DiscoveryOptions, Editability, MemberDiscovery, ProjectEnvironmentSelection, ProjectWorkspace,
+    DefaultGroupsError, DiscoveryOptions, Editability, MemberDiscovery,
+    ProjectEnvironmentSelection, ProjectWorkspace, RequiresPythonDeclaration,
     RequiresPythonSources, VirtualProject, Workspace, WorkspaceCache, WorkspaceError,
     WorkspaceErrorKind, WorkspaceMember,
 };

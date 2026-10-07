@@ -5,6 +5,9 @@ JSON so other tools can use it. In particular, if you want access to the informa
 or script lockfile, you should prefer this command's output, as lockfiles are not a stable format we
 guarantee anything about. Pass `--script path/to/script.py` to request metadata for a script.
 
+Pass `--sync` to install the selected packages before collecting module ownership information.
+Synchronization preserves unrelated installed packages by default; add `--exact` to remove them.
+
 The primary structure is the "resolution" field which contains the dependency graph with exact
 package versions that a `uv.lock` encodes.
 

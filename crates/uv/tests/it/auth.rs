@@ -27,9 +27,9 @@ async fn invalid_cloud_endpoint_urls() {
                 .env(env_var, "not-a-url"), @"
             exit_code: 2 (failure)
             ----- stderr -----
-            error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
-              Caused by: Invalid `UV_[CLOUD]_ENDPOINT_URL`
-              Caused by: relative URL without a base
+            error: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/iniconfig/
+              cause: Invalid `UV_[CLOUD]_ENDPOINT_URL`
+              cause: relative URL without a base
             ");
         }
     }
@@ -65,10 +65,12 @@ async fn add_package_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -119,10 +121,12 @@ async fn add_package_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -161,10 +165,12 @@ async fn add_package_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -215,10 +221,12 @@ async fn add_package_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -247,7 +255,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // Without persisted credentials (with a username in the request)
@@ -258,7 +266,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for public@http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `public@http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // Login to the index
@@ -293,7 +301,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // With a mismatched username
@@ -305,7 +313,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for private@http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `private@http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // Login to the index with a token
@@ -392,7 +400,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/
+    error: Failed to fetch credentials for `http://[LOCALHOST]/`
     ");
 
     // Without persisted credentials (with a username in the request)
@@ -403,7 +411,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for public@http://[LOCALHOST]/
+    error: Failed to fetch credentials for `public@http://[LOCALHOST]/`
     ");
 
     // Login to the index
@@ -448,7 +456,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/
+    error: Failed to fetch credentials for `http://[LOCALHOST]/`
     ");
 
     // Without the username (defaults to __token__ which wasn't stored)
@@ -457,7 +465,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // With a mismatched username
@@ -469,7 +477,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for private@http://[LOCALHOST]/
+    error: Failed to fetch credentials for `private@http://[LOCALHOST]/`
     ");
 
     // With a mismatched port
@@ -480,7 +488,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://192.0.2.1:1000/
+    error: Failed to fetch credentials for `public@https://192.0.2.1:1000/`
     ");
 
     // Login to the index with a token
@@ -655,8 +663,8 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
-      Caused by: No matching entry found in secure storage
+    error: Unable to remove credentials for `http://[LOCALHOST]/basic-auth`
+      cause: No matching entry found in secure storage
     ");
 
     // Logout before logging in (with a username)
@@ -667,8 +675,8 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to remove credentials for public@http://[LOCALHOST]/basic-auth
-      Caused by: No matching entry found in secure storage
+    error: Unable to remove credentials for `public@http://[LOCALHOST]/basic-auth`
+      cause: No matching entry found in secure storage
     ");
 
     // Login with a username
@@ -692,8 +700,8 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
-      Caused by: No matching entry found in secure storage
+    error: Unable to remove credentials for `http://[LOCALHOST]/basic-auth`
+      cause: No matching entry found in secure storage
     ");
 
     // Logout with a username
@@ -1499,7 +1507,7 @@ fn token_text_store_username() {
         .arg("https://example.com/simple"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for https://example.com/simple
+    error: Failed to fetch credentials for `https://example.com/simple`
     "
     );
 
@@ -1510,7 +1518,7 @@ fn token_text_store_username() {
         .arg("wronguser"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for wronguser@https://example.com/simple
+    error: Failed to fetch credentials for `wronguser@https://example.com/simple`
     "
     );
 
@@ -1548,7 +1556,7 @@ fn token_text_store_username() {
         .arg("https://userexample.com/simple"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for https://userexample.com/simple
+    error: Failed to fetch credentials for `https://userexample.com/simple`
     "
     );
 }
@@ -1596,7 +1604,7 @@ fn logout_text_store_multiple_usernames() {
         .arg("user1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for user1@https://example.com/simple
+    error: Failed to fetch credentials for `user1@https://example.com/simple`
     "
     );
 
@@ -1615,7 +1623,7 @@ fn logout_text_store_multiple_usernames() {
         .arg("https://example.com/simple"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No matching entry found for https://example.com/
+    error: No matching entry found for `https://example.com/`
     "
     );
 }
@@ -1712,7 +1720,7 @@ fn native_auth_host_fallback() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for testuser@https://another-example.com/any/path
+    error: Failed to fetch credentials for `testuser@https://another-example.com/any/path`
     "
     );
 
@@ -1779,6 +1787,37 @@ fn bazel_helper_token() {
     );
 }
 
+#[test]
+fn bazel_helper_invalid_bearer_token() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("credentials.toml")
+        .write_str(indoc::indoc! { r#"
+            [[credential]]
+            service = "https://example.com"
+            scheme = "bearer"
+            token = "secret\nvalue"
+        "# })?;
+
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get")
+        .arg("--offline")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "auth-helper")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()),
+        input=r#"{"uri":"https://example.com"}"#,
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid authorization header
+      cause: failed to parse header value
+    "
+    );
+
+    Ok(())
+}
+
 /// Test credential helper with no credentials found
 #[test]
 fn bazel_helper_no_credentials() {
@@ -1812,7 +1851,7 @@ fn bazel_helper_invalid_json() {
     ----- stderr -----
     warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     error: Failed to parse credential request as JSON
-      Caused by: expected ident at line 1 column 2
+      cause: expected ident at line 1 column 2
     "
     );
 }
@@ -1831,7 +1870,7 @@ fn bazel_helper_invalid_uri() {
     ----- stderr -----
     warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     error: Failed to parse credential request as JSON
-      Caused by: relative URL without a base: "not a url" at line 1 column 18
+      cause: relative URL without a base: "not a url" at line 1 column 18
     "#
     );
 }
@@ -1895,148 +1934,5 @@ fn bazel_helper_unknown_username_in_uri() {
     ----- stderr -----
     warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     "#
-    );
-}
-
-/// Test that `pyx.dev` is recognized as a pyx domain even when `PYX_API_URL` points elsewhere.
-///
-/// When `PYX_API_URL` is set to a different URL (e.g., localhost for development),
-/// `pyx.dev` should still be recognized as a pyx domain and use the OAuth flow.
-#[test]
-fn login_pyx_dev_with_custom_api_url() {
-    let context = uv_test::test_context_with_versions!(&[]);
-
-    // When PYX_API_URL is set to localhost, `pyx.dev` should still be recognized as pyx
-    // and reject username/password (because pyx uses OAuth, not basic auth).
-    uv_snapshot!(context.auth_login()
-        .arg("pyx.dev")
-        .arg("--username")
-        .arg("testuser")
-        .arg("--password")
-        .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Cannot specify a username when logging in to pyx
-    "
-    );
-
-    // Same for api.pyx.dev
-    uv_snapshot!(context.auth_login()
-        .arg("api.pyx.dev")
-        .arg("--username")
-        .arg("testuser")
-        .arg("--password")
-        .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Cannot specify a username when logging in to pyx
-    "
-    );
-
-    // Other subdomains like beta.pyx.dev are NOT recognized as default pyx domains.
-    // They fall through to normal credential handling when PYX_API_URL doesn't match.
-    uv_snapshot!(context.auth_login()
-        .arg("beta.pyx.dev")
-        .arg("--username")
-        .arg("testuser")
-        .arg("--password")
-        .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Stored credentials for testuser@https://beta.pyx.dev/
-    "
-    );
-}
-
-/// Test that logout recognizes `pyx.dev` even with custom `PYX_API_URL`.
-#[test]
-fn logout_pyx_dev_with_custom_api_url() {
-    let context = uv_test::test_context_with_versions!(&[]);
-
-    // Logout for pyx.dev should use the pyx flow (succeeds with no-op message because
-    // no credentials exist, but verifies it's recognized as pyx).
-    uv_snapshot!(context.auth_logout()
-        .arg("pyx.dev")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    No credentials found for http://localhost:8000/
-    "
-    );
-}
-
-/// Test that `uv auth token` recognizes `pyx.dev` even with custom `PYX_API_URL`.
-#[test]
-fn token_pyx_dev_with_custom_api_url() {
-    let context = uv_test::test_context_with_versions!(&[]);
-
-    // Token for pyx.dev should use the pyx flow and reject username.
-    uv_snapshot!(context.auth_token()
-        .arg("pyx.dev")
-        .arg("--username")
-        .arg("testuser")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Cannot specify a username when logging in to pyx
-    "
-    );
-}
-
-/// Test behavior when using a pyx.dev subdomain (like staging) without setting `PYX_API_URL`.
-///
-/// This verifies that subdomains like `astral-sh-staging-api.pyx.dev` are NOT automatically
-/// treated as pyx domains - users must set `PYX_API_URL` to use non-default pyx environments.
-#[test]
-fn token_pyx_staging_without_env_var() {
-    let context = uv_test::test_context_with_versions!(&[]);
-
-    // Without PYX_API_URL set, staging pyx URLs are NOT recognized as pyx domains.
-    // They fall through to the normal credential store lookup.
-    uv_snapshot!(context.auth_token()
-        .arg("https://astral-sh-staging-api.pyx.dev"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Failed to fetch credentials for https://astral-sh-staging-api.pyx.dev/
-    "
-    );
-}
-
-/// Test that staging pyx URLs work correctly when `PYX_API_URL` is set.
-#[test]
-fn login_pyx_staging_with_env_var() {
-    let context = uv_test::test_context_with_versions!(&[]);
-
-    // When PYX_API_URL is set to a staging URL, that URL is recognized as pyx
-    // and rejects username/password.
-    uv_snapshot!(context.auth_login()
-        .arg("https://astral-sh-staging-api.pyx.dev")
-        .arg("--username")
-        .arg("testuser")
-        .arg("--password")
-        .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Cannot specify a username when logging in to pyx
-    "
-    );
-
-    // When PYX_API_URL is set to staging, `pyx.dev` is still recognized as pyx
-    // (via is_default_pyx_domain) and uses the OAuth flow.
-    uv_snapshot!(context.auth_login()
-        .arg("pyx.dev")
-        .arg("--username")
-        .arg("testuser")
-        .arg("--password")
-        .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Cannot specify a username when logging in to pyx
-    "
     );
 }

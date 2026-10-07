@@ -1,6 +1,6 @@
 [package]
 name = "uv-test"
-version = "0.0.70"
+version = "0.0.90"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -38,7 +38,7 @@ uv-version = { workspace = true }
 anyhow = { workspace = true }
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 base64 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -62,4 +62,5 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
 url = { workspace = true }
+walkdir = { workspace = true }
 wiremock = { workspace = true }

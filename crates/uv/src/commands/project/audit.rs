@@ -4,20 +4,20 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::commands::ExitStatus;
-use crate::commands::diagnostics;
+use crate::commands::UvError;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
+    ScriptInterpreter,
 };
 use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use rustc_hash::FxHashSet;
 use tracing::trace;
 use uv_audit::{
@@ -28,16 +28,19 @@ use uv_cache::Cache;
 use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification,
-    ExtrasSpecificationWithDefaults, TargetTriple,
+    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, KeyringProviderType, TargetTriple,
 };
-use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_dispatch::UniversalState;
+use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
+use uv_lock::Lock;
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion,
+};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -59,6 +62,7 @@ pub(crate) async fn audit(
     settings: ResolverSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -72,6 +76,10 @@ pub(crate) async fn audit(
     ignore: Vec<VulnerabilityID>,
     ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {
+    if client_builder.is_offline() {
+        bail!("Auditing requires network access and cannot be performed in offline mode");
+    }
+
     // Check if the audit feature is in preview
     if !preview.is_enabled(PreviewFeature::AuditCommand) {
         warn_user!(
@@ -104,7 +112,7 @@ pub(crate) async fn audit(
 
     // Determine the groups to include.
     let default_groups = match target {
-        LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
+        LockTarget::Workspace(workspace) => workspace.default_groups()?,
         LockTarget::Script(_) => DefaultGroups::default(),
     };
     let groups = groups.with_defaults(default_groups);
@@ -129,18 +137,19 @@ pub(crate) async fn audit(
                 None,
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(false),
+                ActiveEnvironment::Ignore,
                 &cache,
                 printer,
             )
             .await?
             .into_interpreter(),
             LockTarget::Workspace(workspace) => {
-                let workspace_python = WorkspacePython::from_request(
+                let project_python = ProjectPythonRequest::from_request(
                     None,
                     Some(workspace),
                     &groups,
@@ -149,15 +158,15 @@ pub(crate) async fn audit(
                 )
                 .await?;
                 ProjectInterpreter::discover(
-                    workspace,
-                    &groups,
-                    workspace_python,
+                    ProjectEnvironmentTarget::from(workspace),
+                    project_python,
                     &client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
-                    false,
-                    Some(false),
+                    ProjectEnvironmentPolicy::Optional,
+                    ActiveEnvironment::Ignore,
                     &cache,
                     printer,
                 )
@@ -201,12 +210,7 @@ pub(crate) async fn audit(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     // Determine the markers to use for resolution.
@@ -223,7 +227,8 @@ pub(crate) async fn audit(
         target.install_path(),
         &extras,
         &groups,
-        &settings,
+        &settings.index_locations,
+        settings.keyring_provider,
         client_builder,
         concurrency,
         &cache,
@@ -277,7 +282,8 @@ pub(crate) async fn audit_lock(
     root: &Path,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
-    settings: &ResolverSettings,
+    index_locations: &IndexLocations,
+    keyring_provider: KeyringProviderType,
     client_builder: BaseClientBuilder<'_>,
     concurrency: Concurrency,
     cache: &Cache,
@@ -291,8 +297,7 @@ pub(crate) async fn audit_lock(
     let mut projects = auditable.projects(root)?;
 
     // Flat indexes cannot provide PEP 792 project-status metadata.
-    let flat_index_urls: FxHashSet<&IndexUrl> = settings
-        .index_locations
+    let flat_index_urls: FxHashSet<&IndexUrl> = index_locations
         .flat_indexes()
         .map(|index| &index.url)
         .collect();
@@ -305,8 +310,8 @@ pub(crate) async fn audit_lock(
         .collect();
     let base_client = client_builder.clone().build()?;
     let registry_client = RegistryClientBuilder::new(client_builder, cache.clone())
-        .index_locations(settings.index_locations.clone())
-        .keyring(settings.keyring_provider)
+        .index_locations(index_locations.clone())
+        .keyring(keyring_provider)
         .build()?;
     let capabilities = IndexCapabilities::default();
     let status_audit =

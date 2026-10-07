@@ -6,13 +6,16 @@ on:
         type: string
         default: "true"
 
-permissions: {}
+permissions:
+  contents: read
 
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
+  UV_INTERNAL__BUILD_GIT_INFO: 1
+  UV_LOCKED: 1
 
 jobs:
   build-binary-linux-libc:
@@ -32,7 +35,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -67,7 +70,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -101,6 +104,13 @@ jobs:
 
       - name: "Setup armv7"
         run: |
+          # Try the next configured mirror after the first failed download.
+          cat /etc/apt/apt-mirrors.txt
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
           sudo apt-get update
           sudo apt-get install gcc-arm-linux-gnueabihf
 
@@ -109,7 +119,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add armv7-unknown-linux-gnueabihf
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -151,7 +161,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add x86_64-unknown-linux-musl
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -183,7 +193,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -204,7 +214,7 @@ jobs:
   build-binary-macos-x86_64:
     name: "macos x86_64"
     timeout-minutes: 10
-    runs-on: macos-latest-large # github-macos-14-x86_64-12
+    runs-on: namespace-profile-macos-15
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
@@ -213,24 +223,31 @@ jobs:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install --profile minimal
+        run: |
+          rustup toolchain install --profile minimal
+          rustup target add x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target x86_64-apple-darwin --bin uv --bin uvx
+
+      - name: "Verify binary architecture"
+        run: |
+          test "$(lipo -archs target/x86_64-apple-darwin/no-debug-nightly/uv)" = x86_64
+          test "$(lipo -archs target/x86_64-apple-darwin/no-debug-nightly/uvx)" = x86_64
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
-            ./target/no-debug-nightly/uv
-            ./target/no-debug-nightly/uvx
+            ./target/x86_64-apple-darwin/no-debug-nightly/uv
+            ./target/x86_64-apple-darwin/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-windows-x86_64:
@@ -256,7 +273,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           workspaces: ${{ env.UV_WORKSPACE }}
@@ -299,7 +316,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           workspaces: ${{ env.UV_WORKSPACE }}
@@ -338,7 +355,7 @@ jobs:
           MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
         run: ./scripts/install-mold.sh
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - run: cargo +${MSRV} build --profile no-debug
@@ -385,7 +402,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add aarch64-linux-android
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -406,15 +423,17 @@ jobs:
   build-binary-freebsd:
     name: "freebsd"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Cross build"
+        env:
+          CROSS_BUILD_ENV_PASSTHROUGH: UV_INTERNAL__BUILD_GIT_INFO
         run: |
           # Install cross from `freebsd-firecracker`
           wget -q -O cross https://github.com/acj/freebsd-firecracker/releases/download/v0.0.10/cross

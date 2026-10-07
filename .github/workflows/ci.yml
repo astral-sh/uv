@@ -6,23 +6,42 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   plan:
+    # CI on main is redundant in the security repository.
+    if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
     uses: $/.github/workflows/plan.yml
 
   check-fmt:
+    needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
   review:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
-    uses: $/.github/workflows/pull-request-security-review.yml
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@45c506043c254690f2612686e5d5a72c81c251a4
+    with:
+      runner: depot-ubuntu-24.04-16
+      helper-runner: github-ubuntu-24.04-x86_64-4
+      # renovate: datasource=github-release-attachments depName=astral-sh/uv
+      uv-version: "0.12.13"
+      uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+      # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
+      # Keep the environment outside the checkout when switching to the PR head.
+      setup-command: |
+        export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-review-tools"
+        uv sync --locked --only-dev
+        echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
     secrets: inherit
     permissions:
       contents: read
@@ -60,6 +79,15 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-release.yml
+
+  check-crates-policies:
+    needs: plan
+    if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
+    uses: $/.github/workflows/check-crates-policies.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
 
   check-lock:
     needs: plan
@@ -113,6 +141,7 @@ jobs:
     uses: $/.github/workflows/test-integration.yml
     secrets: inherit
     permissions:
+      contents: read
       id-token: write
     with:
       sha: ${{ github.sha }}
@@ -135,7 +164,7 @@ jobs:
     with:
       sha: ${{ github.sha }}
 
-  build-release-binaries:
+  build-release-artifacts:
     needs: plan
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: $/.github/workflows/build-release-binaries.yml
@@ -151,6 +180,18 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
+  publish-docker:
+    needs: build-docker
+    if: ${{ needs.build-docker.outputs.publish-dev == 'true' }}
+    uses: $/.github/workflows/publish-docker.yml
+    with:
+      manifest: ${{ needs.build-docker.outputs.manifest }}
+      push-dev: true
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
       packages: write
       attestations: write
 
@@ -161,6 +202,9 @@ jobs:
     secrets: inherit
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+    permissions:
+      contents: read
+      id-token: write
 
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
   # attestations and PyPI does not support attestations in reusable workflows.
@@ -170,15 +214,13 @@ jobs:
     needs:
       - plan
       - build-dev-binaries
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     # Only the main repository is a trusted publisher
     if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && needs.plan.outputs.test-publish == 'true' }}
     environment:
       name: uv-test-publish
       deployment: false
     env:
-      # No dbus in GitHub Actions
-      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
       PYTHON_VERSION: 3.12
     permissions:
       # For trusted publishing
@@ -189,7 +231,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
@@ -247,28 +289,10 @@ jobs:
           fi
           GITLAB_PYPI_OIDC_TOKEN=$(cat "${pypi_id_token_file}")
 
-          # we expect ./gitlab-artifacts/*/artifacts/pyx-id-token to exist
-          pyx_id_token_file=$(find ./gitlab-artifacts -type f -name pyx-id-token | head -n 1)
-          if [ -z "${pyx_id_token_file}" ]; then
-            echo "No pyx-id-token file found in GitLab artifacts"
-            exit 1
-          fi
-          GITLAB_PYX_OIDC_TOKEN=$(cat "${pyx_id_token_file}")
-
           # Add secret masks for the tokens.
           echo "::add-mask::$GITLAB_PYPI_OIDC_TOKEN"
-          echo "::add-mask::$GITLAB_PYX_OIDC_TOKEN"
 
           echo "GITLAB_PYPI_OIDC_TOKEN=${GITLAB_PYPI_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
-          echo "GITLAB_PYX_OIDC_TOKEN=${GITLAB_PYX_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
-
-      - name: "Add password to keyring"
-        run: |
-          # `keyrings.alt` contains the plaintext keyring
-          ./uv tool install --with keyrings.alt keyring
-          echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
-        env:
-          UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
 
       - name: "Add password to uv text store"
         run: |
@@ -280,35 +304,49 @@ jobs:
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
         run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
         env:
-          RUST_LOG: uv=debug,uv_publish=trace
+          UV_TEST_PUBLISH_RUST_LOG: uv=debug,uv_publish=trace
           UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
           UV_TEST_PUBLISH_PASSWORD: ${{ secrets.UV_TEST_PUBLISH_PASSWORD }}
+          UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
           UV_TEST_PUBLISH_GITLAB_PAT: ${{ secrets.UV_TEST_PUBLISH_GITLAB_PAT }}
           UV_TEST_PUBLISH_CODEBERG_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CODEBERG_TOKEN }}
           UV_TEST_PUBLISH_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CLOUDSMITH_TOKEN }}
-          UV_TEST_PUBLISH_PYX_TOKEN: ${{ secrets.UV_TEST_PUBLISH_PYX_TOKEN }}
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
           UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYPI_OIDC_TOKEN }}
-          UV_TEST_PUBLISH_GITLAB_PYX_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYX_OIDC_TOKEN }}
 
   required-checks-passed:
     name: "all required jobs passed"
-    if: always()
+    if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
+      - plan
       - check-fmt
       - check-lint
       - check-docs
+      - check-crates-policies
       - check-generated-files
       - test
+      - test-system
       - build-dev-binaries
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
       - name: "Check required jobs passed"
         run: |
-          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          failing=$(
+            echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
+              to_entries[]
+              | select($conditional_jobs[.key] != false)
+              | select(.value.result != "success" and .value.result != "skipped")
+              | "\(.key): \(.value.result)"
+            '
+          )
           if [ -n "$failing" ]; then
             echo "$failing"
             exit 1
           fi
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          # Jobs not listed here are always required.
+          CONDITIONAL_JOBS: >-
+            {
+              "test-system": ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
+            }

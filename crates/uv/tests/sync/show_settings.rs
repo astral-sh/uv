@@ -1,10 +1,11 @@
 use std::process::Command;
 
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use url::Url;
 use uv_static::EnvVars;
 
-use uv_test::{capture_uv_snapshot, diff_uv_snapshot, uv_snapshot};
+use uv_test::{TestContext, capture_uv_snapshot, diff_uv_snapshot, uv_snapshot};
 
 /// Add shared arguments to a command.
 ///
@@ -25,6 +26,141 @@ fn add_shared_args(mut command: Command) -> Command {
         command.env(EnvVars::LC_ALL, "C");
     }
     command
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn show_settings_returns_before_running_commands() {
+    let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(context.filters(), add_shared_args(context.command())
+        .args(["cache", "dir", "--show-settings"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            system_certs: false,
+            custom_certificates: [CERTIFICATES],
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+            metadata_range_request: Fallback,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+            cache_reads: 2,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_arch: None,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    "#);
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.cache_size())
+        .arg("--show-settings"), @"
+    ...
+             \"[CACHE_DIR]/\",
+         ),
+     }
+    +SizeArgs {
+    +    output_format: Auto,
+    +    human: false,
+    +}
+    ...
+    ");
+
+    add_shared_args(context.pip_tree())
+        .arg("--python")
+        .arg("does-not-exist")
+        .arg("--show-settings")
+        .assert()
+        .success();
+
+    add_shared_args(context.python_find())
+        .arg("does-not-exist")
+        .arg("--show-settings")
+        .assert()
+        .success();
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.python_pin())
+        .arg("--no-project")
+        .arg("--show-settings")
+        .arg("3.12"), @r#"
+    ...
+             "[CACHE_DIR]/",
+         ),
+     }
+    +PythonPinSettings {
+    +    request: Some(
+    +        "3.12",
+    +    ),
+    +    resolved: false,
+    +    no_project: true,
+    +    global: false,
+    +    rm: false,
+    +    install_mirrors: PythonInstallMirrors {
+    +        python_install_mirror: None,
+    +        pypy_install_mirror: None,
+    +        graalpy_install_mirror: None,
+    +        python_downloads_json_url: None,
+    +    },
+    +}
+    ...
+    "#);
+
+    assert!(!context.temp_dir.child(".python-version").exists());
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.workspace_dir())
+        .arg("--show-settings"), @"
+    ...
+             \"[CACHE_DIR]/\",
+         ),
+     }
+    +WorkspaceDirArgs {
+    +    package: None,
+    +}
+    ...
+    ");
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.workspace_list())
+        .arg("--show-settings"), @"
+    ...
+             \"[CACHE_DIR]/\",
+         ),
+     }
+    +WorkspaceListArgs {
+    +    paths: false,
+    +    scripts: false,
+    +}
+    ...
+    ");
 }
 
 #[test]
@@ -57,6 +193,7 @@ fn pip_compile_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -69,6 +206,7 @@ fn pip_compile_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -82,7 +220,9 @@ fn pip_compile_baseline() {
     PipCompileSettings {
         format: None,
         src_file: [
-            "requirements.in",
+            Local(
+                "requirements.in",
+            ),
         ],
         constraints: [],
         overrides: [],
@@ -98,6 +238,7 @@ fn pip_compile_baseline() {
         required_environments: SupportedEnvironments(
             [],
         ),
+        minimum_libc_version: None,
         refresh: None(
             Timestamp(
                 SystemTime {
@@ -116,6 +257,7 @@ fn pip_compile_baseline() {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                graalpy_install_mirror: None,
                 python_downloads_json_url: None,
             },
             system: false,
@@ -261,6 +403,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -273,6 +416,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -296,7 +440,6 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         index: None,
         dry_run: false,
         no_attestations: false,
-        direct: false,
         publish_url: DisplaySafeUrl {
             scheme: "https",
             cannot_be_a_base: false,
@@ -338,6 +481,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
                         "https://check-user:****@test.pypi.org/simple/",
                     ),
                     expanded: false,
+                    force_relative: false,
                 },
             ),
         ),
@@ -372,6 +516,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
                                 "https://index-user:****@test.pypi.org/simple/",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     ),
                     explicit: false,
@@ -428,6 +573,7 @@ fn pip_install_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -440,6 +586,7 @@ fn pip_install_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -453,7 +600,9 @@ fn pip_install_baseline() {
     PipInstallSettings {
         package: [],
         requirements: [
-            "requirements.in",
+            Local(
+                "requirements.in",
+            ),
         ],
         editables: [],
         editable: None,
@@ -462,6 +611,7 @@ fn pip_install_baseline() {
         excludes: [],
         build_constraints: [],
         dry_run: Disabled,
+        output_format: Text,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         excludes_from_workspace: [],
@@ -485,6 +635,7 @@ fn pip_install_baseline() {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
+                graalpy_install_mirror: None,
                 python_downloads_json_url: None,
             },
             system: false,
@@ -615,6 +766,7 @@ fn lock_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -627,6 +779,7 @@ fn lock_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -646,6 +799,7 @@ fn lock_baseline() {
         install_mirrors: PythonInstallMirrors {
             python_install_mirror: None,
             pypy_install_mirror: None,
+            graalpy_install_mirror: None,
             python_downloads_json_url: None,
         },
         refresh: None(
@@ -741,6 +895,7 @@ fn version_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -753,6 +908,7 @@ fn version_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -771,13 +927,14 @@ fn version_baseline() {
         dry_run: false,
         lock_check: Disabled,
         frozen: None,
-        active: None,
+        active: Warn,
         no_sync: false,
         package: None,
         python: None,
         install_mirrors: PythonInstallMirrors {
             python_install_mirror: None,
             pypy_install_mirror: None,
+            graalpy_install_mirror: None,
             python_downloads_json_url: None,
         },
         refresh: None(
@@ -882,6 +1039,7 @@ fn tool_install_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -894,6 +1052,7 @@ fn tool_install_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -1023,6 +1182,7 @@ fn tool_install_baseline() {
         install_mirrors: PythonInstallMirrors {
             python_install_mirror: None,
             pypy_install_mirror: None,
+            graalpy_install_mirror: None,
             python_downloads_json_url: None,
         },
     }
@@ -1090,6 +1250,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     +                                "https://pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -1244,6 +1405,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     +                                "https://pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -1403,6 +1565,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                                "https://pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -1439,6 +1602,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                                "https://test.pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -1493,6 +1657,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     +                                "https://test.pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -1584,6 +1749,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     +                                "https://download.pytorch.org/whl/torch_stable.html",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -1706,6 +1872,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                                "https://download.pytorch.org/whl",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -1742,6 +1909,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     +                                "https://test.pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -2153,6 +2321,7 @@ fn resolve_both() -> anyhow::Result<()> {
     +                                "https://pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -2287,6 +2456,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     +                                "https://pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -2378,7 +2548,7 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
              malware_check_url: None,
          },
@@ -2415,7 +2585,7 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     +        flags: [],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
 
      ----- stderr -----
@@ -2452,12 +2622,12 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 7, column 13
-          |
-        7 | conflicts = [
-          |             ^
-        Each set of conflicts must have at least two entries, but found only one
+    error: Failed to parse: pyproject.toml
+      cause: TOML parse error at line 7, column 13
+               |
+             7 | conflicts = [
+               |             ^
+             Each set of conflicts must have at least two entries, but found only one
     "
     );
 
@@ -2476,12 +2646,12 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 7, column 13
-          |
-        7 | conflicts = [[]]
-          |             ^^^^
-        Each set of conflicts must have at least two entries, but found none
+    error: Failed to parse: pyproject.toml
+      cause: TOML parse error at line 7, column 13
+               |
+             7 | conflicts = [[]]
+               |             ^^^^
+             Each set of conflicts must have at least two entries, but found none
     "
     );
 
@@ -2502,12 +2672,12 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 7, column 13
-          |
-        7 | conflicts = [
-          |             ^
-        Each set of conflicts must have at least two entries, but found only one
+    error: Failed to parse: pyproject.toml
+      cause: TOML parse error at line 7, column 13
+               |
+             7 | conflicts = [
+               |             ^
+             Each set of conflicts must have at least two entries, but found only one
     "
     );
 
@@ -2633,6 +2803,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     +                                "https://pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -2692,12 +2863,12 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `[CACHE_DIR]/uv.toml`
-      Caused by: TOML parse error at line 1, column 2
-          |
-        1 | [project]
-          |  ^^^^^^^
-        unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    error: Failed to parse: [CACHE_DIR]/uv.toml
+      cause: TOML parse error at line 1, column 2
+               |
+             1 | [project]
+               |  ^^^^^^^
+             unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `graalpy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -2724,12 +2895,12 @@ fn resolve_config_file() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.
-    error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
-      Caused by: TOML parse error at line 9, column 3
-          |
-        9 | ""
-          |   ^
-        key with no value, expected `=`
+    error: Failed to parse: [CACHE_DIR]/pyproject.toml
+      cause: TOML parse error at line 9, column 3
+               |
+             9 | ""
+               |   ^
+             key with no value, expected `=`
     "#
     );
 
@@ -3078,6 +3249,7 @@ fn index_priority() -> anyhow::Result<()> {
     +                                "https://cli.pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -3116,6 +3288,7 @@ fn index_priority() -> anyhow::Result<()> {
     +                                "https://file.pypi.org/simple",
     +                            ),
     +                            expanded: false,
+    +                            force_relative: false,
     +                        },
     +                    ),
     +                    explicit: false,
@@ -3227,6 +3400,372 @@ fn index_priority() -> anyhow::Result<()> {
     ...
     "
     );
+
+    Ok(())
+}
+
+/// Named index arguments must resolve identically to their explicit CLI spellings.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn index_by_name() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+    // `explicit` and `default` are supported together; use both to test overriding behaviour.
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        [[index]]
+        name = "internal"
+        url = "https://example.invalid/simple"
+        explicit = true
+        default = true
+    "#})?;
+
+    let show_settings = || {
+        let mut command = add_shared_args(context.pip_compile());
+        command.arg("requirements.in").arg("--show-settings");
+        command
+    };
+
+    for argument in ["--index", "--default-index"] {
+        let named = capture_uv_snapshot!(
+            context.filters(),
+            show_settings()
+                .arg(argument)
+                .arg("internal")
+                .arg("--preview-features")
+                .arg("index-by-name")
+        );
+        let explicit = capture_uv_snapshot!(
+            context.filters(),
+            show_settings()
+                .arg(argument)
+                .arg("internal=https://example.invalid/simple")
+                .arg("--preview-features")
+                .arg("index-by-name")
+        );
+
+        // Selecting a name must match spelling out its URL with the same CLI role.
+        assert_eq!(named, explicit, "{argument}");
+    }
+
+    let commands: [fn(&TestContext) -> Command; 5] = [
+        TestContext::lock,
+        TestContext::sync,
+        TestContext::upgrade,
+        TestContext::venv,
+        TestContext::pip_list,
+    ];
+
+    for command in commands {
+        for argument in ["--index", "--default-index"] {
+            let named = capture_uv_snapshot!(
+                context.filters(),
+                add_shared_args(command(&context))
+                    .arg("--show-settings")
+                    .arg(argument)
+                    .arg("internal")
+                    .arg("--preview-features")
+                    .arg("index-by-name")
+            );
+            let explicit = capture_uv_snapshot!(
+                context.filters(),
+                add_shared_args(command(&context))
+                    .arg("--show-settings")
+                    .arg(argument)
+                    .arg("internal=https://example.invalid/simple")
+                    .arg("--preview-features")
+                    .arg("index-by-name")
+            );
+
+            assert_eq!(named, explicit, "{argument}");
+        }
+    }
+
+    let explicit = capture_uv_snapshot!(
+        context.filters(),
+        show_settings()
+            .arg("--index")
+            .arg("internal=https://example.invalid/simple")
+    );
+
+    // Without preview, configured names resolve identically but produce a preview warning.
+    diff_uv_snapshot!(context.filters(), &explicit, show_settings()
+        .arg("--index")
+        .arg("internal"), @"
+    ...
+             reinstall: None,
+         },
+     }
+    +
+    +----- stderr -----
+    +warning: Referencing an index by name is experimental and may change without warning. Pass `--preview-features index-by-name` to disable this warning.
+    ...
+    ");
+
+    // With preview, an unknown name is reported as an index rather than a missing path.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("requirements.in")
+        .arg("--index")
+        .arg("missing")
+        .arg("--preview-features")
+        .arg("index-by-name"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Could not find an index named `missing`
+    ");
+
+    Ok(())
+}
+
+/// Preview determines whether a named index or matching directory takes precedence.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn index_by_name_with_matching_path() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        [[index]]
+        name = "internal"
+        url = "https://example.invalid/simple"
+    "#})?;
+
+    let show_settings = || {
+        let mut command = add_shared_args(context.pip_compile());
+        command.arg("requirements.in").arg("--show-settings");
+        command
+    };
+    context.temp_dir.child("internal").create_dir_all()?;
+
+    let path = capture_uv_snapshot!(
+        context.filters(),
+        show_settings().arg("--index").arg("./internal")
+    );
+
+    // Without preview, an existing path takes precedence and produces a disambiguation warning.
+    diff_uv_snapshot!(context.filters(), &path, show_settings()
+        .arg("--index")
+        .arg("internal"), @"
+    ...
+                                     fragment: None,
+                                 },
+                                 given: Some(
+    -                                \"./internal\",
+    +                                \"internal\",
+                                 ),
+                                 expanded: false,
+                                 force_relative: false,
+    ...
+             reinstall: None,
+         },
+     }
+    +
+    +----- stderr -----
+    +warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./internal`). Support for ambiguous values will be removed in the future
+    ...
+    ");
+
+    let named = capture_uv_snapshot!(
+        context.filters(),
+        show_settings()
+            .arg("--index")
+            .arg("internal")
+            .arg("--preview-features")
+            .arg("index-by-name")
+    );
+    let explicit = capture_uv_snapshot!(
+        context.filters(),
+        show_settings()
+            .arg("--index")
+            .arg("internal=https://example.invalid/simple")
+            .arg("--preview-features")
+            .arg("index-by-name")
+    );
+
+    // With preview, the configured name takes precedence over the existing path.
+    assert_eq!(named, explicit);
+
+    Ok(())
+}
+
+/// User-configured named indexes retain settings that cannot be expressed on the CLI.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn index_by_name_from_user_configuration() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let user_configuration = context.user_config_dir.child("uv");
+    user_configuration.create_dir_all()?;
+    user_configuration
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        [[index]]
+        name = "internal"
+        url = "https://example.invalid/simple"
+        authenticate = "always"
+    "#})?;
+
+    let show_settings = || {
+        let mut command = add_shared_args(context.pip_compile());
+        command.arg("requirements.in").arg("--show-settings");
+        command
+    };
+
+    let index = capture_uv_snapshot!(
+        context.filters(),
+        show_settings()
+            .arg("--index")
+            .arg("internal=https://example.invalid/simple")
+            .arg("--preview-features")
+            .arg("index-by-name")
+    );
+
+    // User-configured names must preserve index settings that the CLI cannot express.
+    diff_uv_snapshot!(context.filters(), &index, show_settings()
+        .arg("--index")
+        .arg("internal")
+        .arg("--preview-features")
+        .arg("index-by-name"), @"
+    ...
+                         ),
+                         format: Simple,
+                         publish_url: None,
+    -                    authenticate: Auto,
+    +                    authenticate: Always,
+                         ignore_error_codes: None,
+                         cache_control: None,
+                         hash_algorithm: None,
+    ...
+    ");
+
+    Ok(())
+}
+
+/// Tool commands resolve configured indexes by name.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn tool_index_by_name() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let configuration = context.temp_dir.child("uv.toml");
+    // `explicit` and `default` are supported together; use both to test overriding behaviour.
+    configuration.write_str(indoc::indoc! {r#"
+        [[index]]
+        name = "internal"
+        url = "https://example.invalid/simple"
+        explicit = true
+        default = true
+    "#})?;
+
+    let tools: [fn(&TestContext) -> Command; 3] = [
+        TestContext::tool_run,
+        TestContext::tool_install,
+        TestContext::tool_upgrade,
+    ];
+
+    for tool in tools {
+        let show_settings = || {
+            let mut command = add_shared_args(tool(&context));
+            command
+                .arg("--show-settings")
+                .arg("--config-file")
+                .arg(configuration.path())
+                .arg("--preview-features")
+                .arg("index-by-name");
+            command
+        };
+
+        for argument in ["--index", "--default-index"] {
+            let named = capture_uv_snapshot!(
+                context.filters(),
+                show_settings()
+                    .arg(argument)
+                    .arg("internal")
+                    .arg("iniconfig")
+            );
+            let explicit = capture_uv_snapshot!(
+                context.filters(),
+                show_settings()
+                    .arg(argument)
+                    .arg("internal=https://example.invalid/simple")
+                    .arg("iniconfig")
+            );
+
+            assert_eq!(named, explicit, "{argument}");
+        }
+    }
+
+    Ok(())
+}
+
+/// Named relative indexes remain relative to their configuration under `--directory`.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn index_by_name_with_directory() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((
+        r#"given: Some\(\s+"file://[^"]+/configuration/configured-index",\s+\)"#,
+        "given: None",
+    ));
+    let configuration_directory = context.temp_dir.child("configuration");
+    configuration_directory.create_dir_all()?;
+    let configuration_file = configuration_directory.child("uv.toml");
+    configuration_file.write_str(indoc::indoc! {r#"
+        [[index]]
+        name = "internal"
+        url = "./configured-index"
+    "#})?;
+
+    let project_directory = context.temp_dir.child("project");
+    project_directory.create_dir_all()?;
+
+    let show_settings = || {
+        let mut command = add_shared_args(context.pip_compile());
+        command
+            .arg("requirements.in")
+            .arg("--show-settings")
+            .arg("--config-file")
+            .arg(configuration_file.path())
+            .arg("--directory")
+            .arg("project")
+            .arg("--preview-features")
+            .arg("index-by-name");
+        command
+    };
+
+    let configured_index = configuration_directory.child("configured-index");
+    let configured_index = Url::from_file_path(configured_index.path()).map_err(|()| {
+        anyhow::anyhow!("Failed to convert the configured index path to a file URL")
+    })?;
+    let configured_index = format!("internal={configured_index}");
+
+    for argument in ["--index", "--default-index"] {
+        let named = capture_uv_snapshot!(
+            context.filters(),
+            show_settings().arg(argument).arg("internal")
+        );
+        let explicit = capture_uv_snapshot!(
+            context.filters(),
+            show_settings().arg(argument).arg(&configured_index)
+        );
+
+        // Resolving the configured name must preserve its original configuration directory.
+        assert_eq!(named, explicit, "{argument}");
+    }
 
     Ok(())
 }
@@ -3393,7 +3932,6 @@ fn preview_features() {
     +            WorkspaceList,
     +            SbomExport,
     +            AuthHelper,
-    +            DirectPublish,
     +            TargetWorkspaceDiscovery,
     +            MetadataJson,
     +            GcsEndpoint,
@@ -3416,12 +3954,23 @@ fn preview_features() {
     +            NoDistutilsPatch,
     +            IndexHashAlgorithm,
     +            LockfileFormatCheck,
+    +            LockfileNormalization,
     +            LockWithoutMetadata,
     +            TarCodec,
+    +            IndexByName,
+    +            ArtifactHashFiltering,
+    +            ContentAddressedCache,
+    +            MissingExcludeNewerPackageLock,
+    +            ResolutionInputs,
+    +            BatchExport,
+    +            FrozenLockfile,
+    +            MinimumLibcVersion,
+    +            BuildDependencyCheck,
+    +            BuildLazyImports,
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -3449,7 +3998,7 @@ fn preview_features() {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -3621,7 +4170,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -3697,7 +4246,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -3867,7 +4416,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -3914,8 +4463,8 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`
-      Caused by: cannot specify both `preview` and `preview-features`
+    error: Failed to parse: uv.toml
+      cause: cannot specify both `preview` and `preview-features`
     ");
 
     config.write_str(r#"preview-features = ["unknown-preview-feature"]"#)?;
@@ -3944,12 +4493,12 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`
-      Caused by: TOML parse error at line 1, column 20
-          |
-        1 | preview-features = ["  "]
-          |                    ^^^^^^
-        preview feature name cannot be empty
+    error: Failed to parse: uv.toml
+      cause: TOML parse error at line 1, column 20
+               |
+             1 | preview-features = ["  "]
+               |                    ^^^^^^
+             preview feature name cannot be empty
     "#);
 
     config.write_str("preview-features = 123")?;
@@ -3958,12 +4507,12 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`
-      Caused by: TOML parse error at line 1, column 20
-          |
-        1 | preview-features = 123
-          |                    ^^^
-        invalid type: integer `123`, expected a boolean or a list of preview feature names
+    error: Failed to parse: uv.toml
+      cause: TOML parse error at line 1, column 20
+               |
+             1 | preview-features = 123
+               |                    ^^^
+             invalid type: integer `123`, expected a boolean or a list of preview feature names
     ");
 
     Ok(())
@@ -4007,7 +4556,7 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4139,7 +4688,7 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Never,
+         python_arch: None,
     ...
     "
     );
@@ -4324,6 +4873,31 @@ fn system_certs_cli_aliases_override_env() {
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
+fn system_certs_env_overrides_native_tls() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let mut command = add_shared_args(context.version());
+    command
+        .arg("--show-settings")
+        .env(EnvVars::UV_SYSTEM_CERTS, "0")
+        .env_remove(EnvVars::UV_NATIVE_TLS);
+    let baseline = capture_uv_snapshot!(context.filters(), &mut command);
+
+    for native_tls in ["1", "invalid"] {
+        assert_eq!(
+            baseline,
+            capture_uv_snapshot!(
+                context.filters(),
+                command.env(EnvVars::UV_NATIVE_TLS, native_tls)
+            )
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
 fn system_certs_config_aliases() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -4356,16 +4930,7 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     "})?;
 
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
-        .arg("--show-settings"), @"
-    ...
-             malware_check_url: None,
-         },
-     }
-    +
-    +----- stderr -----
-    +warning: The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead.
-    ...
-    "
+        .arg("--show-settings"), @""
     );
 
     Ok(())

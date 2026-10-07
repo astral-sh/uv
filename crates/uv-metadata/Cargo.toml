@@ -1,6 +1,6 @@
 [package]
 name = "uv-metadata"
-version = "0.0.70"
+version = "0.0.90"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -17,7 +17,7 @@ uv-distribution-filename = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
 
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 fs-err = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }

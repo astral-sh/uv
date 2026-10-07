@@ -45,8 +45,8 @@ pub(crate) fn cache_size(
     let total_bytes = disk_usage.count_ignoring_errors();
 
     if human_readable {
-        let (bytes, unit) = human_readable_bytes(total_bytes);
-        writeln!(printer.stdout_important(), "{bytes:.1}{unit}")?;
+        let bytes = human_readable_bytes(total_bytes);
+        writeln!(printer.stdout_important(), "{bytes:.1}")?;
     } else {
         writeln!(printer.stdout_important(), "{total_bytes}")?;
     }

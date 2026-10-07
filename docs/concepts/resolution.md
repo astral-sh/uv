@@ -216,6 +216,60 @@ required-environments = [
 ]
 ```
 
+To require a macOS release, use its
+[Darwin kernel version](<https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards>)
+in `platform_release`. For example, macOS 15 uses Darwin 24:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release == '24.0.0'"
+]
+```
+
+Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be satisfied by a wheel
+that only supports a newer release. Wheels targeting newer releases are still retained in the
+lockfile.
+
+### Minimum libc version
+
+!!! note
+
+    `minimum-libc-version` is in preview. Use `--preview-features minimum-libc-version` or
+    `preview-features = ["minimum-libc-version"]` to disable the warning.
+
+Environment markers do not include the libc implementation or version. The `minimum-libc-version`
+setting specifies the oldest libc versions that must be supported in `required-environments`.
+
+For example, to require support for glibc 2.31 on x86-64 and ARM64 Linux:
+
+```toml title="pyproject.toml"
+[tool.uv]
+preview-features = ["minimum-libc-version"]
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
+minimum-libc-version = { glibc = "2.31" }
+```
+
+With this configuration, a `manylinux_2_17` wheel satisfies the glibc requirement, but a
+`manylinux_2_34` wheel does not. Both are retained in the lockfile and exported hashes, so machines
+with newer glibc versions can install the newer wheel. Musl wheels are also retained, but do not
+satisfy the glibc requirement. Omitting a libc implementation means it is not required, not
+excluded.
+
+To require both glibc and musl support, set a version for each:
+
+```toml
+minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+```
+
+Each configured libc version needs coverage in `required-environments`. If a required environment
+has no compatible wheel or usable source distribution, uv will try another version of the package.
+Generic Linux wheels, such as `linux_x86_64`, do not constrain libc and can satisfy either
+implementation.
+
 ## Common marker values
 
 The `environments` and `required-environments` settings accept
@@ -778,7 +832,7 @@ as if they do not exist.
 
 This option is also supported in the `pyproject.toml`, e.g.:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer = "2006-12-02T02:07:43Z"
 ```
@@ -792,7 +846,7 @@ When specified in persistent configuration, local date times are not allowed.
 Values may also be specified for specific packages, e.g.,
 `--exclude-newer-package setuptools=2006-12-02`, or:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
 ```
@@ -800,7 +854,7 @@ exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
 The package option also accepts `<package>=false` to opt a package out of the restriction, e.g.,
 `--exclude-newer-package setuptools=false`, or:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer-package = { setuptools = false }
 ```
@@ -812,7 +866,7 @@ Package-specific values will take precedence over both global and index-specific
 
 Likewise, an individual index can override the global cutoff:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer = "2006-12-02T02:07:43Z"
 
@@ -824,7 +878,7 @@ exclude-newer = "7 days"
 
 Or disable it entirely for that index:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [[tool.uv.index]]
 name = "internal"
 url = "https://internal.example.com/simple"
@@ -860,7 +914,7 @@ performed, e.g., when `--upgrade` or `--refresh` is used.
 
 This option is also supported in the `pyproject.toml`, e.g.:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer = "1 week"
 ```
@@ -868,7 +922,7 @@ exclude-newer = "1 week"
 Values may also be specified for specific packages, e.g.,
 `--exclude-newer-package "setuptools=30 days"`, or:
 
-```pyproject.toml
+```toml title="pyproject.toml"
 [tool.uv]
 exclude-newer = "1 week"
 exclude-newer-package = { setuptools = "30 days" }

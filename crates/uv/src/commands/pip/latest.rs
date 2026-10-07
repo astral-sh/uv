@@ -51,7 +51,7 @@ impl LatestClient<'_> {
                 }
                 None => {
                     warn_user_once!(
-                        "{} is missing an upload date, but user provided: {}",
+                        "`{}` is missing an upload date, but user provided: {}",
                         file.filename,
                         exclude_newer
                     );

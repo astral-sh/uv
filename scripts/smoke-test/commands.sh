@@ -9,14 +9,14 @@ uv python pin 3.13
 
 # Create a virtual environment and install a package with `uv pip`
 uv venv -v
-uv pip install ruff -v
+uv pip install ruff==0.16.2 -v
 
 # Install a package with extension modules, e.g., `numpy` and make sure it's importable
-uv pip install numpy -v
+uv pip install numpy==2.3.2 -v
 uv run --no-project python -c "import numpy; print(numpy.__version__)"
 
 # Show the `uvx` version
 uvx --version
 
 # Run a package via `uvx`
-uvx -v ruff --version
+uvx -v ruff@0.16.2 --version

@@ -11,6 +11,9 @@ Example usage:
 #     "httpx",
 #     "tqdm",
 # ]
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ VERSIONS_FILE = REPO_ROOT / "crates" / "uv-python" / "download-metadata.json"
 PREFIXES = [
     "https://github.com/astral-sh/python-build-standalone/releases/download/",
     "https://downloads.python.org/pypy/",
+    "https://github.com/oracle/graalpython/releases/download/",
 ]
 
 
