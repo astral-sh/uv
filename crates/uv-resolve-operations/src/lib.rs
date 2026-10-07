@@ -318,8 +318,7 @@ pub async fn resolve(
             .into_iter()
             .chain(overrides.into_iter().map(Override::Requirement))
             .collect(),
-    )
-    .map_err(anyhow::Error::from)?;
+    )?;
     let excludes = Excludes::from_entries(excludes);
     let modifiers = DependencyModifiers::new(overrides, excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
