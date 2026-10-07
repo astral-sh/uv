@@ -293,21 +293,20 @@ establish overall runtime equivalence.
 
 [Windows line-table PGO build, verification, and timings](https://github.com/astral-sh/uv/actions/runs/37352288394)
 
-### Linux and macOS PGO with line tables
+### Linux and macOS PGO debug-level comparison
 
-Full uv comparisons with `line-tables-only` completed on the same runner profiles as the earlier
-`full` experiments, with the same Rust toolchain, dependencies, optimization settings, and training
-corpus. The uv source was unchanged; the intervening commits updated the experiment tooling and
-documentation. Each run built a fresh no-debug baseline and trained independent PGO profiles.
+Full uv comparisons with `full`, `limited`, and `line-tables-only` used the same runner profiles, uv
+source, Rust toolchain, dependencies, optimization settings, and training corpus. Each run built a
+fresh no-debug baseline and trained independent PGO profiles.
 
 Combined instrumented build, training, and final build times were, using the no-debug baseline from
-each line-table run:
+each line-table run in this table. The limited runs' baselines are recorded separately below:
 
-| Native target             | No debug | Full debug info | Line tables | Reduction vs. full |
-| ------------------------- | -------: | --------------: | ----------: | -----------------: |
-| x86_64-unknown-linux-gnu  |  17m 24s |         26m 38s |     19m 19s |              27.5% |
-| aarch64-unknown-linux-gnu |  23m 57s |         32m 38s |      26m 6s |              20.0% |
-| aarch64-apple-darwin      |   15m 1s |         50m 31s |     16m 39s |              67.0% |
+| Native target             | No debug | Line tables | Limited | Full debug info |
+| ------------------------- | -------: | ----------: | ------: | --------------: |
+| x86_64-unknown-linux-gnu  |  17m 24s |     19m 19s | 23m 26s |         26m 38s |
+| aarch64-unknown-linux-gnu |  23m 57s |      26m 6s |  25m 8s |         32m 38s |
+| aarch64-apple-darwin      |   15m 1s |     16m 39s | 16m 46s |         50m 31s |
 
 The fresh baselines help account for differences between runners and runs:
 
@@ -323,25 +322,25 @@ or timings of the production release workflow. They exclude runner queueing, set
 processing, verification, and artifact upload. The Linux runs do not use manylinux containers, and
 production signing is not exercised.
 
-The uncompressed `uv` companions were also substantially smaller. No-debug builds do not produce
-separate symbol companions:
+Uncompressed `uv` companion sizes are recorded below. No-debug builds do not produce separate symbol
+companions:
 
-| Native target             | No-debug symbol bytes | Full symbol bytes | Line-table symbol bytes | Size reduction vs. full |
-| ------------------------- | --------------------: | ----------------: | ----------------------: | ----------------------: |
-| x86_64-unknown-linux-gnu  |                     0 |       681,367,000 |             197,367,616 |                   71.0% |
-| aarch64-unknown-linux-gnu |                     0 |       700,826,864 |             210,404,032 |                   70.0% |
-| aarch64-apple-darwin      |                     0 |       696,890,788 |             225,785,082 |                   67.6% |
+| Native target             | No-debug symbol bytes | Line-table symbol bytes | Limited symbol bytes | Full symbol bytes |
+| ------------------------- | --------------------: | ----------------------: | -------------------: | ----------------: |
+| x86_64-unknown-linux-gnu  |                     0 |             197,367,616 |          292,576,848 |       681,367,000 |
+| aarch64-unknown-linux-gnu |                     0 |             210,404,032 |          305,129,584 |       700,826,864 |
+| aarch64-apple-darwin      |                     0 |             225,785,082 |          337,300,065 |       696,890,788 |
 
-Each target passed Rust entry-point, AWS-LC, and jitterentropy source lookups; removing the
-companion symbols prevented those lookups. Embedded SBOM validation, wheel installation with exact
-executable hashes, smoke checks, and macOS ad hoc signature verification passed. Relative to their
-fresh baselines, `uv` changed by -14,328 bytes on Linux x86-64, -11,856 bytes on Linux ARM64, and
-+36,400 bytes on macOS. Wheel size changes were -13,299, -30,649, and +9,450 bytes respectively.
+Each line-table target passed Rust entry-point, AWS-LC, and jitterentropy source lookups; removing
+the companion symbols prevented those lookups. Embedded SBOM validation, wheel installation with
+exact executable hashes, smoke checks, and macOS ad hoc signature verification passed. Relative to
+their fresh baselines, `uv` changed by -14,328 bytes on Linux x86-64, -11,856 bytes on Linux ARM64,
+and +36,400 bytes on macOS. Wheel size changes were -13,299, -30,649, and +9,450 bytes respectively.
 
-Neither debug setting reported PGO profile mismatches. The Linux configurations each reported 18
-missing-profile warnings. macOS reported 5,888 for the no-debug baseline and 5,883 for line tables;
-the earlier full-debug build reported 6,000. These warnings still require the coverage caveats
-described above.
+Neither the full nor line-table setting reported PGO profile mismatches. The Linux configurations
+each reported 18 missing-profile warnings. macOS reported 5,888 for the no-debug baseline and 5,883
+for line tables; the earlier full-debug build reported 6,000. These warnings still require the
+coverage caveats described above.
 
 Cached Jupyter and Trio resolutions were identical between each baseline and line-table binary. All
 six median timing differences were below 0.14 ms; these limited workloads do not establish overall
@@ -356,3 +355,78 @@ Completed uv jobs:
 The Linux x86-64 workflow is marked failed because an auxiliary macOS fixture job never acquired a
 GitHub-hosted runner and was canceled. Its full uv job passed; the macOS full uv experiment passed
 in its separate run.
+
+### Limited PGO on all native targets
+
+All four `limited` comparisons passed at commit `b00c5d1791ca87f9fba676dfb01b9e2aa8b06c50`, using
+Rust 1.99.0, LLVM 23.1.1, and Maturin 1.15.0. Debug information was set to `limited` for both the
+instrumented and final symbols builds. Each baseline used `none`. Runner profiles, Cargo job limits,
+fat LTO, and the PGO training corpus matched the line-table comparisons.
+
+Combined instrumented build, training, and final build times, with each limited run's baseline:
+
+| Native target             | No debug | Limited | Limited overhead | Line-table overhead in its own run |
+| ------------------------- | -------: | ------: | ---------------: | ---------------------------------: |
+| x86_64-unknown-linux-gnu  |   21m 6s | 23m 26s |            11.1% |                              11.0% |
+| aarch64-unknown-linux-gnu |   23m 6s |  25m 8s |             8.8% |                               9.0% |
+| aarch64-apple-darwin      |  14m 56s | 16m 46s |            12.2% |                              10.8% |
+| x86_64-pc-windows-msvc    |   30m 3s | 40m 30s |            34.8% |                               8.8% |
+
+The Linux x86-64 no-debug baseline took 21.3% longer than in the line-table run; its limited build
+also took 21.4% longer than the line-table build. The paired overheads were nearly identical, so the
+raw timing difference does not establish an added cost from `limited`. Linux ARM64's baseline and
+symbols timings both decreased by roughly 3.5–3.7%. macOS baselines were within 0.6%.
+
+Windows completed on `namespace-profile-windows-2022-x86-64-16x32` with four Cargo jobs. The limited
+instrumented build and training took 30m 1s, and the final build took 10m 29s. Its combined symbols
+time was 22.0% longer than the line-table run despite a 1.5% shorter no-debug baseline. This
+warrants repeat measurement before attributing the whole difference to the debug level. Full-debug
+PGO previously exhausted memory on this runner profile; there is no completed full-debug PGO timing
+or PDB size for comparison. Peak memory was not measured.
+
+Limited `uv` symbols were 48.2%, 45.0%, and 49.4% larger than line tables on Linux x86-64, Linux
+ARM64, and macOS respectively. On Windows, `uv.pdb` was 150,351,872 bytes versus 150,409,216 bytes
+with line tables, a difference of only 0.04%. The limited `uvx.pdb` and `uvw.pdb` were each
+4,509,696 bytes. All sizes are uncompressed; symbol size alone does not establish which additional
+debugger capabilities are available.
+
+All targets passed Rust entry-point, AWS-LC, and jitterentropy source lookups and the negative
+checks with companions hidden. Embedded SBOM checks, wheel installation with exact executable
+hashes, smoke checks, macOS ad hoc signing, and Windows static CRT checks passed. Downloaded
+executable hashes and companion sizes also matched the reports. The checks establish source lookup
+coverage; they do not test variable inspection or a representative crash dump.
+
+Limited builds changed the shipped executable and processed wheel sizes relative to their paired
+no-debug builds by:
+
+| Native target             | `uv` executable delta bytes | Wheel delta bytes |
+| ------------------------- | --------------------------: | ----------------: |
+| x86_64-unknown-linux-gnu  |                      +6,408 |              +567 |
+| aarch64-unknown-linux-gnu |                     -21,328 |           -54,837 |
+| aarch64-apple-darwin      |                     +52,896 |           +12,661 |
+| x86_64-pc-windows-msvc    |                      +5,632 |            +2,159 |
+
+Separate PGO training and debug settings can affect code generation; these small differences do not
+guarantee identical release sizes. Every mode reported zero PGO profile mismatches. Missing profile
+counts matched the line-table comparisons: 18 for each Linux build, 19 for each Windows build, and
+5,888/5,883 for macOS baseline/limited. The macOS coverage caveat above still applies.
+
+Cached resolver outputs matched in every comparison. Median baseline/limited times in milliseconds
+were:
+
+| Native target             | Jupyter baseline | Jupyter limited | Trio baseline | Trio limited |
+| ------------------------- | ---------------: | --------------: | ------------: | -----------: |
+| x86_64-unknown-linux-gnu  |           12.615 |          12.608 |        10.425 |       10.262 |
+| aarch64-unknown-linux-gnu |           10.685 |          10.610 |         8.227 |        8.299 |
+| aarch64-apple-darwin      |           11.221 |          11.334 |         9.258 |        9.294 |
+| x86_64-pc-windows-msvc    |           32.777 |          32.379 |        22.111 |       21.527 |
+
+All median differences were below 0.6 ms. These short workloads and single build observations do not
+establish overall runtime equivalence or precise production CI costs.
+
+Completed limited uv jobs:
+
+- [Linux x86-64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430069)
+- [Linux ARM64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430665)
+- [macOS ARM64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430285)
+- [Windows x86-64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430170)
