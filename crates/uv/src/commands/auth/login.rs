@@ -4,12 +4,10 @@ use anyhow::{Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 use uv_auth::{AuthBackend, Credentials, Service, TextCredentialStore};
+use uv_command_support::{ExitStatus, Printer};
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
-
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 /// Login to a service.
 pub(crate) async fn login(

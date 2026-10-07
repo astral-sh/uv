@@ -1,6 +1,6 @@
-use crate::commands::UvError;
 use crate::commands::operations::resolution as resolve_operations;
 use crate::commands::project::EnvironmentError;
+use uv_command_support::UvError;
 
 /// A failure while finding or creating an environment for a tool invocation.
 #[derive(Debug, thiserror::Error)]

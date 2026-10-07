@@ -1,9 +1,9 @@
 use owo_colors::OwoColorize;
 
+use uv_command_support::UvError;
+use uv_distribution::dist_hints;
 use uv_distribution_types::Name;
 
-use crate::commands::UvError;
-use crate::commands::diagnostics::dist_hints;
 use crate::commands::operations::installation::Changelog;
 
 /// An error while preparing or installing distributions.

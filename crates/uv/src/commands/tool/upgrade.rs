@@ -9,6 +9,7 @@ use tracing::{debug, trace};
 use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer, conjunction};
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_dispatch::PlatformState;
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -38,9 +39,8 @@ use crate::commands::project::{
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::tool::common::finalize_tool_install;
 use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
-use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
-use crate::printer::Printer;
 use uv_configuration::Modifications;
 use uv_settings::ResolverInstallerSettings;
 

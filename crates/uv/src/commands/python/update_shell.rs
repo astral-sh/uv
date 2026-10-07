@@ -1,9 +1,7 @@
 use anyhow::Result;
 
+use uv_command_support::{ExitStatus, Printer, update_shell};
 use uv_python::managed::python_executable_dir;
-
-use crate::commands::{ExitStatus, update_shell};
-use crate::printer::Printer;
 
 /// Ensure that the Python executable directory is in PATH.
 pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {

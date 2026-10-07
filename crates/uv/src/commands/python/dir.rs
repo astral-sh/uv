@@ -3,10 +3,9 @@ use std::fmt::Write;
 use anyhow::Context;
 use owo_colors::OwoColorize;
 
+use uv_command_support::Printer;
 use uv_fs::Simplified;
 use uv_python::managed::{ManagedPythonInstallations, python_executable_dir};
-
-use crate::printer::Printer;
 
 /// Show the Python installation directory.
 pub(crate) fn dir(bin: bool, printer: Printer) -> anyhow::Result<()> {

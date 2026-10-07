@@ -2,14 +2,12 @@ use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
+use uv_command_support::{Printer, progress::ProgressReporter};
 use uv_distribution_types::BuildableSource;
 use uv_distribution_types::VersionOrUrlRef;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
-
-use crate::commands::reporters::ProgressReporter;
-use crate::printer::Printer;
 
 #[derive(Debug)]
 pub(crate) struct ResolverReporter {

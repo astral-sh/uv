@@ -6,13 +6,11 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_command_support::{Printer, elapsed};
 use uv_configuration::Concurrency;
 use uv_fs::{CWD, Simplified};
 use uv_installer::{compile_files, compile_tree};
 use uv_python::PythonEnvironment;
-
-use crate::commands::elapsed;
-use crate::printer::Printer;
 
 /// Compile all Python source files in site-packages to bytecode, to speed up the
 /// initial run of any subsequent executions.

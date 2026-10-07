@@ -4,6 +4,7 @@ use std::path::Path;
 
 use owo_colors::OwoColorize;
 use uv_cache::Refresh;
+use uv_command_support::Printer;
 use uv_configuration::{Constraints, ExcludeDependency, Override, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -19,7 +20,6 @@ use uv_warnings::warn_user;
 use uv_workspace::{Editability, WorkspaceMember};
 
 use crate::commands::project::LockValidationError;
-use crate::printer::Printer;
 
 // Lock diagnostics use a stable target for command-specific `RUST_LOG` filters.
 macro_rules! debug {

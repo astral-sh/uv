@@ -10,14 +10,11 @@ use tracing::debug;
 use uv_fs::Simplified;
 use uv_shell::{ConfigurationUpdate, Shell, update_configuration_file};
 
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use crate::ExitStatus;
+use crate::Printer;
 
 /// Ensure that an executable directory is in PATH.
-pub(super) async fn update_shell(
-    executable_directory: &Path,
-    printer: Printer,
-) -> Result<ExitStatus> {
+pub async fn update_shell(executable_directory: &Path, printer: Printer) -> Result<ExitStatus> {
     debug!(
         "Ensuring that the executable directory is in PATH: {}",
         executable_directory.simplified_display()

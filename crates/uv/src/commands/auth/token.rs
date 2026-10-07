@@ -2,10 +2,8 @@ use std::fmt::Write;
 
 use anyhow::{Result, bail};
 use uv_auth::{AuthBackend, Credentials, Service};
+use uv_command_support::{ExitStatus, Printer};
 use uv_preview::Preview;
-
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
 
 /// Show the token that will be used for a service.
 pub(crate) async fn token(

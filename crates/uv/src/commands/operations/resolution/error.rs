@@ -1,8 +1,7 @@
+use uv_command_support::UvError;
+use uv_distribution::dist_hints;
 use uv_distribution_types::{DerivationChain, Name};
 use uv_resolver::{NoSolutionError, NoSolutionHeader, ResolveError};
-
-use crate::commands::UvError;
-use crate::commands::diagnostics::dist_hints;
 
 /// An error while reading requirements or resolving dependencies.
 #[derive(thiserror::Error, Debug)]

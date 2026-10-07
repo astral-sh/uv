@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
+use uv_command_support::{ExitStatus, Printer, Stdout, UvError};
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_dispatch::UniversalState;
 use uv_lock::{Lock, Metadata, Package};
@@ -27,8 +28,6 @@ use crate::commands::project::{
     ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment,
     ScriptInterpreter,
 };
-use crate::commands::{ExitStatus, UvError};
-use crate::printer::{Printer, Stdout};
 use uv_configuration::Modifications;
 use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 

@@ -4,10 +4,10 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use crate::commands::UvError;
 use crate::commands::operations::resolution::Error as ResolveError;
 use crate::commands::project::PythonContextError;
 use uv_client::{ClientBuildError, FlatIndexError};
+use uv_command_support::UvError;
 use uv_distribution::{LoweringError, MetadataError};
 use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError};
 use uv_errors::{Hinted, Hints};

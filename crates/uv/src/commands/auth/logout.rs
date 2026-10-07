@@ -4,11 +4,10 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
 use uv_auth::{AuthBackend, Credentials, Service, TextCredentialStore, Username};
+use uv_command_support::{ExitStatus, Printer};
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
-
-use crate::{commands::ExitStatus, printer::Printer};
 
 /// Logout from a service.
 ///

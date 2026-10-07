@@ -12,6 +12,7 @@ use serde::Deserialize;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
     ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
@@ -41,8 +42,6 @@ use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
     ScriptInterpreter, detect_conflicts,
 };
-use crate::commands::{ExitStatus, OutputWriter, UvError};
-use crate::printer::Printer;
 use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]

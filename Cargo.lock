@@ -5787,7 +5787,6 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_fs",
- "astral-version-ranges",
  "astral_async_zip",
  "axoupdater",
  "backon",
@@ -5797,7 +5796,6 @@ dependencies = [
  "console",
  "ctrlc",
  "diskus",
- "dotenvy",
  "dunce",
  "embed-manifest",
  "etcetera",
@@ -5816,7 +5814,6 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "jiff",
- "nix 0.31.3",
  "owo-colors",
  "petgraph",
  "predicates",
@@ -5854,6 +5851,7 @@ dependencies = [
  "uv-cache-key",
  "uv-cli",
  "uv-client",
+ "uv-command-support",
  "uv-configuration",
  "uv-console",
  "uv-dispatch",
@@ -6316,6 +6314,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-command-support"
+version = "0.0.90"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "dotenvy",
+ "fs-err",
+ "indicatif",
+ "nix 0.31.3",
+ "owo-colors",
+ "rustc-hash",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uv-console",
+ "uv-fs",
+ "uv-redacted",
+ "uv-shell",
+ "uv-static",
+ "uv-warnings",
+]
+
+[[package]]
 name = "uv-configuration"
 version = "0.0.90"
 dependencies = [
@@ -6472,6 +6493,7 @@ version = "0.0.90"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
+ "astral-version-ranges",
  "either",
  "fs-err",
  "futures",
@@ -6484,6 +6506,7 @@ dependencies = [
  "rmp-serde",
  "rustc-hash",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",

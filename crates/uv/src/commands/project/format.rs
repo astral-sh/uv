@@ -9,14 +9,13 @@ use tracing::debug;
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_command_support::child::run_to_completion;
+use uv_command_support::{ExitStatus, Printer};
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::child::run_to_completion;
-use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
-use crate::printer::Printer;
 
 /// Run the formatter.
 #[expect(clippy::fn_params_excessive_bools)]

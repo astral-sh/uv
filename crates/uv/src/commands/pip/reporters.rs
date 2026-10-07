@@ -5,12 +5,11 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_command_support::Printer;
 use uv_fs::Simplified;
 use uv_python::PythonEnvironment;
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_tool::InstalledTools;
-
-use crate::printer::Printer;
 
 /// Display a message about the target environment for the operation.
 pub(crate) fn report_target_environment(

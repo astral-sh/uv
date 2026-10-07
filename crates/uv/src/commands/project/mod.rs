@@ -11,6 +11,7 @@ use uv_audit::{Dependency, VulnerabilityID};
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{Printer, conjunction};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
     ExtrasSpecification, GitLfsSetting, HashCheckingMode, Reinstall, TargetTriple, Upgrade,
@@ -68,8 +69,7 @@ pub(crate) use crate::commands::project::python::{
     ProjectPythonRequest, PythonRequestSource, PythonRequirementConflicts, find_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{capitalize, conjunction, operations};
-use crate::printer::Printer;
+use crate::commands::{capitalize, operations};
 use uv_configuration::Modifications;
 use uv_settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
 

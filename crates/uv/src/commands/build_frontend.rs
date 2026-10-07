@@ -15,6 +15,7 @@ use uv_build_backend::check_direct_build;
 use uv_build_frontend::SourceBuild;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
     DependencyGroupsWithDefaults, DependencyMode, DependencyModifiers, HashCheckingMode,
@@ -49,11 +50,9 @@ use uv_warnings::warn_user;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
-use crate::commands::ExitStatus;
 use crate::commands::operations;
 use crate::commands::project::{PythonContextError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::printer::Printer;
 use uv_settings::ResolverSettings;
 
 #[derive(Debug, Error)]
