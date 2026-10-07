@@ -12,7 +12,6 @@ use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -1895,9 +1894,9 @@ impl PythonVariant {
     }
 }
 impl PythonRequest {
-    /// Create a request from a `Requires-Python` constraint.
-    pub fn from_requires_python(requires_python: &RequiresPython) -> Option<Self> {
-        let specifiers = requires_python.specifiers().clone();
+    /// Create a request from Python version specifiers.
+    pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Option<Self> {
+        let specifiers = specifiers.clone();
         if specifiers.is_empty() {
             return None;
         }
@@ -1916,6 +1915,11 @@ impl PythonRequest {
     /// This is intended for parsing the argument to the `--python` flag. See also
     /// [`try_from_tool_name`][Self::try_from_tool_name] below.
     pub fn parse(value: &str) -> Self {
+        Self::parse_with_working_directory(value, Path::new(""))
+    }
+
+    /// Parse a request, resolving relative paths against `working_directory`.
+    pub(crate) fn parse_with_working_directory(value: &str, working_directory: &Path) -> Self {
         let lowercase_value = &value.to_ascii_lowercase();
 
         // Literals, e.g. `any` or `default`
@@ -1941,7 +1945,7 @@ impl PythonRequest {
             return request;
         }
 
-        let value_as_path = PathBuf::from(value);
+        let value_as_path = working_directory.join(value);
         // e.g. /path/to/.venv
         if value_as_path.is_dir() {
             return Self::Directory(value_as_path);
@@ -1960,22 +1964,6 @@ impl PythonRequest {
             }
         }
 
-        // During unit testing, we cannot change the working directory used by std
-        // so we perform a check relative to the mock working directory. Ideally we'd
-        // remove this code and use tests at the CLI level so we can change the real
-        // directory.
-        #[cfg(test)]
-        if value_as_path.is_relative() {
-            if let Ok(current_dir) = crate::current_dir() {
-                let relative = current_dir.join(&value_as_path);
-                if relative.is_dir() {
-                    return Self::Directory(relative);
-                }
-                if relative.is_file() {
-                    return Self::File(relative);
-                }
-            }
-        }
         // e.g. .\path\to\python3.exe or ./path/to/python3
         // If it contains a path separator, we'll treat it as a full path even if it does not exist
         if value.contains(std::path::MAIN_SEPARATOR) {
@@ -2273,14 +2261,13 @@ impl PythonRequest {
     /// Requests without version constraints (e.g., paths, executable names) are always considered
     /// compatible. For versioned requests, compatibility means the request's version range has a
     /// non-empty intersection with the `requires-python` range.
-    pub fn intersects_requires_python(&self, requires_python: &RequiresPython) -> bool {
+    pub fn intersects_specifiers(&self, requires_python: &VersionSpecifiers) -> bool {
         let Some(specifiers) = self.as_version_specifiers() else {
             return true;
         };
 
         let request_range = release_specifiers_to_ranges(specifiers);
-        let requires_python_range =
-            release_specifiers_to_ranges(requires_python.specifiers().clone());
+        let requires_python_range = release_specifiers_to_ranges(requires_python.clone());
         !request_range
             .intersection(&requires_python_range)
             .is_empty()
@@ -3589,7 +3576,6 @@ mod tests {
     use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
     use uv_cache::Cache;
-    use uv_distribution_types::RequiresPython;
     use uv_pep440::{Prerelease, PrereleaseKind, Version, VersionSpecifiers};
 
     use crate::{
@@ -4532,60 +4518,53 @@ mod tests {
     }
 
     #[test]
-    fn intersects_requires_python_exact() {
-        let requires_python =
-            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
+    fn intersects_specifiers_exact() {
+        let requires_python = VersionSpecifiers::from_str(">=3.12").unwrap();
 
-        assert!(PythonRequest::parse("3.12").intersects_requires_python(&requires_python));
-        assert!(!PythonRequest::parse("3.11").intersects_requires_python(&requires_python));
+        assert!(PythonRequest::parse("3.12").intersects_specifiers(&requires_python));
+        assert!(!PythonRequest::parse("3.11").intersects_specifiers(&requires_python));
     }
 
     #[test]
-    fn intersects_requires_python_major() {
-        let requires_python =
-            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
+    fn intersects_specifiers_major() {
+        let requires_python = VersionSpecifiers::from_str(">=3.12").unwrap();
 
         // `3` overlaps with `>=3.12` (e.g., 3.12, 3.13, ... are all Python 3)
-        assert!(PythonRequest::parse("3").intersects_requires_python(&requires_python));
+        assert!(PythonRequest::parse("3").intersects_specifiers(&requires_python));
         // `2` does not overlap with `>=3.12`
-        assert!(!PythonRequest::parse("2").intersects_requires_python(&requires_python));
+        assert!(!PythonRequest::parse("2").intersects_specifiers(&requires_python));
     }
 
     #[test]
-    fn intersects_requires_python_range() {
-        let requires_python =
-            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
+    fn intersects_specifiers_range() {
+        let requires_python = VersionSpecifiers::from_str(">=3.12").unwrap();
 
-        assert!(PythonRequest::parse(">=3.12,<3.13").intersects_requires_python(&requires_python));
-        assert!(!PythonRequest::parse(">=3.10,<3.12").intersects_requires_python(&requires_python));
+        assert!(PythonRequest::parse(">=3.12,<3.13").intersects_specifiers(&requires_python));
+        assert!(!PythonRequest::parse(">=3.10,<3.12").intersects_specifiers(&requires_python));
     }
 
     #[test]
-    fn intersects_requires_python_implementation_range() {
-        let requires_python =
-            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
+    fn intersects_specifiers_implementation_range() {
+        let requires_python = VersionSpecifiers::from_str(">=3.12").unwrap();
 
         assert!(
-            PythonRequest::parse("cpython@>=3.12,<3.13")
-                .intersects_requires_python(&requires_python)
+            PythonRequest::parse("cpython@>=3.12,<3.13").intersects_specifiers(&requires_python)
         );
         assert!(
-            !PythonRequest::parse("cpython@>=3.10,<3.12")
-                .intersects_requires_python(&requires_python)
+            !PythonRequest::parse("cpython@>=3.10,<3.12").intersects_specifiers(&requires_python)
         );
     }
 
     #[test]
-    fn intersects_requires_python_no_version() {
-        let requires_python =
-            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
+    fn intersects_specifiers_no_version() {
+        let requires_python = VersionSpecifiers::from_str(">=3.12").unwrap();
 
         // Requests without version constraints are always compatible
-        assert!(PythonRequest::Any.intersects_requires_python(&requires_python));
-        assert!(PythonRequest::Default.intersects_requires_python(&requires_python));
+        assert!(PythonRequest::Any.intersects_specifiers(&requires_python));
+        assert!(PythonRequest::Default.intersects_specifiers(&requires_python));
         assert!(
             PythonRequest::Implementation(ImplementationName::CPython)
-                .intersects_requires_python(&requires_python)
+                .intersects_specifiers(&requires_python)
         );
     }
 }

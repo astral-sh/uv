@@ -549,9 +549,12 @@ async fn build_package(
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
             let groups = DependencyGroupsWithDefaults::none();
-            interpreter_request = find_requires_python(workspace, &groups)?
-                .as_ref()
-                .and_then(PythonRequest::from_requires_python);
+            interpreter_request =
+                find_requires_python(workspace, &groups)?
+                    .as_ref()
+                    .and_then(|requires_python| {
+                        PythonRequest::from_specifiers(requires_python.specifiers())
+                    });
         }
     }
 

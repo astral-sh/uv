@@ -212,7 +212,7 @@ impl ToolPython {
         .await?
         .filter(|file| match (file.version(), requires_python.as_ref()) {
             (Some(request), Some(requires_python)) => {
-                request.intersects_requires_python(requires_python)
+                request.intersects_specifiers(requires_python.specifiers())
             }
             _ => true,
         }) {
@@ -223,9 +223,9 @@ impl ToolPython {
         } else {
             (
                 PythonRequestSource::RequiresPython,
-                requires_python
-                    .as_ref()
-                    .and_then(PythonRequest::from_requires_python),
+                requires_python.as_ref().and_then(|requires_python| {
+                    PythonRequest::from_specifiers(requires_python.specifiers())
+                }),
             )
         };
 

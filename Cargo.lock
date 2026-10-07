@@ -7563,7 +7563,6 @@ dependencies = [
  "uv-client",
  "uv-dirs",
  "uv-distribution-filename",
- "uv-distribution-types",
  "uv-errors",
  "uv-extract",
  "uv-fs",
