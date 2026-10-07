@@ -124,7 +124,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: astral-sh/github-actions
-          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          ref: de5c5ed6f218ef3decf7d4269113a3382d4d8380
           sparse-checkout: pull-request-review
           persist-credentials: false
 
@@ -155,7 +155,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: astral-sh/github-actions
-          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          ref: de5c5ed6f218ef3decf7d4269113a3382d4d8380
           sparse-checkout: pull-request-review
           persist-credentials: false
 
