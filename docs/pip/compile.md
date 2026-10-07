@@ -89,6 +89,19 @@ $ uv pip compile --group some/path/pyproject.toml:foo --group other/pyproject.to
     `uv pip compile some/path/pyproject.toml --group foo` sources `foo`
     from `./pyproject.toml` and **not** `some/path/pyproject.toml`.
 
+To compile requirements for multiple platforms, use the `--universal` flag:
+
+```console
+$ uv pip compile requirements.in --universal -o requirements.txt
+```
+
+By default, `uv pip compile` produces a resolution specific to the current platform, operating
+system, and Python version. With `--universal`, uv performs a universal resolution, generating a
+single `requirements.txt` file compatible across operating systems, architectures, and Python
+implementations where dependencies have universal compatibility. The output file retains environment
+markers to indicate which package versions are needed for each platform. See
+[universal resolution](../concepts/resolution.md#universal-resolution) for more details.
+
 ## Upgrading requirements
 
 When using an output file, uv will consider the versions pinned in an existing output file. If a
