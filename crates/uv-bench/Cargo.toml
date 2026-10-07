@@ -49,6 +49,11 @@ path = "benches/uv_startup.rs"
 harness = false
 
 [[bench]]
+name = "macos_python_install"
+path = "benches/macos_python_install.rs"
+harness = false
+
+[[bench]]
 name = "macos_dylib"
 path = "benches/macos_dylib.rs"
 harness = false
