@@ -4,7 +4,7 @@ use uv_pypi_types::Scheme;
 
 /// A `--prefix` directory into which packages can be installed, separate from a virtual environment
 /// or system Python interpreter.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Prefix(PathBuf);
 
 impl Prefix {
