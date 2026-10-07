@@ -30,6 +30,13 @@ on:
         type: choice
         options: [all, Linux, Linux-ARM64, macOS, Windows]
         default: all
+      windows-runner:
+        description: Namespace runner profile for the Windows uv comparison
+        type: choice
+        options:
+          - namespace-profile-windows-2022-x86-64-16x32
+          - namespace-profile-windows-2022-x86-64-32x64
+        default: namespace-profile-windows-2022-x86-64-16x32
       verify-run:
         description: Verify uv artifacts from this workflow run ID instead of rebuilding
         type: string
@@ -68,7 +75,7 @@ jobs:
             os: macOS
             uv-checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
           - runner: windows-2022
-            uv-runner: namespace-profile-windows-2022-x86-64-16x32
+            uv-runner: ${{ inputs.windows-runner || 'namespace-profile-windows-2022-x86-64-16x32' }}
             os: Windows
             uv-checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
     steps:

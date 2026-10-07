@@ -134,10 +134,13 @@ and smoke checks run on the final PGO binaries after deleting the instrumented b
 
 Both modes start with empty build and training directories. This requires four optimized builds per
 platform, so PGO workflow jobs have a three-hour timeout. Build durations are observations of the
-build and training pipeline, not application performance benchmarks. Windows uses the repository's
-32 GB Namespace release runner, with Cargo build parallelism fixed at four jobs for both
-configurations. The instrumented build with full debug information exhausted memory on that runner;
-`line-tables-only` provides a lower-detail comparison with the same optimization and PGO settings.
+build and training pipeline, not application performance benchmarks. Windows defaults to the
+repository's 32 GB Namespace release runner, with Cargo build parallelism fixed at four jobs for
+both configurations. The instrumented build with full debug information exhausted memory on that
+runner. For full-debug comparisons, set `windows-runner` to
+`namespace-profile-windows-2022-x86-64-32x64`, which selects the 32-vCPU, 64 GB profile. Both the
+no-debug baseline and symbols build run on the selected profile; Cargo parallelism remains four.
+`line-tables-only` and `limited` comparisons can use the default 32 GB profile.
 
 Run with Python 3.12 and pass `--benchmark`, or enable the workflow's `benchmark` input, for a small
 runtime comparison of the verified binaries. It resolves the existing Jupyter and Trio requirements
@@ -216,8 +219,9 @@ These are single cold observations, excluding symbol processing and verification
 information increases build cost substantially even though the installed files remain close in size.
 On Windows x86-64, the baseline completed in 25m 6s, but LLVM exhausted memory while compiling the
 instrumented `uv` with full debug information on the 32 GB release runner. Windows PGO symbol
-coverage and size comparisons with full debug information remain unverified. A request for a 64 GB
-runner never acquired a machine; access to that runner configuration has not been established.
+coverage and size comparisons with full debug information remain unverified. An earlier request
+using the direct `nscloud-windows-2022-amd64-32x64` label never acquired a machine. The experiment
+now supports selecting the configured `namespace-profile-windows-2022-x86-64-32x64` profile.
 
 Neither Linux target reported profile mismatches. Each configuration reported 18 missing-profile
 warnings, all for `uvx`. macOS reported 5,888 missing-profile warning lines for the baseline and
