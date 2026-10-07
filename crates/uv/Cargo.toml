@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 uv-audit = { workspace = true }
+uv-audit-operations = { workspace = true }
 uv-auth = { workspace = true }
 uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }

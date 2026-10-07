@@ -1,17 +1,21 @@
 use std::path::Path;
 
 use anyhow::{Result, bail};
+
+use crate::commands::project::{
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
+};
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
+use uv_audit_operations::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
-use uv_configuration::AuditOutputFormat;
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple,
+    ActiveEnvironment, AuditOutputFormat, Concurrency, DependencyGroups, ExtrasSpecification,
+    TargetTriple,
 };
 use uv_dispatch::UniversalState;
-use uv_lock_operations::LockTarget;
-use uv_lock_operations::{LockMode, LockOperation};
+use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
@@ -22,15 +26,9 @@ use uv_redacted::DisplaySafeUrl;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::resolution_markers;
 use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
-use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
+use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
-
-use crate::commands::audit::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
-use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
-};
 
 pub(crate) async fn audit(
     project_dir: &Path,

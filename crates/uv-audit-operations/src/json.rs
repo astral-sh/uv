@@ -6,7 +6,7 @@ use uv_normalize::PackageName;
 use super::AuditResults;
 
 #[derive(Debug, Serialize)]
-pub(crate) struct Report {
+pub(super) struct Report {
     schema: Schema,
     #[serde(flatten)]
     body: ReportBody,
@@ -20,7 +20,7 @@ struct ReportBody {
 }
 
 impl Report {
-    pub(crate) fn from_findings(
+    pub(super) fn from_findings(
         n_packages: usize,
         vulnerabilities: &[&uv_audit::Vulnerability],
         statuses: &[&uv_audit::ProjectStatus],
@@ -68,13 +68,13 @@ impl Report {
 
 /// JSON report containing separate findings for each audited tool.
 #[derive(Debug, Serialize)]
-pub(crate) struct ToolReports {
+pub struct ToolReports {
     schema: Schema,
     tools: Vec<ToolReport>,
 }
 
 impl ToolReports {
-    pub(crate) fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
+    pub fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
         let tools = audits
             .iter()
             .map(|(name, results)| {
