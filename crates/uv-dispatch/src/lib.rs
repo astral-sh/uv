@@ -77,6 +77,9 @@ pub enum BuildDispatchError {
     #[error(transparent)]
     Prepare(#[from] uv_installer::PrepareError),
 
+    #[error("Failed to uninstall build dependencies")]
+    UninstallBuildDependencies(#[source] uv_installer::UninstallError),
+
     #[error(transparent)]
     Lookahead(#[from] uv_requirements::Error),
 }
@@ -91,6 +94,7 @@ impl uv_errors::Hinted for BuildDispatchError {
             | Self::Join(_)
             | Self::Anyhow(_)
             | Self::Prepare(_)
+            | Self::UninstallBuildDependencies(_)
             | Self::Lookahead(_) => uv_errors::Hints::none(),
         }
     }
@@ -105,7 +109,11 @@ impl IsBuildBackendError for BuildDispatchError {
             }
             Self::Prepare(error) => error.is_user_failure(),
             Self::Lookahead(error) => error.is_user_failure(),
-            Self::BuildBackend(_) | Self::Tags(_) | Self::Join(_) | Self::Anyhow(_) => false,
+            Self::BuildBackend(_)
+            | Self::Tags(_)
+            | Self::Join(_)
+            | Self::Anyhow(_)
+            | Self::UninstallBuildDependencies(_) => false,
         }
     }
 
@@ -118,6 +126,7 @@ impl IsBuildBackendError for BuildDispatchError {
             | Self::Join(_)
             | Self::Anyhow(_)
             | Self::Prepare(_)
+            | Self::UninstallBuildDependencies(_)
             | Self::Lookahead(_) => false,
             Self::BuildFrontend(err) => err.is_build_backend_error(),
         }
@@ -491,7 +500,7 @@ impl BuildContext for BuildDispatch<'_> {
             for dist_info in &reinstalls {
                 let summary = uv_installer::uninstall(dist_info, &layout)
                     .await
-                    .context("Failed to uninstall build dependencies")?;
+                    .map_err(BuildDispatchError::UninstallBuildDependencies)?;
                 debug!(
                     "Uninstalled {} ({} file{}, {} director{})",
                     dist_info.name(),
