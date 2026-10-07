@@ -31,11 +31,11 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
 
-use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::{
+use uv_dispatch::UniversalState;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, detect_conflicts,
 };
-use uv_dispatch::UniversalState;
 use uv_lock_operations::DiscoveredProject;
 use uv_lock_operations::FrozenWorkspace;
 use uv_lock_operations::LockTarget;

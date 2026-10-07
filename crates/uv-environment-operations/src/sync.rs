@@ -20,7 +20,6 @@ use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::PythonEnvironment;
-use uv_requirements::script_extra_build_requires;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_resolver::FlatIndex;
 use uv_settings::InstallerSettingsRef;
@@ -28,12 +27,15 @@ use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache};
 
-use crate::commands::operations::malware::{MalwareCheckContext, maybe_check_malware};
-use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::{EnvironmentError, detect_conflicts};
+use crate::install_target::InstallTarget;
+use crate::malware::{MalwareCheckContext, maybe_check_malware};
+use crate::{EnvironmentError, detect_conflicts};
+use uv_requirements::script_extra_build_requires;
 
-/// Sync a lockfile with an environment.
-pub(crate) async fn sync_from_lock(
+/// Install the selected packages from a lockfile into an environment.
+///
+/// Validates interpreter, platform, extras, and groups before planning or applying changes.
+pub async fn sync_from_lock(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
@@ -129,7 +131,6 @@ pub(crate) async fn sync_from_lock(
             }
         }
         InstallTarget::Script { script, .. } => {
-            // Try to get extra build dependencies from the script metadata
             script_extra_build_requires(
                 (*script).into(),
                 &sources,
@@ -391,7 +392,7 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-pub(in crate::commands) fn store_credentials_from_target(
+pub fn store_credentials_from_target(
     target: InstallTarget<'_>,
     client_builder: &BaseClientBuilder,
 ) -> Result<()> {

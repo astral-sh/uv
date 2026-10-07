@@ -9,6 +9,8 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
 };
 use uv_distribution_types::{Dist, Name, ResolvedDist};
+use uv_environment_operations::malware::MalwareCheckContext;
+use uv_environment_operations::sync_from_lock;
 use uv_fs::PortablePathBuf;
 use uv_installer::SitePackages;
 use uv_lock::{Installable, Metadata};
@@ -19,11 +21,9 @@ use uv_python::PythonEnvironment;
 use uv_settings::MalwareCheckSettings;
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::sync::sync_from_lock;
-use crate::commands::project::install_target::InstallTarget;
 use uv_configuration::Modifications;
 use uv_dispatch::UniversalState;
+use uv_environment_operations::install_target::InstallTarget;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::{InstallerSettingsRef, ResolverSettings};

@@ -14,6 +14,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
+use uv_environment_operations::EnvironmentError;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -46,12 +47,13 @@ use uv_tool::{InstalledTools, entrypoint_paths};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::{EnvironmentError, EnvironmentSpecification, resolve_names};
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::error::ToolError;
+use crate::commands::tool::requirements::resolve_names;
 use crate::commands::tool::{Target, ToolRequest};
 use uv_dispatch::PlatformState;
+use uv_environment_operations::EnvironmentSpecification;
+use uv_environment_operations::environment::CachedEnvironment;
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_context::PythonDownloadReporter;
 use uv_resolve_operations::latest::LatestClient;

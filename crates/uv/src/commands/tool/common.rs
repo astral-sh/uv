@@ -109,9 +109,9 @@ impl Hinted for NoExecutablesError {
         hints
     }
 }
-use crate::commands::project::{EnvironmentSpecification, PreferenceLocation};
 use crate::commands::tool::error::ToolLockError;
 use uv_dispatch::PlatformState;
+use uv_environment_operations::{EnvironmentSpecification, PreferenceLocation};
 use uv_lock_operations::ValidatedLock;
 use uv_python_context::PythonDownloadReporter;
 use uv_python_context::PythonRequestSource;

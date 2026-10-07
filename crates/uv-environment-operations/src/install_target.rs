@@ -6,7 +6,6 @@ use std::str::FromStr;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use crate::commands::project::EnvironmentError;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions, InstallTarget as InstallOptionTarget,
@@ -24,9 +23,11 @@ use uv_scripts::Pep723Script;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::{RequiresPythonDeclaration, RequiresPythonSources, VirtualProject, Workspace};
 
+use crate::EnvironmentError;
+
 /// A target that can be installed from a lockfile.
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum InstallTarget<'lock> {
+pub enum InstallTarget<'lock> {
     /// A project (which could be a workspace root or member).
     Project {
         workspace: &'lock Workspace,
@@ -66,7 +67,7 @@ pub(crate) enum InstallTarget<'lock> {
 
 /// The workspace packages selected by an installation target.
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum PackageSelection<'lock> {
+pub enum PackageSelection<'lock> {
     Projects(&'lock [PackageName]),
     Workspace,
     NonProjectWorkspace,
@@ -74,7 +75,7 @@ pub(crate) enum PackageSelection<'lock> {
 
 impl<'lock> PackageSelection<'lock> {
     /// Resolve package flags, defaulting to the current project or non-project workspace.
-    pub(crate) fn from_args(
+    pub fn from_args(
         all_packages: bool,
         names: &'lock [PackageName],
         project_name: Option<&'lock PackageName>,
@@ -91,7 +92,7 @@ impl<'lock> PackageSelection<'lock> {
     }
 
     /// Identify workspace members excluded from installation before a lockfile is available.
-    pub(crate) fn first_party_exclusions(
+    pub fn first_party_exclusions(
         self,
         workspace: &Workspace,
         project_name: Option<&PackageName>,
@@ -285,7 +286,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
 
 impl<'lock> InstallTarget<'lock> {
     /// Intersect the lockfile's Python requirement with the selected groups' requirements.
-    pub(super) fn python_requirement(
+    pub fn python_requirement(
         &self,
         groups: &DependencyGroupsWithDefaults,
     ) -> Result<ProjectPythonRequirement, EnvironmentError> {
@@ -344,7 +345,7 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Select installation roots from a project and its workspace.
-    pub(crate) fn from_project(
+    pub fn from_project(
         project: &'lock VirtualProject,
         lock: &'lock Lock,
         selection: PackageSelection<'lock>,
@@ -405,7 +406,7 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Convert the target's locked packages to a [`Resolution`].
-    pub(crate) fn to_resolution(
+    pub fn to_resolution(
         self,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -617,10 +618,7 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Validate the extras requested by the [`ExtrasSpecification`].
-    pub(crate) fn validate_extras(
-        self,
-        extras: &ExtrasSpecification,
-    ) -> Result<(), EnvironmentError> {
+    pub fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), EnvironmentError> {
         if extras.is_empty() {
             return Ok(());
         }
@@ -677,7 +675,7 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Validate the dependency groups requested by the [`DependencyGroupSpecifier`].
-    pub(crate) fn validate_groups(
+    pub fn validate_groups(
         self,
         groups: &DependencyGroupsWithDefaults,
     ) -> Result<(), EnvironmentError> {
@@ -789,7 +787,7 @@ impl<'lock> InstallTarget<'lock> {
     /// Returns the names of all packages in the workspace that will be installed.
     ///
     /// Note this only includes workspace members.
-    pub(crate) fn packages(
+    pub(super) fn packages(
         &self,
         extras: &ExtrasSpecification,
         groups: &DependencyGroupsWithDefaults,

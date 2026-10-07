@@ -38,7 +38,7 @@ use uv_virtualenv::{OnExisting, RemovalReason, Seed};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::commands::project::{
+use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironmentTarget, centralized_environment_root,
     centralized_environments_enabled, is_centralized_environment_reference,
     lock_project_environment, update_project_environment_link,

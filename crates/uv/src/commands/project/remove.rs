@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::path::Path;
-use uv_lock_operations::LockOperation;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
@@ -11,37 +10,35 @@ use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    Modifications,
+};
+use uv_dispatch::UniversalState;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::malware::MalwareCheckContext;
+use uv_environment_operations::{
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectInterpreter, sync_from_lock,
 };
 use uv_fs::Simplified;
-use uv_normalize::PackageName;
-use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_lock_operations::{LockMode, LockOperation, LockTarget};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
+use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_settings::{
+    FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::sync::sync_from_lock;
 use crate::commands::project::edit::{EditTarget, ProjectEdit, PythonTarget};
-use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectInterpreter,
-};
-use uv_configuration::Modifications;
-use uv_dispatch::UniversalState;
-use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_lock_operations::LockMode;
-use uv_lock_operations::LockTarget;
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
-use uv_resolve_operations::loggers::DefaultResolveLogger;
-use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.
 pub(crate) async fn remove(

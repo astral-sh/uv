@@ -4,6 +4,9 @@ use uv_lock_operations::LockOperation;
 
 use anyhow::Result;
 use tracing::debug;
+use uv_environment_operations::malware::MalwareCheckContext;
+use uv_environment_operations::store_credentials_from_target;
+use uv_environment_operations::sync_from_lock;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -25,17 +28,15 @@ use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::sync::{store_credentials_from_target, sync_from_lock};
 use crate::commands::project;
-use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::{
+use uv_configuration::Modifications;
+use uv_dispatch::UniversalState;
+use uv_environment_operations::environment::CachedEnvironment;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectInterpreter, ScriptEnvironment,
 };
-use uv_configuration::Modifications;
-use uv_dispatch::UniversalState;
 use uv_install_operations::loggers::SummaryInstallLogger;
 use uv_lock_operations::LockMode;
 use uv_lock_operations::LockTarget;

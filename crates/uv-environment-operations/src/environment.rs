@@ -1,14 +1,11 @@
-use std::path::Path;
-
 use tracing::debug;
 
-use crate::commands::operations::malware::check_resolution_malware;
-use crate::commands::project::{
+use crate::{
     EnvironmentError, EnvironmentResolution, EnvironmentSpecification, resolve_environment,
     sync_environment,
 };
 use uv_command_support::Printer;
-use uv_configuration::Modifications;
+use uv_configuration::{Concurrency, Constraints, HashCheckingMode, Modifications, TargetTriple};
 use uv_dispatch::PlatformState;
 use uv_install_operations::loggers::InstallLogger;
 use uv_resolve_operations::loggers::ResolveLogger;
@@ -18,7 +15,6 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple};
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
@@ -28,84 +24,9 @@ use uv_settings::MalwareCheckSettings;
 use uv_types::{HashStrategy, HashVerification, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
-/// An ephemeral [`PythonEnvironment`] for running an individual command.
-#[derive(Debug)]
-pub(crate) struct EphemeralEnvironment(PythonEnvironment);
-
-impl From<PythonEnvironment> for EphemeralEnvironment {
-    fn from(environment: PythonEnvironment) -> Self {
-        Self(environment)
-    }
-}
-
-impl From<EphemeralEnvironment> for PythonEnvironment {
-    fn from(environment: EphemeralEnvironment) -> Self {
-        environment.0
-    }
-}
-
-impl EphemeralEnvironment {
-    /// Set the ephemeral overlay for a Python environment.
-    pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), EnvironmentError> {
-        let site_packages = self
-            .0
-            .site_packages()
-            .next()
-            .ok_or(EnvironmentError::NoSitePackages)?;
-        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
-        fs_err::write(overlay_path, contents)?;
-        Ok(())
-    }
-
-    /// Enable system site packages for a Python environment.
-    pub(crate) fn set_system_site_packages(&self) -> Result<(), EnvironmentError> {
-        self.0
-            .set_pyvenv_cfg("include-system-site-packages", "true")?;
-        Ok(())
-    }
-
-    /// Set the `extends-environment` key in the `pyvenv.cfg` file to the given path.
-    ///
-    /// Ephemeral environments created by `uv run --with` extend a parent (virtual or system)
-    /// environment by adding a `.pth` file to the ephemeral environment's `site-packages`
-    /// directory. The `pth` file contains Python code to dynamically add the parent
-    /// environment's `site-packages` directory to Python's import search paths in addition to
-    /// the ephemeral environment's `site-packages` directory. This works well at runtime, but
-    /// is too dynamic for static analysis tools like ty to understand. As such, we
-    /// additionally write the `sys.prefix` of the parent environment to the
-    /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
-    /// easier for these tools to statically and reliably understand the relationship between
-    /// the two environments.
-    pub(crate) fn set_parent_environment(
-        &self,
-        parent_environment_sys_prefix: &Path,
-    ) -> Result<(), EnvironmentError> {
-        let parent_environment_sys_prefix = parent_environment_sys_prefix
-            .to_str()
-            .ok_or(EnvironmentError::InvalidParentEnvironmentPath)?;
-        self.0
-            .set_pyvenv_cfg("extends-environment", parent_environment_sys_prefix)?;
-        Ok(())
-    }
-
-    /// Returns the path to the environment's scripts directory.
-    pub(crate) fn scripts(&self) -> &Path {
-        self.0.scripts()
-    }
-
-    /// Returns the path to the environment's Python executable.
-    pub(crate) fn sys_executable(&self) -> &Path {
-        self.0.interpreter().sys_executable()
-    }
-
-    pub(crate) fn sys_prefix(&self) -> &Path {
-        self.0.interpreter().sys_prefix()
-    }
-}
-
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
-pub(crate) struct CachedEnvironment(PythonEnvironment);
+pub struct CachedEnvironment(PythonEnvironment);
 
 impl From<CachedEnvironment> for PythonEnvironment {
     fn from(environment: CachedEnvironment) -> Self {
@@ -137,7 +58,7 @@ fn cached_environment_resolution_hash(
 
 impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
-    pub(crate) async fn from_spec(
+    pub async fn from_spec(
         spec: EnvironmentSpecification<'_>,
         build_constraints: Constraints,
         interpreter: &Interpreter,
@@ -205,7 +126,7 @@ impl CachedEnvironment {
     /// Both checks run before cache lookup. `interpreter` must be the base interpreter for which
     /// `resolution` was produced. In particular, callers materializing a universal lock must derive
     /// its markers and tags from the same interpreter.
-    pub(crate) async fn from_locked_resolution(
+    pub async fn from_locked_resolution(
         resolution: &Resolution,
         build_constraints: Constraints,
         interpreter: &Interpreter,
@@ -223,7 +144,7 @@ impl CachedEnvironment {
         let malware_check_client_builder = client_builder
             .clone()
             .keyring(settings.resolver.keyring_provider);
-        check_resolution_malware(
+        crate::malware::check_resolution_malware(
             resolution,
             &malware_check_client_builder,
             concurrency,
@@ -381,7 +302,7 @@ impl CachedEnvironment {
     ///
     /// When caching, always use the base interpreter, rather than that of the virtual
     /// environment.
-    pub(super) fn base_interpreter(
+    pub fn base_interpreter(
         interpreter: &Interpreter,
         cache: &Cache,
     ) -> Result<Interpreter, uv_python::Error> {

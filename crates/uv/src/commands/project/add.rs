@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
-use uv_lock_operations::{LockError, LockOperation};
 
 use anyhow::{Context, Result, bail};
 use itertools::Itertools;
@@ -18,17 +17,25 @@ use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
-    InstallOptions, NoSources,
+    InstallOptions, Modifications, NoSources,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState, UniversalState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
 };
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::malware::MalwareCheckContext;
+use uv_environment_operations::{
+    EnvironmentError, LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy,
+    ProjectEnvironmentTarget, ProjectInterpreter, sync_from_lock,
+};
 use uv_errors::HintOrdering;
 use uv_fs::Simplified;
 use uv_git::store_credentials;
+use uv_install_operations::loggers::DefaultInstallLogger;
+use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
@@ -36,11 +43,18 @@ use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
 };
+use uv_python_context::{
+    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter, init_script_python_requirement,
+};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
+use uv_resolve_operations::Error as ResolveError;
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolver::FlatIndex;
 use uv_scripts::Pep723Script;
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_settings::{
+    FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+};
 use uv_static::is_known_standard_library_package;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
@@ -48,26 +62,10 @@ use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, Tool
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::sync::sync_from_lock;
+use crate::commands::ScriptPath;
+use crate::commands::project::ProjectError;
 use crate::commands::project::edit::{EditTarget, ProjectEdit, PythonTarget};
-use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectError, ProjectInterpreter,
-};
-use crate::commands::{ScriptPath, project};
-use uv_configuration::Modifications;
-use uv_dispatch::{PlatformState, UniversalState};
-use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_lock_operations::LockMode;
-use uv_lock_operations::LockTarget;
-use uv_python_context::PythonDownloadReporter;
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter, init_script_python_requirement};
-use uv_resolve_operations::Error as ResolveError;
-use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_resolve_operations::reporters::ResolverReporter;
-use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// A failed dependency addition, with `uv add`-specific recovery context.
 #[derive(Debug, thiserror::Error)]
@@ -829,13 +827,13 @@ pub(crate) async fn add(
         }
         Err(err) => {
             let (err, standard_library_package) = match err {
-                ProjectError::Environment(project::EnvironmentError::Resolve(err))
+                ProjectError::Environment(EnvironmentError::Resolve(err))
                 | ProjectError::Lock(LockError::Resolve(err)) => {
                     let standard_library_package =
                         standard_library_package(&err, &edits, python_minor);
                     (UvError::from(*err), standard_library_package)
                 }
-                ProjectError::Environment(project::EnvironmentError::Install(err)) => {
+                ProjectError::Environment(EnvironmentError::Install(err)) => {
                     (UvError::from(*err), None)
                 }
                 err => return Err(UvError::from(err).into()),

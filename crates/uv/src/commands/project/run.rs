@@ -16,6 +16,9 @@ use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, trace, warn};
 use url::Url;
+use uv_environment_operations::EnvironmentError;
+use uv_environment_operations::malware::MalwareCheckContext;
+use uv_environment_operations::sync_from_lock;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -60,17 +63,14 @@ struct GistResponse {
 struct GistFile {
     raw_url: String,
 }
-use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::sync::sync_from_lock;
-use crate::commands::project;
-use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
-use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::{
+use uv_configuration::Modifications;
+use uv_dispatch::UniversalState;
+use uv_environment_operations::environment::CachedEnvironment;
+use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
+use uv_environment_operations::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
     ProjectEnvironmentTarget, ScriptEnvironment, update_environment,
 };
-use uv_configuration::Modifications;
-use uv_dispatch::UniversalState;
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_lock_operations::LockOperation;
 use uv_lock_operations::LockTarget;
@@ -309,7 +309,7 @@ pub(crate) async fn run(
             .await
             {
                 Ok(_) => {}
-                Err(project::EnvironmentError::Resolve(err)) => {
+                Err(EnvironmentError::Resolve(err)) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
@@ -456,8 +456,8 @@ pub(crate) async fn run(
                 )
                 .await
                 {
-                    Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(project::EnvironmentError::Resolve(err)) => {
+                    Ok(update) => Some(update.environment.into_interpreter()),
+                    Err(EnvironmentError::Resolve(err)) => {
                         let err = *err;
                         return Err(UvError::from(err.with_resolution_context("script")).into());
                     }
@@ -985,7 +985,7 @@ pub(crate) async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(project::EnvironmentError::Resolve(err)) => {
+                Err(EnvironmentError::Resolve(err)) => {
                     let err = *err;
                     return Err(UvError::from(err.with_resolution_context("`--with`")).into());
                 }
@@ -1025,8 +1025,7 @@ pub(crate) async fn run(
                 false,
             )
         })
-        .transpose()?
-        .map(EphemeralEnvironment::from);
+        .transpose()?;
 
     // If we're running in an ephemeral environment, add a path file to enable loading from the
     // `--with` requirements environment and the project environment site packages.
@@ -1061,7 +1060,7 @@ pub(crate) async fn run(
                     .join("; ")
             );
 
-            ephemeral_env.set_overlay(overlay_content)?;
+            set_overlay(ephemeral_env, &overlay_content)?;
 
             // N.B. The order here matters — earlier interpreters take precedence over the
             // later ones.
@@ -1083,7 +1082,7 @@ pub(crate) async fn run(
                         &entry.path(),
                         &ephemeral_env.scripts().join(entry.file_name()),
                         interpreter.sys_executable(),
-                        ephemeral_env.sys_executable(),
+                        ephemeral_env.interpreter().sys_executable(),
                     ) {
                         Ok(()) => {}
                         // If the entrypoint already exists, skip it.
@@ -1121,7 +1120,7 @@ pub(crate) async fn run(
                     if !source.is_dir() {
                         continue;
                     }
-                    let target = ephemeral_env.sys_prefix().join(dir);
+                    let target = ephemeral_env.interpreter().sys_prefix().join(dir);
                     if let Some(parent) = target.parent() {
                         fs_err::create_dir_all(parent)?;
                     }
@@ -1139,13 +1138,13 @@ pub(crate) async fn run(
 
             // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
             // file. This helps out static-analysis tools such as ty (see docs on
-            // `CachedEnvironment::set_parent_environment`).
+            // `set_parent_environment`).
             //
             // Note that we do this even if the parent environment is not a virtual environment.
             // For ephemeral environments created by `uv run --with`, the parent environment's
             // `site-packages` directory is added to `sys.path` even if the parent environment is not
             // a virtual environment and even if `--system-site-packages` was not explicitly selected.
-            ephemeral_env.set_parent_environment(base_interpreter.sys_prefix())?;
+            set_parent_environment(ephemeral_env, base_interpreter.sys_prefix())?;
 
             // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
             // environment.
@@ -1153,13 +1152,10 @@ pub(crate) async fn run(
                 && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
                     .is_ok_and(|cfg| cfg.include_system_site_packages())
             {
-                ephemeral_env.set_system_site_packages()?;
+                ephemeral_env.set_pyvenv_cfg("include-system-site-packages", "true")?;
             }
         }
     }
-
-    // Cast to `PythonEnvironment`.
-    let ephemeral_env = ephemeral_env.map(PythonEnvironment::from);
 
     // Determine the Python interpreter to use for the command, if necessary.
     let interpreter = ephemeral_env
@@ -1286,6 +1282,40 @@ pub(crate) async fn run(
         .with_context(|| format!("Failed to spawn: {}", command.display_executable()))?;
 
     run_to_completion(handle).await
+}
+
+/// Add the parent environments' site packages to an ephemeral environment.
+fn set_overlay(environment: &PythonEnvironment, contents: &str) -> anyhow::Result<()> {
+    let site_packages = environment
+        .site_packages()
+        .next()
+        .context("Failed to find `site-packages` directory for environment")?;
+    let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
+    fs_err::write(overlay_path, contents)?;
+    Ok(())
+}
+
+/// Set the `extends-environment` key in the `pyvenv.cfg` file to the given path.
+///
+/// Ephemeral environments created by `uv run --with` extend a parent (virtual or system)
+/// environment by adding a `.pth` file to the ephemeral environment's `site-packages`
+/// directory. The `pth` file contains Python code to dynamically add the parent
+/// environment's `site-packages` directory to Python's import search paths in addition to
+/// the ephemeral environment's `site-packages` directory. This works well at runtime, but
+/// is too dynamic for static analysis tools like ty to understand. As such, we
+/// additionally write the `sys.prefix` of the parent environment to the
+/// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
+/// easier for these tools to statically and reliably understand the relationship between
+/// the two environments.
+fn set_parent_environment(
+    environment: &PythonEnvironment,
+    parent_environment_sys_prefix: &Path,
+) -> anyhow::Result<()> {
+    let parent_environment_sys_prefix = parent_environment_sys_prefix.to_str().context(
+        "Cannot write parent environment path to `pyvenv.cfg` because it is not valid UTF-8",
+    )?;
+    environment.set_pyvenv_cfg("extends-environment", parent_environment_sys_prefix)?;
+    Ok(())
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

@@ -11,11 +11,11 @@ use uv_requirements::ScriptRequirementsError;
 use uv_workspace::RequiresPythonSources;
 use uv_workspace::dependency_groups::DependencyGroupError;
 
-use crate::commands::project::ConflictError;
+use crate::ConflictError;
 
 /// A failure while resolving, creating, or updating a Python environment.
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum EnvironmentError {
+pub enum EnvironmentError {
     #[error(transparent)]
     Conflict(#[from] ConflictError),
 
@@ -66,12 +66,6 @@ pub(crate) enum EnvironmentError {
 
     #[error("Malware check failed due to an error from OSV")]
     Osv(#[from] osv::Error),
-
-    #[error("Failed to find `site-packages` directory for environment")]
-    NoSitePackages,
-
-    #[error("Cannot write parent environment path to `pyvenv.cfg` because it is not valid UTF-8")]
-    InvalidParentEnvironmentPath,
 
     #[error("Attempted to drop a temporary virtual environment while still in-use")]
     DroppedEnvironment,
@@ -221,8 +215,6 @@ impl From<EnvironmentError> for UvError {
             | EnvironmentError::InvalidProjectEnvironmentDir(..)
             | EnvironmentError::MalwareFound
             | EnvironmentError::Osv(..)
-            | EnvironmentError::NoSitePackages
-            | EnvironmentError::InvalidParentEnvironmentPath
             | EnvironmentError::DroppedEnvironment
             | EnvironmentError::DependencyGroup(..)
             | EnvironmentError::Client(..)
@@ -276,8 +268,6 @@ impl uv_errors::Hinted for EnvironmentError {
             | Self::InvalidProjectEnvironmentDir(..)
             | Self::MalwareFound
             | Self::Osv(..)
-            | Self::NoSitePackages
-            | Self::InvalidParentEnvironmentPath
             | Self::DroppedEnvironment
             | Self::DependencyGroup(..)
             | Self::ClientBuild(..)
