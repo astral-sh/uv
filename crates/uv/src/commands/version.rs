@@ -25,7 +25,7 @@ pub(crate) fn self_version(
         }
         VersionFormat::Json => {
             let string = serde_json::to_string_pretty(&version_info)?;
-            writeln!(printer.stdout(), "{string}")?;
+            writeln!(printer.stdout_important(), "{string}")?;
         }
     }
 
