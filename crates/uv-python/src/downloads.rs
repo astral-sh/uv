@@ -49,8 +49,8 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
 use crate::python_version::{BuildVersionError, python_build_version_from_env};
-use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 use crate::{PythonDownloadMirrors, PythonVariant};
+use crate::{PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, DebugNoInline)]
 pub enum Error {
@@ -662,37 +662,6 @@ impl PythonDownloadRequest {
         self.implementation
             .is_some_and(|implementation| !matches!(implementation, ImplementationName::CPython))
             || self.os.is_some_and(|os| os.is_emscripten())
-    }
-
-    pub(crate) fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
-        let executable = interpreter.sys_executable().display();
-        if let Some(version) = self.version()
-            && !version.matches_interpreter(interpreter)
-        {
-            let interpreter_version = interpreter.python_version();
-            debug!(
-                "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
-            );
-            return false;
-        }
-        let platform = self.platform();
-        let interpreter_platform = Platform::from(interpreter.platform());
-        if !platform.matches(&interpreter_platform) {
-            debug!(
-                "Skipping interpreter at `{executable}`: platform `{interpreter_platform}` does not match request `{platform}`",
-            );
-            return false;
-        }
-        if let Some(implementation) = self.implementation()
-            && !implementation.matches_interpreter(interpreter)
-        {
-            debug!(
-                "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
-                interpreter.implementation_name(),
-            );
-            return false;
-        }
-        true
     }
 
     /// Extract the platform components of this request.

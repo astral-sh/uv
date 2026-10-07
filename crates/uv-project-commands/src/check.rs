@@ -708,9 +708,10 @@ pub async fn check(
     let python_version = if let Some(python) = python {
         let request = PythonRequest::parse(&python);
         if let Some(venv) = venv.as_ref()
-            && request
-                .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
-                .satisfied(venv.interpreter(), cache)
+            && venv.interpreter().matches_request(
+                &request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)),
+                cache,
+            )
         {
             Some(venv.interpreter().python_minor_version())
         } else {
