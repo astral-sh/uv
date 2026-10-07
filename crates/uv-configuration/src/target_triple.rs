@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use tracing::debug;
 
 use uv_distribution_types::macos_darwin_release;
@@ -1531,8 +1533,8 @@ impl TargetTriple {
     }
 
     /// Return the `platform_release` value for the target.
-    fn platform_release(self) -> String {
-        match self {
+    fn platform_release(self) -> Cow<'static, str> {
+        let release = match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Aarch64PcWindowsMsvc => "",
             Self::Linux | Self::X8664UnknownLinuxGnu => "",
@@ -1543,7 +1545,7 @@ impl TargetTriple {
                     && let Some(release) =
                         macos_darwin_release(*major, if *major >= 11 { 0 } else { *minor })
                 {
-                    return release.to_string();
+                    return Cow::Owned(release.to_string());
                 }
                 ""
             }
@@ -1622,8 +1624,8 @@ impl TargetTriple {
             Self::Arm64Ios => "",
             Self::Arm64IosSimulator => "",
             Self::X8664IosSimulator => "",
-        }
-        .to_owned()
+        };
+        Cow::Borrowed(release)
     }
 
     /// Return the `os_name` value for the target.
