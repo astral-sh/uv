@@ -484,6 +484,10 @@
         }
       ]
     },
+    "pyodide-install-mirror": {
+      "description": "Mirror URL to use for downloading managed Pyodide installations.\n\nBy default, managed Pyodide installations are downloaded from [GitHub](https://github.com/pyodide/pyodide/releases).\nThis variable can be set to a mirror URL to use a different source for Pyodide installations.\nThe provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in, e.g., `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": ["string", "null"]
+    },
     "pypy-install-mirror": {
       "description": "Mirror URL to use for downloading managed PyPy installations.\n\nBy default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).\nThis variable can be set to a mirror URL to use a different source for PyPy installations.\nThe provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.\n\nDistributions can be read from a\nlocal directory by using the `file://` URL scheme.",
       "type": ["string", "null"]

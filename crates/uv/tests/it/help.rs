@@ -619,6 +619,15 @@ fn help_subsubcommand() {
 
               Distributions can be read from a local directory by using the `file://` URL scheme.
 
+          --pyodide-mirror <PYODIDE_MIRROR>
+              Set the URL to use as the source for downloading Pyodide installations.
+
+              The provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in,
+              e.g.,
+              `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.
+
+              Distributions can be read from a local directory by using the `file://` URL scheme.
+
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
               URL pointing to JSON of custom Python installations
 
@@ -911,6 +920,8 @@ fn help_flag_subsubcommand() {
               Set the URL to use as the source for downloading PyPy installations
           --graalpy-mirror <GRAALPY_MIRROR>
               Set the URL to use as the source for downloading GraalPy installations
+          --pyodide-mirror <PYODIDE_MIRROR>
+              Set the URL to use as the source for downloading Pyodide installations
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
               URL pointing to JSON of custom Python installations
       -r, --reinstall

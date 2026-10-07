@@ -1550,6 +1550,7 @@ impl PythonInstallSettings {
             mirror: _,
             pypy_mirror: _,
             graalpy_mirror: _,
+            pyodide_mirror: _,
             python_downloads_json_url: _,
             default,
             compile_bytecode,
@@ -1636,6 +1637,7 @@ impl PythonUpgradeSettings {
             mirror: _,
             pypy_mirror: _,
             graalpy_mirror: _,
+            pyodide_mirror: _,
             reinstall,
             python_downloads_json_url: _,
             compile_bytecode,
@@ -1729,6 +1731,7 @@ impl PythonFindSettings {
             python_install_mirror: _,
             pypy_install_mirror: _,
             graalpy_install_mirror: _,
+            pyodide_install_mirror: _,
             python_downloads_json_url,
         } = install_mirrors;
 

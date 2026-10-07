@@ -1561,7 +1561,7 @@ impl ManagedPythonDownload {
         astral_mirror_url: Option<&str>,
     ) -> Result<Vec<DisplaySafeUrl>, Error> {
         let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
-        match self.key.implementation {
+        match self.key.implementation().as_ref() {
             LenientImplementationName::Known(ImplementationName::CPython) => {
                 if let Some(mirror) = mirrors.cpython {
                     // User-configured mirror: use it exclusively, no automatic fallback.
@@ -1614,6 +1614,23 @@ impl ManagedPythonDownload {
                     else {
                         return Err(Error::Mirror(
                             EnvVars::UV_GRAALPY_INSTALL_MIRROR,
+                            self.url.to_string(),
+                        ));
+                    };
+                    return Ok(vec![DisplaySafeUrl::parse(
+                        format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
+                    )?]);
+                }
+            }
+
+            LenientImplementationName::Known(ImplementationName::Pyodide) => {
+                if let Some(mirror) = mirrors.pyodide {
+                    let Some(suffix) = self
+                        .url
+                        .strip_prefix("https://github.com/pyodide/pyodide/releases/download/")
+                    else {
+                        return Err(Error::Mirror(
+                            EnvVars::UV_PYODIDE_INSTALL_MIRROR,
                             self.url.to_string(),
                         ));
                     };

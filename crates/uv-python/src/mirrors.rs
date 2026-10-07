@@ -7,4 +7,6 @@ pub struct PythonDownloadMirrors<'a> {
     pub pypy: Option<&'a str>,
     /// Mirror for GraalPy distributions.
     pub graalpy: Option<&'a str>,
+    /// Mirror for Pyodide distributions.
+    pub pyodide: Option<&'a str>,
 }
