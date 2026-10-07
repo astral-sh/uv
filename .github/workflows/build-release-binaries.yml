@@ -523,8 +523,6 @@ jobs:
             scripts/install-cargo-extensions.sh
 
             if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
-                # Use one codegen unit for both PGO stages to reduce fat-LTO memory use.
-                export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
                 rustup component add llvm-tools-preview
                 python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
                     --target "${{ matrix.target }}" \
