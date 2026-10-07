@@ -6034,6 +6034,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-resolver",
+ "uv-settings",
  "uv-types",
  "uv-workspace",
 ]
