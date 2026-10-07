@@ -47,12 +47,7 @@ use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, Tool
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::operations::installation::loggers::DefaultInstallLogger;
 use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::resolution::loggers::{
-    DefaultResolveLogger, SummaryResolveLogger,
-};
-use crate::commands::operations::resolution::reporters::ResolverReporter;
 use crate::commands::operations::sync::sync_from_lock;
 use crate::commands::project::edit::{EditTarget, ProjectEdit, PythonTarget};
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
@@ -64,8 +59,12 @@ use crate::commands::project::{
 };
 use crate::commands::{ScriptPath, project};
 use uv_configuration::Modifications;
+use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_python_context::PythonDownloadReporter;
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter, init_script_python_requirement};
+use uv_resolve_operations::Error as ResolveError;
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
+use uv_resolve_operations::reporters::ResolverReporter;
 use uv_settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// A failed dependency addition, with `uv add`-specific recovery context.
@@ -853,7 +852,7 @@ pub(crate) async fn add(
 }
 
 fn standard_library_package(
-    operation_error: &crate::commands::operations::resolution::Error,
+    operation_error: &ResolveError,
     edits: &[DependencyEdit],
     python_minor: u8,
 ) -> Option<PackageName> {

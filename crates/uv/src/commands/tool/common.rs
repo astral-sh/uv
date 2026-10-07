@@ -51,8 +51,6 @@ use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::operations;
-
 /// An error raised when a tool package provides no executables.
 #[derive(Debug, Error)]
 pub(crate) enum NoExecutablesError {
@@ -595,9 +593,8 @@ impl ToolLock {
             }
         }
 
-        let markers =
-            operations::resolution::resolution_markers(None, python_platform, interpreter);
-        let tags = operations::resolution::resolution_tags(None, python_platform, interpreter)?;
+        let markers = uv_resolve_operations::resolution_markers(None, python_platform, interpreter);
+        let tags = uv_resolve_operations::resolution_tags(None, python_platform, interpreter)?;
         Ok(ToolLockInstallTarget {
             tool_lock: self,
             project_name,
@@ -643,7 +640,7 @@ pub(crate) fn tool_environment_spec<'lock>(
 pub(crate) async fn refine_interpreter(
     interpreter: &Interpreter,
     python_request: Option<&PythonRequest>,
-    err: &operations::resolution::Error,
+    err: &uv_resolve_operations::Error,
     client_builder: &BaseClientBuilder<'_>,
     reporter: &PythonDownloadReporter,
     install_mirrors: &PythonInstallMirrors,

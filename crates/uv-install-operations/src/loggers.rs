@@ -6,17 +6,17 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use uv_command_support::Printer;
-use uv_command_support::elapsed;
 use uv_configuration::DryRun;
 use uv_distribution_types::Name;
 use uv_normalize::PackageName;
 
-use crate::commands::operations::installation::{ChangeEvent, ChangeEventKind};
-use crate::commands::operations::installation::{Changelog, ShortSpecifier};
+use crate::{ChangeEvent, ChangeEventKind};
+use crate::{Changelog, ShortSpecifier};
+use uv_command_support::Printer;
+use uv_command_support::elapsed;
 
 /// A trait to handle logging during install operations.
-pub(crate) trait InstallLogger {
+pub trait InstallLogger {
     /// Log the completion of the audit phase.
     fn on_check(
         &self,
@@ -60,7 +60,7 @@ pub(crate) trait InstallLogger {
 
 /// The default logger for install operations.
 #[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct DefaultInstallLogger;
+pub struct DefaultInstallLogger;
 
 impl InstallLogger for DefaultInstallLogger {
     fn on_check(
@@ -246,7 +246,7 @@ impl InstallLogger for DefaultInstallLogger {
 /// A logger that only shows installs and uninstalls, the minimal logging necessary to understand
 /// environment changes.
 #[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct SummaryInstallLogger;
+pub struct SummaryInstallLogger;
 
 impl InstallLogger for SummaryInstallLogger {
     fn on_check(
@@ -302,13 +302,13 @@ impl InstallLogger for SummaryInstallLogger {
 
 /// A logger that shows special output for the modification of the given target.
 #[derive(Debug, Clone)]
-pub(crate) struct UpgradeInstallLogger {
+pub struct UpgradeInstallLogger {
     target: PackageName,
 }
 
 impl UpgradeInstallLogger {
     /// Create a new logger for the given target.
-    pub(crate) fn new(target: PackageName) -> Self {
+    pub fn new(target: PackageName) -> Self {
         Self { target }
     }
 }

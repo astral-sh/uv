@@ -36,13 +36,6 @@ use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::operations;
-use crate::commands::operations::installation::loggers::DefaultInstallLogger;
-use crate::commands::operations::resolution::latest::LatestClient;
-use crate::commands::operations::resolution::loggers::{
-    DefaultResolveLogger, SummaryResolveLogger,
-};
-use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
 use crate::commands::project::{
     EnvironmentError, EnvironmentResolution, EnvironmentSpecification, LockValidationError,
     resolve_environment, resolve_names, sync_environment, update_environment,
@@ -54,7 +47,11 @@ use crate::commands::tool::common::{
 use crate::commands::tool::error::ToolLockError;
 use crate::commands::tool::{Target, ToolRequest};
 use uv_configuration::Modifications;
+use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_python_context::PythonDownloadReporter;
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
@@ -156,7 +153,7 @@ pub(crate) async fn install(
     .into_interpreter();
 
     let receipt_build_constraints =
-        operations::resolution::read_constraints(build_constraints, &client_builder).await?;
+        uv_resolve_operations::read_constraints(build_constraints, &client_builder).await?;
     let build_constraints =
         Constraints::from_specifications(receipt_build_constraints.iter().cloned());
 

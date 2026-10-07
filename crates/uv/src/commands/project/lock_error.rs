@@ -4,7 +4,6 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use crate::commands::operations::resolution::Error as ResolveError;
 use uv_client::{ClientBuildError, FlatIndexError};
 use uv_command_support::UvError;
 use uv_distribution::{LoweringError, MetadataError};
@@ -17,6 +16,7 @@ use uv_pep508::MarkerTreeContents;
 use uv_platform_tags::TagsError;
 use uv_python_context::PythonContextError;
 use uv_requirements::ScriptRequirementsError;
+use uv_resolve_operations::Error as ResolveError;
 use uv_settings::{FrozenSource, LockedSource};
 use uv_types::HashStrategyError;
 use uv_workspace::dependency_groups::DependencyGroupError;

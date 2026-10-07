@@ -53,7 +53,6 @@ pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 pub use uv_command_support::ExitStatus;
-
 pub(crate) use uv_console::human_readable_bytes;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
@@ -95,8 +94,8 @@ mod error_tests {
     use insta::assert_snapshot;
 
     use uv_command_support::UvError;
+    use uv_resolve_operations::Error as ResolveError;
 
-    use crate::commands::operations::resolution::Error as ResolveError;
     use crate::commands::project::{EnvironmentError, ProjectError};
 
     #[test]

@@ -4,10 +4,7 @@ use uv_configuration::EditableMode;
 use uv_distribution_types::{DirectorySourceDist, Dist, Resolution, ResolvedDist, SourceDist};
 
 /// Apply editable installation overrides to local directory distributions.
-pub(crate) fn apply_editable_mode(
-    resolution: Resolution,
-    editable: Option<EditableMode>,
-) -> Resolution {
+pub fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
     let Some(editable) = editable else {
         return resolution;
     };

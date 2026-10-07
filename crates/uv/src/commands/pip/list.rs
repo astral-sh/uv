@@ -30,9 +30,9 @@ use uv_python::{
 };
 use uv_resolver::{ExcludeNewer, Prerelease};
 
-use crate::commands::operations::resolution::latest::LatestClient;
-use crate::commands::operations::resolution::reporters::LatestVersionReporter;
 use crate::commands::pip::reporters::report_target_environment;
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::reporters::LatestVersionReporter;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) async fn pip_list(

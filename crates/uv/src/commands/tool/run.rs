@@ -47,20 +47,15 @@ use uv_tool::{InstalledTools, entrypoint_paths};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::operations;
-use crate::commands::operations::installation::loggers::{
-    DefaultInstallLogger, SummaryInstallLogger,
-};
-use crate::commands::operations::resolution::latest::LatestClient;
-use crate::commands::operations::resolution::loggers::{
-    DefaultResolveLogger, SummaryResolveLogger,
-};
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{EnvironmentError, EnvironmentSpecification, resolve_names};
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::error::ToolError;
 use crate::commands::tool::{Target, ToolRequest};
+use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_context::PythonDownloadReporter;
+use uv_resolve_operations::latest::LatestClient;
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_settings::ResolverInstallerSettings;
 use uv_settings::ResolverSettings;
 
@@ -374,8 +369,7 @@ pub(crate) async fn run(
             | ToolError::Environment(EnvironmentError::Requirements(err)),
         ) => {
             return Err(UvError::from(
-                operations::resolution::Error::Requirements(err)
-                    .with_resolution_context("`--with`"),
+                uv_resolve_operations::Error::Requirements(err).with_resolution_context("`--with`"),
             )
             .into());
         }
@@ -837,7 +831,7 @@ async fn get_or_create_environment(
     .into_interpreter();
 
     let build_constraints = Constraints::from_specifications(
-        operations::resolution::read_constraints(build_constraints, client_builder).await?,
+        uv_resolve_operations::read_constraints(build_constraints, client_builder).await?,
     );
 
     let from = match request {
@@ -1128,12 +1122,12 @@ async fn get_or_create_environment(
                     .into_inner();
 
                     // Determine the markers and tags to use for the resolution.
-                    let markers = operations::resolution::resolution_markers(
+                    let markers = uv_resolve_operations::resolution_markers(
                         None,
                         python_platform.as_ref(),
                         &interpreter,
                     );
-                    let tags = operations::resolution::resolution_tags(
+                    let tags = uv_resolve_operations::resolution_tags(
                         None,
                         python_platform.as_ref(),
                         &interpreter,

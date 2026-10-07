@@ -64,13 +64,7 @@ struct GistResponse {
 struct GistFile {
     raw_url: String,
 }
-use crate::commands::operations::installation::loggers::{
-    DefaultInstallLogger, SummaryInstallLogger,
-};
 use crate::commands::operations::malware::MalwareCheckContext;
-use crate::commands::operations::resolution::loggers::{
-    DefaultResolveLogger, SummaryResolveLogger,
-};
 use crate::commands::operations::sync::sync_from_lock;
 use crate::commands::project;
 use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
@@ -82,8 +76,10 @@ use crate::commands::project::{
     ProjectEnvironmentTarget, ScriptEnvironment, update_environment,
 };
 use uv_configuration::Modifications;
+use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_python_context::PythonDownloadReporter;
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_settings::{
     FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings, ResolverSettings,
 };

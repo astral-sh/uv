@@ -1,14 +1,13 @@
 use owo_colors::OwoColorize;
-
 use uv_command_support::UvError;
 use uv_distribution::dist_hints;
 use uv_distribution_types::Name;
 
-use crate::commands::operations::installation::Changelog;
+use crate::Changelog;
 
 /// An error while preparing or installing distributions.
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum Error {
+pub enum Error {
     #[error(transparent)]
     Prepare(#[from] uv_installer::PrepareError),
     #[error(transparent)]
@@ -27,7 +26,7 @@ pub(crate) enum Error {
 
 impl Error {
     /// Return the changes required by an environment that failed an up-to-date check.
-    pub(crate) fn outdated_environment(&self) -> Option<&Changelog> {
+    pub fn outdated_environment(&self) -> Option<&Changelog> {
         match self {
             Self::OutdatedEnvironment(changelog) => Some(changelog),
             Self::Prepare(_)

@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, anyhow};
 use owo_colors::OwoColorize;
 use tracing::debug;
-
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_command_support::Printer;
@@ -34,20 +33,18 @@ use uv_python::PythonEnvironment;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::operations::installation::bytecode::{
-    compile_bytecode, compile_bytecode_files,
-};
-use crate::commands::operations::installation::loggers::InstallLogger;
-use crate::commands::operations::installation::reporters::{InstallReporter, PrepareReporter};
+use crate::bytecode::{compile_bytecode, compile_bytecode_files};
+use crate::loggers::InstallLogger;
+use crate::reporters::{InstallReporter, PrepareReporter};
 
 mod bytecode;
-pub(crate) mod editable;
+pub mod editable;
 mod error;
-pub(crate) mod loggers;
-pub(crate) mod report;
-pub(crate) mod reporters;
+pub mod loggers;
+pub mod report;
+mod reporters;
 
-pub(crate) use error::Error;
+pub use error::Error;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 enum ChangeEventKind {
@@ -146,7 +143,7 @@ impl ChangedDist {
 
 /// A summary of the changes made to the environment during an installation.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Changelog {
+pub struct Changelog {
     /// The distributions that were installed.
     installed: HashSet<ChangedDist>,
     /// The distributions that were uninstalled.
@@ -191,25 +188,25 @@ impl Changelog {
     }
 
     /// Create a [`Changelog`] from a list of installed distributions.
-    pub(crate) fn from_installed(installed: Vec<CachedDist>) -> Self {
+    pub fn from_installed(installed: Vec<CachedDist>) -> Self {
         Self::from_local(installed, Vec::new())
     }
 
     /// Returns `true` if the changelog includes a distribution with the given name, either via
     /// an installation or uninstallation.
-    pub(crate) fn includes(&self, name: &PackageName) -> bool {
+    pub fn includes(&self, name: &PackageName) -> bool {
         self.installed.iter().any(|dist| dist.name() == name)
             || self.uninstalled.iter().any(|dist| dist.name() == name)
     }
 
     /// Returns `true` if the changelog is empty.
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.installed.is_empty() && self.uninstalled.is_empty()
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BytecodeCompilation {
+pub enum BytecodeCompilation {
     /// Compile all Python source files in the environment.
     All,
     /// Compile Python source files installed by this operation.
@@ -217,14 +214,14 @@ pub(crate) enum BytecodeCompilation {
 }
 
 /// An installation plan and the time required to create it.
-pub(crate) struct InstallationPlan {
+pub struct InstallationPlan {
     plan: Plan,
     elapsed: Duration,
 }
 
 impl InstallationPlan {
     /// Determine the changes required to make an environment satisfy a resolution.
-    pub(crate) fn build(
+    pub fn build(
         resolution: &Resolution,
         site_packages: SitePackages,
         installation: InstallationStrategy,
@@ -266,7 +263,7 @@ impl InstallationPlan {
     }
 
     /// Returns `true` if executing the plan would not modify the environment.
-    pub(crate) fn is_noop(
+    pub fn is_noop(
         &self,
         modifications: Modifications,
         compile: Option<BytecodeCompilation>,
@@ -281,7 +278,7 @@ impl InstallationPlan {
     }
 
     /// Complete an installation that was determined to be a no-op.
-    pub(crate) fn finish_noop(
+    pub fn finish_noop(
         self,
         resolution: &Resolution,
         modifications: Modifications,
@@ -319,7 +316,7 @@ impl InstallationPlan {
 /// Install a set of requirements into the current environment.
 ///
 /// Returns a [`Changelog`] summarizing the changes made to the environment.
-pub(crate) async fn install(
+pub async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
     installation: InstallationStrategy,
@@ -384,7 +381,7 @@ pub(crate) async fn install(
 
 impl InstallationPlan {
     /// Execute a previously computed installation plan.
-    pub(crate) async fn execute(
+    pub async fn execute(
         self,
         resolution: &Resolution,
         modifications: Modifications,
@@ -868,7 +865,7 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
-pub(crate) fn diagnose_environment<'a>(
+pub fn diagnose_environment<'a>(
     relevant_packages: impl Iterator<Item = &'a PackageName>,
     venv: &PythonEnvironment,
     markers: &ResolverMarkerEnvironment,

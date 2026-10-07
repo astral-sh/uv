@@ -11,6 +11,9 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{Dist, Resolution, ResolvedDist, SourceDist};
+use uv_install_operations::editable::apply_editable_mode;
+use uv_install_operations::loggers::InstallLogger;
+use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_lock::Installable;
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -18,18 +21,14 @@ use uv_preview::Preview;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::PythonEnvironment;
 use uv_requirements::script_extra_build_requires;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_resolver::FlatIndex;
 use uv_settings::InstallerSettingsRef;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache};
 
-use crate::commands::operations;
-use crate::commands::operations::installation::Changelog;
-use crate::commands::operations::installation::editable::apply_editable_mode;
-use crate::commands::operations::installation::loggers::InstallLogger;
 use crate::commands::operations::malware::{MalwareCheckContext, maybe_check_malware};
-use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::{EnvironmentError, detect_conflicts};
 
@@ -224,10 +223,9 @@ pub(crate) async fn sync_from_lock(
     // Populate credentials from the target.
     store_credentials_from_target(target, &client_builder)?;
 
-    let bytecode_compilation =
-        compile_bytecode.then_some(operations::installation::BytecodeCompilation::All);
+    let bytecode_compilation = compile_bytecode.then_some(BytecodeCompilation::All);
     let site_packages = SitePackages::from_environment(venv)?;
-    let installation_plan = operations::installation::InstallationPlan::build(
+    let installation_plan = InstallationPlan::build(
         &resolution,
         site_packages,
         InstallationStrategy::Strict,

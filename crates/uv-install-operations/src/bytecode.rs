@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use anyhow::Context;
 use owo_colors::OwoColorize;
 use tracing::debug;
-
 use uv_cache::Cache;
 use uv_command_support::{Printer, elapsed};
 use uv_configuration::Concurrency;

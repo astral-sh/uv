@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tracing::debug;
-
 use uv_cache::Cache;
 use uv_command_support::Printer;
 use uv_fs::Simplified;

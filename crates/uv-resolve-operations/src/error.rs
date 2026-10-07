@@ -5,7 +5,7 @@ use uv_resolver::{NoSolutionError, NoSolutionHeader, ResolveError};
 
 /// An error while reading requirements or resolving dependencies.
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum Error {
+pub enum Error {
     #[error("{header}")]
     NoSolution {
         header: NoSolutionHeader,
@@ -34,7 +34,7 @@ pub(crate) enum Error {
 
 impl Error {
     /// Return the solver failure for an unsatisfiable resolution.
-    pub(crate) fn as_no_solution(&self) -> Option<&NoSolutionError> {
+    pub fn as_no_solution(&self) -> Option<&NoSolutionError> {
         match self {
             Self::NoSolution { source, .. } | Self::Resolve(ResolveError::NoSolution(source)) => {
                 Some(source)
@@ -70,7 +70,7 @@ impl Error {
 
     /// Set the command-specific context for a resolution failure.
     #[must_use]
-    pub(crate) fn with_resolution_context(self, context: &'static str) -> Self {
+    pub fn with_resolution_context(self, context: &'static str) -> Self {
         match self.with_default_resolution_context() {
             Self::NoSolution { header, source } => Self::NoSolution {
                 header: header.with_context(context),
@@ -154,7 +154,7 @@ impl uv_errors::Hinted for Error {
 #[error(
     "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file"
 )]
-pub(crate) struct ExtrasWithoutSourceError {
+pub struct ExtrasWithoutSourceError {
     pub(crate) has_editable: bool,
 }
 

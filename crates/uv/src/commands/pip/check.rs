@@ -14,8 +14,8 @@ use uv_python::{
     PythonVersion,
 };
 
-use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
 use crate::commands::pip::reporters::report_target_environment;
+use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// Check for incompatibilities in installed packages.
 pub(crate) fn pip_check(
