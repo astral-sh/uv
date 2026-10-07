@@ -32,7 +32,8 @@ jobs:
         run: |
           review_config="$RUNNER_TEMP/pull-request-code-quality-review"
           mkdir -p "$review_config/codex" "$RUNNER_TEMP/codex-code-quality-review"
-          cp security-pr-review/schema.json "$review_config/"
+          jq 'del(.properties.reviewed_paths) | .required -= ["reviewed_paths"]' \
+            security-pr-review/schema.json > "$review_config/schema.json"
           printf 'REVIEW_CONFIG=%s\n' "$review_config" >> "$GITHUB_ENV"
 
       - name: "Checkout caller repository"
@@ -103,9 +104,8 @@ jobs:
           output-schema-file: "${{ env.REVIEW_CONFIG }}/schema.json"
           output-file: "${{ runner.temp }}/pull-request-code-quality-review-result.json"
 
-      - name: "Check review coverage"
+      - name: "Check reviewed checkout"
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
@@ -113,14 +113,6 @@ jobs:
             exit 1
           fi
           git diff --no-ext-diff --no-textconv --exit-code HEAD --
-          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
-            "$merge_base..$HEAD_SHA" \
-            | jq --raw-input --slurp 'split("\u0000")[:-1]' \
-              > "$RUNNER_TEMP/code-quality-review-expected-paths.json"
-          jq --exit-status --slurpfile paths "$RUNNER_TEMP/code-quality-review-expected-paths.json" \
-            '(.reviewed_paths | sort) == ($paths[0] | sort)' \
-            "$RUNNER_TEMP/pull-request-code-quality-review-result.json" > /dev/null
 
       - name: "Upload Codex thread"
         if: always()

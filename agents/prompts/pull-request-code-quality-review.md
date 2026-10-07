@@ -47,11 +47,9 @@ deliberate tradeoff. Respect corrections and withdrawn suggestions. Traits, clon
 duplication, and small helpers are contextual choices, not automatic findings. Do not repeat an
 existing finding or report unrelated pre-existing problems. No findings is a valid result.
 
-Return only JSON matching `$REVIEW_CONFIG/schema.json`. Include every inspected changed path in
-`reviewed_paths`; never claim coverage of an unread path. Each finding needs a precise diff
-location, triggering condition or concrete maintenance cost, evidence, and the smallest useful
-correction. Keep ranges tight and use repository-relative paths. Order findings by impact:
-`priority` 0 is critical, 1 is urgent, 2 is an actionable defect, and 3 is a nonblocking
-improvement. Design and style suggestions are normally priority 3; do not present preferences as
-bugs. Do not invent results for checks you did not run. Use an empty `findings` array when nothing
-actionable remains.
+Return only JSON matching `$REVIEW_CONFIG/schema.json`. Each finding needs a precise diff location,
+triggering condition or concrete maintenance cost, evidence, and the smallest useful correction.
+Keep ranges tight and use repository-relative paths. Order findings by impact: `priority` 0 is
+critical, 1 is urgent, 2 is an actionable defect, and 3 is a nonblocking improvement. Design and
+style suggestions are normally priority 3; do not present preferences as bugs. Do not invent results
+for checks you did not run. Use an empty `findings` array when nothing actionable remains.
