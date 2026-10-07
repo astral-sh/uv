@@ -43,7 +43,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenLink, Interpreter, PythonArchitecture, PythonVersion};
+use crate::{BrokenLink, Interpreter, PythonArchitecture, PythonDownloadMirrors, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -1577,9 +1577,7 @@ pub(crate) async fn find_best_python_installation(
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     reporter: Option<&dyn crate::downloads::Reporter>,
-    python_install_mirror: Option<&str>,
-    pypy_install_mirror: Option<&str>,
-    graalpy_install_mirror: Option<&str>,
+    mirrors: PythonDownloadMirrors<'_>,
     python_downloads_json_url: Option<&str>,
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {request}");
@@ -1663,9 +1661,7 @@ pub(crate) async fn find_best_python_installation(
                     retry_policy,
                     cache,
                     reporter,
-                    python_install_mirror,
-                    pypy_install_mirror,
-                    graalpy_install_mirror,
+                    mirrors,
                 )
                 .await
                 .map(Some),
