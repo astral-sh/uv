@@ -4,15 +4,18 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use tracing::{debug, info, trace};
 use uv_auth::Credentials;
 use uv_cache::Cache;
+use uv_cli::PublishOutputFormat;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
+use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
     PreparedDistribution, PublishFinalizeError, PublishOutcome, PublishSession,
     PublishingCredentials, TrustedPublishResult, UploadOutcome, check_trusted_publishing,
@@ -37,11 +40,22 @@ pub(crate) async fn publish(
     check_url: Option<IndexUrl>,
     index: Option<String>,
     index_locations: IndexLocations,
+    output_format: PublishOutputFormat,
     dry_run: bool,
     no_attestations: bool,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
+    if matches!(output_format, PublishOutputFormat::Json)
+        && !preview.is_enabled(PreviewFeature::JsonOutput)
+    {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
     if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
     }
@@ -83,21 +97,27 @@ pub(crate) async fn publish(
     };
 
     let distributions = PublishSession::prepare(paths, no_attestations)?;
-    match distributions.len() {
-        0 => bail!("No files found to publish"),
-        1 => {
+    let distribution_count = distributions.len();
+    if distribution_count == 0 {
+        bail!("No files found to publish");
+    }
+    if matches!(output_format, PublishOutputFormat::Text) {
+        if distribution_count == 1 {
             if dry_run {
                 writeln!(printer.stderr(), "Checking 1 file against {publish_url}")?;
             } else {
                 writeln!(printer.stderr(), "Publishing 1 file to {publish_url}")?;
             }
-        }
-        n => {
-            if dry_run {
-                writeln!(printer.stderr(), "Checking {n} files against {publish_url}")?;
-            } else {
-                writeln!(printer.stderr(), "Publishing {n} files to {publish_url}")?;
-            }
+        } else if dry_run {
+            writeln!(
+                printer.stderr(),
+                "Checking {distribution_count} files against {publish_url}"
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Publishing {distribution_count} files to {publish_url}"
+            )?;
         }
     }
 
@@ -145,6 +165,7 @@ pub(crate) async fn publish(
         printer,
     )
     .await?;
+    let report_publish_url = publish_url.to_string();
     let mut session = PublishSession::new(
         publish_url,
         credentials,
@@ -161,8 +182,10 @@ pub(crate) async fn publish(
     }
 
     // Keep the result so finalization also runs after a preparation or upload error.
-    let result = publish_files(distributions, &mut session, dry_run, printer).await;
-    let outcome = result.as_ref().copied().unwrap_or(PublishOutcome::Failed);
+    let result = publish_files(distributions, &mut session, output_format, dry_run, printer).await;
+    let outcome = result
+        .as_ref()
+        .map_or(PublishOutcome::Failed, |result| result.outcome);
     match session.finalize(outcome).await {
         Ok(()) => {}
         Err(PublishFinalizeError::TokenInvalidation(err)) => {
@@ -173,25 +196,88 @@ pub(crate) async fn publish(
         }
     }
 
-    result.map(|outcome| match outcome {
-        PublishOutcome::Success | PublishOutcome::DryRun => ExitStatus::Success,
-        PublishOutcome::Failed => ExitStatus::Failure,
-    })
+    let result = result?;
+    match result.outcome {
+        PublishOutcome::Success | PublishOutcome::DryRun => {
+            if matches!(output_format, PublishOutputFormat::Json) {
+                let report = PublishReport {
+                    schema: SchemaReport::default(),
+                    publish_url: report_publish_url,
+                    files: result.files,
+                    dry_run,
+                };
+                writeln!(
+                    printer.stdout_important(),
+                    "{}",
+                    serde_json::to_string_pretty(&report)?
+                )?;
+            }
+            Ok(ExitStatus::Success)
+        }
+        PublishOutcome::Failed => Ok(ExitStatus::Failure),
+    }
+}
+
+#[derive(Debug, Serialize, Default)]
+struct SchemaReport {
+    version: SchemaVersion,
+}
+
+#[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+enum SchemaVersion {
+    #[default]
+    Preview,
+}
+
+#[derive(Debug, Serialize)]
+struct PublishReport {
+    schema: SchemaReport,
+    publish_url: String,
+    files: Vec<PublishFileReport>,
+    dry_run: bool,
+}
+
+#[derive(Debug)]
+struct PublishResult {
+    outcome: PublishOutcome,
+    files: Vec<PublishFileReport>,
+}
+
+#[derive(Debug, Serialize)]
+struct PublishFileReport {
+    filename: String,
+    status: PublishFileStatus,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum PublishFileStatus {
+    Uploaded,
+    AlreadyExists,
+    Validated,
+    Skipped,
 }
 
 /// Publish each distribution, reporting all validation failures during a dry run.
 async fn publish_files(
     distributions: Vec<PreparedDistribution>,
     session: &mut PublishSession<'_>,
+    output_format: PublishOutputFormat,
     dry_run: bool,
     printer: Printer,
-) -> Result<PublishOutcome> {
+) -> Result<PublishResult> {
     let mut error_count: usize = 0;
+    let mut files = Vec::with_capacity(distributions.len());
 
     for prepared in distributions {
-        let reporter = Arc::new(PublishReporter::single(printer, dry_run));
-        match publish_file(prepared, session, reporter, dry_run, printer).await {
-            Ok(()) => {}
+        let reporter_printer = match output_format {
+            PublishOutputFormat::Text => printer,
+            PublishOutputFormat::Json => Printer::Quiet,
+        };
+        let reporter = Arc::new(PublishReporter::single(reporter_printer, dry_run));
+        match publish_file(prepared, session, reporter, output_format, dry_run, printer).await {
+            Ok(file) => files.push(file),
             Err(err) => {
                 if !dry_run {
                     return Err(err);
@@ -209,13 +295,19 @@ async fn publish_files(
     if error_count > 0 {
         let failed = if error_count == 1 { "file" } else { "files" };
         writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
-        return Ok(PublishOutcome::Failed);
+        return Ok(PublishResult {
+            outcome: PublishOutcome::Failed,
+            files,
+        });
     }
 
-    Ok(if dry_run {
-        PublishOutcome::DryRun
-    } else {
-        PublishOutcome::Success
+    Ok(PublishResult {
+        outcome: if dry_run {
+            PublishOutcome::DryRun
+        } else {
+            PublishOutcome::Success
+        },
+        files,
     })
 }
 
@@ -224,47 +316,63 @@ async fn publish_file(
     prepared: PreparedDistribution,
     session: &mut PublishSession<'_>,
     reporter: Arc<PublishReporter>,
+    output_format: PublishOutputFormat,
     dry_run: bool,
     printer: Printer,
-) -> Result<()> {
+) -> Result<PublishFileReport> {
+    let filename = prepared.raw_filename().to_string();
     let normalized_filename = prepared.filename().to_string();
     if prepared.raw_filename() != normalized_filename {
         warn_user_once!(
             "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
             prepared.raw_filename()
         );
-        return Ok(());
+        return Ok(PublishFileReport {
+            filename,
+            status: PublishFileStatus::Skipped,
+        });
     }
 
     if session.check_existing(&prepared, reporter.clone()).await? {
-        writeln!(
-            printer.stderr(),
-            "File {} already exists, skipping",
-            prepared.filename()
-        )?;
-        return Ok(());
+        if matches!(output_format, PublishOutputFormat::Text) {
+            writeln!(
+                printer.stderr(),
+                "File {} already exists, skipping",
+                prepared.filename()
+            )?;
+        }
+        return Ok(PublishFileReport {
+            filename,
+            status: PublishFileStatus::AlreadyExists,
+        });
     }
 
     if dry_run {
         session.dry_run(&prepared, reporter).await?;
-        return Ok(());
+        return Ok(PublishFileReport {
+            filename,
+            status: PublishFileStatus::Validated,
+        });
     }
 
     let uploaded = session.upload(prepared, reporter).await?;
     info!("Upload succeeded");
 
-    match uploaded {
-        UploadOutcome::Uploaded => {}
+    let status = match uploaded {
+        UploadOutcome::Uploaded => PublishFileStatus::Uploaded,
         UploadOutcome::AlreadyExists => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "File already exists, skipping".dimmed()
-            )?;
+            if matches!(output_format, PublishOutputFormat::Text) {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    "File already exists, skipping".dimmed()
+                )?;
+            }
+            PublishFileStatus::AlreadyExists
         }
-    }
+    };
 
-    Ok(())
+    Ok(PublishFileReport { filename, status })
 }
 
 /// Whether to allow prompting for username and password.
