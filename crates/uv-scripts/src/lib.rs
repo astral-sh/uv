@@ -18,7 +18,11 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
+use uv_workspace::pyproject::{BuildConstraintDependency, ExtraBuildDependency, Sources};
+
+mod discovery;
+
+pub use discovery::{ScriptDiscoveryError, find_scripts};
 
 pub use uv_configuration::ExcludeDependency;
 pub use uv_workspace::pyproject::OverrideDependency;
@@ -428,7 +432,7 @@ pub struct ToolUv {
     pub override_dependencies: Option<Vec<OverrideDependency>>,
     pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-    pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
@@ -726,6 +730,8 @@ fn serialize_metadata(metadata: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use crate::{Pep723Error, Pep723Script, ScriptTag, serialize_metadata};
     use std::str::FromStr;
 
@@ -737,10 +743,10 @@ mod tests {
         # ///
     "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
-        ));
+        );
     }
 
     #[test]
@@ -754,10 +760,10 @@ mod tests {
         # ]
     "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
-        ));
+        );
     }
 
     #[test]
@@ -765,10 +771,10 @@ mod tests {
         // Explicit string (not `indoc`) so the closing tag's trailing space is preserved.
         let contents = "# /// script\n# requires-python = '>=3.11'\n# /// \n";
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlockTrailingContent)
-        ));
+        );
     }
 
     #[test]
@@ -779,10 +785,10 @@ mod tests {
             # /// unexpected
         "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlockTrailingContent)
-        ));
+        );
     }
 
     #[test]

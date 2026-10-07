@@ -289,13 +289,13 @@ fn update_site_packages_mtime(site_packages: &Path) {
         Ok(dir) => {
             if let Err(err) = dir.set_modified(now) {
                 debug!(
-                    "Failed to update mtime for {}: {err}",
+                    "Failed to update mtime for `{}`: {err}",
                     site_packages.display()
                 );
             }
         }
         Err(err) => debug!(
-            "Failed to open {} to update mtime: {err}",
+            "Failed to open `{}` to update mtime: {err}",
             site_packages.display()
         ),
     }

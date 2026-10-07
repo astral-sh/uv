@@ -7,10 +7,13 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   update:
     if: github.repository == 'astral-sh/uv' && !github.event.issue.pull_request
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 15
     permissions:
@@ -196,13 +199,13 @@ jobs:
 
       - name: "Update issue context"
         if: steps.find-thread.outputs.found == 'true'
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.153.4"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "issue-triage"
@@ -252,7 +255,7 @@ jobs:
   persist:
     needs: update
     if: needs.update.outputs.changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 10
     concurrency:

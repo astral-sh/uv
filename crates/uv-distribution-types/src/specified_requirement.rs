@@ -1,21 +1,45 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
+use std::io;
+use std::path::Path;
 
 use uv_git_types::{GitLfs, GitReference};
 use uv_normalize::ExtraName;
 use uv_pep508::{MarkerEnvironment, MarkerTree, UnnamedRequirement};
-use uv_pypi_types::{Hashes, ParsedUrl};
+use uv_pypi_types::{HashError, Hashes, ParsedUrl};
 
 use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
 
-/// An [`UnresolvedRequirement`] with additional metadata from `requirements.txt`, currently only
-/// hashes but in the future also editable and similar information.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+/// A named requirement with hashes from `requirements.txt` or `pyproject.toml`.
+#[derive(
+    Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct NameRequirementSpecification {
     /// The actual requirement.
+    #[serde(flatten)]
     pub requirement: Requirement,
     /// Hashes of the downloadable packages.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hashes: Vec<String>,
+}
+
+impl NameRequirementSpecification {
+    /// Make the requirement's path relative to the given root.
+    pub fn relative_to(self, root: &Path) -> Result<Self, io::Error> {
+        Ok(Self {
+            requirement: self.requirement.relative_to(root)?,
+            hashes: self.hashes,
+        })
+    }
+
+    /// Make the requirement's path absolute based on the given root.
+    #[must_use]
+    pub fn into_absolute(self, root: &Path) -> Self {
+        Self {
+            requirement: self.requirement.into_absolute(root),
+            hashes: self.hashes,
+        }
+    }
 }
 
 /// An [`UnresolvedRequirement`] with additional metadata from `requirements.txt`, currently only
@@ -197,14 +221,14 @@ impl UnresolvedRequirement {
     }
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Option<Hashes> {
+    pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
         match self {
             Self::Named(requirement) => requirement.hashes(),
             Self::Unnamed(requirement) => {
-                let fragment = requirement.url.verbatim.fragment()?;
-                fragment
-                    .split('&')
-                    .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
+                let Some(fragment) = requirement.url.verbatim.fragment() else {
+                    return Ok(None);
+                };
+                Hashes::parse_url_fragment(fragment)
             }
         }
     }

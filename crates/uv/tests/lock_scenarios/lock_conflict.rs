@@ -1,8 +1,10 @@
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use url::Url;
 
 use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::Scenario;
@@ -134,9 +136,9 @@ fn extra_basic() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+             And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // And now with the same extra configuration, we tell uv about
@@ -178,7 +180,7 @@ fn extra_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -302,9 +304,9 @@ fn extra_basic_three_extras() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project[extra2] depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.2.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because project[extra2] depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.2.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+             And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // And now with the same extra configuration, we tell uv about
@@ -348,7 +350,7 @@ fn extra_basic_three_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -548,9 +550,9 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+             And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // If we define extra1/extra2 as conflicting and project3/project4
@@ -585,9 +587,9 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (included: project[extra2], project[project3]; excluded: project[extra1], project[project4]):
-      ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
-          And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (included: project[extra2], project[project3]; excluded: project[extra1], project[project4])
+      cause: Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
+             And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // One could try to declare all pairs of conflicting extras as
@@ -697,9 +699,9 @@ fn extra_multiple_independent() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+             And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // OK, responding to the error, we declare our anyio extras
@@ -730,9 +732,9 @@ fn extra_multiple_independent() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (included: project[project4]; excluded: project[project3]):
-      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (included: project[project4]; excluded: project[project3])
+      cause: Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+             And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // Once we declare ALL our conflicting extras, resolution succeeds.
@@ -778,7 +780,7 @@ fn extra_multiple_independent() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -925,7 +927,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -1002,9 +1004,9 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+             And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -1518,13 +1520,13 @@ fn extra_nested_across_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (included: dummy[extra2], dummysub[extra1]; excluded: dummy[extra1], dummysub[extra2]):
-      ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
+    error: No solution found when resolving dependencies for split (included: dummy[extra2], dummysub[extra1]; excluded: dummy[extra1], dummysub[extra2])
+      cause: Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
 
-          Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
-          And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
-          And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
-          And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
+             Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
+             And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
+             And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
+             And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
     ");
 
     // Now let's write out the full set of conflicts, taking
@@ -1651,9 +1653,9 @@ fn extra_depends_on_conflicting_extra() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (included: example[foo]; excluded: example[bar]):
-      ╰─▶ Because example[foo] depends on sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that example[foo]'s requirements are unsatisfiable.
-          And because your project requires example[foo], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (included: example[foo]; excluded: example[bar])
+      cause: Because example[foo] depends on sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that example[foo]'s requirements are unsatisfiable.
+             And because your project requires example[foo], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -1739,7 +1741,7 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "example", extra = "bar" },
@@ -1864,9 +1866,9 @@ fn group_basic() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project:group2 depends on sortedcontainers==2.4.0 and project:group1 depends on sortedcontainers==2.3.0, we can conclude that project:group1 and project:group2 are incompatible.
-          And because your project requires project:group1 and project:group2, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because project:group2 depends on sortedcontainers==2.4.0 and project:group1 depends on sortedcontainers==2.3.0, we can conclude that project:group1 and project:group2 are incompatible.
+             And because your project requires project:group1 and project:group2, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // And now with the same group configuration, we tell uv about
@@ -1909,7 +1911,7 @@ fn group_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -2046,7 +2048,7 @@ fn group_default() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -2060,6 +2062,7 @@ fn group_default() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
+        default-groups = ["group1"]
 
         [package.dev-dependencies]
         group1 = [
@@ -2181,8 +2184,8 @@ fn group_virtual() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because you require sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // And now with the same group configuration, we tell uv about
@@ -2261,7 +2264,7 @@ fn groups_respect_supported_environments_when_filtering_wheels() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -2366,7 +2369,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.10.0"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'darwin'",
@@ -2528,9 +2531,9 @@ fn mixed() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.4.0, we can conclude that project:group1 and project[extra1] are incompatible.
-          And because your project requires project[extra1] and project:group1, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because project:group1 depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.4.0, we can conclude that project:group1 and project[extra1] are incompatible.
+             And because your project requires project[extra1] and project:group1, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // And now with the same extra/group configuration, we tell uv
@@ -2575,7 +2578,7 @@ fn mixed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -2713,7 +2716,7 @@ fn group_activates_self_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "dev" },
@@ -2964,7 +2967,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -3108,7 +3111,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "cu118" },
@@ -3251,7 +3254,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -3414,7 +3417,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-7-project-cu118' and extra == 'extra-7-project-cu124'",
@@ -3725,7 +3728,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -3862,7 +3865,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -4000,7 +4003,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -4142,7 +4145,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -4280,7 +4283,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -4423,7 +4426,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -4564,7 +4567,7 @@ fn shared_dependency_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -4727,7 +4730,7 @@ fn shared_dependency_group() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -4891,7 +4894,7 @@ fn shared_dependency_mixed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -5094,7 +5097,7 @@ conflicts = [
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "x1" },
@@ -5277,7 +5280,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -5436,7 +5439,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-7-project-cu118' and extra == 'extra-7-project-cu124'",
@@ -5594,7 +5597,7 @@ fn collision_extra() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg", extra = "bar" },
@@ -5808,7 +5811,7 @@ fn extra_inferences() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg", extra = "x1" },
@@ -5817,8 +5820,6 @@ fn extra_inferences() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
 
         [[manifest.dependency-metadata]]
         name = "python-nvd3"
@@ -7841,7 +7842,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform != 'linux' and extra != 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2'",
@@ -8010,7 +8011,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
     }, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "test", extra = "chgnet" },
@@ -8245,7 +8246,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
     }, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "test", extra = "alignn" },
@@ -8505,7 +8506,7 @@ fn overlapping_resolution_markers() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.10.*"
         resolution-markers = [
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
@@ -9175,7 +9176,7 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.12.*"
         resolution-markers = [
             "extra != 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124'",
@@ -9636,7 +9637,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
@@ -10048,7 +10049,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
@@ -10494,7 +10495,7 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.12.*"
         resolution-markers = [
             "platform_machine != 'inapplicable' and extra != 'extra-5-debug-a' and extra == 'extra-5-debug-b'",
@@ -10624,12 +10625,12 @@ fn conflict_item_unknown_field() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 10, column 17
-           |
-        10 |               { name = "foo", extra = "extra1" },
-           |                 ^^^^
-        unknown field `name`, expected one of `package`, `extra`, `group`
+    error: Failed to parse: pyproject.toml
+      cause: TOML parse error at line 10, column 17
+                |
+             10 |               { name = "foo", extra = "extra1" },
+                |                 ^^^^
+             unknown field `name`, expected one of `package`, `extra`, `group`
     "#);
 
     Ok(())
@@ -10711,7 +10712,7 @@ fn many_pairwise_conflicts_shared_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "a" },
@@ -10789,6 +10790,286 @@ fn many_pairwise_conflicts_shared_extra() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// A transitive dependency cannot replace a workspace member's source in a conflict fork.
+#[test]
+fn lock_conflicting_workspace_member_transitive_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { path = "bar" }
+
+        [tool.uv.workspace]
+        members = ["foo"]
+
+        [tool.uv]
+        conflicts = [[{ package = "root" }, { package = "foo" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("other/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "2.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    let other_url = Url::from_file_path(context.temp_dir.child("other").path())
+        .map_err(|()| anyhow!("failed to convert dependency path to file URL"))?;
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo @ {other_url}"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--offline", "--preview-features", "package-conflicts",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `bar==1.0`
+      cause: Requirements contain conflicting URLs for package `foo` in all marker environments:
+             - file://[TEMP_DIR]/foo
+             - file://[TEMP_DIR]/other
+
+    hint: `bar` (v1.0) was included because `root` (v1.0) depends on `bar`
+    ");
+
+    Ok(())
+}
+
+/// A registry release cannot replace a workspace member in a conflict fork.
+#[test]
+fn lock_conflicting_workspace_member_transitive_registry() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "workspace-member-registry-identity"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.foo.versions."2.0"]
+        sdist = false
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { path = "bar" }
+
+        [tool.uv.workspace]
+        members = ["foo"]
+
+        [tool.uv]
+        conflicts = [[{ package = "root" }, { package = "foo" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo==2.0"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--preview-features", "package-conflicts"])
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (included: root; excluded: foo)
+      cause: Because only bar==1.0 is available and bar==1.0 depends on foo, we can conclude that all versions of bar cannot be used.
+             And because root depends on bar and your workspace requires root, we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: The package `bar` depends on the package `foo` but the name is shadowed by one of your workspace members. Consider changing the name of the workspace member.
+    ");
+
+    Ok(())
+}
+
+/// An unqualified transitive dependency uses the workspace member even when its root is excluded.
+#[test]
+fn lock_conflicting_workspace_member_transitive_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar"]
+
+        [tool.uv.sources]
+        bar = { path = "bar" }
+
+        [tool.uv.workspace]
+        members = ["foo"]
+
+        [tool.uv]
+        conflicts = [[{ package = "root" }, { package = "foo" }]]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo>=1"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--offline", "--preview-features", "package-conflicts",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+    conflicts = [[
+        { package = "foo" },
+        { package = "root" },
+    ]]
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "foo",
+        "root",
+    ]
+
+    [[package]]
+    name = "bar"
+    version = "1.0"
+    source = { directory = "bar" }
+    dependencies = [
+        { name = "foo", marker = "extra == 'project-4-root'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "foo", specifier = ">=1" }]
+
+    [[package]]
+    name = "foo"
+    version = "1.0"
+    source = { virtual = "foo" }
+
+    [[package]]
+    name = "root"
+    version = "1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "bar", marker = "extra == 'project-4-root'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "bar", directory = "bar" }]
+    "#);
+
+    context
+        .temp_dir
+        .child("bar/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "1.0"
+        dependencies = ["foo>=2"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--offline", "--preview-features", "package-conflicts",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (included: root; excluded: foo)
+      cause: Because only bar==1.0 is available and bar==1.0 depends on foo, we can conclude that all versions of bar cannot be used.
+             And because root depends on bar and your workspace requires root, we can conclude that your workspace's requirements are unsatisfiable.
+
+    hint: The package `bar` depends on the package `foo` but the name is shadowed by one of your workspace members. Consider changing the name of the workspace member.
+    ");
 
     Ok(())
 }
@@ -10875,7 +11156,7 @@ fn project_level_conflict_with_extra() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg-a" },
@@ -11053,7 +11334,7 @@ fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg-a" },
@@ -11265,7 +11546,7 @@ fn project_level_conflict_with_group() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg-a" },

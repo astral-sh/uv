@@ -1,3 +1,4 @@
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
@@ -7,6 +8,130 @@ use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
 use uv_test::{uv_snapshot, venv_bin_path};
+
+#[test]
+fn python_find_default_arch() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_python_sources();
+    let arch = Arch::from_env().to_string();
+    let os = Os::from_env();
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12\n")?;
+
+    // A version pin uses the architecture specified by the environment variable.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, "wasm32"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for any-3.12-any-wasm32-any in [PYTHON SOURCES]
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, &arch), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+    // An empty value leaves the architecture unrestricted.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, ""), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, "invalid"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_PYTHON_ARCH` with invalid value `invalid`: Unknown architecture: invalid
+    ");
+
+    // An architecture-qualified request and an explicit interpreter path take precedence.
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_ARCH, "wasm32")
+        .arg(format!("cpython-3.12-{os}-{arch}")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+    let python = context
+        .python_find()
+        .env(EnvVars::UV_PYTHON_ARCH, &arch)
+        .output()?;
+    let python = String::from_utf8(python.stdout)?;
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_ARCH, "wasm32")
+        .arg(python.trim()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn python_default_arch_existing_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_python_sources();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12\n")?;
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--offline")
+        .env(EnvVars::UV_PYTHON_ARCH, "wasm32"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for any-3.12-any-wasm32-any in [PYTHON SOURCES]
+    ");
+
+    Ok(())
+}
+
+/// Workspace discovery warnings should retain the parse diagnostic, unless warnings are disabled.
+#[test]
+fn python_find_warning_chain() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = 42
+            version = "0.1.0"
+        "#})?;
+
+    // Bypass settings discovery so this exercises the workspace discovery warning.
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-config"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    warning: Failed to parse: pyproject.toml
+      cause: TOML parse error at line 2, column 8
+               |
+             2 | name = 42
+               |        ^^
+             invalid type: integer `42`, expected a string
+    ");
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-config").arg("--quiet"), @"exit_code: 0 (success)");
+    Ok(())
+}
 
 #[test]
 fn python_find() {
@@ -649,6 +774,70 @@ fn python_find_venv() {
     }
 }
 
+#[test]
+#[cfg(unix)]
+fn python_find_venv_executable_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let python = context.interpreter();
+    let python3 = python.with_file_name("python3");
+
+    // Prefer `python` when discovering an environment or requesting it by directory.
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::VIRTUAL_ENV, context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    // An explicit executable path is still used as given.
+    uv_snapshot!(context.filters(), context.python_find().arg(&python3), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+
+    // Discover environments containing only `python`.
+    fs_err::remove_file(&python3)?;
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    // Discover environments containing only `python3`.
+    fs_err::os::unix::fs::symlink(fs_err::canonicalize(&python)?, &python3)?;
+    fs_err::remove_file(&python)?;
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn python_find_unsupported_version() {
@@ -725,7 +914,7 @@ fn python_find_venv_invalid() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
-      Caused by: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
+      cause: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
     ");
 
     // Unless the virtual environment is not active
@@ -1009,8 +1198,8 @@ fn python_find_path() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from provided path at `bar`
-      Caused by: Failed to query Python interpreter at `[TEMP_DIR]/bar`
-      Caused by: [PERMISSION DENIED]
+      cause: Failed to query Python interpreter at `[TEMP_DIR]/bar`
+      cause: [PERMISSION DENIED]
     ");
 
     // No interpreter at a file that does not exist
@@ -1028,7 +1217,6 @@ fn python_find_freethreaded_313() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -1062,7 +1250,6 @@ fn python_find_freethreaded_314() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -1127,7 +1314,6 @@ fn python_find_version_range_installation_key_order() {
         .with_filtered_latest_python_versions()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_exe_suffix();
 
@@ -1259,7 +1445,6 @@ fn python_find_prerelease_version_specifiers() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -1337,7 +1522,6 @@ fn python_find_prerelease_with_patch_request() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();

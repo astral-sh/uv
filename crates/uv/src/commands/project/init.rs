@@ -18,12 +18,13 @@ use uv_configuration::{
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
+use uv_install_wheel::reserved_script_name;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
@@ -59,6 +60,7 @@ pub(crate) async fn init(
     no_workspace: bool,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     config_discovery: ConfigDiscovery,
     cache: &Cache,
@@ -77,6 +79,7 @@ pub(crate) async fn init(
                 install_mirrors,
                 client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 cache,
                 printer,
@@ -124,6 +127,12 @@ pub(crate) async fn init(
                     // whitespace, and replacing any internal whitespace with hyphens.
                     let candidate = directory_name.trim().replace(' ', "-");
                     match PackageName::from_owned(candidate) {
+                        Ok(name) if reserved_script_name(name.as_str()).is_some() => {
+                            anyhow::bail!(
+                                "The directory name (`{directory_name}`) cannot be used as project \
+                                name, please provide a package name with `--name`."
+                            );
+                        }
                         Ok(name) => name,
                         Err(_) => {
                             let directory_description = if explicit_path.is_some() {
@@ -156,6 +165,7 @@ pub(crate) async fn init(
                 no_workspace,
                 client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 config_discovery,
                 cache,
@@ -202,6 +212,7 @@ async fn init_script(
     install_mirrors: PythonInstallMirrors,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
     printer: Printer,
@@ -253,6 +264,7 @@ async fn init_script(
         script_path.parent().unwrap_or(&CWD),
         !pin_python,
         python_preference,
+        python_arch,
         python_downloads,
         config_discovery,
         client_builder,
@@ -289,6 +301,7 @@ async fn init_project(
     no_workspace: bool,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     config_discovery: ConfigDiscovery,
     cache: &Cache,
@@ -387,6 +400,7 @@ async fn init_project(
         install_mirrors,
         client_builder,
         python_preference,
+        python_arch,
         python_downloads,
         cache,
         workspace.as_deref(),
@@ -491,6 +505,7 @@ async fn determine_requires_python(
     install_mirrors: PythonInstallMirrors,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
     workspace: Option<&Workspace>,
@@ -549,12 +564,12 @@ async fn determine_requires_python(
                         Some(python_request),
                         EnvironmentPreference::OnlySystem,
                         python_preference,
+                        python_arch,
                         python_downloads,
                         client_builder,
                         cache,
                         Some(reporter),
-                        install_mirrors.python_install_mirror.as_deref(),
-                        install_mirrors.pypy_install_mirror.as_deref(),
+                        install_mirrors.mirrors(),
                         install_mirrors.python_downloads_json_url.as_deref(),
                     )
                     .await?
@@ -576,12 +591,12 @@ async fn determine_requires_python(
                     Some(python_request),
                     EnvironmentPreference::OnlySystem,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     client_builder,
                     cache,
                     Some(reporter),
-                    install_mirrors.python_install_mirror.as_deref(),
-                    install_mirrors.pypy_install_mirror.as_deref(),
+                    install_mirrors.mirrors(),
                     install_mirrors.python_downloads_json_url.as_deref(),
                 )
                 .await?
@@ -646,12 +661,12 @@ async fn determine_requires_python(
                 Some(&python_request),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
+                python_arch,
                 python_downloads,
                 client_builder,
                 cache,
                 Some(reporter),
-                install_mirrors.python_install_mirror.as_deref(),
-                install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.mirrors(),
                 install_mirrors.python_downloads_json_url.as_deref(),
             )
             .await?
@@ -675,12 +690,12 @@ async fn determine_requires_python(
             None,
             EnvironmentPreference::OnlySystem,
             python_preference,
+            python_arch,
             python_downloads,
             client_builder,
             cache,
             Some(reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?

@@ -17,13 +17,6 @@ fn assert_project_unchanged(context: &TestContext, expected: &str) -> Result<()>
     Ok(())
 }
 
-/// Return snapshot filters for metadata fetched from a [`PackseServer`].
-fn packse_filters(context: &TestContext) -> Vec<(&str, &str)> {
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
-    filters
-}
-
 /// Write a project where `foo==1` resolves two versions of `bar` in platform forks.
 fn write_fork_upgrade_project(
     context: &TestContext,
@@ -71,6 +64,31 @@ fn upgrade_help() {
 
     Options:
           --exclude <EXCLUDE>  Exclude the named package from upgrades
+
+    Index options:
+          --index <INDEX>
+              The indexes to use when resolving dependencies, in addition to the default index [env:
+              UV_INDEX]
+          --default-index <DEFAULT_INDEX>
+              The default package index (by default: <https://pypi.org/simple>) [env: UV_DEFAULT_INDEX]
+      -i, --index-url <INDEX_URL>
+              (Deprecated: use `--default-index` instead) The URL of the Python package index (by
+              default: <https://pypi.org/simple>) [env: UV_INDEX_URL]
+          --extra-index-url <EXTRA_INDEX_URL>
+              (Deprecated: use `--index` instead) Extra URLs of package indexes to use, in addition to
+              `--index-url` [env: UV_EXTRA_INDEX_URL]
+      -f, --find-links <FIND_LINKS>
+              Locations to search for candidate distributions, in addition to those found in the
+              registry indexes [env: UV_FIND_LINKS]
+          --no-index
+              Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and
+              those provided via `--find-links`
+          --index-strategy <INDEX_STRATEGY>
+              The strategy to use when resolving against multiple index URLs [env: UV_INDEX_STRATEGY=]
+              [possible values: first-index, unsafe-first-match, unsafe-best-match]
+          --keyring-provider <KEYRING_PROVIDER>
+              Attempt to use `keyring` for authentication for index URLs [env: UV_KEYRING_PROVIDER=]
+              [possible values: disabled, subprocess]
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -172,7 +190,7 @@ fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()
         write_fork_upgrade_project(&context, &server, "bar==2 ; sys_platform != 'linux'")?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -196,7 +214,7 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
     let pyproject_toml = write_fork_upgrade_project(&context, &server, "bar>=1")?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -330,7 +348,7 @@ fn upgrade_rejects_conflicting_extra_declarations() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -353,7 +371,7 @@ fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
     let pyproject_toml = write_fork_upgrade_project(&context, &server, "bar<2")?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -408,7 +426,7 @@ fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("a")
@@ -480,7 +498,6 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
         @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2021-01-01T00:00:00Z` to `2024-03-25T00:00:00Z`
     Resolved 4 packages in [TIME]
     Update anyio v2.0.0 -> v4.3.0
     Updated requirement: `anyio<=2` -> `anyio<=4.3.0`
@@ -524,8 +541,8 @@ fn upgrade_reports_no_solution_without_mutation() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     assert_project_unchanged(&context, pyproject_toml)
@@ -680,7 +697,7 @@ fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -697,7 +714,7 @@ fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -757,7 +774,7 @@ fn upgrade_updates_multiple_named_packages_together() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("foo")
@@ -776,7 +793,7 @@ fn upgrade_updates_multiple_named_packages_together() -> Result<()> {
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -828,7 +845,7 @@ fn upgrade_without_package_selects_all_production_dependencies() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context.upgrade().env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
     exit_code: 0 (success)
@@ -843,7 +860,7 @@ fn upgrade_without_package_selects_all_production_dependencies() -> Result<()> {
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -1030,7 +1047,7 @@ fn upgrade_exclude_leaves_dependency_as_hard_constraint() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("--exclude")
@@ -1046,7 +1063,7 @@ fn upgrade_exclude_leaves_dependency_as_hard_constraint() -> Result<()> {
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -1114,7 +1131,7 @@ fn upgrade_updates_safe_declarations_and_warns_for_blocked_declarations() -> Res
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -1132,7 +1149,7 @@ fn upgrade_updates_safe_declarations_and_warns_for_blocked_declarations() -> Res
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -1206,7 +1223,7 @@ fn upgrade_updates_requirement_constrained_by_conflicting_groups() -> Result<()>
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("baz")
@@ -1258,7 +1275,7 @@ fn upgrade_succeeds_when_all_selected_declarations_are_blocked() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -1307,7 +1324,7 @@ fn upgrade_rejects_mixed_updates_after_unrepresentable_blocker() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -1356,7 +1373,8 @@ fn upgrade_preserves_hard_constraint_no_solution_failure() -> Result<()> {
         .write_str(&pyproject_toml)?;
     fs_err::remove_dir_all(&context.venv)?;
 
-    let filters: Vec<_> = packse_filters(&context)
+    let filters: Vec<_> = context
+        .filters()
         .into_iter()
         .chain([(
             // This hint is only shown when the current platform doesn't match the target.
@@ -1375,9 +1393,9 @@ fn upgrade_preserves_hard_constraint_no_solution_failure() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies for split (markers: sys_platform != 'linux'):
-      ╰─▶ Because all versions of foo depend on bar{sys_platform != 'linux'}==2 and your project depends on bar<2, we can conclude that your project and all versions of foo are incompatible.
-          And because your project depends on foo==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: sys_platform != 'linux')
+      cause: Because all versions of foo depend on bar{sys_platform != 'linux'}==2 and your project depends on bar<2, we can conclude that your project and all versions of foo are incompatible.
+             And because your project depends on foo==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "
     );
 
@@ -1430,7 +1448,7 @@ fn upgrade_ignores_unrelated_path_package_when_attributing_versions() -> Result<
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -1446,7 +1464,7 @@ fn upgrade_ignores_unrelated_path_package_when_attributing_versions() -> Result<
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -1692,6 +1710,56 @@ fn upgrade_allows_registry_source() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+#[cfg(feature = "test-pypi")]
+async fn upgrade_uses_extra_index_url_credentials_for_registry_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "private" }}
+
+        [[tool.uv.index]]
+        name = "private"
+        url = "{}/basic-auth/simple"
+        explicit = true
+        "#,
+        proxy.uri()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    let authenticated_index = proxy.authenticated_url("public", "heron", "/basic-auth/simple");
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .upgrade()
+            .arg("iniconfig")
+            .arg("--no-cache")
+            .env(EnvVars::UV_EXTRA_INDEX_URL, authenticated_index),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    Add iniconfig v2.0.0
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
 #[test]
 #[cfg(feature = "test-pypi")]
 fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
@@ -1777,7 +1845,7 @@ fn upgrade_ignores_inapplicable_non_registry_source_without_requires_python() ->
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("baz")
@@ -1836,7 +1904,7 @@ fn upgrade_skips_excluded_declarations_and_updates_applicable_requirement() -> R
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")

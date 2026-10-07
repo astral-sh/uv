@@ -7,22 +7,23 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
 use uv_installer::SitePackages;
+use uv_lock::{Installable, Metadata};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
-use uv_resolver::{Installable, Metadata};
 use uv_settings::MalwareCheckSettings;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::DefaultInstallLogger;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{resolution_markers, resolution_tags};
-use crate::commands::project::UniversalState;
 use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::sync::do_sync;
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverSettings};
@@ -92,7 +93,7 @@ pub(crate) async fn collect_module_owners(
             DryRun::Disabled,
             Printer::Silent,
             preview,
-            malware_settings,
+            MalwareCheckContext::from(malware_settings),
         )
         .await?;
     }
@@ -175,6 +176,7 @@ fn target_selection(
         InstallTarget::Project { .. }
         | InstallTarget::Projects { .. }
         | InstallTarget::Workspace { .. }
+        | InstallTarget::Lockfile { .. }
         | InstallTarget::NonProjectWorkspace { .. } => (
             ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default()),
             DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default()),

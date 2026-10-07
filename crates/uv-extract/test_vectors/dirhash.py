@@ -10,10 +10,7 @@
 # exclude-newer = "P7D"
 # ///
 
-"""Independent Python implementation of ``uv_extract::dirhash``.
-
-The Rust ``test_vectors_json`` test case exercises this implementation in CI.
-"""
+"""Independent Python implementation of ``uv_extract::dirhash``."""
 
 import sys
 from pathlib import Path

@@ -14,18 +14,20 @@ use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::RequiresPython;
-use uv_errors::Hints;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,
 };
+use uv_platform::{Arch, Platform};
 use uv_static::EnvVars;
-use uv_warnings::{warn_user_once, write_warning_chain};
+use uv_warnings::{warn_user_once, warn_user_with_chain};
 use which::{which, which_all};
 
-use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
+use crate::downloads::{
+    ArchRequest, ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest,
+};
 use crate::implementation::ImplementationName;
 use crate::installation::{PythonInstallation, PythonInstallationKey};
 use crate::interpreter::Error as InterpreterError;
@@ -41,7 +43,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenLink, Interpreter, PythonVersion};
+use crate::{BrokenLink, Interpreter, PythonArchitecture, PythonDownloadMirrors, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -310,7 +312,7 @@ pub enum Error {
     BuildVersion(#[from] crate::python_version::BuildVersionError),
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Query(err, _, _) => err.hints(),
@@ -853,6 +855,7 @@ fn python_installations<'a>(
         )
         .filter_ok(move |installation| {
             installation.satisfies_preferences(version, environments, preference)
+                && platform.matches(&Platform::from(installation.interpreter.platform()))
         })
         .map_ok(PythonInstallation::maybe_with_test_source),
     )
@@ -1064,14 +1067,14 @@ impl Error {
                 InterpreterError::UnexpectedResponse(UnexpectedResponseError { path, .. })
                 | InterpreterError::StatusCode(StatusCodeError { path, .. }) => {
                     debug!(
-                        "Skipping bad interpreter at {} from {source}: {err}",
+                        "Skipping bad interpreter at `{}` from {source}: {err}",
                         path.display()
                     );
                     false
                 }
                 InterpreterError::QueryScript { path, err } => {
                     debug!(
-                        "Skipping bad interpreter at {} from {source}: {err}",
+                        "Skipping bad interpreter at `{}` from {source}: {err}",
                         path.display()
                     );
                     false
@@ -1079,14 +1082,14 @@ impl Error {
                 #[cfg(windows)]
                 InterpreterError::CorruptWindowsPackage { path, err } => {
                     debug!(
-                        "Skipping bad interpreter at {} from {source}: {err}",
+                        "Skipping bad interpreter at `{}` from {source}: {err}",
                         path.display()
                     );
                     false
                 }
                 InterpreterError::PermissionDenied { path, err } => {
                     debug!(
-                        "Skipping unexecutable interpreter at {} from {source}: {err}",
+                        "Skipping unexecutable interpreter at `{}` from {source}: {err}",
                         path.display()
                     );
                     false
@@ -1100,13 +1103,13 @@ impl Error {
                     {
                         true
                     } else {
-                        trace!("Skipping missing interpreter at {}", path.display());
+                        trace!("Skipping missing interpreter at `{}`", path.display());
                         false
                     }
                 }
             },
             Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
-                trace!("Skipping broken virtualenv at {}", path.display());
+                trace!("Skipping broken virtualenv at `{}`", path.display());
                 false
             }
             _ => true,
@@ -1154,12 +1157,14 @@ pub(crate) fn find_python_installations<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     find_python_installations_with_strategy(
         request,
         environments,
         preference,
+        arch,
         cache,
         QueryStrategy::Sequential,
     )
@@ -1171,9 +1176,16 @@ fn find_python_installations_with_strategy<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     cache: &'a Cache,
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
+    let arch = arch.map(|arch| {
+        PythonDownloadRequest::from_request(request)
+            .and_then(|request| request.arch().map(ArchRequest::inner))
+            .unwrap_or_else(|| arch.into_inner())
+    });
+    let platform = PlatformRequest::default().with_default_arch(arch);
     let sources = DiscoveryPreferences {
         python_preference: preference,
         environment_preference: environments,
@@ -1259,7 +1271,7 @@ fn find_python_installations_with_strategy<'a>(
             python_installations(
                 &VersionRequest::Any,
                 None,
-                PlatformRequest::default(),
+                platform,
                 environments,
                 preference,
                 cache,
@@ -1272,7 +1284,7 @@ fn find_python_installations_with_strategy<'a>(
             python_installations(
                 &VersionRequest::Default,
                 None,
-                PlatformRequest::default(),
+                platform,
                 environments,
                 preference,
                 cache,
@@ -1289,7 +1301,7 @@ fn find_python_installations_with_strategy<'a>(
                 python_installations(
                     version,
                     None,
-                    PlatformRequest::default(),
+                    platform,
                     environments,
                     preference,
                     cache,
@@ -1303,7 +1315,7 @@ fn find_python_installations_with_strategy<'a>(
             python_installations(
                 &VersionRequest::Default,
                 Some(implementation),
-                PlatformRequest::default(),
+                platform,
                 environments,
                 preference,
                 cache,
@@ -1321,7 +1333,7 @@ fn find_python_installations_with_strategy<'a>(
                 python_installations(
                     version,
                     Some(implementation),
-                    PlatformRequest::default(),
+                    platform,
                     environments,
                     preference,
                     cache,
@@ -1345,7 +1357,7 @@ fn find_python_installations_with_strategy<'a>(
                 python_installations(
                     request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
-                    request.platform(),
+                    request.platform().with_default_arch(arch),
                     environments,
                     preference,
                     cache,
@@ -1364,18 +1376,20 @@ fn find_python_installations_with_strategy<'a>(
 /// concurrently.
 ///
 /// Unlike [`find_python_installations`], this eagerly collects matching installations instead of
-/// returning a lazy iterator. Non-critical discovery errors are dropped, while critical errors are
-/// propagated in discovery order.
+/// returning a lazy iterator. Interpreter query failures produce warnings and are skipped. Other
+/// non-critical discovery errors are dropped, while critical errors are propagated in discovery order.
 pub fn find_all_python_installations(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     cache: &Cache,
 ) -> Result<Vec<PythonInstallation>, Error> {
     let results = find_python_installations_with_strategy(
         request,
         environments,
         preference,
+        arch,
         cache,
         QueryStrategy::Parallel,
     );
@@ -1384,6 +1398,9 @@ pub fn find_all_python_installations(
         match result {
             Ok(Ok(installation)) => installations.push(installation),
             Ok(Err(_)) => {}
+            Err(err @ Error::Query(..)) => {
+                warn_user_with_chain!(&err);
+            }
             Err(err) if err.is_critical() => return Err(err),
             Err(_) => {}
         }
@@ -1399,9 +1416,10 @@ pub(crate) fn find_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     cache: &Cache,
 ) -> Result<FindPythonResult, Error> {
-    let installations = find_python_installations(request, environments, preference, cache);
+    let installations = find_python_installations(request, environments, preference, arch, cache);
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;
@@ -1528,7 +1546,9 @@ pub(crate) fn find_python_installation(
     }
 
     Ok(Err(PythonNotFound {
-        request: request.clone(),
+        request: request
+            .with_default_arch(arch.map(PythonArchitecture::into_inner))
+            .into_owned(),
         environment_preference: environments,
         python_preference: preference,
     }))
@@ -1552,12 +1572,12 @@ pub(crate) async fn find_best_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    arch: Option<PythonArchitecture>,
     downloads_enabled: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     reporter: Option<&dyn crate::downloads::Reporter>,
-    python_install_mirror: Option<&str>,
-    pypy_install_mirror: Option<&str>,
+    mirrors: PythonDownloadMirrors<'_>,
     python_downloads_json_url: Option<&str>,
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {request}");
@@ -1593,7 +1613,7 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        let result = find_python_installation(request, environments, preference, cache);
+        let result = find_python_installation(request, environments, preference, arch, cache);
         let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1630,6 +1650,7 @@ pub(crate) async fn find_best_python_installation(
 
             let download = download_request
                 .clone()
+                .with_default_arch(arch.map(PythonArchitecture::into_inner))
                 .fill()
                 .map(|request| download_list.find(&request));
 
@@ -1640,8 +1661,7 @@ pub(crate) async fn find_best_python_installation(
                     retry_policy,
                     cache,
                     reporter,
-                    python_install_mirror,
-                    pypy_install_mirror,
+                    mirrors,
                 )
                 .await
                 .map(Some),
@@ -1667,11 +1687,13 @@ pub(crate) async fn find_best_python_installation(
                     return Err(error);
                 }
 
-                let error = anyhow::Error::from(error).context(format!(
-                    "A managed Python download is available for {request}, but an error occurred when attempting to download it."
-                ));
-                write_warning_chain(error.as_ref(), Hints::none())
-                    .expect("writing to stderr should not fail");
+                warn_user_with_chain!(
+                    anyhow::Error::from(error)
+                        .context(format!(
+                            "A managed Python download is available for {request}, but an error occurred when attempting to download it."
+                        ))
+                        .as_ref()
+                );
                 previous_fetch_failed = true;
             }
         }
@@ -1685,7 +1707,9 @@ pub(crate) async fn find_best_python_installation(
             return Err(match error {
                 crate::Error::MissingPython(err, _) => PythonNotFound {
                     // Use a more general error in this case since we looked for multiple versions
-                    request: original_request.clone(),
+                    request: original_request
+                        .with_default_arch(arch.map(PythonArchitecture::into_inner))
+                        .into_owned(),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
                 }
@@ -2270,6 +2294,20 @@ impl PythonRequest {
             }
             Self::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
+    }
+
+    /// Require an exact architecture for requests that do not select one or name an executable.
+    pub fn with_default_arch(&self, arch: Option<Arch>) -> Cow<'_, Self> {
+        let Some(arch) = arch else {
+            return Cow::Borrowed(self);
+        };
+        let Some(request) = PythonDownloadRequest::from_request(self) else {
+            return Cow::Borrowed(self);
+        };
+        if request.arch().is_some() {
+            return Cow::Borrowed(self);
+        }
+        Cow::Owned(Self::Key(request.with_arch(arch)))
     }
 
     /// Whether this request opts-in to a pre-release Python version.
@@ -3837,6 +3875,7 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::{cell::Cell, io, path::PathBuf, str::FromStr};
 
     use assert_fs::{TempDir, prelude::*};
@@ -3884,11 +3923,11 @@ mod tests {
 
         sort_installations_by_key(&mut installations, |key| *key);
 
-        assert!(matches!(
+        assert_matches!(
             &installations[..],
             [Ok(2), Ok(1), Err(noncritical), Err(critical), Ok(3)]
                 if !noncritical.is_critical() && critical.is_critical()
-        ));
+        );
     }
 
     #[test]
@@ -4381,11 +4420,9 @@ mod tests {
                 PythonVariant::Default
             )
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3rc1"),
-                Err(Error::InvalidVersionRequest(_))
-            ),
+        assert_matches!(
+            VersionRequest::from_str("3rc1"),
+            Err(Error::InvalidVersionRequest(_)),
             "Pre-release version requests require a minor version"
         );
         assert_eq!(
@@ -4415,25 +4452,19 @@ mod tests {
                 PythonVariant::Default
             )
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3.12-dev"),
-                Err(Error::InvalidVersionRequest(_))
-            ),
+        assert_matches!(
+            VersionRequest::from_str("3.12-dev"),
+            Err(Error::InvalidVersionRequest(_)),
             "Development version segments are not allowed"
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3.12+local"),
-                Err(Error::InvalidVersionRequest(_))
-            ),
+        assert_matches!(
+            VersionRequest::from_str("3.12+local"),
+            Err(Error::InvalidVersionRequest(_)),
             "Local version segments are not allowed"
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3.12.post0"),
-                Err(Error::InvalidVersionRequest(_))
-            ),
+        assert_matches!(
+            VersionRequest::from_str("3.12.post0"),
+            Err(Error::InvalidVersionRequest(_)),
             "Post version segments are not allowed"
         );
         assert!(
@@ -4476,14 +4507,14 @@ mod tests {
                 PythonVariant::Freethreaded
             )
         );
-        assert!(matches!(
+        assert_matches!(
             VersionRequest::from_str("3.13tt"),
             Err(Error::InvalidVersionRequest(_))
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             VersionRequest::from_str("3.12²t"),
             Err(Error::InvalidVersionRequest(_))
-        ));
+        );
 
         // `==` specifiers are parsed as concrete version requests via `from_specifiers`
         assert_eq!(
@@ -4639,22 +4670,22 @@ mod tests {
 
     #[test]
     fn test_try_split_prefix_and_version() {
-        assert!(matches!(
+        assert_matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix"),
             Ok(None),
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix3"),
             Ok(Some(_)),
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix@3"),
             Ok(Some(_)),
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix3notaversion"),
             Ok(None),
-        ));
+        );
         // Version parsing errors are only raised if @ is present.
         assert!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix@3notaversion").is_err()

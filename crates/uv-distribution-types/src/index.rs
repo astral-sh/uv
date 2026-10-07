@@ -421,7 +421,7 @@ impl From<IndexHashAlgorithm> for HashAlgorithm {
             IndexHashAlgorithm::Sha256 => Self::Sha256,
             IndexHashAlgorithm::Sha384 => Self::Sha384,
             IndexHashAlgorithm::Sha512 => Self::Sha512,
-            IndexHashAlgorithm::Blake2b => Self::Blake2b,
+            IndexHashAlgorithm::Blake2b => Self::Blake2b256,
         }
     }
 }
@@ -803,6 +803,8 @@ pub enum IndexSourceError {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use http::HeaderValue;
 
@@ -918,9 +920,6 @@ mod tests {
 
         let index: Index = toml::from_str(toml_str).unwrap();
         assert_eq!(index.name.as_ref().unwrap().as_ref(), "internal");
-        assert!(matches!(
-            index.exclude_newer,
-            Some(ExcludeNewerOverride::Enabled(_))
-        ));
+        assert_matches!(index.exclude_newer, Some(ExcludeNewerOverride::Enabled(_)));
     }
 }

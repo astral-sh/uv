@@ -20,6 +20,7 @@ env:
   PYTHON_VERSION: "3.12"
   RUSTC_BOOTSTRAP: 1
   RUSTUP_MAX_RETRIES: 10
+  UV_LOCKED: 1
 
 jobs:
   # We use the large GitHub actions runners
@@ -41,7 +42,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
@@ -53,9 +54,11 @@ jobs:
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.5"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -100,11 +103,6 @@ jobs:
           sudo mount -o loop /tmp/minix.img /minix
           sudo chown "$(id -u):$(id -g)" /minix
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest
-
       - name: "Cargo test"
         env:
           # Retry more than default to reduce flakes in CI
@@ -119,7 +117,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          uv run --only-dev cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -164,7 +162,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
@@ -192,17 +190,14 @@ jobs:
           security list-keychains -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
           security default-keychain -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.5"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
 
       - name: "Install required Python versions"
         run: uv python install
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest
 
       - name: "Cargo test"
         env:
@@ -219,7 +214,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          uv run --only-dev cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -272,9 +267,11 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.5"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -283,7 +280,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
@@ -306,11 +303,6 @@ jobs:
           New-Item -Path "C:\uv-smb" -ItemType Directory -Force
           New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest
-
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
@@ -329,7 +321,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo nextest run \
+          uv run --only-dev cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \

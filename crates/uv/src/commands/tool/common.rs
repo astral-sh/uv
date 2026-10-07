@@ -12,38 +12,37 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecification, GitLfsSetting, InstallOptions, Override, TargetTriple,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, IndexLocations, InstalledDist, Name, Requirement,
-    RequiresPython, Resolution, UnresolvedRequirement,
+    DependencyMetadata, HashCollection, IndexLocations, InstalledDist, Name,
+    NameRequirementSpecification, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
 };
-use uv_errors::{ErrorWithHints, Hint, Hints};
+use uv_errors::{ErrorWithHints, Hinted, Hints};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
+use uv_lock::{Installable, Lock, ResolverManifest};
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVariant,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
-use uv_resolver::{
-    FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
-};
+use uv_resolver::{FlatIndex, OptionsBuilder, Preference, ResolverOutput};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
@@ -68,7 +67,7 @@ pub(crate) enum NoExecutablesError {
     },
 }
 
-impl Hint for NoExecutablesError {
+impl Hinted for NoExecutablesError {
     fn hints(&self) -> Hints<'_> {
         let mut hints = Hints::none();
         let (package, matching_dependency_packages) = match self {
@@ -112,7 +111,7 @@ impl Hint for NoExecutablesError {
     }
 }
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, PreferenceLocation, ProjectError, PythonRequestSource,
+    EnvironmentSpecification, PreferenceLocation, ProjectError, PythonRequestSource,
     lock::ValidatedLock,
 };
 use crate::commands::reporters::PythonDownloadReporter;
@@ -153,10 +152,10 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
 /// Remove the entrypoints at the given paths.
 fn remove_entrypoint_paths<'a>(entrypoints: impl IntoIterator<Item = &'a Path>) {
     for executable in entrypoints {
-        debug!("Removing executable: `{}`", executable.simplified_display());
+        debug!("Removing executable: {}", executable.simplified_display());
         if let Err(err) = fs_err::remove_file(executable) {
             warn!(
-                "Failed to remove executable: `{}`: {err}",
+                "Failed to remove executable `{}`: {err}",
                 executable.simplified_display()
             );
         }
@@ -316,7 +315,7 @@ impl ToolLock {
         constraints: &[Requirement],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
-        build_constraints: &[Requirement],
+        build_constraints: &[NameRequirementSpecification],
         dependency_metadata: &DependencyMetadata,
     ) -> ResolverManifest {
         ResolverManifest::new(
@@ -339,7 +338,14 @@ impl ToolLock {
         index_locations: &IndexLocations,
     ) -> anyhow::Result<Self> {
         let manifest = manifest.clone().relative_to(root)?;
-        let lock = Lock::from_resolution(resolution, manifest, root, Vec::new(), index_locations)?;
+        let lock = Lock::from_resolution(
+            resolution,
+            manifest,
+            root,
+            Vec::new(),
+            index_locations,
+            false,
+        )?;
         Ok(Self {
             root: root.to_path_buf(),
             lock,
@@ -397,7 +403,7 @@ impl ToolLock {
         constraints: &[Requirement],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
-        build_constraints: &[Requirement],
+        build_constraints: &Constraints,
         refresh: &Refresh,
         interpreter: &Interpreter,
         settings: &ResolverSettings,
@@ -463,26 +469,22 @@ impl ToolLock {
             .index_strategy(*index_strategy)
             .build_options(build_options.clone())
             .build();
-        let hasher = HashStrategy::Generate(HashGeneration::Url);
-        let build_hasher = HashStrategy::default();
+        let hasher = HashStrategy::collect(HashCollection::Url);
+        let build_hasher = HashStrategy::from_constraints(
+            build_constraints,
+            Some(&interpreter.to_resolver_marker_environment()),
+            HashCheckingMode::Verify,
+        )?;
 
-        let flat_index = {
-            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-            let entries = client
-                .fetch_all(index_locations.flat_indexes().map(Index::url))
-                .await?;
-            FlatIndex::from_entries(entries, None, &hasher, build_options)
-        };
+        let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
         let extra_build_requires =
             LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
                 .into_inner();
-        let dispatch_constraints =
-            Constraints::from_requirements(build_constraints.iter().cloned());
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
-            &dispatch_constraints,
+            build_constraints,
             interpreter,
             index_locations,
             &flat_index,
@@ -526,6 +528,8 @@ impl ToolLock {
             &BTreeMap::new(),
             requirements,
             &BTreeMap::new(),
+            &BTreeMap::new(),
+            None,
             constraints,
             &overrides,
             excludes,
@@ -643,12 +647,11 @@ pub(crate) async fn refine_interpreter(
     reporter: &PythonDownloadReporter,
     install_mirrors: &PythonInstallMirrors,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
-) -> anyhow::Result<Option<Interpreter>, ProjectError> {
-    let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
-        err
-    else {
+) -> Result<Option<Interpreter>, uv_python::Error> {
+    let Some(no_solution_err) = err.as_no_solution() else {
         return Ok(None);
     };
 
@@ -701,12 +704,12 @@ pub(crate) async fn refine_interpreter(
         Some(&requires_python_request),
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_arch,
         python_downloads,
         client_builder,
         cache,
         Some(reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.mirrors(),
         install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
@@ -715,7 +718,10 @@ pub(crate) async fn refine_interpreter(
     // If the user passed a `--python` request, and the refined interpreter is incompatible, we
     // can't use it.
     if let Some(python_request) = python_request {
-        if !python_request.satisfied(&interpreter, cache) {
+        if !python_request
+            .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
+            .satisfied(&interpreter, cache)
+        {
             return Ok(None);
         }
     }
@@ -740,7 +746,7 @@ pub(crate) fn finalize_tool_install(
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
     excludes: Vec<ExcludeDependency>,
-    build_constraints: Vec<Requirement>,
+    build_constraints: Vec<NameRequirementSpecification>,
     lock: Option<&ToolLock>,
     printer: Printer,
 ) -> anyhow::Result<()> {
@@ -895,7 +901,7 @@ pub(crate) fn finalize_tool_install(
 
         let mut names = BTreeSet::new();
         for (name, src, target) in target_entrypoints {
-            debug!("Installing executable: `{name}`");
+            debug!("Installing executable: {name}");
 
             #[cfg(unix)]
             replace_symlink(src, &target).context("Failed to install executable")?;

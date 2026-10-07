@@ -13,10 +13,13 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   initialize-context:
     if: github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 10
     permissions:
@@ -103,7 +106,7 @@ jobs:
   triage:
     needs: initialize-context
     if: github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 15
     permissions:
@@ -139,13 +142,13 @@ jobs:
 
       - name: "Triage issue"
         id: triage
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.153.4"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "issue-triage"
@@ -175,7 +178,7 @@ jobs:
   context:
     needs: triage
     if: needs.triage.outputs.result != ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 10
     concurrency:
@@ -257,7 +260,7 @@ jobs:
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
       issue-type: ${{ fromJSON(needs.triage.outputs.result).type }}
-      runner: ubuntu-latest
+      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     secrets: inherit
 
   fix-bug:
@@ -284,5 +287,5 @@ jobs:
       parent-pull-request: ${{ needs.reproduce-bug.outputs.pull-request }}
       parent-head-ref: ${{ needs.reproduce-bug.outputs.head-ref }}
       parent-head-sha: ${{ needs.reproduce-bug.outputs.head-sha }}
-      runner: ubuntu-latest
+      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     secrets: inherit

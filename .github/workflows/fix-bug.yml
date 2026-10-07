@@ -34,7 +34,7 @@ on:
         type: string
       runner:
         description: "The runner to use for bug fixing"
-        default: ubuntu-latest
+        default: github-ubuntu-24.04-x86_64-4
         required: false
         type: string
     outputs:
@@ -46,6 +46,9 @@ on:
         value: ${{ jobs.publish.outputs.pull-request }}
 
 permissions: {}
+
+env:
+  UV_LOCKED: 1
 
 jobs:
   fix:
@@ -75,14 +78,14 @@ jobs:
 
       - name: "Load issue context"
         id: issue-context
-        uses: ./.github/actions/load-issue-context
+        uses: $/.github/actions/load-issue-context
         with:
           issue-number: ${{ inputs.issue-number }}
           path: ${{ runner.temp }}/issue-context
 
       - name: "Load reproduction Codex thread"
         id: reproduction-thread
-        uses: ./.github/actions/load-codex-thread
+        uses: $/.github/actions/load-codex-thread
         with:
           repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
@@ -90,12 +93,32 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/codex-home/sessions
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: "Check uv runner support"
+        if: ${{ !((runner.os == 'Linux' && runner.arch == 'X64') || (runner.os == 'macOS' && runner.arch == 'ARM64')) }}
+        shell: bash
+        run: |
+          echo "Unsupported uv runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+          exit 1
+
+      - name: "Install uv on Linux x64"
+        if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           enable-cache: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Install uv on macOS ARM64"
+        if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
+          enable-cache: false
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: false
 
@@ -127,7 +150,7 @@ jobs:
           issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
           if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] ||
             [ "$issue_number" != "$ISSUE_NUMBER" ] ||
-            [ "$PARENT_HEAD_REF" != "zb/reproduce-bug/$issue_number" ] ||
+            [ "$PARENT_HEAD_REF" != "automations/reproduce-bug/$issue_number" ] ||
             ! [[ "$PARENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] ||
             ! [[ "$PARENT_PULL_REQUEST" =~ ^https://github\.com/astral-sh/uv-dev/pull/[1-9][0-9]*$ ]]; then
             echo "The regression-test pull request context is invalid." >&2
@@ -287,7 +310,7 @@ jobs:
       - name: "Fix reproduced bug"
         id: fix-bug
         if: steps.prepare.outputs.existing != 'true'
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
         env:
           CARGO_HOME: ${{ runner.temp }}/cargo-home
           GH_TOKEN: ${{ github.token }}
@@ -296,7 +319,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-fix-bug-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.153.4"
           codex-home: "${{ runner.temp }}/codex-home"
           effort: high
           codex-args: >-
@@ -447,7 +470,7 @@ jobs:
   publish:
     needs: fix
     if: needs.fix.outputs.publish == 'true'
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     environment: automations
     timeout-minutes: 10
     permissions:
@@ -673,7 +696,7 @@ jobs:
       needs.fix.result == 'success' &&
       needs.fix.outputs.result != '' &&
       (needs.publish.result == 'success' || needs.publish.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 10
     concurrency:

@@ -1,3 +1,8 @@
+#[cfg(target_os = "macos")]
+use std::fs::Permissions;
+#[cfg(target_os = "macos")]
+use std::os::unix::fs::PermissionsExt;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -32,7 +37,7 @@ fn clean_all() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
@@ -41,11 +46,15 @@ fn clean_all() -> Result<()> {
     Ok(())
 }
 
-/// `cache clean` should report physical space for hardlinks only when the preview is enabled.
+/// Cache cleanup should count hardlinked storage only when its final link is removed.
 #[cfg(unix)]
 #[test]
 fn clean_all_hardlinked_file() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    // Remove unrelated cache entries so the retained hardlink is the only cached data.
+    context.clean().assert().success();
+    context.cache_dir.create_dir_all()?;
 
     // Keep the retained hardlink beside the cache so both entries share a filesystem.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
@@ -58,11 +67,12 @@ fn clean_all_hardlinked_file() -> Result<()> {
     let cached = context.cache_dir.child("hardlinked.bin");
     fs_err::hard_link(&retained, &cached)?;
 
+    // Counting the externally retained hardlink would incorrectly report 1.0MiB.
     uv_snapshot!(context.filters(), context.clean(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files (1.0MiB)
+    Removed [N] files (0B)
     ");
 
     context.cache_dir.create_dir_all()?;
@@ -85,6 +95,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
         .sync_all()?;
     fs_err::hard_link(&cached, context.cache_dir.child("second-hardlink.bin"))?;
 
+    // Counting each hardlink separately would incorrectly report 2.0MiB.
     uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -258,7 +269,7 @@ fn clear_all_alias() -> Result<()> {
     uv_snapshot!(context.filters(), command, @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
@@ -287,7 +298,7 @@ async fn clean_force() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
@@ -307,7 +318,7 @@ async fn clean_force() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
@@ -343,7 +354,7 @@ fn clean_package_pypi() -> Result<()> {
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
         .cache_dir
-        .child("simple-v24")
+        .child("simple-v25")
         .child("pypi")
         .child("iniconfig.rkyv");
     assert!(
@@ -354,7 +365,7 @@ fn clean_package_pypi() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("iniconfig"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
@@ -370,7 +381,7 @@ fn clean_package_pypi() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -406,7 +417,7 @@ fn clean_package_index() -> Result<()> {
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
         .cache_dir
-        .child("simple-v24")
+        .child("simple-v25")
         .child("index")
         .child("e8208120cae3ba69")
         .child("iniconfig.rkyv");
@@ -418,7 +429,7 @@ fn clean_package_index() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("iniconfig"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
@@ -455,16 +466,62 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     fs_err::os::unix::fs::symlink(&victim_dir, package_entry.join("escape"))?;
     fs_err::os::unix::fs::symlink(&archive_entry, package_entry.join("archive"))?;
 
-    uv_snapshot!(context.filters(), context.clean().arg("demo"), @"
+    let files = context.cache_dir.child("files-v0");
+    let shard = files.child("shard");
+    shard.child("orphan").write_str("orphan")?;
+    shard
+        .child("nested")
+        .child("orphan")
+        .write_str("nested orphan")?;
+    fs_err::os::unix::fs::symlink(&victim_dir, files.child("escape"))?;
+    fs_err::os::unix::fs::symlink(&victim_dir, shard.child("escape"))?;
+
+    // Keep this shard flat so macOS can prune it with bulk metadata reads.
+    let flat_shard = files.child("flat");
+    flat_shard.child("orphan").write_str("orphan")?;
+    let retained = context.cache_dir.path().with_file_name("retained.bin");
+    fs_err::write(&retained, "retained")?;
+    fs_err::hard_link(&retained, flat_shard.child("retained"))?;
+    fs_err::os::unix::fs::symlink(&victim_dir, flat_shard.child("escape"))?;
+
+    uv_snapshot!(context.filters(), context.clean().args(["demo", "other"]), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed 3 files ([SIZE])
+    Removed 6 files ([SIZE])
     ");
 
     assert!(victim_dir.is_dir());
     assert!(victim_dir.child("payload.txt").is_file());
     assert!(fs_err::symlink_metadata(package_entry).is_err());
     assert!(fs_err::symlink_metadata(archive_entry).is_err());
+    assert!(!shard.child("orphan").exists());
+    assert!(!shard.child("nested").exists());
+    assert!(fs_err::symlink_metadata(files.child("escape"))?.is_symlink());
+    assert!(fs_err::symlink_metadata(shard.child("escape"))?.is_symlink());
+    assert!(!flat_shard.child("orphan").exists());
+    assert!(retained.is_file());
+    assert!(flat_shard.child("retained").is_file());
+    assert!(fs_err::symlink_metadata(flat_shard.child("escape"))?.is_symlink());
+
+    Ok(())
+}
+
+/// Empty file-cache shards can be removed without search permission.
+#[cfg(target_os = "macos")]
+#[test]
+fn clean_package_empty_shard_without_search_permission() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let shard = context.cache_dir.child("files-v0").child("shard");
+    shard.create_dir_all()?;
+    fs_err::set_permissions(&shard, Permissions::from_mode(0o600))?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("demo"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Removed 1 directory (0B)
+    ");
+
+    assert!(!shard.exists());
 
     Ok(())
 }
@@ -520,10 +577,10 @@ fn clean_handles_verbatim_paths() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed 2 files
+    Removed 2 files (0B)
     ");
 
     Ok(())

@@ -99,15 +99,15 @@ fn workspace_metadata_simple() {
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo/"
+          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo"
         }
       ],
       "resolution": {
-        "foo==0.1.0@editable+[TEMP_DIR]/foo/": {
+        "foo==0.1.0@editable+[TEMP_DIR]/foo": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/foo/"
+            "editable": "[TEMP_DIR]/foo"
           },
           "kind": "package",
           "dependencies": []
@@ -157,15 +157,15 @@ fn workspace_metadata_quiet() {
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo/"
+          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo"
         }
       ],
       "resolution": {
-        "foo==0.1.0@editable+[TEMP_DIR]/foo/": {
+        "foo==0.1.0@editable+[TEMP_DIR]/foo": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/foo/"
+            "editable": "[TEMP_DIR]/foo"
           },
           "kind": "package",
           "dependencies": []
@@ -198,6 +198,7 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     context.init().arg("foo").assert().success();
 
     let workspace = context.temp_dir.child("foo");
+    context.lock().current_dir(&workspace).assert().success();
     let environment = workspace.child(".venv");
     environment.create_dir_all()?;
 
@@ -230,6 +231,235 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
       "empty_environment": null
     }
     "#);
+
+    // Remove the manifest to check environment discovery from the lockfile alone.
+    fs_err::remove_file(workspace.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let broken: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::assert_json_snapshot!(broken.get("environment"), @"null");
+
+    let output = context
+        .workspace_metadata()
+        .current_dir(&workspace)
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "missing-env")
+        .assert()
+        .success();
+    let missing: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::assert_json_snapshot!(missing.get("environment"), @"null");
+    assert!(!workspace.child("missing-env").exists());
+
+    Ok(())
+}
+
+/// Lockfile metadata requires revision 5 or later.
+#[test]
+fn workspace_metadata_lockfile_requires_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().args([
+        "--frozen", "--preview-features", "workspace-metadata", "--preview-features", "frozen-lockfile"
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+    Ok(())
+}
+
+/// Frozen metadata retains locked member paths when workspace manifests move those members.
+#[test]
+fn workspace_metadata_lockfile_keeps_stale_member_path() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["foo"]
+    "#})?;
+    context
+        .temp_dir
+        .child("foo/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0"
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["members"], @r#"
+        [
+          {
+            "id": "foo==1.0@virtual+[TEMP_DIR]/foo",
+            "name": "foo",
+            "path": "[TEMP_DIR]/foo"
+          },
+          {
+            "id": "root==1.0@virtual+[TEMP_DIR]/",
+            "name": "root",
+            "path": "[TEMP_DIR]/"
+          }
+        ]
+        "#);
+    });
+
+    fs_err::rename(
+        context.temp_dir.child("foo"),
+        context.temp_dir.child("moved"),
+    )?;
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["moved"]
+    "#})?;
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let moved_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(moved_metadata, metadata);
+
+    fs_err::remove_file(&pyproject)?;
+    fs_err::remove_file(context.temp_dir.child("moved/pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--offline",
+            "--preview-features",
+            "workspace-metadata,frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    assert_eq!(lockfile_metadata, metadata);
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("-qq"), @"
+    exit_code: 0 (success)
+    ");
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--frozen"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let lockfile = context.read("uv.lock");
+
+    pyproject_toml.write_str(&context.read("pyproject.toml").replace("0.1.0", "0.2.0"))?;
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let member_id = metadata["members"][0]["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing workspace member ID"))?;
+    insta::assert_json_snapshot!(metadata["resolution"][member_id]["version"], @r#""0.2.0""#);
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    // Synchronization must respect an explicit request not to update the lockfile.
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--sync").arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .arg("--frozen")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let member_id = metadata["members"][0]["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing workspace member ID"))?;
+    insta::assert_json_snapshot!(metadata["resolution"][member_id]["version"], @r#""0.1.0""#);
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    assert_ne!(lockfile, context.read("uv.lock"));
+    context
+        .workspace_metadata()
+        .arg("--locked")
+        .assert()
+        .success();
 
     Ok(())
 }
@@ -688,6 +918,12 @@ dependencies = [
 ]
 "#
     ))?;
+    context
+        .lock()
+        .current_dir(&project)
+        .arg("--offline")
+        .assert()
+        .success();
 
     let assert = context
         .workspace_metadata()
@@ -707,7 +943,35 @@ dependencies = [
         insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
         [
           {
-            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/metadata_child-0.1.0-py3-none-any.whl",
+            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/project/../metadata_child-0.1.0-py3-none-any.whl",
+            "marker": "sys_platform == 'linux'"
+          }
+        ]
+        "#);
+    });
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(project.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .current_dir(&project)
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let resolution = lockfile_metadata["resolution"]
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("metadata resolution was not an object"))?;
+    let parent_node = resolution
+        .iter()
+        .find_map(|(id, node)| id.starts_with("metadata-parent==").then_some(node))
+        .ok_or_else(|| anyhow::anyhow!("missing metadata-parent resolution node"))?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
+        [
+          {
+            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/project/../metadata_child-0.1.0-py3-none-any.whl",
             "marker": "sys_platform == 'linux'"
           }
         ]
@@ -762,6 +1026,32 @@ fn workspace_metadata_sync_centralized_environment() -> Result<()> {
         metadata["environment"]["root"].as_str().map(Path::new),
         Some(target.as_path())
     );
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .arg("--preview-features")
+        .arg("workspace-metadata,centralized-project-envs")
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    assert_eq!(
+        lockfile_metadata["environment"]["root"]
+            .as_str()
+            .map(Path::new),
+        Some(target.as_path())
+    );
+    let mut filters = context.filters();
+    filters.push((
+        r#"(\[CACHE_DIR\]/environments-v2/)[^/" ]+"#,
+        "$1[ENVIRONMENT]",
+    ));
+    insta::with_settings!({ filters => filters }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"]["root"], @r#""[CACHE_DIR]/environments-v2/[ENVIRONMENT]""#);
+    });
 
     Ok(())
 }
@@ -821,6 +1111,25 @@ fn workspace_metadata_sync_active_environment() -> Result<()> {
         metadata["environment"]["root"].as_str().map(Path::new),
         Some(active.path())
     );
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let assert = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--preview-features",
+            "frozen-lockfile",
+            "--active",
+        ])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv")
+        .env(EnvVars::VIRTUAL_ENV, active.path())
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"]["root"], @r#""[TEMP_DIR]/active""#);
+    });
 
     Ok(())
 }
@@ -964,6 +1273,61 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
         "#);
     });
 
+    // Remove the manifest and required distribution to exercise installation from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    context
+        .pip_uninstall()
+        .arg("metadata-required")
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg(extraneous.path())
+        .assert()
+        .success();
+
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "required_module": [
+            {
+              "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+    context.pip_show().arg("metadata-extra").assert().success();
+
+    // Exact synchronization also removes unrelated packages without a workspace manifest.
+    context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--exact",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.pip_freeze(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    metadata-required==0.1.0
+    ");
+
     Ok(())
 }
 
@@ -1056,6 +1420,148 @@ dependencies = [
     });
 
     context.pip_show().arg("missing-owner").assert().failure();
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let lockfile_metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(lockfile_metadata["environment"], @r#"
+        {
+          "python": {
+            "implementation": "cpython",
+            "path": "[VENV]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[VENV]/"
+        }
+        "#);
+        insta::assert_json_snapshot!(lockfile_metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+    context.pip_show().arg("missing-owner").assert().failure();
+
+    let override_env = context.temp_dir.child("override-env");
+    context.venv().arg(override_env.path()).assert().success();
+    let output = context
+        .workspace_metadata()
+        .args(["--frozen", "--preview-features", "frozen-lockfile"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "override-env")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["environment"], @r#"
+        {
+          "python": {
+            "implementation": "cpython",
+            "path": "[TEMP_DIR]/override-env/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[TEMP_DIR]/override-env"
+        }
+        "#);
+        insta::assert_json_snapshot!(metadata.get("module_owners"), @"null");
+    });
+
+    Ok(())
+}
+
+/// Module owners include dependencies selected by a non-project workspace's groups.
+#[test]
+fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let wheel = context
+        .temp_dir
+        .child("installed_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        wheel.path(),
+        "installed-owner",
+        "installed_owner-0.1.0",
+        &[("installed_module.py", "")],
+    )?;
+    let wheel_url = Url::from_file_path(wheel.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        docs = ["installed-owner @ {wheel_url}"]
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+    context.pip_install().arg(wheel.path()).assert().success();
+
+    // Remove the manifest to discover the workspace and its environment from the lockfile.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    let output = context
+        .workspace_metadata()
+        .arg("--frozen")
+        .args(["--preview-features", "frozen-lockfile"])
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+    // Synchronization creates the requested environment and installs workspace-group dependencies.
+    let output = context
+        .workspace_metadata()
+        .args([
+            "--frozen",
+            "--sync",
+            "--preview-features",
+            "frozen-lockfile",
+        ])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "metadata-env")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&output.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["environment"], @r#"
+        {
+          "python": {
+            "implementation": "cpython",
+            "path": "[TEMP_DIR]/metadata-env/[BIN]/[PYTHON]",
+            "version": "3.12.[X]"
+          },
+          "root": "[TEMP_DIR]/metadata-env"
+        }
+        "#);
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "installed-owner==0.1.0@path+[TEMP_DIR]/installed_owner-0.1.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
 
     Ok(())
 }
@@ -1408,8 +1914,8 @@ dependencies = [
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: Failed to collect module owners
-      Caused by: Failed to determine installation plan
-      Caused by: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
+      cause: Failed to determine installation plan
+      cause: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
     "#);
 
     Ok(())
@@ -1449,7 +1955,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         },
         {
           "name": "bird-feeder",
@@ -1463,11 +1969,11 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -1600,13 +2106,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"(?m)^WARN Ignoring non-directory workspace member: `[^\n]+`\n",
-        "",
-    ));
-
-    uv_snapshot!(filters, context.workspace_metadata().current_dir(&workspace), @r#"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -1866,7 +2366,7 @@ fn workspace_metadata_from_member() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         },
         {
           "name": "bird-feeder",
@@ -1880,11 +2380,11 @@ fn workspace_metadata_from_member() -> Result<()> {
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -2048,7 +2548,7 @@ fn workspace_metadata_multiple_members() {
         {
           "name": "pkg-a",
           "path": "[TEMP_DIR]/pkg-a",
-          "id": "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a/"
+          "id": "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a"
         },
         {
           "name": "pkg-b",
@@ -2062,11 +2562,11 @@ fn workspace_metadata_multiple_members() {
         }
       ],
       "resolution": {
-        "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a/": {
+        "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a": {
           "name": "pkg-a",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/pkg-a/"
+            "editable": "[TEMP_DIR]/pkg-a"
           },
           "kind": "package",
           "dependencies": []
@@ -2134,15 +2634,15 @@ fn workspace_metadata_single_project() {
         {
           "name": "my-project",
           "path": "[TEMP_DIR]/my-project",
-          "id": "my-project==0.1.0@editable+[TEMP_DIR]/my-project/"
+          "id": "my-project==0.1.0@editable+[TEMP_DIR]/my-project"
         }
       ],
       "resolution": {
-        "my-project==0.1.0@editable+[TEMP_DIR]/my-project/": {
+        "my-project==0.1.0@editable+[TEMP_DIR]/my-project": {
           "name": "my-project",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/my-project/"
+            "editable": "[TEMP_DIR]/my-project"
           },
           "kind": "package",
           "dependencies": []
@@ -2197,15 +2697,15 @@ fn workspace_metadata_with_excluded() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -2443,15 +2943,15 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         }
       ],
       "resolution": {
-        "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": {
             "group": "dev"
@@ -2462,11 +2962,11 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
             }
           ]
         },
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -2477,28 +2977,28 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
           "optional_dependencies": [
             {
               "name": "io",
-              "id": "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace"
             }
           ],
           "dependency_groups": [
             {
               "name": "dev",
-              "id": "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace"
             }
           ]
         },
-        "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": {
             "extra": "io"
           },
           "dependencies": [
             {
-              "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
             },
             {
               "id": "anyio==4.3.0@registry+https://pypi.org/simple"

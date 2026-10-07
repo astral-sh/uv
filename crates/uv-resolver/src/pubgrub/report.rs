@@ -24,7 +24,6 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::{ErrorTree, PrefixMatch};
-use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::PrereleaseSelection;
@@ -35,6 +34,7 @@ use crate::resolver::{
     UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
+use uv_configuration::EffectiveExcludeNewerSource;
 
 type ReportDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 
@@ -604,10 +604,10 @@ impl PubGrubReportFormatter<'_> {
     fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
-            PubGrubPackageInner::Package {
-                name, extra, group, ..
-            } if self.workspace_members.contains(name) => {
-                if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
+            PubGrubPackageInner::Package { name, kind, .. }
+                if self.workspace_members.contains(name) =>
+            {
+                if self.is_single_project_workspace() && kind.is_base() {
                     Some(Cow::Borrowed("your project"))
                 } else {
                     Some(Cow::Owned(format!("{package}")))
@@ -632,10 +632,10 @@ impl PubGrubReportFormatter<'_> {
     fn is_single_project_workspace_member(&self, package: &PubGrubPackage) -> bool {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
-            PubGrubPackageInner::Package {
-                name, extra, group, ..
-            } if self.workspace_members.contains(name) => {
-                self.is_single_project_workspace() && extra.is_none() && group.is_none()
+            PubGrubPackageInner::Package { name, kind, .. }
+                if self.workspace_members.contains(name) =>
+            {
+                self.is_single_project_workspace() && kind.is_base()
             }
             _ => false,
         }

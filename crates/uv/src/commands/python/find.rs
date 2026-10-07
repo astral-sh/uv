@@ -4,21 +4,21 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::DependencyGroupsWithDefaults;
+use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
-    PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::{warn_user, warn_user_once_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
     ExitStatus,
-    project::{ScriptInterpreter, WorkspacePython, validate_project_requires_python},
+    project::{ProjectPythonRequest, ScriptInterpreter},
 };
 use crate::printer::Printer;
 
@@ -33,6 +33,7 @@ pub(crate) async fn find(
     system: bool,
     config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads_json_url: Option<&str>,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
@@ -65,7 +66,7 @@ pub(crate) async fn find(
                         | WorkspaceErrorKind::MissingPyprojectToml
                         | WorkspaceErrorKind::NonWorkspace(_)
                 ) {
-                    warn_user_once!("{err}");
+                    warn_user_once_with_chain!(&err);
                 }
                 None
             }
@@ -74,11 +75,7 @@ pub(crate) async fn find(
 
     // Don't enable the requires-python settings on groups
     let groups = DependencyGroupsWithDefaults::none();
-    let WorkspacePython {
-        source,
-        python_request,
-        requires_python,
-    } = WorkspacePython::from_request(
+    let project_python = ProjectPythonRequest::from_request(
         request.map(|request| PythonRequest::parse(&request)),
         project.as_ref().map(VirtualProject::workspace),
         &groups,
@@ -87,16 +84,20 @@ pub(crate) async fn find(
     )
     .await?;
 
-    let python_request = python_request.unwrap_or_default();
+    let python_request = project_python
+        .python_request
+        .as_ref()
+        .unwrap_or(&PythonRequest::Default);
     let python = PythonInstallation::find_existing(
-        &python_request,
+        python_request,
         environment_preference,
         python_preference,
+        python_arch,
         cache,
     )?;
     python
         .download_and_warn_if_outdated_prerelease(
-            &python_request,
+            python_request,
             client_builder,
             cache,
             python_downloads_json_url,
@@ -104,19 +105,8 @@ pub(crate) async fn find(
         .await?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
-    if let Some(requires_python) = requires_python {
-        match validate_project_requires_python(
-            python.interpreter(),
-            project.as_ref().map(VirtualProject::workspace),
-            &groups,
-            &requires_python,
-            &source,
-        ) {
-            Ok(()) => {}
-            Err(err) => {
-                warn_user!("{err}");
-            }
-        }
+    if let Err(err) = project_python.check(python.interpreter()) {
+        warn_user!("{err}");
     }
 
     if show_version {
@@ -143,6 +133,7 @@ pub(crate) async fn find_script(
     resolve_links: bool,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     config_discovery: ConfigDiscovery,
     cache: &Cache,
@@ -153,11 +144,12 @@ pub(crate) async fn find_script(
         None,
         client_builder,
         python_preference,
+        python_arch,
         python_downloads,
         &PythonInstallMirrors::default(),
         false,
         config_discovery,
-        Some(false),
+        ActiveEnvironment::Ignore,
         cache,
         printer,
     )
@@ -167,7 +159,7 @@ pub(crate) async fn find_script(
             writeln!(
                 printer.stderr(),
                 "{}",
-                ErrorWithHints::new(&error, uv_errors::Hint::hints(&error))
+                ErrorWithHints::new(&error, uv_errors::Hinted::hints(&error))
             )?;
             return Ok(ExitStatus::Failure);
         }

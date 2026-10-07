@@ -59,10 +59,10 @@ fn branching_urls_overlapping() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to resolve dependencies for `a` (v0.1.0)
-      ╰─▶ Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version == '3.11.*'`:
-          - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
-          - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
+    error: Failed to resolve dependencies for package `a==0.1.0`
+      cause: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version == '3.11.*'`:
+             - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
+             - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
     "
     );
 
@@ -124,10 +124,10 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to resolve dependencies for `b2` (v0.1.0)
-      ╰─▶ Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version >= '3.12'`:
-          - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
-          - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
+    error: Failed to resolve dependencies for package `b2==0.1.0`
+      cause: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version >= '3.12'`:
+             - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
+             - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
 
     hint: `b2` (v0.1.0) was included because `a` (v0.1.0) depends on `b` (v0.1.0) which depends on `b2`
     "
@@ -199,7 +199,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -393,7 +393,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -553,7 +553,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -637,7 +637,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -711,10 +711,10 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to resolve dependencies for `a` (v0.1.0)
-      ╰─▶ Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version == '3.11.*'`:
-          - git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a
-          - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
+    error: Failed to resolve dependencies for package `a==0.1.0`
+      cause: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version == '3.11.*'`:
+             - git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a
+             - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
     "
     );
 
@@ -761,7 +761,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
 
     [options]

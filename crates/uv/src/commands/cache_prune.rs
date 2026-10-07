@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_cache::{Cache, RemovalMode};
+use uv_cache::{Cache, RemovalAccounting};
 use uv_fs::Simplified;
 use uv_preview::{Preview, PreviewFeature};
 
@@ -43,12 +43,12 @@ pub(crate) async fn cache_prune(
         }
     };
 
-    let removal_mode = if preview.is_enabled(PreviewFeature::CachePhysicalSpace) {
-        RemovalMode::Physical
+    let removal_accounting = if preview.is_enabled(PreviewFeature::CachePhysicalSpace) {
+        RemovalAccounting::Fine
     } else {
-        RemovalMode::Logical
+        RemovalAccounting::Coarse
     };
-    let cache = cache.with_removal_mode(removal_mode);
+    let cache = cache.with_removal_accounting(removal_accounting);
 
     writeln!(
         printer.stderr(),
@@ -86,19 +86,14 @@ pub(crate) async fn cache_prune(
         }
     }
 
-    // If any, report the physical space, falling back to the logical removed size.
-    let reported_bytes = summary.physical_bytes.unwrap_or(summary.logical_bytes);
-    if summary.logical_bytes > 0 || reported_bytes > 0 {
-        let bytes = if reported_bytes < 1024 {
-            format!("{reported_bytes}B")
+    // Prefer the fine-grained estimate, falling back to coarse accounting.
+    let reported_bytes = summary.fine_bytes.unwrap_or(summary.coarse_bytes);
+    if summary.num_files > 0 || summary.num_dirs > 0 {
+        let bytes = human_readable_bytes(reported_bytes);
+        if summary.fine_bytes_incomplete {
+            write!(printer.stderr(), " (at least {:.1})", bytes.green())?;
         } else {
-            let (bytes, unit) = human_readable_bytes(reported_bytes);
-            format!("{bytes:.1}{unit}")
-        };
-        if summary.physical_bytes_incomplete {
-            write!(printer.stderr(), " (at least {})", bytes.green())?;
-        } else {
-            write!(printer.stderr(), " ({})", bytes.green())?;
+            write!(printer.stderr(), " ({:.1})", bytes.green())?;
         }
     }
 

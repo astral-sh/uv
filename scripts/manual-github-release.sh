@@ -6,9 +6,10 @@
 #
 # It can take a while to download all the artifacts.
 #
-# Requires the `gh` CLI.
+# Requires `gh` and `jq`.
 
 set -euo pipefail
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 if [ -z "${COMMIT:-}" ]; then
     echo "COMMIT is required."
@@ -26,10 +27,42 @@ cd "release_$RUN_ID"
 
 REPO=$(gh repo view --json nameWithOwner | jq .nameWithOwner -r)
 
-# Download all artifacts for the workflow run
-gh run download "$RUN_ID" --repo "$REPO" --pattern 'artifacts-*'
+# Find the publication artifacts across all attempts of this run.
+gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" |
+    jq -s '[.[].artifacts[]]' > workflow-artifacts.json
+RUN_ATTEMPT=$(gh run view "$RUN_ID" --repo "$REPO" --json attempt --jq .attempt)
 
-MANIFEST="artifacts-dist-manifest/dist-manifest.json"
+# Return the latest artifact in a family, up to the given run attempt.
+artifact_name() {
+    jq -er --arg prefix "release-github-$1-$RUN_ID-" --argjson attempt "$2" '
+        [.[]
+         | select(.name | startswith($prefix))
+         | . + {attempt: (.name | ltrimstr($prefix) | tonumber)}
+         | select(.attempt <= $attempt)]
+        | max_by(.attempt)
+        | if . == null then error("Missing artifact: \($prefix)*")
+          elif .expired then error("Artifact has expired: \(.name)")
+          else .name end
+    ' workflow-artifacts.json
+}
+
+# Successful upstream jobs may come from earlier attempts. Anchor their selection
+# to the last hosted manifest, excluding outputs from any later failed rerun.
+manifest_artifact=$(artifact_name manifest "$RUN_ATTEMPT")
+manifest_attempt=${manifest_artifact##*-}
+gh run download "$RUN_ID" --repo "$REPO" --name "$manifest_artifact" --dir artifacts
+for artifact in archives global; do
+    name=$(artifact_name "$artifact" "$manifest_attempt")
+    gh run download "$RUN_ID" --repo "$REPO" \
+        --name "$name" --dir artifacts
+done
+
+MANIFEST="artifacts/dist-manifest.json"
+"$SCRIPT_DIR/dist-manifest-to-files.sh" "$MANIFEST" > release-assets.txt
+assets=()
+while IFS= read -r asset; do
+    assets+=("$asset")
+done < release-assets.txt
 
 # Extract values from manifest
 TAG=$(jq -r '.announcement_tag // .tag' "$MANIFEST")
@@ -38,25 +71,18 @@ BODY=$(jq -r '.announcement_github_body' "$MANIFEST")
 PRERELEASE=$(jq -r '.announcement_is_prerelease' "$MANIFEST")
 
 # Write body to temp file
-echo "$BODY" > /tmp/notes.txt
-
-# Merge artifacts-* directories into artifacts/ (like CI does)
-mkdir -p artifacts
-cp -r artifacts-*/* artifacts/
-
-# Remove the granular manifests (like CI does)
-rm -f artifacts/*-dist-manifest.json
+echo "$BODY" > notes.txt
 
 # Create release
 release_args=(
     "$TAG"
     --target "$COMMIT"
     --title "$TITLE"
-    --notes-file /tmp/notes.txt
+    --notes-file notes.txt
 )
 
 if [ "$PRERELEASE" = "true" ]; then
     release_args+=(--prerelease)
 fi
 
-gh release create "${release_args[@]}" artifacts/*
+gh release create "${release_args[@]}" "${assets[@]}"

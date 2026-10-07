@@ -389,19 +389,18 @@ impl FlatRequiresDist {
                     .simplify_extras(slice::from_ref(&extra))
                     .simplify_not_extras_with(|candidate| candidate != &extra)
                     .and(production_marker.negate());
-                if extra_marker.is_false() {
+                let marker = marker.and(extra_marker);
+                if marker.is_false() {
                     continue;
                 }
-                let requirement = {
-                    let marker = marker.and(extra_marker);
-                    Requirement {
-                        name: requirement.name.clone(),
-                        extras: requirement.extras.clone(),
-                        groups: requirement.groups.clone(),
-                        source: requirement.source.clone(),
-                        origin: requirement.origin.clone(),
-                        marker,
-                    }
+                let requirement = Requirement {
+                    name: requirement.name.clone(),
+                    extras: requirement.extras.clone(),
+                    groups: requirement.groups.clone(),
+                    source: requirement.source.clone(),
+                    scope: requirement.scope.clone(),
+                    origin: requirement.origin.clone(),
+                    marker,
                 };
                 if requirement.name == *name {
                     // Add each transitively included extra.
@@ -412,33 +411,34 @@ impl FlatRequiresDist {
                             .cloned()
                             .map(|extra| (extra, requirement.marker)),
                     );
-                } else {
-                    // Add the requirements for that extra.
-                    flattened.push(requirement);
                 }
+
+                // Retain the requirement, including any recursively reached self-constraint.
+                flattened.push(requirement);
+            }
+        }
+
+        // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
+        // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
+        // transitively expanding `project[bar]`.
+        let mut self_constraints = vec![];
+        for req in &flattened {
+            if req.name == *name && !req.source.is_empty() {
+                self_constraints.push(Requirement {
+                    name: req.name.clone(),
+                    extras: Box::new([]),
+                    groups: req.groups.clone(),
+                    source: req.source.clone(),
+                    scope: req.scope.clone(),
+                    origin: req.origin.clone(),
+                    marker: req.marker,
+                });
             }
         }
 
         // Drop all the self-references now that we've flattened them out.
         flattened.retain(|req| req.name != *name);
-
-        // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
-        // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
-        // transitively expanding `project[bar]`.
-        for req in &requirements {
-            if req.name == *name {
-                if !req.source.is_empty() {
-                    flattened.push(Requirement {
-                        name: req.name.clone(),
-                        extras: Box::new([]),
-                        groups: req.groups.clone(),
-                        source: req.source.clone(),
-                        origin: req.origin.clone(),
-                        marker: req.marker,
-                    });
-                }
-            }
-        }
+        flattened.extend(self_constraints);
 
         Self(flattened.into_boxed_slice())
     }
@@ -538,7 +538,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = true
@@ -561,7 +561,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
@@ -584,7 +584,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
@@ -606,7 +606,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 7, column 8
           |
         7 | tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
@@ -629,7 +629,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
@@ -670,7 +670,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
@@ -693,7 +693,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: Failed to parse: `[PATH]/pyproject.toml`
+        error: Failed to parse: [PATH]/pyproject.toml
           Caused by: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }

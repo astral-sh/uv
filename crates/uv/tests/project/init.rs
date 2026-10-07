@@ -2685,6 +2685,29 @@ fn init_unmanaged() -> Result<()> {
 }
 
 #[test]
+fn init_python_current_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let directory = context.temp_dir.child("Python");
+    directory.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&directory), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The directory name (`Python`) cannot be used as project name, please provide a package name with `--name`.
+    ");
+
+    // An explicit name is allowed, even if it is `python`.
+    uv_snapshot!(context.filters(), context.init().current_dir(&directory).arg("--name").arg("python").arg("--bare"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Initialized project `python`
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn init_hidden() {
     let context = uv_test::test_context!("3.12");
 
@@ -2727,7 +2750,7 @@ fn init_failure() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to discover parent workspace; use `uv init --no-workspace` to ignore
-      Caused by: No `project` table found in: [TEMP_DIR]/pyproject.toml
+      cause: No `project` table found in: [TEMP_DIR]/pyproject.toml
     ");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-workspace"), @"

@@ -12,24 +12,31 @@ use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_pep440::Version;
+use uv_scripts::{ScriptDiscoveryError, find_scripts};
 use uv_shell::shlex_posix;
+use uv_static::EnvVars;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
-use crate::commands::workspace::list::{ScriptDiscoveryError, find_scripts};
 use crate::printer::Printer;
+use crate::settings::{FrozenSource, LockCheck};
 
 /// Run a type check powered by ty.
+#[expect(clippy::fn_params_excessive_bools)]
 pub(super) async fn run(
     version: Option<String>,
     ty_path: Option<PathBuf>,
     fix: bool,
     target_dir: &Path,
     workspace_root: Option<&Path>,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
     check_targets: &[PathBuf],
     excluded_targets: &[PathBuf],
+    explicit_targets: bool,
     venv_path: Option<&Path>,
+    python_version: Option<&Version>,
     exclude_newer: Option<jiff::Timestamp>,
     show_version: bool,
     show_command: bool,
@@ -152,6 +159,11 @@ pub(super) async fn run(
     if fix {
         command.arg("--fix");
     }
+    if let Some(python_version) = python_version {
+        command
+            .arg("--python-version")
+            .arg(python_version.to_string());
+    }
     // PEP 723 scripts have independent environments and must be checked explicitly with
     // `uv check --script`. This still allows explicitly selected script paths to be checked.
     // Older versions of ty do not support `--exclude-scripts`, so discover and exclude their
@@ -161,7 +173,7 @@ pub(super) async fn run(
         command.arg("--exclude-scripts");
     } else if let Some(workspace_root) = workspace_root {
         excluded_scripts.extend(
-            find_scripts(workspace_root, cache)
+            find_scripts(workspace_root, cache.root())
                 .filter_map(|script| match script {
                     Ok(script) => check_targets
                         .iter()
@@ -199,6 +211,10 @@ pub(super) async fn run(
         );
     }
     if !check_targets.is_empty() {
+        // Respect configured exclusions when automatically selecting members of a virtual workspace.
+        if !explicit_targets {
+            command.arg("--force-exclude");
+        }
         // Keep paths relative to the working directory for stable diagnostics, and use `--` so
         // option-like filenames are treated as paths.
         command.arg("--");
@@ -210,8 +226,30 @@ pub(super) async fn run(
             );
         }
     }
-    // Opt into ty querying uv for project metadata.
-    command.env("TY_UV", "1");
+    // Only query workspace metadata if a workspace was discovered. Keep uv integration enabled
+    // for standalone scripts, which have their own environments.
+    command.env(
+        "TY_UV",
+        if workspace_root.is_some() {
+            "1"
+        } else {
+            "scripts"
+        },
+    );
+
+    if workspace_root.is_some() {
+        // Forward enabled settings and remove disabled ones so CLI overrides of inherited
+        // settings also apply when ty invokes `uv workspace metadata`.
+        if frozen.is_some() {
+            command.env(EnvVars::UV_FROZEN, "1");
+        } else {
+            command.env_remove(EnvVars::UV_FROZEN);
+        }
+        match lock_check {
+            LockCheck::Enabled(_) => command.env(EnvVars::UV_LOCKED, "1"),
+            LockCheck::Disabled => command.env_remove(EnvVars::UV_LOCKED),
+        };
+    }
 
     if let Some(venv_path) = venv_path {
         command.env("VIRTUAL_ENV", venv_path);

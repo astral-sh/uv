@@ -35,6 +35,30 @@ pub enum GitResolverError {
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
 }
 
+impl GitResolverError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Git(error) => {
+                for cause in error.chain() {
+                    if let Some(error) = cause.downcast_ref::<reqwest::Error>() {
+                        return error.status() == Some(reqwest::StatusCode::NOT_FOUND);
+                    }
+                    if cause.is::<std::io::Error>() {
+                        return false;
+                    }
+                }
+                true
+            }
+            Self::Reqwest(error) => error.status() == Some(reqwest::StatusCode::NOT_FOUND),
+            Self::ReqwestMiddleware(error) => {
+                error.status() == Some(reqwest::StatusCode::NOT_FOUND)
+            }
+            Self::Io(_) | Self::LockedFile(_) | Self::Join(_) => false,
+        }
+    }
+}
+
 /// HTTP settings for fetching a Git repository.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GitHttpSettings {

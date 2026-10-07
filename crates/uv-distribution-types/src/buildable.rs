@@ -1,5 +1,8 @@
 use std::borrow::Cow;
+use std::fmt;
 use std::path::Path;
+
+use owo_colors::OwoColorize;
 
 use uv_distribution_filename::SourceDistExtension;
 use uv_git_types::GitUrl;
@@ -10,8 +13,8 @@ use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::{
-    DirectorySourceDist, GitDirectorySourceDist, GitPathSourceDist, Name, PathSourceDist,
-    SourceDist,
+    DirectorySourceDist, DistributionMetadata, GitDirectorySourceDist, GitPathSourceDist, Name,
+    PathSourceDist, SourceDist,
 };
 
 /// A reference to a source that can be built into a built distribution.
@@ -27,6 +30,19 @@ pub enum BuildableSource<'a> {
 }
 
 impl BuildableSource<'_> {
+    /// Display the source with its distribution's version or URL dimmed.
+    pub fn color_display(&self) -> impl fmt::Display + '_ {
+        fmt::from_fn(move |formatter| match self {
+            Self::Dist(dist) => write!(
+                formatter,
+                "{}{}",
+                dist.name(),
+                dist.version_or_url().dimmed()
+            ),
+            Self::Url(url) => fmt::Display::fmt(url, formatter),
+        })
+    }
+
     /// Return the [`PackageName`] of the source, if available.
     pub fn name(&self) -> Option<&PackageName> {
         match self {
@@ -66,6 +82,14 @@ impl BuildableSource<'_> {
         match self {
             Self::Dist(dist) => dist.is_editable(),
             Self::Url(url) => url.is_editable(),
+        }
+    }
+
+    /// Returns `true` if the source is a first-party workspace member.
+    pub fn is_first_party(&self) -> bool {
+        match self {
+            Self::Dist(dist) => dist.is_first_party(),
+            Self::Url(_) => false,
         }
     }
 

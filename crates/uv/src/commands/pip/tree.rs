@@ -22,7 +22,9 @@ use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    EnvironmentPreference, PythonArchitecture, PythonEnvironment, PythonPreference, PythonRequest,
+};
 use uv_resolver::{ExcludeNewer, Prerelease};
 
 use crate::commands::ExitStatus;
@@ -34,6 +36,7 @@ use crate::printer::Printer;
 /// Display the installed packages in the current environment as a dependency tree.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_tree(
+    python_arch: Option<PythonArchitecture>,
     show_version_specifiers: bool,
     depth: u8,
     prune: &[PackageName],
@@ -60,6 +63,7 @@ pub(crate) async fn pip_tree(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
+        python_arch,
         cache,
     )?;
 

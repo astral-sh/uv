@@ -13,7 +13,7 @@ use tracing::trace;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
-use uv_normalize::{ExtraName, InvalidNameError, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::{LowerBound, Version};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
@@ -128,18 +128,8 @@ pub enum ResolveError {
     #[error("Package `{0}` is unavailable")]
     PackageUnavailable(PackageName),
 
-    #[error("Invalid extra value in conflict marker: {reason}: {raw_extra}")]
-    InvalidExtraInConflictMarker {
-        reason: String,
-        raw_extra: ExtraName,
-    },
-
-    #[error("Invalid {kind} value in conflict marker: {name_error}")]
-    InvalidValueInConflictMarker {
-        kind: &'static str,
-        #[source]
-        name_error: InvalidNameError,
-    },
+    #[error(transparent)]
+    ConflictMarker(#[from] uv_resolver_types::ConflictMarkerError),
     #[error(
         "The index returned metadata for the wrong package: expected {request} for {expected}, got {request} for {actual}"
     )]
@@ -150,13 +140,39 @@ pub enum ResolveError {
     },
 }
 
-impl uv_errors::Hint for ResolveError {
+impl ResolveError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Dependencies(error, ..) => error.is_user_failure(),
+            Self::Distribution(error) => error.is_user_failure(),
+            Self::ConflictingUrls { .. }
+            | Self::ConflictingIndexesForEnvironment { .. }
+            | Self::ConflictingIndexes(..)
+            | Self::DisallowedUrl { .. }
+            | Self::DistributionType(_)
+            | Self::NoSolution(_)
+            | Self::UnhashedPackage(_)
+            | Self::PackageUnavailable(_)
+            | Self::ConflictMarker(_)
+            | Self::MismatchedPackageName { .. } => true,
+            Self::Dist(_, _, _, error) => error.is_user_failure(),
+            Self::Client(error) => error.is_user_failure(),
+            Self::ChannelClosed
+            | Self::UnregisteredTask(_)
+            | Self::InvalidVersion(_)
+            | Self::ConflictingDistribution(_) => false,
+        }
+    }
+}
+
+impl uv_errors::Hinted for ResolveError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::NoSolution(no_solution) => uv_errors::Hint::hints(no_solution.as_ref()),
-            Self::Client(error) => uv_errors::Hint::hints(error),
-            Self::Distribution(error) => uv_errors::Hint::hints(error),
-            Self::Dependencies(error, ..) => uv_errors::Hint::hints(error.as_ref()),
+            Self::NoSolution(no_solution) => uv_errors::Hinted::hints(no_solution.as_ref()),
+            Self::Client(error) => uv_errors::Hinted::hints(error),
+            Self::Distribution(error) => uv_errors::Hinted::hints(error),
+            Self::Dependencies(error, ..) => uv_errors::Hinted::hints(error.as_ref()),
             _ => uv_errors::Hints::none(),
         }
     }
@@ -421,7 +437,7 @@ pub struct NoSolutionError {
     /// These version sets are not filtered by `exclude-newer`. See
     /// [`NoSolutionError::included_versions`] instead if filtered versions are needed.
     ///
-    /// These versions are filtered by [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for
+    /// These versions are filtered by [`EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF`] for
     /// deterministic output in tests.
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
@@ -745,13 +761,8 @@ impl NoSolutionError {
             .unique()
     }
 
-    /// Generate the report and hints for this resolution failure.
-    ///
-    /// Returns the formatted report string and structured [`PubGrubHint`] values.
-    /// The result is cached so repeated calls (e.g., from both `Display` and
-    /// explicit hint collection) don't recompute the derivation tree.
     /// Return the formatted report string.
-    pub fn report(&self) -> &str {
+    fn report(&self) -> &str {
         &self.cached().0
     }
 
@@ -892,7 +903,7 @@ impl std::fmt::Debug for NoSolutionError {
 
 impl std::error::Error for NoSolutionError {}
 
-impl uv_errors::Hint for NoSolutionError {
+impl uv_errors::Hinted for NoSolutionError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.pubgrub_hints()
             .iter()
@@ -901,7 +912,7 @@ impl uv_errors::Hint for NoSolutionError {
     }
 }
 
-impl uv_errors::Hint for Box<NoSolutionError> {
+impl uv_errors::Hinted for Box<NoSolutionError> {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.as_ref().hints()
     }
@@ -1776,18 +1787,17 @@ impl NoSolutionHeader {
 impl std::fmt::Display for NoSolutionHeader {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match (self.context, self.env.end_user_fork_display()) {
-            (None, None) => write!(f, "No solution found when resolving dependencies:"),
-            (Some(context), None) => write!(
-                f,
-                "No solution found when resolving {context} dependencies:"
-            ),
+            (None, None) => write!(f, "No solution found when resolving dependencies"),
+            (Some(context), None) => {
+                write!(f, "No solution found when resolving {context} dependencies")
+            }
             (None, Some(split)) => write!(
                 f,
-                "No solution found when resolving dependencies for {split}:"
+                "No solution found when resolving dependencies for {split}"
             ),
             (Some(context), Some(split)) => write!(
                 f,
-                "No solution found when resolving {context} dependencies for {split}:"
+                "No solution found when resolving {context} dependencies for {split}"
             ),
         }
     }
@@ -1953,6 +1963,9 @@ fn simplify_range(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+    use uv_resolver_types::PackageNodeKind;
+
     use super::*;
     use crate::resolver::UnavailableVersion;
 
@@ -1976,8 +1989,7 @@ mod tests {
     fn pubgrub_package(name: &str) -> PubGrubPackage {
         PubGrubPackage::from(PubGrubPackageInner::Package {
             name: package_name(name),
-            extra: None,
-            group: None,
+            kind: PackageNodeKind::Base,
             marker: uv_pep508::MarkerTree::TRUE,
         })
     }
@@ -2159,10 +2171,7 @@ mod tests {
             cause2: Arc::new(cause2),
         });
 
-        assert!(matches!(
-            collapse_unavailable_versions(tree),
-            ErrorTree::Derived(_)
-        ));
+        assert_matches!(collapse_unavailable_versions(tree), ErrorTree::Derived(_));
     }
 
     #[test]

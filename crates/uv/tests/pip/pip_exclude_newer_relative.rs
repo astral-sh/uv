@@ -18,7 +18,7 @@ fn pip_install_exclude_newer_relative() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("idna"), @"
@@ -34,7 +34,7 @@ fn pip_install_exclude_newer_relative() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
@@ -73,7 +73,7 @@ fn pip_install_exclude_newer_relative_config() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("idna"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -94,7 +94,7 @@ fn pip_install_exclude_newer_relative_config() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--upgrade")
         .arg("idna"), @"
     exit_code: 0 (success)

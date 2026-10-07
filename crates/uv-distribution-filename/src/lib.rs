@@ -144,6 +144,7 @@ pub enum DistFilenameError {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::str::FromStr;
 
     use uv_normalize::PackageName;
@@ -161,8 +162,9 @@ mod tests {
         // is rejected because it has no recognized distribution extension.
         let name = PackageName::from_str("my-package").unwrap();
         let err = DistFilename::try_from_filename_with_reason("0.1.0", &name).unwrap_err();
-        assert!(
-            matches!(err, DistFilenameError::NoRecognizedExtension(_)),
+        assert_matches!(
+            err,
+            DistFilenameError::NoRecognizedExtension(_),
             "unexpected error variant: {err:?}"
         );
         let rendered = err.to_string();
@@ -178,8 +180,9 @@ mod tests {
         // similarly rejected with the no-extension reason rather than silently swallowing it.
         let name = PackageName::from_str("my-package").unwrap();
         let err = DistFilename::try_from_filename_with_reason("", &name).unwrap_err();
-        assert!(
-            matches!(err, DistFilenameError::NoRecognizedExtension(_)),
+        assert_matches!(
+            err,
+            DistFilenameError::NoRecognizedExtension(_),
             "unexpected error variant: {err:?}"
         );
     }
@@ -191,8 +194,9 @@ mod tests {
         let name = PackageName::from_str("my-package").unwrap();
         let err =
             DistFilename::try_from_filename_with_reason("not-a-wheel.whl", &name).unwrap_err();
-        assert!(
-            matches!(err, DistFilenameError::InvalidWheel(_)),
+        assert_matches!(
+            err,
+            DistFilenameError::InvalidWheel(_),
             "unexpected error variant: {err:?}"
         );
     }
