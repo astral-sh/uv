@@ -8,13 +8,44 @@ use tracing::info_span;
 
 use uv_client::BaseClientBuilder;
 use uv_configuration::{BuildOptions, HashCheckingMode, RequirementsInput, TargetTriple};
-use uv_distribution_types::Resolution;
-use uv_lock::PylockToml;
+use uv_distribution_types::{RequiresPython, Resolution};
+use uv_lock::{PylockToml, PylockTomlError};
 use uv_normalize::{ExtraName, GroupName};
+use uv_pep440::Version;
+use uv_platform_tags::TagsError;
 use uv_python::{Interpreter, PythonVersion};
-use uv_types::HashStrategy;
+use uv_types::{HashStrategy, HashStrategyError};
 
 use uv_resolve_operations::{resolution_markers, resolution_tags};
+
+/// A failure while resolving the packages recorded in a `pylock.toml`.
+#[derive(Debug, thiserror::Error)]
+pub enum PylockResolutionError {
+    #[error(
+        "The requested interpreter resolved to Python {python_version}, which is incompatible with the `pylock.toml`'s Python requirement: `{requires_python}`"
+    )]
+    IncompatiblePython {
+        python_version: Version,
+        requires_python: RequiresPython,
+    },
+    #[error(transparent)]
+    Tags(#[from] TagsError),
+    #[error(transparent)]
+    Pylock(#[from] PylockTomlError),
+    #[error(transparent)]
+    Hash(#[from] HashStrategyError),
+}
+
+impl uv_errors::Hinted for PylockResolutionError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Pylock(error) => error.hints(),
+            Self::IncompatiblePython { .. } | Self::Tags(_) | Self::Hash(_) => {
+                uv_errors::Hints::none()
+            }
+        }
+    }
+}
 
 /// Read a `pylock.toml` from a local path or remote URL and parse it.
 ///
@@ -72,14 +103,13 @@ pub(crate) fn resolve_pylock_toml(
     groups: &[GroupName],
     build_options: &BuildOptions,
     hash_checking: Option<HashCheckingMode>,
-) -> anyhow::Result<(Resolution, HashStrategy)> {
+) -> Result<(Resolution, HashStrategy), PylockResolutionError> {
     if let Some(requires_python) = lock.requires_python.as_ref() {
         if !requires_python.contains(interpreter.python_version()) {
-            return Err(anyhow::anyhow!(
-                "The requested interpreter resolved to Python {}, which is incompatible with the `pylock.toml`'s Python requirement: `{}`",
-                interpreter.python_version(),
-                requires_python,
-            ));
+            return Err(PylockResolutionError::IncompatiblePython {
+                python_version: interpreter.python_version().clone(),
+                requires_python: requires_python.clone(),
+            });
         }
     }
 
