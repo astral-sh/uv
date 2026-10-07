@@ -55,6 +55,13 @@ pub enum BuildDispatchError {
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
 
+    #[error("No solution found when resolving: {requirements}")]
+    ResolveRequirements {
+        requirements: String,
+        #[source]
+        source: uv_resolver::ResolveError,
+    },
+
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
@@ -72,21 +79,12 @@ impl uv_errors::Hinted for BuildDispatchError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BuildFrontend(err) => err.hints(),
-            Self::Resolve(err) => err.hints(),
-            Self::Anyhow(err) => {
-                // Walk the anyhow error chain to find hint-bearing errors
-                // (e.g., ResolveError wrapped via `with_context`).
-                for cause in err.chain() {
-                    if let Some(resolve_err) = cause.downcast_ref::<uv_resolver::ResolveError>() {
-                        let hints = resolve_err.hints();
-                        if !hints.is_empty() {
-                            return hints;
-                        }
-                    }
-                }
-                uv_errors::Hints::none()
-            }
-            _ => uv_errors::Hints::none(),
+            Self::Resolve(err) | Self::ResolveRequirements { source: err, .. } => err.hints(),
+            Self::Tags(_)
+            | Self::Join(_)
+            | Self::Anyhow(_)
+            | Self::Prepare(_)
+            | Self::Lookahead(_) => uv_errors::Hints::none(),
         }
     }
 }
@@ -95,14 +93,12 @@ impl IsBuildBackendError for BuildDispatchError {
     fn is_user_failure(&self) -> bool {
         match self {
             Self::BuildFrontend(error) => error.is_user_failure(),
-            Self::Resolve(error) => error.is_user_failure(),
+            Self::Resolve(error) | Self::ResolveRequirements { source: error, .. } => {
+                error.is_user_failure()
+            }
             Self::Prepare(error) => error.is_user_failure(),
             Self::Lookahead(error) => error.is_user_failure(),
-            Self::Anyhow(error) => error
-                .chain()
-                .find_map(|cause| cause.downcast_ref::<uv_resolver::ResolveError>())
-                .is_some_and(uv_resolver::ResolveError::is_user_failure),
-            Self::Tags(_) | Self::Join(_) => false,
+            Self::Tags(_) | Self::Join(_) | Self::Anyhow(_) => false,
         }
     }
 
@@ -110,6 +106,7 @@ impl IsBuildBackendError for BuildDispatchError {
         match self {
             Self::Tags(_)
             | Self::Resolve(_)
+            | Self::ResolveRequirements { .. }
             | Self::Join(_)
             | Self::Anyhow(_)
             | Self::Prepare(_)
@@ -375,14 +372,14 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )?;
-        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
-            format!(
-                "No solution found when resolving: {}",
-                requirements
+        let resolution = Resolution::from(resolver.resolve().await.map_err(|source| {
+            BuildDispatchError::ResolveRequirements {
+                requirements: requirements
                     .iter()
                     .map(|requirement| format!("`{requirement}`"))
-                    .join(", ")
-            )
+                    .join(", "),
+                source,
+            }
         })?);
         Ok(ResolvedRequirements::new(resolution, hasher))
     }
