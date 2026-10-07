@@ -1,4 +1,5 @@
 pub use active_environment::*;
+pub use add_bounds::*;
 pub use annotation_style::*;
 pub use authentication::*;
 pub use build_options::*;
@@ -41,6 +42,7 @@ pub use vcs::*;
 pub use version_bump::*;
 
 mod active_environment;
+mod add_bounds;
 mod annotation_style;
 mod authentication;
 mod build_options;

@@ -15,9 +15,9 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
-    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
-    InstallOptions, Modifications, NoSources,
+    ActiveEnvironment, AddBoundsKind, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
+    DevMode, DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults,
+    GitLfsSetting, InstallOptions, Modifications, NoSources,
 };
 use uv_dispatch::{BuildDispatch, PlatformState, UniversalState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -39,6 +39,7 @@ use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
+use uv_project_edit::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
@@ -59,7 +60,6 @@ use uv_static::is_known_standard_library_package;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
-use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::ProjectError;

@@ -26,6 +26,7 @@ use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, PackageName};
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
+use uv_project_edit::{DependencyTarget, Error, PyProjectTomlMut};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
@@ -35,11 +36,9 @@ use uv_settings::{
     FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
 };
 use uv_workspace::pyproject::PyProjectToml;
-use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
     DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceError,
     WorkspaceErrorKind,
-    pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
 use crate::ProjectError;

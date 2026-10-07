@@ -21,7 +21,7 @@ pub enum ProjectError {
     Pep723ScriptTomlParse(#[source] toml::de::Error),
 
     #[error(transparent)]
-    PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
+    PyprojectMut(#[from] uv_project_edit::Error),
 
     #[error(transparent)]
     Lock(#[from] uv_lock_operations::LockError),

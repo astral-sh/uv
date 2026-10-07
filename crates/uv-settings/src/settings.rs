@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage, ForkStrategy,
-    IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode, PrereleasePackage,
-    ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedHost,
-    TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
+    AddBoundsKind, AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage,
+    ForkStrategy, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode,
+    PrereleasePackage, ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple,
+    TrustedHost, TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
@@ -28,7 +28,6 @@ use uv_torch::TorchMode;
 use uv_workspace::pyproject::{
     BuildConstraintDependency, ExtraBuildDependencies, OverrideDependency,
 };
-use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{EnvironmentOptions, FilesystemOptions};
 

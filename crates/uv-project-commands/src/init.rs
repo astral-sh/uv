@@ -22,6 +22,7 @@ use uv_git::GIT;
 use uv_install_wheel::reserved_script_name;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_project_edit::{DependencyTarget, PyProjectTomlMut};
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
@@ -34,7 +35,6 @@ use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceErrorKind,
 };
