@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -22,7 +22,7 @@ use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
 use crate::record::RecordEntry;
-use crate::script::{Script, scripts_from_ini};
+use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
 
 /// Wrapper script template function
@@ -56,15 +56,12 @@ if __name__ == "__main__":
 pub(crate) fn read_scripts_from_section(
     scripts_section: &HashMap<String, Option<String>>,
     section_name: &str,
-    extras: Option<&[String]>,
 ) -> Result<Vec<Script>, Error> {
     let mut scripts = Vec::new();
     for (script_name, python_location) in scripts_section {
         match python_location {
             Some(value) => {
-                if let Some(script) = Script::from_value(script_name, value, extras)? {
-                    scripts.push(script);
-                }
+                scripts.push(Script::from_value(script_name, value)?);
             }
             None => {
                 return Err(Error::InvalidWheel(format!(
@@ -167,6 +164,92 @@ const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
 const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];
 const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
 
+/// Return the reserved interpreter name if a script would overwrite a Python executable.
+///
+/// Expects a lowercase string.
+pub fn reserved_script_name(name: &str) -> Option<&str> {
+    let normalized_name = name.strip_suffix(".py").unwrap_or(name);
+    (RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
+        || normalized_name
+            .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
+            .is_some_and(|minor| minor.parse::<u8>().is_ok())
+        || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
+            .iter()
+            .any(|prefix| {
+                normalized_name
+                    .strip_prefix(prefix)
+                    .and_then(|minor| minor.strip_suffix('t'))
+                    .is_some_and(|minor| minor.parse::<u8>().is_ok())
+            }))
+    .then_some(normalized_name)
+}
+
+/// An unpacked wheel whose data directories cannot overwrite a reserved script.
+pub(crate) struct ValidatedWheel<'wheel> {
+    path: &'wheel Path,
+}
+
+impl<'wheel> ValidatedWheel<'wheel> {
+    pub(crate) fn new(
+        layout: &Layout,
+        wheel: &'wheel Path,
+        dist_info_prefix: &str,
+    ) -> Result<Self, Error> {
+        let data_dir = wheel.join(format!("{dist_info_prefix}.data"));
+        for (source, destination) in [
+            (data_dir.join("scripts"), &layout.scheme.scripts),
+            (data_dir.join("data"), &layout.scheme.data),
+        ] {
+            if !source.is_dir() {
+                continue;
+            }
+
+            for entry in WalkDir::new(&source).min_depth(1) {
+                let entry = entry?;
+                if entry.file_type().is_dir() {
+                    continue;
+                }
+
+                let relative = relative_to(entry.path(), &source)?;
+                validate_data_script_destination(
+                    &destination.join(relative),
+                    &layout.scheme.scripts,
+                )?;
+            }
+        }
+
+        Ok(Self { path: wheel })
+    }
+
+    pub(crate) fn as_path(&self) -> &Path {
+        self.path
+    }
+}
+
+fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(), Error> {
+    let Some(name) = target
+        .strip_prefix(scripts)
+        .ok()
+        .filter(|relative| relative.components().count() == 1)
+        .and_then(Path::to_str)
+    else {
+        return Ok(());
+    };
+
+    let normalized_name = name.to_ascii_lowercase();
+    let normalized_name = normalized_name
+        .strip_suffix(".exe")
+        .unwrap_or(&normalized_name);
+    if let Some(reserved) = reserved_script_name(normalized_name) {
+        return Err(Error::ReservedScriptName {
+            reserved: reserved.to_string(),
+            declared: name.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
 /// A form of [`Script`] guaranteed by [`ValidatedScript::try_from_script`] to be constrained to
 /// the scripts directory.
 struct ValidatedScript<'script> {
@@ -181,7 +264,7 @@ impl<'script> ValidatedScript<'script> {
             &layout.scheme.scripts,
         ) else {
             return Err(Error::InvalidWheel(format!(
-                "Script path must resolve to a file within the scripts directory: `{}`",
+                "Script path must resolve to a file within the scripts directory: {}",
                 script.name
             )));
         };
@@ -198,30 +281,19 @@ impl<'script> ValidatedScript<'script> {
         }
 
         // Reserve launcher basenames emitted by `uv venv` across supported platforms.
-        // Apply the Windows launcher normalization before checking so wheel validity is portable.
-        // FIXME: What are the in-reality rules here for name normalization?
-        let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
-        if RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
-            || normalized_name
-                .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
-                .is_some_and(|minor| minor.parse::<u8>().is_ok())
-            || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
-                .iter()
-                .any(|prefix| {
-                    normalized_name
-                        .strip_prefix(prefix)
-                        .and_then(|minor| minor.strip_suffix('t'))
-                        .is_some_and(|minor| minor.parse::<u8>().is_ok())
-                })
-        {
+        // Normalize casing before checking so wheel validity is portable.
+        let lowercase_name = name.to_ascii_lowercase();
+        if let Some(reserved) = reserved_script_name(&lowercase_name) {
             return Err(Error::ReservedScriptName {
-                reserved: normalized_name.to_string(),
+                reserved: reserved.to_string(),
                 declared: script.name.clone(),
             });
         }
 
         let path = if cfg!(windows) {
             // On Windows we actually build an `.exe` wrapper.
+            // FIXME: What are the in-reality rules here for name normalization?
+            let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
             let name = normalized_name.to_string() + std::env::consts::EXE_SUFFIX;
 
             layout.scheme.scripts.join(name)
@@ -331,7 +403,7 @@ impl WheelFile {
             .and_then(|wheel_version| wheel_version.split_once('.'))
             .ok_or_else(|| {
                 Error::InvalidWheel(format!(
-                    "Invalid Wheel-Version in WHEEL file: {wheel_version:?}"
+                    "Invalid Wheel-Version in `WHEEL` file: {wheel_version:?}"
                 ))
             })?;
         // pip has some test wheels that use that ancient version,
@@ -392,6 +464,7 @@ pub(crate) enum LibKind {
 fn move_folder_recorded(
     src_dir: &Path,
     dest_dir: &Path,
+    scripts: &Path,
     site_packages: &Path,
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
@@ -414,6 +487,7 @@ fn move_folder_recorded(
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else {
+            validate_data_script_destination(&target, scripts)?;
             rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
@@ -467,6 +541,7 @@ fn install_script(
     }
 
     let script_absolute = layout.scheme.scripts.join(file.file_name());
+    validate_data_script_destination(&script_absolute, &layout.scheme.scripts)?;
     let script_relative =
         pathdiff::diff_paths(&script_absolute, site_packages).ok_or_else(|| {
             Error::Io(io::Error::other(format!(
@@ -476,7 +551,7 @@ fn install_script(
         })?;
 
     let path = file.path();
-    let mut script = File::open(&path)?;
+    let mut script = BufReader::new(File::open(&path)?);
 
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
     // > In wheel, scripts are packaged in {distribution}-{version}.data/scripts/.
@@ -503,7 +578,13 @@ fn install_script(
         loop {
             match script.read_exact(&mut byte) {
                 Ok(()) => {
-                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                    if byte[0] == b'\n' {
+                        break;
+                    }
+                    if byte[0] == b'\r' {
+                        if script.fill_buf()?.first() == Some(&b'\n') {
+                            script.consume(1);
+                        }
                         break;
                     }
 
@@ -573,7 +654,7 @@ fn install_script(
                 // If we have to modify the permissions, copy the file, since we might not own it,
                 // and we may not be allowed to change permissions on an unowned moved file.
                 warn!(
-                    "Copying script from {} to {} (permissions: {:o})",
+                    "Copying script from `{}` to `{}` (permissions: {:o})",
                     path.simplified_display(),
                     script_absolute.simplified_display(),
                     permissions.mode()
@@ -654,16 +735,22 @@ pub(crate) fn install_data(
             Some("data") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/data to {}",
+                    "Installing data/data to `{}`",
                     layout.scheme.data.user_display()
                 );
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.data,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("scripts") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/scripts to {}",
+                    "Installing data/scripts to `{}`",
                     layout.scheme.scripts.user_display()
                 );
                 let mut rename_or_copy = RenameOrCopy::default();
@@ -707,26 +794,44 @@ pub(crate) fn install_data(
                 let target_path = layout.scheme.include.join(dist_name.as_str());
                 trace!(
                     ?dist_name,
-                    "Installing data/headers to {}",
+                    "Installing data/headers to `{}`",
                     target_path.user_display()
                 );
-                move_folder_recorded(&path, &target_path, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &target_path,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("purelib") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/purelib to {}",
+                    "Installing data/purelib to `{}`",
                     layout.scheme.purelib.user_display()
                 );
-                move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.purelib,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("platlib") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/platlib to {}",
+                    "Installing data/platlib to `{}`",
                     layout.scheme.platlib.user_display()
                 );
-                move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.platlib,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
@@ -887,16 +992,15 @@ pub(crate) fn write_record(
 ///
 /// This function is given both the location of the unpacked wheel and the list of files from the
 /// wheel that were unpacked to avoid a walkdir for this check.
+///
+/// Returns the relative path to the `RECORD` file if it was rewritten.
 pub fn validate_and_heal_record<'a>(
     wheel_dir: &Path,
-    unpacked_wheel: impl IntoIterator<Item = &'a (PathBuf, u64)>,
+    unpacked_wheel: impl IntoIterator<Item = (&'a Path, u64)>,
     dist: impl Display,
-) -> Result<(), Error> {
+) -> Result<Option<PathBuf>, Error> {
     // On the filesystem: The unpacked files of the wheel.
-    let mut files: BTreeMap<&Path, u64> = unpacked_wheel
-        .into_iter()
-        .map(|(path, size)| (path.as_path(), *size))
-        .collect();
+    let mut files: BTreeMap<&Path, u64> = unpacked_wheel.into_iter().collect();
 
     // In the record: The files we expect in the wheel.
     let dist_info_prefix = find_dist_info(wheel_dir)?;
@@ -930,8 +1034,7 @@ pub fn validate_and_heal_record<'a>(
     // that weren't removed from files.
     if !extra_record_entries.is_empty() {
         debug!(
-            "RECORD contains files not in wheel archive for {}: `{}`",
-            dist,
+            "Files `{}` are listed in `RECORD` but missing from the wheel archive for `{dist}`",
             extra_record_entries
                 .iter()
                 .map(Simplified::simplified_display)
@@ -940,16 +1043,16 @@ pub fn validate_and_heal_record<'a>(
     }
     if !files.is_empty() {
         debug!(
-            "Wheel archive contains files not in RECORD for {}: `{}`",
-            dist,
+            "Files `{}` are in the wheel archive for `{dist}` but missing from `RECORD`",
             files
                 .keys()
                 .map(Simplified::simplified_display)
                 .join("`, `")
         );
     }
-    if !extra_record_entries.is_empty() || !files.is_empty() {
-        debug!("Rewriting RECORD to match actual wheel contents for {dist}");
+    let healed = !extra_record_entries.is_empty() || !files.is_empty();
+    if healed {
+        debug!("Rewriting `RECORD` to match actual wheel contents for {dist}");
         // We already removed RECORD entries with no matching unpacked file, now add files that
         // were unpacked but not listed in the archive.
         for (path, size) in files {
@@ -967,7 +1070,7 @@ pub fn validate_and_heal_record<'a>(
         write_record(wheel_dir, &dist_info_prefix, record)?;
     }
 
-    Ok(())
+    Ok(healed.then(|| PathBuf::from(dist_info_dir).join("RECORD")))
 }
 
 /// Parse a file with email message format such as WHEEL and METADATA
@@ -982,7 +1085,7 @@ fn parse_email_message_file(
 
     let headers = parse_headers(content.as_slice())
         .map_err(|err| {
-            Error::InvalidWheel(format!("Failed to parse {debug_filename} file: {err}"))
+            Error::InvalidWheel(format!("Failed to parse `{debug_filename}` file: {err}"))
         })?
         .0;
 
@@ -1068,27 +1171,22 @@ pub(crate) fn dist_info_metadata(
 ///
 /// Returns (`script_name`, module, function)
 ///
-/// Extras are supposed to be ignored, which happens if you pass None for extras.
+/// Extras declared by an entry point are accepted but ignored.
 pub(crate) fn parse_scripts(
     wheel: impl AsRef<Path>,
     dist_info_prefix: &str,
-    extras: Option<&[String]>,
     python_minor: u8,
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
     let entry_points_path = wheel
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
 
-    // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let ini = match fs::read_to_string(entry_points_path) {
-        Ok(ini) => ini,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            return Ok((Vec::new(), Vec::new()));
-        }
-        Err(err) => return Err(err.into()),
-    };
+    let EntryPoints {
+        console_scripts,
+        gui_scripts,
+    } = EntryPoints::read(entry_points_path, python_minor)?;
 
-    scripts_from_ini(extras, python_minor, ini)
+    Ok((console_scripts, gui_scripts))
 }
 
 /// Rename a file with a fallback to copy that switches over on the first failure.
@@ -1124,6 +1222,7 @@ impl RenameOrCopy {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
     use std::io::{Cursor, ErrorKind};
     use std::path::Path;
 
@@ -1218,14 +1317,14 @@ mod test {
             .child("example-1.0.0.dist-info/entry_points.txt")
             .write_binary(&[0xff])?;
 
-        let error = parse_scripts(&wheel, "example-1.0.0", None, 13)
+        let error = parse_scripts(&wheel, "example-1.0.0", 13)
             .err()
             .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
 
-        assert!(matches!(
+        assert_matches!(
             error,
             Error::Io(err) if err.kind() == ErrorKind::InvalidData
-        ));
+        );
 
         Ok(())
     }
@@ -1258,42 +1357,20 @@ mod test {
     #[test]
     fn test_script_from_value() {
         assert_eq!(
-            Script::from_value("launcher", "foo.bar:main", None).unwrap(),
-            Some(Script {
+            Script::from_value("launcher", "foo.bar:main").unwrap(),
+            Script {
                 name: "launcher".to_string(),
                 module: "foo.bar".to_string(),
                 function: "main".to_string(),
-            })
+            }
         );
         assert_eq!(
-            Script::from_value(
-                "launcher",
-                "foo.bar:main",
-                Some(&["bar".to_string(), "baz".to_string()]),
-            )
-            .unwrap(),
-            Some(Script {
-                name: "launcher".to_string(),
-                module: "foo.bar".to_string(),
-                function: "main".to_string(),
-            })
-        );
-        assert_eq!(
-            Script::from_value("launcher", "foomod:main_bar [bar,baz]", Some(&[])).unwrap(),
-            None
-        );
-        assert_eq!(
-            Script::from_value(
-                "launcher",
-                "foomod:main_bar [bar,baz]",
-                Some(&["bar".to_string(), "baz".to_string()]),
-            )
-            .unwrap(),
-            Some(Script {
+            Script::from_value("launcher", "foomod:main_bar [bar,baz]").unwrap(),
+            Script {
                 name: "launcher".to_string(),
                 module: "foomod".to_string(),
                 function: "main_bar".to_string(),
-            })
+            }
         );
     }
 

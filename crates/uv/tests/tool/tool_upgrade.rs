@@ -8,31 +8,28 @@ use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
 use wiremock::{
-    Mock, MockServer, ResponseTemplate,
+    Mock, ResponseTemplate,
     matchers::{method, path},
 };
 
 use uv_static::EnvVars;
 
-use uv_test::uv_snapshot;
+use uv_test::package_server::PackageServer;
+use uv_test::packse::{PackseServer, scenario::Scenario};
+use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
 fn tool_upgrade_empty() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Nothing to upgrade
     ");
@@ -41,13 +38,8 @@ fn tool_upgrade_empty() {
         .arg("--all")
         .arg("-p")
         .arg("3.13")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Nothing to upgrade
     ");
@@ -57,13 +49,8 @@ fn tool_upgrade_empty() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -74,13 +61,8 @@ fn tool_upgrade_empty() {
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Nothing to upgrade
     ");
@@ -89,22 +71,61 @@ fn tool_upgrade_empty() {
         .arg("--all")
         .arg("-p")
         .arg("3.12")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Nothing to upgrade
     ");
 }
 
 #[test]
-fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+fn tool_upgrade_all_ignores_invalid_tool_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    tool_dir.child("tool backup").create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Ignoring tool directory `tools/tool backup` with an invalid package name; move it outside the tool directory, or remove it if no longer needed
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_all_unreadable_receipt() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
+
+    tool_dir.child("babel").create_dir_all()?;
+    tool_dir
+        .child("babel")
+        .child("uv-receipt.toml")
+        .write_binary(&[0xff])?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade().arg("--all"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to inspect installed tools in `tools`
+      cause: failed to read from file `[TEMP_DIR]/tools/babel/uv-receipt.toml`: stream did not contain valid UTF-8
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     let root_pyproject = context.temp_dir.child("pyproject.toml");
@@ -163,20 +184,15 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
     let status = context
         .tool_install()
         .arg(context.temp_dir.path())
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install");
     assert!(status.success());
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     OK
-
-    ----- stderr -----
     ");
 
     child_src
@@ -184,31 +200,23 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
         .write_str("MESSAGE = 'PRE-UPGRADE'\n")?;
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     OK
-
-    ----- stderr -----
     ");
 
     let status = context
         .tool_upgrade()
         .arg("root")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool upgrade");
     assert!(status.success());
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     OK
-
-    ----- stderr -----
     ");
 
     child_src
@@ -216,12 +224,9 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
         .write_str("MESSAGE = 'POST-UPGRADE'\n")?;
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     OK
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -229,8 +234,9 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
 
 #[test]
 fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     let tool_root = context.temp_dir.child("tool-root");
@@ -308,20 +314,15 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
         .arg("--with-editable")
         .arg(other_workspace.path())
         .arg(tool_root.path())
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install");
     assert!(status.success());
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     0.1.0 OK
-
-    ----- stderr -----
     ");
 
     tool_root.child("pyproject.toml").write_str(indoc! {r#"
@@ -341,20 +342,15 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
     let status = context
         .tool_upgrade()
         .arg("tool-root")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool upgrade");
     assert!(status.success());
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     0.1.1 OK
-
-    ----- stderr -----
     ");
 
     other_child_src
@@ -362,12 +358,9 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
         .write_str("MESSAGE = 'POST-UPGRADE'\n")?;
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     0.1.1 POST-UPGRADE
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -375,8 +368,9 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
 
 #[test]
 fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     let tool_root = context.temp_dir.child("tool-root");
@@ -455,20 +449,15 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
         .arg("--with")
         .arg(other_workspace.path())
         .arg(tool_root.path())
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install");
     assert!(status.success());
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     0.1.0 OK
-
-    ----- stderr -----
     ");
 
     tool_root.child("pyproject.toml").write_str(indoc! {r#"
@@ -488,20 +477,15 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
     let status = context
         .tool_upgrade()
         .arg("tool-root")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool upgrade");
     assert!(status.success());
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     0.1.1 OK
-
-    ----- stderr -----
     ");
 
     other_child_src
@@ -509,12 +493,9 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
         .write_str("MESSAGE = 'POST-UPGRADE'\n")?;
 
     uv_snapshot!(context.filters(), Command::new("root_cli").env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     0.1.1 OK
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -522,24 +503,22 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
 
 #[test]
 fn tool_upgrade_name() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -549,18 +528,13 @@ fn tool_upgrade_name() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` by installing from PyPI, which should upgrade to the latest version.
+    // Upgrade `babel` by installing from the new index, which should upgrade to the latest version.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
@@ -572,7 +546,9 @@ fn tool_upgrade_name() {
 
 #[test]
 fn tool_upgrade_recomputes_relative_exclude_newer() {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -582,9 +558,10 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         .arg("--exclude-newer")
         .arg("3 weeks")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-03-22T00:00:00Z")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(
+            EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP,
+            "2024-03-22T00:00:00Z",
+        )
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -592,14 +569,9 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated black v24.2.0 -> v24.3.0
      - black==24.2.0
@@ -629,24 +601,22 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
 
 #[test]
 fn tool_upgrade_multiple_names() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `python-dotenv` from Test PyPI, to get an outdated version.
+    // Install `python-dotenv` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -655,18 +625,13 @@ fn tool_upgrade_multiple_names() {
     Installed 1 executable: dotenv
     ");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -676,19 +641,14 @@ fn tool_upgrade_multiple_names() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` and `python-dotenv` from PyPI.
+    // Upgrade `babel` and `python-dotenv` from the new index.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
@@ -704,25 +664,22 @@ fn tool_upgrade_multiple_names() {
 
 #[test]
 fn tool_upgrade_pinned_hint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install a specific version of `babel` so the receipt records an exact pin.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel==2.6.0")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -736,14 +693,9 @@ fn tool_upgrade_pinned_hint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Modified babel environment
      - pytz==2018.5
@@ -755,11 +707,13 @@ fn tool_upgrade_pinned_hint() {
 
 #[test]
 fn tool_upgrade_pinned_hint_with_mixed_constraint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install a specific version of `babel` with an additional constraint to ensure the requirement
@@ -767,14 +721,9 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel>=2.0,==2.6.0")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -788,14 +737,9 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Modified babel environment
      - pytz==2018.5
@@ -806,25 +750,24 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
 }
 
 #[test]
-fn tool_upgrade_all() {
+fn tool_upgrade_all() -> Result<()> {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `python-dotenv` from Test PyPI, to get an outdated version.
+    // Install `python-dotenv` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -833,18 +776,13 @@ fn tool_upgrade_all() {
     Installed 1 executable: dotenv
     ");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -854,19 +792,18 @@ fn tool_upgrade_all() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade all from PyPI.
+    // An invalid directory must not prevent valid tools from being upgraded.
+    tool_dir.child("tool backup").create_dir_all()?;
+
+    // Upgrade all from the new index.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
+    warning: Ignoring tool directory `tools/tool backup` with an invalid package name; move it outside the tool directory, or remove it if no longer needed
     Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
      + babel==2.14.0
@@ -877,41 +814,33 @@ fn tool_upgrade_all() {
      + python-dotenv==1.0.1
     Installed 1 executable: dotenv
     ");
+
+    Ok(())
 }
 
 #[test]
 fn tool_upgrade_non_existing_package() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Attempt to upgrade `black`.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade black
-      Caused by: `black` is not installed; run `uv tool install black` to install
+      cause: `black` is not installed; run `uv tool install black` to install
     ");
 
     // Attempt to upgrade all.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Nothing to upgrade
     ");
@@ -919,24 +848,23 @@ fn tool_upgrade_non_existing_package() {
 
 #[test]
 fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `python-dotenv` from Test PyPI, to get an outdated version.
+    // Install `python-dotenv` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -945,18 +873,13 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     Installed 1 executable: dotenv
     ");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -972,18 +895,13 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
         .child("uv-receipt.toml")
         .write_str("Invalid receipt")?;
 
-    // Upgrade all from PyPI.
+    // Upgrade all from the new index.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
@@ -991,7 +909,7 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
      - pytz==2018.5
     Installed 1 executable: pybabel
     error: Failed to upgrade python-dotenv
-      Caused by: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
+      cause: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
     ");
 
     Ok(())
@@ -1001,21 +919,16 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
 fn tool_upgrade_settings() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black` with `lowest-direct`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black>=23")
         .arg("--resolution=lowest-direct")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1032,13 +945,8 @@ fn tool_upgrade_settings() {
     // Upgrade `black`. This should be a no-op, since the resolution is set to `lowest-direct`.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Nothing to upgrade
     ");
@@ -1047,13 +955,8 @@ fn tool_upgrade_settings() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
         .arg("--resolution=highest")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated black v23.1.0 -> v24.3.0
      - black==23.1.0
@@ -1064,20 +967,17 @@ fn tool_upgrade_settings() {
 
 #[test]
 fn tool_upgrade_no_binary_package_env_var() {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black>=23")
         .arg("--resolution=lowest-direct")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -1095,13 +995,8 @@ fn tool_upgrade_no_binary_package_env_var() {
         .arg("black")
         .arg("--resolution=highest")
         .env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated black v23.1.0 -> v24.3.0
      - black==23.1.0
@@ -1121,24 +1016,22 @@ fn tool_upgrade_no_binary_package_env_var() {
 
 #[test]
 fn tool_upgrade_respect_constraints() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel<2.10")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1148,18 +1041,13 @@ fn tool_upgrade_respect_constraints() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` from PyPI. It should be updated, but not beyond the constraint.
+    // Upgrade `babel` from the new index. It should be updated, but not beyond the constraint.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated babel v2.6.0 -> v2.9.1
      - babel==2.6.0
@@ -1172,24 +1060,22 @@ fn tool_upgrade_respect_constraints() {
 
 #[test]
 fn tool_upgrade_constraint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1203,14 +1089,9 @@ fn tool_upgrade_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel<2.12.0")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated babel v2.6.0 -> v2.11.0
      - babel==2.6.0
@@ -1224,16 +1105,11 @@ fn tool_upgrade_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .arg("--upgrade-package")
         .arg("babel<2.14.0")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `--upgrade-package` is enabled by default on `uv tool upgrade`
     Updated babel v2.11.0 -> v2.13.1
@@ -1248,14 +1124,9 @@ fn tool_upgrade_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated babel v2.13.1 -> v2.14.0
      - babel==2.13.1
@@ -1268,93 +1139,80 @@ fn tool_upgrade_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .arg("--upgrade")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `--upgrade` is enabled by default on `uv tool upgrade`
     Nothing to upgrade
     ");
 }
 
-/// Upgrade a tool, but only by upgrading one of it's `--with` dependencies, and not the tool
-/// itself.
+/// Upgrade an explicitly installed `--with` dependency while the tool remains pinned.
 #[test]
 fn tool_upgrade_with() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // `python-dotenv` has no dependencies; `pytz` is added solely through `--with`.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("babel==2.6.0")
+        .arg("python-dotenv==0.10.2.post2")
+        .arg("--with")
+        .arg("pytz")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + babel==2.6.0
+     + python-dotenv==0.10.2.post2
      + pytz==2018.5
-    Installed 1 executable: pybabel
+    Installed 1 executable: dotenv
     ");
 
-    // Upgrade `babel` from PyPI. It shouldn't be updated, but `pytz` should be.
+    // The receipt should retain `pytz` and allow it to upgrade independently of the tool.
     uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("babel")
+        .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
-    Modified babel environment
+    Modified python-dotenv environment
      - pytz==2018.5
      + pytz==2024.1
 
-    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
+    hint: `python-dotenv` is pinned to `0.10.2.post2` (installed with an exact version pin); reinstall with `uv tool install python-dotenv@latest` to upgrade to a new version.
     ");
 }
 
 #[test]
 fn tool_upgrade_python() {
+    let old_index = old_tool_index();
+
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("babel==2.6.0")
     .arg("--index-url")
-    .arg("https://test.pypi.org/simple/")
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
-    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1368,13 +1226,8 @@ fn tool_upgrade_python() {
         context.filters(),
         context.tool_upgrade().arg("babel")
         .arg("--python").arg("3.12")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1396,24 +1249,22 @@ fn tool_upgrade_python() {
 
 #[test]
 fn tool_upgrade_python_with_all() {
+    let old_index = old_tool_index();
+
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("babel==2.6.0")
     .arg("--index-url")
-    .arg("https://test.pypi.org/simple/")
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
-    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1426,15 +1277,10 @@ fn tool_upgrade_python_with_all() {
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("python-dotenv")
     .arg("--index-url")
-    .arg("https://test.pypi.org/simple/")
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
-    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1447,13 +1293,8 @@ fn tool_upgrade_python_with_all() {
         context.filters(),
         context.tool_upgrade().arg("--all")
         .arg("--python").arg("3.12")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1491,8 +1332,8 @@ fn tool_upgrade_python_with_all() {
 fn test_tool_upgrade_additional_entrypoints() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `babel` entrypoint, and all additional ones from `black` too.
@@ -1502,13 +1343,8 @@ fn test_tool_upgrade_additional_entrypoints() {
         .arg("--with-executables-from")
         .arg("black")
         .arg("babel==2.14.0")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1530,13 +1366,8 @@ fn test_tool_upgrade_additional_entrypoints() {
         .arg("--python")
         .arg("3.12")
         .arg("babel")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1560,30 +1391,28 @@ fn test_tool_upgrade_additional_entrypoints() {
 /// absent after the upgrade.
 #[test]
 fn tool_upgrade_excludes() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     let excludes_txt = context.temp_dir.child("excludes.txt");
     excludes_txt.write_str("pytz").unwrap();
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     // `pytz` is excluded, so it won't be installed despite being a dependency.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel<2.10")
         .arg("--excludes")
         .arg("excludes.txt")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1592,25 +1421,112 @@ fn tool_upgrade_excludes() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` from PyPI. Babel should be updated (within the `<2.10`
+    // Upgrade `babel` from the new index. Babel should be updated (within the `<2.10`
     // constraint), but `pytz` should remain excluded.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Updated babel v2.6.0 -> v2.9.1
      - babel==2.6.0
      + babel==2.9.1
     Installed 1 executable: pybabel
     ");
+}
+
+/// Reuse the configured index username when the tool receipt has stripped its credentials.
+///
+/// See: <https://github.com/astral-sh/uv/issues/21216>
+#[tokio::test]
+async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let proxy = crate::pypi_proxy::start().await;
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])?;
+    let credentials = format!(
+        r#"{{"{host}": {{"public": "heron"}}}}"#,
+        host = proxy.host_port()
+    );
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(&format!(
+        indoc! {r#"
+            index-url = "{}"
+            keyring-provider = "subprocess"
+        "#},
+        proxy.username_url("public", "/basic-auth/simple/")
+    ))?;
+
+    context
+        .tool_install()
+        .arg("executable-application")
+        .arg("--index-url")
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env_remove(EnvVars::UV_DEFAULT_INDEX)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, &credentials)
+        .env(EnvVars::PATH, &path)
+        .assert()
+        .success();
+
+    let receipt = fs_err::read_to_string(
+        tool_dir
+            .join("executable-application")
+            .join("uv-receipt.toml"),
+    )?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(receipt, @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/basic-auth/simple"
+        keyring-provider = "subprocess"
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env_remove(EnvVars::UV_DEFAULT_INDEX)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, &credentials)
+        .env(EnvVars::PATH, &path), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple/
+    Keyring request for public@[LOCALHOST]
+    Nothing to upgrade
+    ");
+
+    Ok(())
 }
 
 /// When upgrading a tool from an authenticated index with invalid credentials,
@@ -1624,7 +1540,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1634,13 +1551,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
         .arg("executable-application")
         .arg("--index")
         .arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple"))
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -1672,17 +1584,12 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     // with a credentials error rather than silently reporting "Nothing to upgrade".
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("executable-application")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade executable-application
-      Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
-      Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Missing credentials for: http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     Ok(())
@@ -1690,7 +1597,7 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
 
 #[test]
 fn tool_upgrade_writes_preview_lock() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1700,8 +1607,6 @@ fn tool_upgrade_writes_preview_lock() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links"))
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -1712,8 +1617,6 @@ fn tool_upgrade_writes_preview_lock() {
         .tool_upgrade()
         .arg("simple-launcher")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -1721,7 +1624,7 @@ fn tool_upgrade_writes_preview_lock() {
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -1746,46 +1649,76 @@ fn tool_upgrade_writes_preview_lock() {
 ///
 /// Serving the metadata separately lets the resolver record the advertised hash without
 /// downloading the wheel that the installer will later verify.
-async fn mount_simple_launcher_index(server: &MockServer, hash: &str, wheel: &[u8]) {
+async fn mount_simple_launcher_index(server: &PackageServer, hash: &str, wheel: &[u8]) {
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "simple-launcher",
-        "files": [{
-            "filename": wheel_filename,
-            "url": format!("{}/files/{wheel_filename}", server.uri()),
-            "hashes": {
-                "sha256": hash
-            },
-            "core-metadata": true,
-            "upload-time": "2024-03-24T00:00:00Z"
-        }]
-    });
-    Mock::given(method("GET"))
-        .and(path("/simple/simple-launcher/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(server)
+    server
+        .serve_with(
+            wheel_filename,
+            wheel,
+            Some(hash),
+            json!({ "core-metadata": true }),
+        )
         .await;
     Mock::given(method("GET"))
-        .and(path(format!("/files/{wheel_filename}.metadata")))
+        .and(path(format!("/{wheel_filename}.metadata")))
         .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
             Metadata-Version: 2.1
             Name: simple-launcher
             Version: 0.1.0
             Requires-Python: >=3.8
         "}))
-        .mount(server)
+        .mount(server.mock_server())
         .await;
+}
+
+#[tokio::test]
+async fn tool_upgrade_resolution_hints() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
+    )?;
+    let server = PackageServer::new(&"simple-launcher".parse()?).await;
+    mount_simple_launcher_index(
+        &server,
+        "5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
+        &wheel,
+    )
+    .await;
+    let index_url = server.index_url();
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--index-url")
+        .arg(&index_url)
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    server.mock_server().reset().await;
     Mock::given(method("GET"))
-        .and(path(format!("/files/{wheel_filename}")))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel.to_vec()))
-        .mount(server)
+        .and(path("/simple/simple-launcher/"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(server.mock_server())
         .await;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher>0.1.0")
+        .arg("--index-url")
+        .arg(&index_url)
+        .arg("--no-cache")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to upgrade simple-launcher
+      cause: Because simple-launcher was not found in the package registry and you require simple-launcher>0.1.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: An index URL (http://[LOCALHOST]/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    ");
+
+    Ok(())
 }
 
 /// Ensure that `tool upgrade` verifies distributions against its newly generated tool lock.
@@ -1794,8 +1727,7 @@ async fn mount_simple_launcher_index(server: &MockServer, hash: &str, wheel: &[u
 /// source preference remains valid, while the index changes the advertised hash before upgrade.
 #[tokio::test]
 async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let tool_dir = context.temp_dir.child("tools");
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
     let wheel = fs_err::read(
@@ -1804,27 +1736,24 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
             .join("test/links")
             .join(wheel_filename),
     )?;
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"simple-launcher".parse()?).await;
     mount_simple_launcher_index(
         &server,
         "5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
         &wheel,
     )
     .await;
-    let index_url = format!("{}/simple", server.uri());
+    let index_url = server.index_url();
 
     context
         .tool_install()
         .arg("simple-launcher")
         .arg("--index-url")
         .arg(&index_url)
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
 
-    server.reset().await;
     mount_simple_launcher_index(
         &server,
         "0000000000000000000000000000000000000000000000000000000000000000",
@@ -1839,24 +1768,18 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
         .arg("--reinstall")
         .arg("--no-cache")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade simple-launcher
-      Caused by: Failed to prepare distributions
-      Caused by: Failed to download `simple-launcher==0.1.0`
-      Caused by: Hash mismatch for `simple-launcher==0.1.0`
+      cause: Failed to download `simple-launcher==0.1.0`
+      cause: Hash mismatch for `simple-launcher==0.1.0`
 
-        Expected:
-          sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-        Computed:
-          sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+             Computed:
+               sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
     ");
 
     Ok(())
@@ -1867,7 +1790,8 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
 fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let local_package = context.temp_dir.child("simple-launcher");
@@ -1897,8 +1821,6 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
         .arg("--python")
         .arg("3.11")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -1909,8 +1831,6 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
         .arg("--python")
         .arg("3.12")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -1927,4 +1847,94 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
     });
 
     Ok(())
+}
+
+/// An index containing earlier synthetic tool releases and their dependencies.
+fn old_tool_index() -> PackseServer {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "old-tool-index"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.babel.versions."2.6.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.pytz.versions."2018.5"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.python-dotenv.versions."0.10.2.post2"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dotenv"]
+    "#})
+    .expect("old tool scenario should parse");
+    PackseServer::from_scenario(&scenario)
+}
+
+/// Later synthetic releases change dependencies to exercise upgrade and removal behavior.
+fn new_tool_index() -> PackseServer {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "new-tool-index"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.babel.versions."2.6.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.9.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.11.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.13.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["setuptools"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.14.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["pybabel"]
+
+        [packages.pytz.versions."2024.1"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.setuptools.versions."69.2.0"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.python-dotenv.versions."0.10.2.post2"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dotenv"]
+
+        [packages.python-dotenv.versions."1.0.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dotenv"]
+    "#})
+    .expect("new tool scenario should parse");
+    PackseServer::from_scenario(&scenario)
 }

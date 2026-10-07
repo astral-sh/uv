@@ -2,9 +2,6 @@
 source: crates/uv/tests/it/ecosystem.rs
 expression: snapshot
 ---
-success: true
-exit_code: 0
------ stdout -----
-
+exit_code: 0 (success)
 ----- stderr -----
 Resolved 177 packages in [TIME]

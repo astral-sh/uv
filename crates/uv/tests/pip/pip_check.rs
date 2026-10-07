@@ -2,7 +2,9 @@ use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
+use indoc::indoc;
 
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
 
 #[test]
@@ -17,10 +19,7 @@ fn check_compatible_packages() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -34,15 +33,146 @@ fn check_compatible_packages() -> Result<()> {
     );
 
     uv_snapshot!(context.pip_check(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 5 packages in [TIME]
     All installed packages are compatible
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn check_arbitrary_equality() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "arbitrary-equality"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.package-a.versions."1.0.0"]
+        sdist = false
+        requires = ["package-b===1"]
+
+        [packages.package-b.versions."1.0.0"]
+        sdist = false
+
+        [packages.package-b.versions."1.0.0+local"]
+        sdist = false
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("package-a")
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==1.0.0
+    ");
+
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["package-a", "package-b===1.0"])
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("package-b==1.0.0+local")
+        .arg("--no-deps")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - package-b==1.0.0
+     + package-b==1.0.0+local
+    ");
+
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    Found 1 incompatibility
+    The package `package-a` requires `package-b===1`, but `1.0.0+local` is installed
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_post_release_after_prerelease() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "post-release-after-prerelease"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.package-a.versions."1.0.0"]
+        sdist = false
+        requires = ["package-b>1.0.dev0,>1.0a1"]
+
+        [packages.package-b.versions."1.0.post0"]
+        sdist = false
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("package-a")
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==1.0.post0
+    ");
+
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["package-a", "package-b>1.0.dev0,>1.0a1"])
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -57,10 +187,7 @@ fn check_versionless_egg_info_file() -> Result<()> {
         .write_str("Metadata-Version: 1.1\nName: demo\nVersion: 1.0\n")?;
 
     uv_snapshot!(context.pip_check(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 1 package in [TIME]
     All installed packages are compatible
@@ -84,10 +211,7 @@ fn check_incompatible_packages() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -108,10 +232,7 @@ fn check_incompatible_packages() -> Result<()> {
         .arg("-r")
         .arg("requirements_idna.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -124,10 +245,7 @@ fn check_incompatible_packages() -> Result<()> {
     );
 
     uv_snapshot!(context.pip_check(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Checked 5 packages in [TIME]
     Found 1 incompatibility
@@ -153,10 +271,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -177,10 +292,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
         .arg("-r")
         .arg("requirements_two.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -196,10 +308,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     );
 
     uv_snapshot!(context.pip_check(), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Checked 5 packages in [TIME]
     Found 2 incompatibilities
@@ -219,10 +328,7 @@ fn check_python_version() {
         .pip_install()
         .arg("urllib3")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -232,10 +338,7 @@ fn check_python_version() {
     );
 
     uv_snapshot!(context.filters(), context.pip_check().arg("--python-version").arg("3.7"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Checked 1 package in [TIME]
     Found 1 incompatibility
@@ -256,10 +359,7 @@ fn check_dependency_metadata_from_config_file() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -280,10 +380,7 @@ fn check_dependency_metadata_from_config_file() -> Result<()> {
         .arg("-r")
         .arg("requirements_idna.txt")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -308,10 +405,7 @@ fn check_dependency_metadata_from_config_file() -> Result<()> {
         .pip_check()
         .arg("--config-file")
         .arg("uv.toml"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Checked 5 packages in [TIME]
     All installed packages are compatible

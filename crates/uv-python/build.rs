@@ -4,6 +4,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
 
+use zstd::stream::write::Encoder;
+
 use uv_static::EnvVars;
 
 fn process_json(data: &serde_json::Value) -> serde_json::Value {
@@ -24,9 +26,9 @@ fn main() {
         "download-metadata.json".into(),
     ]);
 
-    let version_metadata_minified = PathBuf::from_iter([
+    let version_metadata_compressed = PathBuf::from_iter([
         env::var(EnvVars::OUT_DIR).unwrap(),
-        "download-metadata-minified.json".into(),
+        "download-metadata.json.zst".into(),
     ]);
 
     println!(
@@ -36,7 +38,7 @@ fn main() {
 
     println!(
         "cargo::rerun-if-changed={}",
-        version_metadata_minified.to_str().unwrap()
+        version_metadata_compressed.to_str().unwrap()
     );
 
     let json_data: serde_json::Value = serde_json::from_str(
@@ -48,16 +50,22 @@ fn main() {
     let filtered_data = process_json(&json_data);
 
     #[expect(clippy::disallowed_types)]
-    let mut out_file = File::create(version_metadata_minified)
-        .expect("failed to open download-metadata-minified.json");
+    let out_file = File::create(version_metadata_compressed)
+        .expect("failed to open download-metadata.json.zst");
 
-    out_file
+    // Compress the embedded catalog to reduce the binary size.
+    let mut encoder =
+        Encoder::new(out_file, 19).expect("Failed to create download metadata encoder");
+    encoder
         .write_all(
             serde_json::to_string(&filtered_data)
                 .expect("Failed to serialize JSON")
                 .as_bytes(),
         )
-        .expect("Failed to write minified JSON");
+        .expect("Failed to compress download metadata");
+    let out_file = encoder
+        .finish()
+        .expect("Failed to finish compressing download metadata");
 
     // Cargo uses the modified times of the paths specified in
     // `rerun-if-changed`, so fetch the current file times and set them the same
@@ -72,5 +80,5 @@ fn main() {
                 .set_accessed(meta.accessed().unwrap())
                 .set_modified(meta.modified().unwrap()),
         )
-        .expect("failed to write file times to download-metadata-minified.json");
+        .expect("failed to write file times to download-metadata.json.zst");
 }

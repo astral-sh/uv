@@ -252,6 +252,12 @@ name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 ```
 
+If the index is already configured, you can select it by name (this feature is in preview):
+
+```console
+$ uv add --preview-features index-by-name torch --index pytorch
+```
+
 !!! tip
 
     The above example will only work on x86-64 Linux, due to the specifics of the PyTorch index.
@@ -470,6 +476,13 @@ To declare a dependency on a workspace member, add the member name with `{ works
 workspace members must be explicitly stated. Workspace members are always
 [editable](#editable-dependencies) . See the [workspace](./workspaces.md) documentation for more
 details on workspaces.
+
+To source a dependency from a different workspace, `workspace` can also be a path string:
+
+```toml title="pyproject.toml"
+[tool.uv.sources]
+foo = { workspace = "../other-workspace" }
+```
 
 ```toml title="pyproject.toml"
 [project]

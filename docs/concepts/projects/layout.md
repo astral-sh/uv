@@ -63,8 +63,9 @@ use [`uvx`](../../guides/tools.md) or
 With the [`centralized-project-envs` preview feature](../preview.md), uv stores the default project
 environment in its cache. uv attempts to maintain a `.venv` directory link to the cached environment
 so existing activation and editor workflows can continue to use the usual path. If link creation
-fails, uv continues using the cached environment directly, but tools relying on `.venv` may not
-discover it. Switching interpreters selects separate cached environments and can reuse them later.
+fails, uv attempts to write the cached environment path to `.venv` instead. If both attempts fail,
+uv continues using the cached environment directly, but tools relying on `.venv` may not discover
+it. Switching interpreters selects separate cached environments and can reuse them later.
 
 Explicit project environment paths, including `UV_PROJECT_ENVIRONMENT` and environments selected
 with `--active`, are not centralized. The feature has no effect when `--no-cache` is enabled.

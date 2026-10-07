@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "labels": {
+      "type": "array",
+      "items": { "type": "string" },
+      "maxItems": 3
+    },
+    "summary": { "type": "string" }
+  },
+  "required": ["labels", "summary"]
+}

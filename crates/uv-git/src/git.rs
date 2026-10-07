@@ -7,7 +7,7 @@ use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow};
-use cargo_util::{ProcessBuilder, paths};
+use cargo_util::{ProcessBuilder, ProcessError, paths};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 use url::Url;
@@ -18,9 +18,9 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-/// A file indicates that if present, `git reset` has been done and a repo
-/// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
-const CHECKOUT_READY_LOCK: &str = ".ok";
+/// Extension for the marker beside a completed checkout.
+/// See [`GitCheckout::reset`] for why we need this.
+const CHECKOUT_READY_EXTENSION: &str = "ok";
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitError {
@@ -307,6 +307,13 @@ impl GitRemote {
         with_lfs: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
+            .or_else(|| {
+                if let GitReference::BranchOrTagOrCommit(revision) = reference {
+                    revision.parse::<GitOid>().ok()
+                } else {
+                    None
+                }
+            })
             .map(ReferenceOrOid::Oid)
             .unwrap_or(ReferenceOrOid::Reference(reference));
         if let Some(mut db) = db {
@@ -446,6 +453,13 @@ impl GitCheckout {
         revision: GitOid,
         original_remote_url: &DisplaySafeUrl,
     ) -> Result<Self> {
+        // Invalidate readiness before replacing the checkout, including an interrupted clone.
+        match fs_err::remove_file(into.with_extension(CHECKOUT_READY_EXTENSION)) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+
         let dirname = into.parent().unwrap();
         fs_err::create_dir_all(dirname)?;
         match fs_err::remove_dir_all(into) {
@@ -492,7 +506,10 @@ impl GitCheckout {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
-                self.repo.path.join(CHECKOUT_READY_LOCK).exists()
+                self.repo
+                    .path
+                    .with_extension(CHECKOUT_READY_EXTENSION)
+                    .exists()
             }
             _ => false,
         }
@@ -511,18 +528,19 @@ impl GitCheckout {
     }
 
     /// This performs `git reset --hard` to the revision of this checkout and updates submodules,
-    /// with additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
+    /// with additional interrupt protection by a marker file.
     ///
     /// If we're interrupted while performing any of the processes in this method (e.g., we die
     /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
-    /// To enable this we have a dummy file in our checkout, [`.ok`],
-    /// which if present means that the repo has been successfully checked out and is
-    /// ready to go. Hence if we start to update submodules, we make sure this file
-    /// *doesn't* exist, and then once we're done we create the file.
+    /// The marker sits beside the checkout with an [`.ok` extension], so tracked files cannot
+    /// collide with it. It is removed before cloning and created only after preparation succeeds.
+    /// For example, there may be the `checkouts/<repository-key>/0123456789abcdef/` contents
+    /// directory containing `checkouts/<repository-key>/0123456789abcdef/pyproject.toml`, and the
+    /// `checkouts/<repository-key>/0123456789abcdef.ok` marker file besides it.
     ///
-    /// [`.ok`]: CHECKOUT_READY_LOCK
+    /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
     /// using the original remote URL.
     fn reset(
@@ -530,15 +548,12 @@ impl GitCheckout {
         with_lfs: Option<bool>,
         original_remote_url: &DisplaySafeUrl,
     ) -> Result<Option<bool>> {
-        let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
-        let _ = paths::remove_file(&ok_file);
-
         // We want to skip smudge if lfs was disabled for the repository
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
         let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
 
-        debug!("Reset {} to {}", self.repo.path.display(), self.revision);
+        debug!("Reset `{}` to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
         GIT.as_ref()
@@ -570,6 +585,7 @@ impl GitCheckout {
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
             .cwd(&self.repo.path)
             .exec_with_output()
+            .map_err(|err| redact_git_error(err, original_remote_url))
             .map(drop)?;
 
         // Recursively update nested submodules without overriding `remote.origin.url`, so each
@@ -588,6 +604,7 @@ impl GitCheckout {
             .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
             .cwd(&self.repo.path)
             .exec_with_output()
+            .map_err(|err| redact_git_error(err, original_remote_url))
             .map(drop)?;
 
         // Validate Git LFS objects (if needed) after the reset.
@@ -602,7 +619,7 @@ impl GitCheckout {
         // When Git LFS is enabled, the objects must also be fetched and
         // validated successfully as part of the corresponding db.
         if with_lfs.is_none() || lfs_validation == Some(true) {
-            paths::create(ok_file)?;
+            paths::create(self.repo.path.with_extension(CHECKOUT_READY_EXTENSION))?;
         }
 
         Ok(lfs_validation)
@@ -676,20 +693,14 @@ fn fetch(
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
-    let oid_to_fetch = if let ReferenceOrOid::Oid(rev) = reference {
+    if let ReferenceOrOid::Oid(rev) = reference {
         let local_object = reference.resolve(repo).ok();
         if let Some(local_object) = local_object {
             if rev == local_object {
                 return Ok(());
             }
         }
-
-        // If we know the reference is a full commit hash, we can just return it without
-        // querying GitHub.
-        Some(rev)
-    } else {
-        None
-    };
+    }
 
     // Translate the reference desired here into an actual list of refspecs
     // which need to get fetched. Additionally record if we're fetching tags.
@@ -720,24 +731,12 @@ fn fetch(
             refspec_strategy = RefspecStrategy::First;
         }
 
-        // For ambiguous references, we can fetch the exact commit (if known); otherwise,
-        // we fetch all branches and tags.
-        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit)) => {
-            // The `oid_to_fetch` is the exact commit we want to fetch. But it could be the exact
-            // commit of a branch or tag. We should only fetch it directly if it's the exact commit
-            // of a short commit hash.
-            if let Some(oid_to_fetch) =
-                oid_to_fetch.filter(|oid| is_short_hash_of(branch_or_tag_or_commit, *oid))
-            {
-                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else {
-                // We don't know what the rev will point to. To handle this
-                // situation we fetch all branches and tags, and then we pray
-                // it's somewhere in there.
-                refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
-                refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
-                tags = true;
-            }
+        // Fetch all branches and tags so ambiguous references can resolve to either a named
+        // reference or a short commit hash.
+        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(_)) => {
+            refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
+            refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
+            tags = true;
         }
 
         ReferenceOrOid::Reference(GitReference::DefaultBranch) => {
@@ -855,7 +854,7 @@ fn fetch_with_cli(
         if msg.contains("transport '") && msg.contains("' not allowed") && offline {
             return GitError::TransportNotAllowed.into();
         }
-        err
+        redact_git_error(err, url)
     })?;
 
     Ok(())
@@ -913,7 +912,8 @@ fn fetch_lfs(
         .env_remove(EnvVars::GIT_LFS_SKIP_SMUDGE)
         .cwd(&repo.path);
 
-    cmd.exec_with_output()?;
+    cmd.exec_with_output()
+        .map_err(|err| redact_git_error(err, url))?;
 
     // We now validate the Git LFS objects explicitly (if supported). This is
     // needed to avoid issues with Git LFS not being installed or configured
@@ -927,13 +927,17 @@ fn fetch_lfs(
     Ok(validation_result)
 }
 
-/// Whether `rev` is a shorter hash of `oid`.
-fn is_short_hash_of(rev: &str, oid: GitOid) -> bool {
-    let long_hash = oid.to_string();
-    match long_hash.get(..rev.len()) {
-        Some(truncated_long_hash) => truncated_long_hash.eq_ignore_ascii_case(rev),
-        None => false,
+/// Redact a credentialed remote URL from a Git process error.
+fn redact_git_error(mut error: anyhow::Error, url: &DisplaySafeUrl) -> anyhow::Error {
+    let credentialed_root = DisplaySafeUrl::from_url(remote_url_root((**url).clone()));
+    let redact = |message: &str| credentialed_root.redact_in(&url.redact_in(message));
+
+    if let Some(process_error) = error.downcast_mut::<ProcessError>() {
+        process_error.desc = redact(&process_error.desc);
+        return error;
     }
+
+    anyhow!("{}", redact(&error.to_string()))
 }
 
 #[cfg(test)]
@@ -961,5 +965,62 @@ mod tests {
             submodule_update_config(&url),
             vec!["remote.origin.url=ssh://git@example.com/org/repo.git".to_string()]
         );
+    }
+
+    #[test]
+    fn git_process_error_redacts_credentials() -> Result<()> {
+        let url = DisplaySafeUrl::parse("https://git:secret-token@example.com/org/repo.git")?;
+        let stderr = format!("fatal: Authentication failed for '{}'", url.as_str());
+        let error = ProcessError::new_raw(
+            &format!(
+                "process didn't exit successfully: `git fetch --force '{}' '+HEAD:refs/remotes/origin/HEAD'`",
+                url.as_str()
+            ),
+            Some(128),
+            "exit status: 128",
+            Some(b"git output"),
+            Some(stderr.as_bytes()),
+        )
+        .into();
+
+        let error = redact_git_error(error, &url);
+        let process_error = error
+            .downcast_ref::<ProcessError>()
+            .context("expected Git process error")?;
+
+        assert_eq!(
+            error.to_string(),
+            "process didn't exit successfully: `git fetch --force 'https://git:****@example.com/org/repo.git' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)\n--- stdout\ngit output\n--- stderr\nfatal: Authentication failed for 'https://git:****@example.com/org/repo.git'"
+        );
+        assert_eq!(process_error.code, Some(128));
+        assert_eq!(
+            process_error.stdout.as_deref(),
+            Some(b"git output".as_slice())
+        );
+        assert_eq!(process_error.stderr.as_deref(), Some(stderr.as_bytes()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn git_submodule_process_error_redacts_credentials() -> Result<()> {
+        let url = DisplaySafeUrl::parse("https://git:secret-token@example.com/org/repo.git")?;
+
+        for args in ["--init", "--recursive --init"] {
+            let error = anyhow!(
+                "process didn't exit successfully: `git -c 'url.https://git:secret-token@example.com/.insteadOf=https://example.com/' submodule update {args}` (exit status: 128)"
+            );
+            let redacted = redact_git_error(error, &url).to_string();
+
+            assert!(!redacted.contains("secret-token"));
+            assert_eq!(
+                redacted,
+                format!(
+                    "process didn't exit successfully: `git -c 'url.https://git:****@example.com/.insteadOf=https://example.com/' submodule update {args}` (exit status: 128)"
+                )
+            );
+        }
+
+        Ok(())
     }
 }

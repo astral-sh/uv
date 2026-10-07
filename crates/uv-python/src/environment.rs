@@ -14,8 +14,8 @@ use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
 use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
 use crate::{
-    EnvironmentPreference, Error, Interpreter, Prefix, PythonNotFound, PythonPreference,
-    PythonRequest, Target,
+    EnvironmentPreference, Error, Interpreter, Prefix, PythonArchitecture, PythonNotFound,
+    PythonPreference, PythonRequest, Target,
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
@@ -152,13 +152,19 @@ impl PythonEnvironment {
         request: &PythonRequest,
         preference: EnvironmentPreference,
         python_preference: PythonPreference,
+        python_arch: Option<PythonArchitecture>,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let installation =
-            match find_python_installation(request, preference, python_preference, cache)? {
-                Ok(installation) => installation,
-                Err(err) => return Err(EnvironmentNotFound::from(err).into()),
-            };
+        let installation = match find_python_installation(
+            request,
+            preference,
+            python_preference,
+            python_arch,
+            cache,
+        )? {
+            Ok(installation) => installation,
+            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
+        };
         Ok(Self::from_installation(installation))
     }
 
@@ -167,7 +173,7 @@ impl PythonEnvironment {
     /// N.B. This function also works for system Python environments and users depend on this.
     pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         debug!(
-            "Checking for Python environment at: `{}`",
+            "Checking for Python environment at: {}",
             root.as_ref().user_display()
         );
         match root.as_ref().try_exists() {

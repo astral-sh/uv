@@ -1,0 +1,14 @@
+[project]
+name = "pyx-member-26"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "readme-renderer[md]",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

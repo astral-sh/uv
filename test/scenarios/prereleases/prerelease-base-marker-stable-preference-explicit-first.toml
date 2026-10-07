@@ -1,0 +1,20 @@
+name = "prerelease-base-marker-stable-preference-explicit-first"
+description = "Base and marker requirements retain the stable preference within the marker fork when the explicit requirement appears first."
+
+[resolver_options]
+universal = true
+
+[root]
+requires_python = ">=3.12"
+requires = [
+  "c>=0.5a1 ; sys_platform == 'linux'",
+  "c>=1.0",
+]
+
+[expected]
+satisfiable = true
+explanation = "All platforms select the stable release of `c`, regardless of the explicit pre-release specifier or declaration order."
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]
