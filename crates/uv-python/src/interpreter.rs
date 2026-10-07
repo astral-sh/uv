@@ -1440,6 +1440,7 @@ fn python_home(interpreter: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::time::{Duration, UNIX_EPOCH};
 
     use anyhow::Result;
     use fs_err as fs;
@@ -1447,11 +1448,12 @@ mod tests {
     use serde_json::Value;
     use tempfile::tempdir;
 
-    use uv_cache::{Cache, CacheBucket};
+    use uv_cache::{Cache, CacheBucket, CachedByTimestamp};
     use uv_cache_info::Timestamp;
     use uv_pep440::Version;
 
     use crate::Interpreter;
+    use crate::interpreter::{InterpreterInfo, canonicalize_executable};
 
     fn mocked_interpreter_response() -> &'static str {
         indoc! {r##"
@@ -1515,8 +1517,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_cache_invalidation() {
-        let mock_dir = tempdir().unwrap();
+    async fn test_cache_invalidation() -> Result<()> {
+        let mock_dir = tempdir()?;
         let mocked_interpreter = mock_dir.path().join("python");
         let query_log = mock_dir.path().join("queries");
         let json = mocked_interpreter_response().replace(
@@ -1524,7 +1526,7 @@ mod tests {
             &mocked_interpreter.display().to_string(),
         );
 
-        let cache = Cache::temp().unwrap().init().await.unwrap();
+        let cache = Cache::temp()?.init().await?;
 
         fs::write(
             &mocked_interpreter,
@@ -1533,30 +1535,38 @@ mod tests {
         echo queried >> '{}'
         echo '{json}'
         ", query_log.display()},
-        )
-        .unwrap();
+        )?;
 
         fs::set_permissions(
             &mocked_interpreter,
             std::os::unix::fs::PermissionsExt::from_mode(0o770),
-        )
-        .unwrap();
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        )?;
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
         assert_eq!(
             interpreter.markers.python_version().version,
-            Version::from_str("3.12").unwrap()
+            Version::from_str("3.12")?
         );
         assert!(cache.bucket(CacheBucket::Interpreter).is_dir());
-        assert_eq!(fs::read_to_string(&query_log).unwrap(), "queried\n");
+        assert_eq!(fs::read_to_string(&query_log)?, "queried\n");
 
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
         assert_eq!(
             interpreter.markers.python_version().version,
-            Version::from_str("3.12").unwrap()
+            Version::from_str("3.12")?
         );
-        assert_eq!(fs::read_to_string(&query_log).unwrap(), "queried\n");
+        assert_eq!(fs::read_to_string(&query_log)?, "queried\n");
 
-        let timestamp = Timestamp::from_path(&mocked_interpreter).unwrap();
+        let absolute = std::path::absolute(&mocked_interpreter)?;
+        let canonical = canonicalize_executable(&absolute)?;
+        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, &cache);
+        let mut cached: CachedByTimestamp<InterpreterInfo> =
+            rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
+        assert_eq!(cached.timestamp, Timestamp::from_path(&canonical)?);
+        assert_eq!(
+            cached.data.markers.python_version().version,
+            Version::from_str("3.12")?
+        );
+
         fs::write(
             &mocked_interpreter,
             formatdoc! {r"
@@ -1564,21 +1574,41 @@ mod tests {
         echo queried >> '{}'
         echo '{}'
         ", query_log.display(), json.replace("3.12", "3.13")},
-        )
-        .unwrap();
-        assert_ne!(
-            Timestamp::from_path(&mocked_interpreter).unwrap(),
-            timestamp
-        );
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        )?;
+
+        // Back-to-back writes can share a Unix `ctime`. Store a well-formed entry with a
+        // different timestamp to exercise stale-cache rejection deterministically.
+        let modified = Timestamp::from_path(&canonical)?;
+        cached.timestamp = if modified == Timestamp::from(UNIX_EPOCH) {
+            Timestamp::from(UNIX_EPOCH + Duration::from_secs(1))
+        } else {
+            Timestamp::from(UNIX_EPOCH)
+        };
+        fs::write(cache_entry.path(), rmp_serde::to_vec(&cached)?)?;
+        assert_ne!(cached.timestamp, Timestamp::from_path(&canonical)?);
+
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
         assert_eq!(
             interpreter.markers.python_version().version,
-            Version::from_str("3.13").unwrap()
+            Version::from_str("3.13")?
         );
+        assert_eq!(fs::read_to_string(&query_log)?, "queried\nqueried\n");
+
+        let refreshed: CachedByTimestamp<InterpreterInfo> =
+            rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
+        assert_eq!(refreshed.timestamp, Timestamp::from_path(&canonical)?);
         assert_eq!(
-            fs::read_to_string(&query_log).unwrap(),
-            "queried\nqueried\n"
+            refreshed.data.markers.python_version().version,
+            Version::from_str("3.13")?
         );
+
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
+        assert_eq!(
+            interpreter.markers.python_version().version,
+            Version::from_str("3.13")?
+        );
+        assert_eq!(fs::read_to_string(&query_log)?, "queried\nqueried\n");
+        Ok(())
     }
 
     #[tokio::test]
