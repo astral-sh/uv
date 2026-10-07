@@ -1139,6 +1139,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) overrides: Vec<RequirementsInput>,
     pub(crate) excludes: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
+    pub(crate) system_site_packages: bool,
     pub(crate) lfs: GitLfsSetting,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -1169,6 +1170,7 @@ impl ToolInstallSettings {
             overrides,
             excludes,
             build_constraints,
+            system_site_packages,
             lfs,
             installer,
             force,
@@ -1244,6 +1246,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            system_site_packages,
             lfs,
             python: python.and_then(Maybe::into_option),
             python_platform,
