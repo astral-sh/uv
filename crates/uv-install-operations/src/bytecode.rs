@@ -1,15 +1,16 @@
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use anyhow::Context;
 use owo_colors::OwoColorize;
 use tracing::debug;
 use uv_cache::Cache;
 use uv_command_support::{Printer, elapsed};
 use uv_configuration::Concurrency;
-use uv_fs::{CWD, Simplified};
+use uv_fs::CWD;
 use uv_installer::{compile_files, compile_tree};
 use uv_python::PythonEnvironment;
+
+use crate::Error;
 
 /// Compile all Python source files in site-packages to bytecode, to speed up the
 /// initial run of any subsequent executions.
@@ -20,7 +21,7 @@ pub(super) async fn compile_bytecode(
     concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     let start = std::time::Instant::now();
     let mut files = 0;
     for site_packages in venv.site_packages() {
@@ -39,11 +40,9 @@ pub(super) async fn compile_bytecode(
             cache.root(),
         )
         .await
-        .with_context(|| {
-            format!(
-                "Failed to bytecode-compile Python file in: {}",
-                site_packages.user_display()
-            )
+        .map_err(|source| Error::CompileTree {
+            path: site_packages,
+            source,
         })?;
     }
     write_bytecode_summary(files, start, printer)?;
@@ -57,11 +56,11 @@ pub(super) async fn compile_bytecode_files(
     concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     let start = std::time::Instant::now();
     let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
         .await
-        .context("Failed to bytecode-compile installed packages")?;
+        .map_err(Error::CompileFiles)?;
     if files == 0 {
         return Ok(());
     }
