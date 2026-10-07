@@ -310,7 +310,15 @@ impl ArchRequest {
         match self {
             Self::Explicit(request) => request == platform.arch,
             Self::Environment(env) => {
-                // Check if the environment's platform can run the target platform
+                // When the environment has a CPU variant (e.g., power9/10/11, x86_64_v3),
+                // require an exact arch match so the variant-specific download is preferred
+                // over a generic same-family download. The caller (find/iter_matching) can
+                // retry with a relaxed request if no exact match is available.
+                if env.variant().is_some() {
+                    return env == platform.arch;
+                }
+                // For a generic (no-variant) environment, accept any download that the
+                // environment can run — same family is sufficient.
                 let env_platform = Platform::new(platform.os, env, platform.libc);
                 env_platform.supports(platform)
             }
@@ -384,6 +392,19 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_any_arch(mut self) -> Self {
         self.arch = None;
+        self
+    }
+
+    /// Strip the CPU variant from the environment arch, falling back to a generic same-family
+    /// request. Used when a variant-specific download is not available (e.g., power9 binary
+    /// not yet published) so uv can still install the generic ppc64le binary.
+    #[must_use]
+    pub(crate) fn with_arch_family_fallback(mut self) -> Self {
+        if let Some(ArchRequest::Environment(arch)) = self.arch {
+            if arch.variant().is_some() {
+                self.arch = Some(ArchRequest::Environment(Arch::new(arch.family(), None)));
+            }
+        }
         self
     }
 
@@ -1022,6 +1043,17 @@ impl ManagedPythonDownloadList {
     pub fn find(&self, request: &PythonDownloadRequest) -> Result<&ManagedPythonDownload, Error> {
         if let Some(download) = self.iter_matching(request).next() {
             return Ok(download);
+        }
+
+        // If the environment arch has a CPU variant (e.g. power9/10/11) but no variant-specific
+        // download exists, fall back to the generic same-family download.
+        if let Some(ArchRequest::Environment(env_arch)) = request.arch {
+            if env_arch.variant().is_some() {
+                let fallback = request.clone().with_arch_family_fallback();
+                if let Some(download) = self.iter_matching(&fallback).next() {
+                    return Ok(download);
+                }
+            }
         }
 
         if !request.allows_prereleases()
