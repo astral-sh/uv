@@ -113,10 +113,20 @@ a byte-for-byte reproduction of published release artifacts.
 
 Pass `--pgo`, or enable the workflow's `pgo` input together with `uv`, to compare optimized builds
 using the release PGO training corpus. Each mode runs `scripts/build_uv_pgo.py --train-only` with
-the same debug, stripping, native compiler, and linker settings as its final build. Each final
-Maturin build uses that mode's merged profile. Profiles are not reused between debug settings.
-Windows retains the static CRT flags when setting `RUSTFLAGS`, and macOS disables native C/C++
-profile instrumentation in both stages, matching the release workflow.
+the same codegen-unit, debug, stripping, native compiler, and linker settings as its final build.
+Each final Maturin build uses that mode's merged profile. Profiles are not reused between debug
+settings. Windows retains the static CRT flags when setting `RUSTFLAGS`, and macOS disables native
+C/C++ profile instrumentation in both stages, matching the release workflow.
+
+The uv script accepts `--codegen-units 1` or `--codegen-units 16`; the workflow exposes the same
+`codegen-units` choice. The default is 16, matching the release profile used for the measurements
+below. This sets `CARGO_PROFILE_RELEASE_CODEGEN_UNITS` for both the no-debug and symbols builds,
+including their instrumented PGO builds, and records the value in the report. Other optimization
+settings and Cargo job counts remain unchanged. This permits testing the single-codegen-unit setting
+from [#22303](https://github.com/astral-sh/uv/pull/22303) without changing production profiles or
+runner sizes. Compare debug overhead against the no-debug baseline from the same run; comparisons
+against earlier 16-unit runs also include variation in runner load, caches, and training workloads.
+The small Rust+C fixture does not use this option.
 
 The workflow also supports native Linux ARM64 on the release's 64 GB Depot runner. It uses Rust's
 bundled LLD for the instrumented build's long-range calls and sets jemalloc's page size as in the
@@ -136,11 +146,12 @@ Both modes start with empty build and training directories. This requires four o
 platform, so PGO workflow jobs have a three-hour timeout. Build durations are observations of the
 build and training pipeline, not application performance benchmarks. Windows defaults to the
 repository's 32 GB Namespace release runner, with Cargo build parallelism fixed at four jobs for
-both configurations. The instrumented build with full debug information exhausted memory on that
-runner. For full-debug comparisons, set `windows-runner` to
-`namespace-profile-windows-2022-x86-64-32x64`, which selects the 32-vCPU, 64 GB profile. Both the
-no-debug baseline and symbols build run on the selected profile; Cargo parallelism remains four.
-`line-tables-only` and `limited` comparisons can use the default 32 GB profile.
+both configurations. The instrumented build with full debug information and 16 codegen units
+exhausted memory on that runner. The `windows-runner` input also accepts
+`namespace-profile-windows-2022-x86-64-32x64`, but the attempted run on that profile was cancelled
+without acquiring a runner; it has no build measurements. Both the no-debug baseline and symbols
+build run on the selected profile; Cargo parallelism remains four. Single-codegen-unit comparisons
+can test whether the default 32 GB profile is sufficient for full debug information.
 
 Run with Python 3.12 and pass `--benchmark`, or enable the workflow's `benchmark` input, for a small
 runtime comparison of the verified binaries. It resolves the existing Jupyter and Trio requirements

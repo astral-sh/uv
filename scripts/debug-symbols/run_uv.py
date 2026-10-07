@@ -246,6 +246,7 @@ def build(output, report, tools, system, host):
                 "CARGO_TARGET_DIR": temporary,
                 "CARGO_INCREMENTAL": "0",
                 "CARGO_TERM_COLOR": "never",
+                "CARGO_PROFILE_RELEASE_CODEGEN_UNITS": str(report["codegen_units"]),
                 "CARGO_PROFILE_RELEASE_DEBUG": report["debug_level"]
                 if mode == "symbols"
                 else "none",
@@ -566,6 +567,13 @@ def main():
         help="Cargo debug information level for the symbols build and its PGO training",
     )
     parser.add_argument(
+        "--codegen-units",
+        type=int,
+        choices=(1, 16),
+        default=16,
+        help="Release codegen units for both uv builds and their PGO training",
+    )
+    parser.add_argument(
         "--benchmark",
         action="store_true",
         help="Compare repeated offline resolutions after verifying the binaries",
@@ -635,6 +643,7 @@ def main():
             "tools": tools,
             "builds": {},
             "debug_level": args.debug_level,
+            "codegen_units": args.codegen_units,
             "pgo": args.pgo,
             "scope": "Native release profile, fat LTO, self-update, cargo-auditable; optional release PGO training; no manylinux container or release signing",
         }

@@ -1,5 +1,5 @@
 name: Debug symbols experiment
-run-name: ${{ inputs.uv && format(inputs.verify-run && 'uv symbol verification ({0})' || inputs.pgo && 'uv PGO debug symbols ({0}, {1})' || 'uv debug symbols ({0}, {1})', inputs.platform, inputs.debug-level || 'full') || format('Rust+C debug symbol fixture ({0})', inputs.debug-level || 'full') }}
+run-name: ${{ inputs.uv && format(inputs.verify-run && 'uv symbol verification ({0})' || inputs.pgo && 'uv PGO debug symbols ({0}, {1}, CGU {2})' || 'uv debug symbols ({0}, {1}, CGU {2})', inputs.platform, inputs.debug-level || 'full', inputs.codegen-units || '16') || format('Rust+C debug symbol fixture ({0})', inputs.debug-level || 'full') }}
 
 on:
   push:
@@ -21,6 +21,11 @@ on:
         type: choice
         options: [full, limited, line-tables-only]
         default: full
+      codegen-units:
+        description: Release codegen units for both uv builds and their PGO training
+        type: choice
+        options: ["16", "1"]
+        default: "16"
       benchmark:
         description: Compare repeated offline resolutions with the verified uv binaries
         type: boolean
@@ -47,7 +52,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.platform }}-${{ inputs.pgo }}-${{ inputs.debug-level }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.platform }}-${{ inputs.pgo }}-${{ inputs.debug-level }}-${{ inputs.codegen-units }}
   cancel-in-progress: true
 
 jobs:
@@ -130,7 +135,7 @@ jobs:
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Run uv experiment
         if: env.RUN_UV == 'true' && inputs.verify-run == ''
-        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run_uv.py --debug-level ${{ inputs.debug-level == 'limited' && 'limited' || inputs.debug-level == 'line-tables-only' && 'line-tables-only' || 'full' }} ${{ inputs.pgo && '--pgo' || '' }} ${{ inputs.benchmark && '--benchmark' || '' }}
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run_uv.py --debug-level ${{ inputs.debug-level == 'limited' && 'limited' || inputs.debug-level == 'line-tables-only' && 'line-tables-only' || 'full' }} --codegen-units ${{ inputs.codegen-units == '1' && '1' || '16' }} ${{ inputs.pgo && '--pgo' || '' }} ${{ inputs.benchmark && '--benchmark' || '' }}
       - name: Download retained uv outputs
         if: env.RUN_UV == 'true' && inputs.verify-run != ''
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
