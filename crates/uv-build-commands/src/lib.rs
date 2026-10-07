@@ -119,11 +119,11 @@ pub enum Error {
     #[error(
         "Refusing to clear output directory `{}` because it contains the build source `{}`",
         output_dir.simplified_display(),
-        source_dir.simplified_display()
+        source_path.simplified_display()
     )]
     ClearSource {
         output_dir: PathBuf,
-        source_dir: PathBuf,
+        source_path: PathBuf,
     },
 }
 
@@ -423,7 +423,7 @@ pub async fn build_frontend(
         {
             return Err(anyhow::Error::from(Error::ClearSource {
                 output_dir,
-                source_dir: source.directory().to_path_buf(),
+                source_path: source.path().to_path_buf(),
             })
             .context(format!("Failed to build `{source}`")));
         }

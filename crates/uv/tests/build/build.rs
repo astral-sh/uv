@@ -3928,9 +3928,9 @@ fn build_clear_preserves_symlinked_source() -> Result<()> {
     Ok(())
 }
 
-/// Test that `uv build --clear` does not remove an input source distribution and its directory.
+/// Test that `uv build --clear` rejects an output directory containing the input source distribution.
 #[test]
-fn build_clear_preserves_sdist() -> Result<()> {
+fn build_clear_rejects_output_containing_input_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
@@ -3949,11 +3949,13 @@ fn build_clear_preserves_sdist() -> Result<()> {
     let sdist = artifacts.child("project-0.1.0.tar.gz");
     sdist.assert(predicate::path::is_file());
 
+    // Without `--out-dir`, the wheel is written beside the input sdist. Clearing that directory
+    // would remove the input before it is read.
     uv_snapshot!(context.filters(), context.build().arg("artifacts/project-0.1.0.tar.gz").arg("--wheel").arg("--clear"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/artifacts/project-0.1.0.tar.gz`
-      cause: Refusing to clear output directory `[TEMP_DIR]/artifacts` because it contains the build source `[TEMP_DIR]/artifacts`
+      cause: Refusing to clear output directory `[TEMP_DIR]/artifacts` because it contains the build source `[TEMP_DIR]/artifacts/project-0.1.0.tar.gz`
     ");
     sdist.assert(predicate::path::is_file());
     artifacts
