@@ -310,7 +310,7 @@ impl NetworkSettings {
             None => {
                 // CLI didn't provide a value, check environment variable.
                 let env_flag = resolve_flag(false, "offline", environment.offline);
-                if env_flag.is_enabled() {
+                if environment.offline.value.is_some() {
                     env_flag
                 } else if workspace
                     .and_then(|workspace| workspace.globals.offline)

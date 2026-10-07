@@ -4846,6 +4846,35 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
+fn offline_env_false_overrides_config() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
+    );
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str("offline = true\n")?;
+
+    assert_eq!(
+        baseline,
+        capture_uv_snapshot!(
+            context.filters(),
+            add_shared_args(context.version())
+                .arg("--show-settings")
+                .env(EnvVars::UV_OFFLINE, "0")
+        )
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
 fn system_certs_cli_aliases_override_env() {
     let context = uv_test::test_context!("3.12");
 
