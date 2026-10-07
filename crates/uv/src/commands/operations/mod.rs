@@ -7,7 +7,9 @@ use uv_python::PythonInstallation;
 use crate::printer::Printer;
 
 pub(crate) mod installation;
+pub(crate) mod malware;
 pub(crate) mod resolution;
+pub(crate) mod sync;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Modifications {

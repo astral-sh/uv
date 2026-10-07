@@ -4,6 +4,7 @@ use tracing::debug;
 
 use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::loggers::InstallLogger;
+use crate::commands::operations::malware::check_resolution_malware;
 use crate::commands::operations::resolution::loggers::ResolveLogger;
 use crate::commands::project::{
     EnvironmentError, EnvironmentResolution, EnvironmentSpecification, resolve_environment,
@@ -222,7 +223,7 @@ impl CachedEnvironment {
         let malware_check_client_builder = client_builder
             .clone()
             .keyring(settings.resolver.keyring_provider);
-        crate::commands::project::sync::check_resolution_malware(
+        check_resolution_malware(
             resolution,
             &malware_check_client_builder,
             concurrency,

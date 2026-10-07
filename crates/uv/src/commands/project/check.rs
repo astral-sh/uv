@@ -26,12 +26,13 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::loggers::SummaryInstallLogger;
+use crate::commands::operations::malware::MalwareCheckContext;
 use crate::commands::operations::resolution::loggers::SummaryResolveLogger;
+use crate::commands::operations::sync::{store_credentials_from_target, sync_from_lock};
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter,
@@ -445,7 +446,7 @@ pub(crate) async fn check(
             script,
             lock: result.lock(),
         };
-        match project::sync::do_sync(
+        match sync_from_lock(
             target,
             &venv,
             &extras,
@@ -637,7 +638,7 @@ pub(crate) async fn check(
                     &base_interpreter,
                     &settings.resolver.build_options,
                 )?;
-                project::sync::store_credentials_from_target(target, &client_builder)?;
+                store_credentials_from_target(target, &client_builder)?;
                 let ty_state = state.fork();
                 let environment = match CachedEnvironment::from_locked_resolution(
                     &resolution,
@@ -672,7 +673,7 @@ pub(crate) async fn check(
             debug!("Skipping environment synchronization due to `--no-sync`");
         } else {
             let sync_state = state.fork();
-            match project::sync::do_sync(
+            match sync_from_lock(
                 target,
                 &venv,
                 &extras,
