@@ -1,4 +1,3 @@
-use anyhow::Result;
 use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use uv_cache::Cache;
@@ -395,7 +394,7 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 pub fn store_credentials_from_target(
     target: InstallTarget<'_>,
     client_builder: &BaseClientBuilder,
-) -> Result<()> {
+) -> Result<(), EnvironmentError> {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials()? {
