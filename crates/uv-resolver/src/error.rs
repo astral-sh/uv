@@ -117,9 +117,7 @@ pub enum ResolveError {
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
-    #[error(
-        "In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`"
-    )]
+    #[error("Hash-checking is required, but no trusted hash was provided for: `{0}`")]
     UnhashedPackage(PackageName),
 
     #[error("found conflicting distribution in resolution: {0}")]

@@ -2018,7 +2018,7 @@ fn build_sha() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/project`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `hatchling`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+      cause: Hash-checking is required, but no trusted hash was provided for: `hatchling`
     ");
 
     project
