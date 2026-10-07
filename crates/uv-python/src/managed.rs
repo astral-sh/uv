@@ -39,6 +39,9 @@ use crate::interpreter::Interpreter;
 use crate::python_version::PythonVersion;
 use crate::{PythonInstallationMinorVersionKey, PythonVariant, macos_dylib, sysconfig};
 
+#[cfg(windows)]
+pub mod windows_registry;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]

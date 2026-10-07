@@ -54,12 +54,7 @@ mod target;
 mod version_files;
 mod virtualenv;
 #[cfg(windows)]
-pub mod windows_registry;
-
-#[cfg(windows)]
-pub(crate) const COMPANY_KEY: &str = "Astral";
-#[cfg(windows)]
-pub(crate) const COMPANY_DISPLAY_NAME: &str = "Astral Software Inc.";
+mod windows_registry;
 
 #[cfg(not(test))]
 fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
