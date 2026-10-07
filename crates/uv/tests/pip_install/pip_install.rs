@@ -1492,6 +1492,35 @@ fn install_require_hashes_in_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Enable `--require-hashes` from a constraints file included by the requirements file.
+#[test]
+fn install_require_hashes_in_nested_constraints_txt() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        -c constraints.txt
+        iniconfig==2.0.0
+    "})?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc! {r"
+        --require-hashes
+        iniconfig==2.0.0
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Install a requirements file with pins that conflict
 ///
 /// This is likely to occur in the real world when compiled on one platform then installed on another.
