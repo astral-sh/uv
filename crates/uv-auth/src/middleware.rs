@@ -11,6 +11,7 @@ use uv_netrc::Netrc;
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
+use uv_warnings::warn_user_once_with_chain;
 
 use crate::providers::{
     AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider,
@@ -911,8 +912,12 @@ impl AuthMiddleware {
                         || matches!(&err, crate::keyring::Error::AmbiguousUsername(_))
                         || !platform_unavailable
                     {
-                        uv_warnings::warn_user_once!(
-                            "Failed to fetch credentials from the native credential store: {err}"
+                        warn_user_once_with_chain!(
+                            anyhow::Error::from(err)
+                                .context(
+                                    "Failed to fetch credentials from the native credential store"
+                                )
+                                .as_ref()
                         );
                     }
                     None
