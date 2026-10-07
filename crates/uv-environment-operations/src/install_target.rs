@@ -18,7 +18,8 @@ use uv_pypi_types::{
     DependencyGroupSpecifier, DependencyGroups, LenientRequirement, ResolverMarkerEnvironment,
     VerbatimParsedUrl,
 };
-use uv_python_context::{ProjectPythonRequirement, PythonRequirementSource};
+use uv_python_discovery::ProjectPythonRequirement;
+use uv_python_discovery::PythonRequirementSource;
 use uv_scripts::Pep723Script;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::{RequiresPythonDeclaration, RequiresPythonSources, VirtualProject, Workspace};

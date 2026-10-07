@@ -13,9 +13,10 @@ use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonArchitecture, PythonPreference, find_environment};
-use uv_python::{Prefix, Target};
+use uv_python_discovery::find_environment;
+use uv_python_types::{
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonPreference, PythonRequest, Target,
+};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::reporters::report_target_environment;

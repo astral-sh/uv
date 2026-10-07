@@ -15,6 +15,8 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
 uv-auth = { workspace = true }
 uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }
@@ -49,9 +51,8 @@ uv-preview = { workspace = true }
 uv-project-commands = { workspace = true }
 uv-publish-commands = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true }
+uv-python-discovery = { workspace = true }
 uv-python-commands = { workspace = true }
-uv-python-context = { workspace = true }
 uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-requirements-txt = { workspace = true }
@@ -112,6 +113,7 @@ uv-version = { workspace = true }
 embed-manifest = { workspace = true }
 
 [dev-dependencies]
+uv-python-managed = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-extract = { workspace = true }
 uv-platform = { workspace = true }

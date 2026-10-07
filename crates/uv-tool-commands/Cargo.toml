@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
 uv-audit = { workspace = true }
 uv-audit-operations = { workspace = true }
 uv-cache = { workspace = true }
@@ -43,8 +45,7 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true }
-uv-python-context = { workspace = true }
+uv-python-discovery = { workspace = true }
 uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolve-operations = { workspace = true }

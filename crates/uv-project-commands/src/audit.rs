@@ -18,10 +18,10 @@ use uv_environment_operations::{
 use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{
-    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion,
-};
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::ProjectPythonRequest;
+use uv_python_discovery::ScriptInterpreter;
+use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::resolution_markers;

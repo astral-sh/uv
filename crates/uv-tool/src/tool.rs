@@ -8,7 +8,7 @@ use uv_configuration::ExcludeDependency;
 use uv_distribution_types::{NameRequirementSpecification, Requirement};
 use uv_fs::{PortablePath, Simplified};
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::PythonRequest;
+use uv_python_types::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
 
 /// A tool entry.

@@ -27,11 +27,13 @@ use uv_lock::{Installable, Lock};
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
-use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
-use uv_python::{
-    BrokenLink, ConfigDiscovery, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
-    LenientImplementationName, PythonArchitecture, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest,
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::PythonInstallation;
+use uv_python_interpreter::{BrokenLink, Interpreter, InvalidEnvironmentKind, PythonEnvironment};
+use uv_python_managed::{ManagedPythonInstallation, PythonMinorVersionLink};
+use uv_python_types::{
+    EnvironmentPreference, LenientImplementationName, PythonArchitecture, PythonDownloads,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{
@@ -49,11 +51,13 @@ use crate::install_target::{InstallTarget, PackageSelection};
 use uv_command_support::{Printer, conjunction};
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::InstallLogger;
-use uv_python_context::{
-    CompatibleProjectPython, EnvironmentIncompatibilityError, EnvironmentKind,
-    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter,
-    check_environment_compatibility,
-};
+use uv_python_discovery::CompatibleProjectPython;
+use uv_python_discovery::EnvironmentIncompatibilityError;
+use uv_python_discovery::EnvironmentKind;
+use uv_python_discovery::ProjectPythonRequest;
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::ScriptInterpreter;
+use uv_python_discovery::check_environment_compatibility;
 use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_requirements};
 use uv_resolve_operations::loggers::ResolveLogger;
 use uv_settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
@@ -200,8 +204,10 @@ fn existing_project_environment(
 ) -> Result<Option<PythonEnvironment>, EnvironmentError> {
     let environment = match PythonEnvironment::from_root(root, cache) {
         Ok(environment) => environment,
-        Err(uv_python::PythonEnvironmentError::MissingEnvironment(_)) => return Ok(None),
-        Err(uv_python::PythonEnvironmentError::InvalidEnvironment(inner)) => {
+        Err(uv_python_interpreter::PythonEnvironmentError::MissingEnvironment(_)) => {
+            return Ok(None);
+        }
+        Err(uv_python_interpreter::PythonEnvironmentError::InvalidEnvironment(inner)) => {
             match inner.kind {
                 InvalidEnvironmentKind::NotDirectory => {
                     return Err(EnvironmentError::InvalidProjectEnvironmentDir(
@@ -227,16 +233,18 @@ fn existing_project_environment(
             }
             return Ok(None);
         }
-        Err(uv_python::PythonEnvironmentError::Query(uv_python::InterpreterError::NotFound(_))) => {
+        Err(uv_python_interpreter::PythonEnvironmentError::Query(
+            uv_python_interpreter::InterpreterError::NotFound(_),
+        )) => {
             return Ok(None);
         }
-        Err(uv_python::PythonEnvironmentError::Query(uv_python::InterpreterError::BrokenLink(
-            BrokenLink {
+        Err(uv_python_interpreter::PythonEnvironmentError::Query(
+            uv_python_interpreter::InterpreterError::BrokenLink(BrokenLink {
                 path,
                 unix,
                 venv: _,
-            },
-        ))) => {
+            }),
+        )) => {
             if unix {
                 let target_path = fs_err::read_link(&path)?;
                 warn_user!(

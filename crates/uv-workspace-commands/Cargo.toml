@@ -17,6 +17,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-command-support = { workspace = true }
@@ -32,8 +34,7 @@ uv-lock-operations = { workspace = true }
 uv-normalize = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true }
-uv-python-context = { workspace = true }
+uv-python-discovery = { workspace = true }
 uv-resolve-operations = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true }

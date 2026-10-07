@@ -39,10 +39,13 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions,
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::PythonInstallation;
+use uv_python_discovery::PythonVersionFile;
+use uv_python_discovery::VersionFileDiscoveryOptions;
+use uv_python_interpreter::PythonEnvironment;
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolve_operations as operations;
@@ -53,7 +56,9 @@ use uv_warnings::warn_user;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
-use uv_python_context::{PythonContextError, PythonDownloadReporter, find_requires_python};
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::PythonSelectionError;
+use uv_python_discovery::find_requires_python;
 use uv_settings::ResolverSettings;
 
 #[derive(Debug, Error)]
@@ -61,7 +66,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
-    FindOrDownloadPython(#[from] uv_python::Error),
+    FindOrDownloadPython(#[from] uv_python_discovery::Error),
     #[error(transparent)]
     HashStrategy(#[from] uv_types::HashStrategyError),
     #[error(transparent)]
@@ -89,7 +94,7 @@ pub enum Error {
     #[error("Build requirement is not satisfied: `{0}`")]
     UnsatisfiedBuildRequirement(Box<Requirement>),
     #[error(transparent)]
-    PythonContext(#[from] Box<PythonContextError>),
+    PythonContext(#[from] Box<PythonSelectionError>),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -113,8 +118,8 @@ pub enum Error {
     VersionMismatch(Version, Version),
 }
 
-impl From<PythonContextError> for Error {
-    fn from(error: PythonContextError) -> Self {
+impl From<PythonSelectionError> for Error {
+    fn from(error: PythonSelectionError) -> Self {
         Self::PythonContext(Box::new(error))
     }
 }

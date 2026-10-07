@@ -72,7 +72,9 @@ uv-performance-memory-allocator = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true }
+uv-python-managed = { workspace = true }
+uv-python-interpreter = { workspace = true }
+uv-python-types = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }

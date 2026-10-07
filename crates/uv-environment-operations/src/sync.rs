@@ -18,7 +18,7 @@ use uv_lock::Installable;
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
-use uv_python::PythonEnvironment;
+use uv_python_interpreter::PythonEnvironment;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_resolver::FlatIndex;
 use uv_settings::InstallerSettingsRef;

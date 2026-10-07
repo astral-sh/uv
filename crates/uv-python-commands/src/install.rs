@@ -21,19 +21,22 @@ use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::downloads::{
-    self, ArchRequest, DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
-    PythonDownloadRequest,
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::PythonVersionFile;
+use uv_python_discovery::VersionFileDiscoveryOptions;
+use uv_python_discovery::VersionFilePreference;
+use uv_python_interpreter::Interpreter;
+use uv_python_managed::downloads::{
+    self, DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
 };
-use uv_python::managed::{
+use uv_python_managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, PythonExecutable,
     PythonMinorVersionLink, compare_build_versions, create_link_to_executable,
     python_executable_dir,
 };
-use uv_python::{
-    ConfigDiscovery, ImplementationName, Interpreter, PythonArchitecture, PythonDownloads,
-    PythonInstallationKey, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionFilePreference, VersionRequest,
+use uv_python_types::{
+    ArchRequest, ImplementationName, PythonArchitecture, PythonDownloadRequest, PythonDownloads,
+    PythonInstallationKey, PythonRequest, VersionRequest,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_shell::Shell;
@@ -42,7 +45,7 @@ use uv_warnings::warn_user;
 
 use crate::{ChangeEvent, ChangeEventKind};
 use uv_command_support::{ExitStatus, Printer, UvError, conjunction, elapsed};
-use uv_python_context::PythonDownloadReporter;
+use uv_python_discovery::PythonDownloadReporter;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InstallRequest<'a> {
@@ -700,7 +703,7 @@ async fn perform_install(
         if !matches!(registry, Some(false)) {
             #[cfg(windows)]
             {
-                match uv_python::managed::windows_registry::create_registry_entry(installation) {
+                match uv_python_managed::windows_registry::create_registry_entry(installation) {
                     Ok(()) => {}
                     Err(err) => {
                         errors.push((
@@ -1024,7 +1027,7 @@ fn create_bin_links(
                     .or_default()
                     .insert(target.clone());
             }
-            Err(uv_python::managed::Error::LinkExecutable(err))
+            Err(uv_python_managed::Error::LinkExecutable(err))
                 if err.kind() == ErrorKind::AlreadyExists =>
             {
                 debug!(

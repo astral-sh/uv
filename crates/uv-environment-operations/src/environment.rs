@@ -19,7 +19,7 @@ use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
 use uv_preview::Preview;
-use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
+use uv_python_interpreter::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_settings::MalwareCheckSettings;
 use uv_types::{HashStrategy, HashVerification, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
@@ -305,7 +305,7 @@ impl CachedEnvironment {
     pub fn base_interpreter(
         interpreter: &Interpreter,
         cache: &Cache,
-    ) -> Result<Interpreter, uv_python::Error> {
+    ) -> Result<Interpreter, uv_python_discovery::Error> {
         let base_python = if cfg!(unix) {
             interpreter.find_base_python()?
         } else {

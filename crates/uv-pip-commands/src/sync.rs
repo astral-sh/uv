@@ -26,9 +26,12 @@ use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
-use uv_python::{
-    EnvironmentPreference, Prefix, PythonArchitecture, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, Target, find_environment,
+use uv_python_discovery::PythonInstallation;
+use uv_python_discovery::find_environment;
+use uv_python_interpreter::PythonEnvironment;
+use uv_python_types::{
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonDownloads, PythonPreference,
+    PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -48,7 +51,8 @@ use crate::reporters::report_target_environment;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_python_context::{PythonDownloadReporter, report_interpreter};
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::report_interpreter;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 

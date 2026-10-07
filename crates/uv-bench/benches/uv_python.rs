@@ -6,7 +6,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 
-use uv_python::downloads::ManagedPythonDownloadList;
+use uv_python_managed::downloads::ManagedPythonDownloadList;
 
 fn load_python_download_catalog(c: &mut Criterion<WallTime>) {
     c.bench_function("load_python_download_catalog", |b| {

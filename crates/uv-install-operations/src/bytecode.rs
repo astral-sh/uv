@@ -8,7 +8,7 @@ use uv_command_support::{Printer, elapsed};
 use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_installer::{compile_files, compile_tree};
-use uv_python::PythonEnvironment;
+use uv_python_interpreter::PythonEnvironment;
 
 use crate::Error;
 

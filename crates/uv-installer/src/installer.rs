@@ -8,7 +8,7 @@ use uv_cache::Cache;
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
-use uv_python::PythonEnvironment;
+use uv_python_interpreter::PythonEnvironment;
 use uv_threads::initialize_rayon_once;
 
 /// A failure while installing wheels into a Python environment.
@@ -232,9 +232,9 @@ pub trait Reporter: Send + Sync {
 mod tests {
     use uv_cache::Cache;
     use uv_preview::Preview;
-    use uv_python::{
-        EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, find_environment,
-    };
+    use uv_python_discovery::find_environment;
+    use uv_python_interpreter::PythonEnvironment;
+    use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest};
 
     use super::Installer;
 

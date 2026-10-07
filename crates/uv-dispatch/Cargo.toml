@@ -17,6 +17,7 @@ test = false
 workspace = true
 
 [dependencies]
+uv-python-interpreter = { workspace = true }
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
@@ -32,7 +33,6 @@ uv-installer = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }

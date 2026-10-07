@@ -15,7 +15,7 @@ use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
+use uv_python_interpreter::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
@@ -78,7 +78,7 @@ pub enum Error {
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
-    EnvironmentError(#[from] uv_python::PythonEnvironmentError),
+    EnvironmentError(#[from] uv_python_interpreter::PythonEnvironmentError),
     #[error("Failed to find a receipt for tool `{0}` at `{1}`")]
     MissingToolReceipt(String, PathBuf),
     #[error("Failed to read tool environment packages at `{0}`: {1}")]
@@ -282,9 +282,9 @@ impl InstalledTools {
                 );
                 Ok(Some(ToolEnvironment::new(venv, name.clone())))
             }
-            Err(uv_python::PythonEnvironmentError::MissingEnvironment(_)) => Ok(None),
-            Err(uv_python::PythonEnvironmentError::Query(
-                uv_python::InterpreterError::NotFound(interpreter_path),
+            Err(uv_python_interpreter::PythonEnvironmentError::MissingEnvironment(_)) => Ok(None),
+            Err(uv_python_interpreter::PythonEnvironmentError::Query(
+                uv_python_interpreter::InterpreterError::NotFound(interpreter_path),
             )) => {
                 warn!(
                     "Ignoring existing virtual environment with missing Python interpreter: {}",
@@ -293,8 +293,8 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::PythonEnvironmentError::Query(
-                uv_python::InterpreterError::BrokenLink(BrokenLink {
+            Err(uv_python_interpreter::PythonEnvironmentError::Query(
+                uv_python_interpreter::InterpreterError::BrokenLink(BrokenLink {
                     path,
                     unix,
                     venv: _,

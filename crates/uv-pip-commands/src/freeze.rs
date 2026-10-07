@@ -12,8 +12,10 @@ use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDistKind, N
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_python::{EnvironmentPreference, Prefix, PythonRequest, Target, find_environment};
-use uv_python::{PythonArchitecture, PythonPreference};
+use uv_python_discovery::find_environment;
+use uv_python_types::{
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonPreference, PythonRequest, Target,
+};
 
 use crate::reporters::report_target_environment;
 use uv_command_support::ExitStatus;
@@ -70,7 +72,7 @@ pub fn pip_freeze(
                 .filter_map(|path| {
                     environment
                         .clone()
-                        .with_target(uv_python::Target::from(path))
+                        .with_target(uv_python_types::Target::from(path))
                         // Drop invalid paths as per `pip freeze`.
                         .ok()
                 })

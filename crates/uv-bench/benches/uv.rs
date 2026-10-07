@@ -35,7 +35,7 @@ use uv_extract::hash::{HashReader, Hasher};
 use uv_install_wheel::{InstallState, Layout, LinkMode};
 use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
 use uv_pypi_types::{HashAlgorithm, Scheme};
-use uv_python::PythonEnvironment;
+use uv_python_interpreter::PythonEnvironment;
 use uv_resolver::Manifest;
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
@@ -554,7 +554,7 @@ mod resolver {
     use uv_platform_tags::{Arch, Os, Platform, Tags, TagsOptions};
     use uv_preview::Preview;
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
-    use uv_python::Interpreter;
+    use uv_python_interpreter::Interpreter;
     use uv_resolver::{
         ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement,
         Resolver, ResolverEnvironment, ResolverOutput,

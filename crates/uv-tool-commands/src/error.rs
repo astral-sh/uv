@@ -11,7 +11,7 @@ pub(crate) enum ToolError {
     #[error(transparent)]
     Requirements(#[from] uv_requirements::Error),
     #[error(transparent)]
-    Python(Box<uv_python::Error>),
+    Python(Box<uv_python_discovery::Error>),
     #[error(transparent)]
     Resolve(Box<uv_resolve_operations::Error>),
     #[error(transparent)]
@@ -32,8 +32,8 @@ impl From<uv_tool::Error> for ToolError {
     }
 }
 
-impl From<uv_python::Error> for ToolError {
-    fn from(error: uv_python::Error) -> Self {
+impl From<uv_python_discovery::Error> for ToolError {
+    fn from(error: uv_python_discovery::Error) -> Self {
         Self::Python(Box::new(error))
     }
 }

@@ -14,7 +14,7 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, RequiresPython};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_python::LenientImplementationName;
+use uv_python_types::LenientImplementationName;
 use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;

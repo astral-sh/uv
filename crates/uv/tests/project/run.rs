@@ -9,7 +9,7 @@ use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::path::Path;
 use uv_fs::copy_dir_all;
-use uv_python::PYTHON_VERSION_FILENAME;
+use uv_python_discovery::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};

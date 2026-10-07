@@ -2,7 +2,7 @@
 use std::os::unix::fs::PermissionsExt;
 
 use uv_platform::{Arch, Os};
-use uv_python::managed::platform_key_from_env;
+use uv_python_managed::platform_key_from_env;
 use uv_static::EnvVars;
 
 use anyhow::Result;

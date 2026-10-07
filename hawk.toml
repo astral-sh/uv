@@ -310,7 +310,7 @@ reason = "kept public alongside ResolverOutput::len"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::arch"
 kind = "inherent_method"
 level = "expect"
@@ -318,7 +318,7 @@ reason = "retained as part of the PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::libc"
 kind = "inherent_method"
 level = "expect"
@@ -326,7 +326,7 @@ reason = "retained as part of the PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::unnecessary_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::os"
 kind = "inherent_method"
 level = "expect"
@@ -334,7 +334,7 @@ reason = "kept public alongside the other PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_interpreter"
 item = "virtualenv::PyVenvConfiguration::is_virtualenv"
 kind = "inherent_method"
 level = "expect"
@@ -342,7 +342,7 @@ reason = "retained as part of the PyVenvConfiguration accessors"
 
 [[override]]
 lint = "hawk::unnecessary_public"
-crate = "uv_python"
+crate = "uv_python_interpreter"
 item = "virtualenv::PyVenvConfiguration::set"
 kind = "inherent_method"
 level = "expect"

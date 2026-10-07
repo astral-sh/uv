@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use uv_python::managed::python_executable_dir;
+use uv_python_managed::python_executable_dir;
 
 use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, update_shell};

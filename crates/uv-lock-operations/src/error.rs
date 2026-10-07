@@ -14,7 +14,7 @@ use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::MarkerTreeContents;
 use uv_platform_tags::TagsError;
-use uv_python_context::PythonContextError;
+use uv_python_discovery::PythonSelectionError;
 use uv_requirements::ScriptRequirementsError;
 use uv_resolve_operations::Error as ResolveError;
 use uv_settings::{FrozenSource, LockedSource};
@@ -137,7 +137,7 @@ pub enum LockError {
     Tags(#[from] TagsError),
 
     #[error(transparent)]
-    PythonContext(#[from] Box<PythonContextError>),
+    PythonContext(#[from] Box<PythonSelectionError>),
 
     #[error(transparent)]
     Resolve(#[from] Box<ResolveError>),
@@ -275,8 +275,8 @@ impl From<LoweringError> for LockError {
     }
 }
 
-impl From<PythonContextError> for LockError {
-    fn from(error: PythonContextError) -> Self {
+impl From<PythonSelectionError> for LockError {
+    fn from(error: PythonSelectionError) -> Self {
         Self::PythonContext(Box::new(error))
     }
 }

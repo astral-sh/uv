@@ -21,12 +21,12 @@ use uv_lock_operations::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{
-    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
-};
-use uv_python_context::{
-    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter, init_script_python_requirement,
-};
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::ProjectPythonRequest;
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::ScriptInterpreter;
+use uv_python_discovery::init_script_python_requirement;
+use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSettings};

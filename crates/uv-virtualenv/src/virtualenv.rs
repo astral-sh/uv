@@ -19,10 +19,10 @@ use uv_fs::{CWD, PythonExt, Simplified, cachedir};
 use uv_platform_tags::Os;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
-use uv_python::managed::{
+use uv_python_interpreter::{Interpreter, VirtualEnvironment};
+use uv_python_managed::{
     ManagedPythonInstallation, PythonExecutable, PythonMinorVersionLink, replace_link_to_executable,
 };
-use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
 

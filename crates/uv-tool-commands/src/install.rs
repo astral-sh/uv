@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::str::FromStr;
 use uv_dispatch::PlatformState;
 use uv_distribution_types::RequirementScope;
-use uv_python_context::PythonDownloadReporter;
+use uv_python_discovery::PythonDownloadReporter;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
@@ -25,9 +25,11 @@ use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::PythonInstallation;
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};

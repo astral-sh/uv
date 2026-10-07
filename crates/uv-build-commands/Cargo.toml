@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
 uv-auth = { workspace = true }
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
@@ -36,8 +38,7 @@ uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-preview = { workspace = true }
-uv-python = { workspace = true }
-uv-python-context = { workspace = true }
+uv-python-discovery = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolve-operations = { workspace = true }
 uv-resolver = { workspace = true }

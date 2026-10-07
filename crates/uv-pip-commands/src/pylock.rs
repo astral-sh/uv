@@ -13,7 +13,8 @@ use uv_lock::{PylockToml, PylockTomlError};
 use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::Version;
 use uv_platform_tags::TagsError;
-use uv_python::{Interpreter, PythonVersion};
+use uv_python_interpreter::Interpreter;
+use uv_python_types::PythonVersion;
 use uv_types::{HashStrategy, HashStrategyError};
 
 use uv_resolve_operations::{resolution_markers, resolution_tags};

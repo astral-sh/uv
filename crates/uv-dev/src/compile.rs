@@ -5,7 +5,8 @@ use tracing::info;
 
 use uv_cache::{Cache, CacheArgs};
 use uv_configuration::Concurrency;
-use uv_python::{EnvironmentPreference, PythonPreference, PythonRequest, find_environment};
+use uv_python_discovery::find_environment;
+use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest};
 
 #[derive(Parser)]
 pub(crate) struct CompileArgs {

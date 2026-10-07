@@ -21,9 +21,10 @@ use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{
-    EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads, PythonInstallation,
-    PythonPreference, PythonRequest,
+use uv_python_discovery::PythonInstallation;
+use uv_python_interpreter::Interpreter;
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -38,7 +39,7 @@ use uv_environment_operations::{
     update_environment,
 };
 use uv_install_operations::loggers::{DefaultInstallLogger, UpgradeInstallLogger};
-use uv_python_context::PythonDownloadReporter;
+use uv_python_discovery::PythonDownloadReporter;
 use uv_resolve_operations::loggers::SummaryResolveLogger;
 use uv_resolve_operations::resolution_tags;
 use uv_settings::ResolverInstallerSettings;

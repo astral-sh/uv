@@ -16,7 +16,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation, ResolvedRequirements};

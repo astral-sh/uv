@@ -36,10 +36,14 @@ use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
-use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVariant,
-    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::PythonInstallation;
+use uv_python_discovery::PythonVersionFile;
+use uv_python_discovery::VersionFileDiscoveryOptions;
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+    PythonVariant, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{FlatIndex, OptionsBuilder, Preference, ResolverOutput};
@@ -113,7 +117,8 @@ impl Hinted for NoExecutablesError {
 use uv_command_support::Printer;
 use uv_environment_operations::{EnvironmentSpecification, PreferenceLocation};
 use uv_lock_operations::ValidatedLock;
-use uv_python_context::{PythonDownloadReporter, PythonRequestSource};
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::PythonRequestSource;
 use uv_settings::ResolverSettings;
 
 use crate::error::ToolLockError;
@@ -650,7 +655,7 @@ pub(super) async fn refine_interpreter(
     python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
-) -> Result<Option<Interpreter>, uv_python::Error> {
+) -> Result<Option<Interpreter>, uv_python_discovery::Error> {
     let Some(no_solution_err) = err.as_no_solution() else {
         return Ok(None);
     };

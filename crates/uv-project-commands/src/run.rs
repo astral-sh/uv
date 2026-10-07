@@ -45,12 +45,17 @@ use uv_lock::{Installable, Lock};
 use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
-use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonArchitecture,
-    PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersionFile, VersionFileDiscoveryOptions,
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::ProjectPythonRequest;
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::PythonInstallation;
+use uv_python_discovery::PythonVersionFile;
+use uv_python_discovery::ScriptInterpreter;
+use uv_python_discovery::VersionFileDiscoveryOptions;
+use uv_python_interpreter::{Interpreter, PyVenvConfiguration, PythonEnvironment};
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
-use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{
     RequirementsSource, RequirementsSpecification, script_extra_build_requires,
