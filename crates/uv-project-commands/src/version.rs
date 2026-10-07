@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
-use thiserror::Error;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -385,27 +384,11 @@ pub async fn project_version(
     Ok(status)
 }
 
-/// A [`WorkspaceError`] that may carry a hint to use `uv self version`.
-#[derive(Debug, Error)]
-#[error("{err}")]
-pub struct MissingProjectVersionError {
-    err: WorkspaceError,
-}
-
-impl uv_errors::Hinted for MissingProjectVersionError {
-    fn hints(&self) -> uv_errors::Hints<'_> {
-        uv_errors::Hints::from(format!(
-            "If you meant to view uv's version, use `{}` instead",
-            "uv self version".green()
-        ))
-    }
-}
-
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
 /// and --project was not explicitly passed
-fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
+fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> ProjectError {
     if matches!(err.as_ref(), WorkspaceErrorKind::MissingPyprojectToml) && !explicit_project {
-        MissingProjectVersionError { err }.into()
+        ProjectError::MissingProjectVersion(err)
     } else {
         err.into()
     }
@@ -420,7 +403,7 @@ async fn find_target(
     explicit_project: bool,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
-) -> Result<VirtualProject> {
+) -> Result<VirtualProject, ProjectError> {
     // Find the project in the workspace.
     let project = if let Some(package) = package {
         VirtualProject::discover_with_package(
