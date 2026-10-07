@@ -9,7 +9,6 @@ use crate::commands::tool::NoExecutablesError;
 use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
 use uv_build_commands::Error as BuildError;
 use uv_command_support::Printer;
-use uv_resolve_operations::ExtrasWithoutSourceError;
 
 use uv_errors::{Hinted, Hints};
 /// Format an error chain with the default user-facing hints and output settings.
@@ -41,7 +40,6 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
         collect_hint::<RecursionLimitError>(cause, &mut hints);
         collect_hint::<DependencyNotFoundError>(cause, &mut hints);
-        collect_hint::<ExtrasWithoutSourceError>(cause, &mut hints);
         collect_hint::<ProjectError>(cause, &mut hints);
         collect_hint::<uv_environment_operations::EnvironmentError>(cause, &mut hints);
         collect_hint::<uv_python_context::PythonContextError>(cause, &mut hints);

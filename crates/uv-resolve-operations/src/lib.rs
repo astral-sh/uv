@@ -47,7 +47,7 @@ pub mod loggers;
 mod markers;
 pub mod reporters;
 
-pub use error::{Error, ExtrasWithoutSourceError};
+pub use error::Error;
 pub use markers::{resolution_markers, resolution_tags};
 
 /// Consolidate the requirements for an installation.
@@ -66,7 +66,7 @@ pub async fn read_requirements(
         let has_editable = requirements
             .iter()
             .any(|source| matches!(source, RequirementsSource::Editable(_)));
-        return Err(anyhow::Error::new(ExtrasWithoutSourceError { has_editable }).into());
+        return Err(Error::ExtrasWithoutSource { has_editable });
     }
 
     // Read all requirements from the provided sources.
