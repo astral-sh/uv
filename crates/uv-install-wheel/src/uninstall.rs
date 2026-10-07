@@ -176,7 +176,7 @@ fn is_path_in_scheme(
     distribution: impl Display,
     layout: &Layout,
 ) -> bool {
-    let normalized = normalize_path(&site_packages.join(path));
+    let normalized = site_packages.join(path);
 
     // `purelib` or `platlib` are site-packages (depending on `Root-Is-Purelib`). As
     // `.data/*` goes into the directories of `scheme`, `.dist-info` goes into site-packages
