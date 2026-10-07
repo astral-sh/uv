@@ -5,7 +5,6 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use uv_client::{BaseClientBuilder, RegistryClient};
@@ -21,7 +20,6 @@ use uv_distribution_types::{
     ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
@@ -199,12 +197,9 @@ pub async fn resolve(
             if !unused_extras.is_empty() {
                 unused_extras.sort_unstable();
                 unused_extras.dedup();
-                let s = if unused_extras.len() == 1 { "" } else { "s" };
-                return Err(anyhow!(
-                    "Requested extra{s} not found: {}",
-                    unused_extras.iter().join(", ")
-                )
-                .into());
+                return Err(Error::MissingExtras(
+                    unused_extras.into_iter().cloned().collect(),
+                ));
             }
 
             // Extend the requirements with the resolved source trees.
@@ -226,20 +221,18 @@ pub async fn resolve(
                 client.credentials_cache(),
             )
             .await
-            .with_context(|| {
-                format!(
-                    "Failed to read dependency groups from: {}",
-                    pyproject_path.display()
-                )
+            .map_err(|source| Error::DependencyGroups {
+                path: pyproject_path.clone(),
+                source: Box::new(source),
             })?;
 
             // Complain if dependency groups are named that don't appear.
             for name in groups.explicit_names() {
                 if !metadata.dependency_groups.contains_key(name) {
-                    Err(anyhow!(
-                        "The dependency group '{name}' was not found in the project: {}",
-                        pyproject_path.user_display()
-                    ))?;
+                    return Err(Error::MissingGroup {
+                        name: name.clone(),
+                        path: pyproject_path.clone(),
+                    });
                 }
             }
             // Apply dependency-groups

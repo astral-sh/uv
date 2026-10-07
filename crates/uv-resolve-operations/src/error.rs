@@ -1,6 +1,11 @@
+use std::path::PathBuf;
+
+use itertools::Itertools;
 use uv_command_support::UvError;
 use uv_distribution::dist_hints;
 use uv_distribution_types::{DerivationChain, Name};
+use uv_fs::Simplified;
+use uv_normalize::{ExtraName, GroupName};
 use uv_resolver::{NoSolutionError, NoSolutionHeader, ResolveError};
 
 /// An error while reading requirements or resolving dependencies.
@@ -32,6 +37,20 @@ pub enum Error {
         "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file"
     )]
     ExtrasWithoutSource { has_editable: bool },
+    #[error(
+        "Requested extra{} not found: {}",
+        if .0.len() == 1 { "" } else { "s" },
+        .0.iter().join(", ")
+    )]
+    MissingExtras(Vec<ExtraName>),
+    #[error("The dependency group '{name}' was not found in the project: {}", path.user_display())]
+    MissingGroup { name: GroupName, path: PathBuf },
+    #[error("Failed to read dependency groups from: {}", path.display())]
+    DependencyGroups {
+        path: PathBuf,
+        #[source]
+        source: Box<uv_distribution::MetadataError>,
+    },
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }
@@ -50,6 +69,9 @@ impl Error {
             | Self::Requirements(_)
             | Self::RequirementsWithContext { .. }
             | Self::ExtrasWithoutSource { .. }
+            | Self::MissingExtras(_)
+            | Self::MissingGroup { .. }
+            | Self::DependencyGroups { .. }
             | Self::Anyhow(_) => None,
         }
     }
@@ -70,6 +92,9 @@ impl Error {
             | Self::Requirements(_)
             | Self::RequirementsWithContext { .. }
             | Self::ExtrasWithoutSource { .. }
+            | Self::MissingExtras(_)
+            | Self::MissingGroup { .. }
+            | Self::DependencyGroups { .. }
             | Self::Anyhow(_)) => error,
         }
     }
@@ -90,6 +115,9 @@ impl Error {
             | Self::Io(_)
             | Self::Fmt(_)
             | Self::ExtrasWithoutSource { .. }
+            | Self::MissingExtras(_)
+            | Self::MissingGroup { .. }
+            | Self::DependencyGroups { .. }
             | Self::Anyhow(_)) => error,
         }
     }
@@ -102,9 +130,13 @@ impl Error {
             Self::Requirements(error) | Self::RequirementsWithContext { source: error, .. } => {
                 error.is_user_failure()
             }
-            Self::Io(_) | Self::Fmt(_) | Self::ExtrasWithoutSource { .. } | Self::Anyhow(_) => {
-                false
-            }
+            Self::Io(_)
+            | Self::Fmt(_)
+            | Self::ExtrasWithoutSource { .. }
+            | Self::MissingExtras(_)
+            | Self::MissingGroup { .. }
+            | Self::DependencyGroups { .. }
+            | Self::Anyhow(_) => false,
         }
     }
 }
@@ -153,6 +185,9 @@ impl uv_errors::Hinted for Error {
             | Self::Fmt(_)
             | Self::Requirements(_)
             | Self::RequirementsWithContext { .. }
+            | Self::MissingExtras(_)
+            | Self::MissingGroup { .. }
+            | Self::DependencyGroups { .. }
             | Self::Anyhow(_) => uv_errors::Hints::none(),
         }
     }
