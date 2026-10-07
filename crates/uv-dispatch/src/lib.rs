@@ -1,5 +1,5 @@
 //! Avoid cyclic crate dependencies between [resolver][`uv_resolver`],
-//! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
+//! [installer][`uv_installer`] and [build frontend][`uv_build_frontend`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
 use std::ffi::{OsStr, OsString};

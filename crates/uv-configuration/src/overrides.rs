@@ -283,7 +283,7 @@ impl Overrides {
 
     /// Apply overrides with optional package-version context.
     ///
-    /// NB: Change this method together with [`Constraints::apply`].
+    /// NB: Change this method together with [`Constraints::apply`](crate::Constraints::apply).
     pub(crate) fn apply_for_package<'a, I>(
         &'a self,
         package: Option<(&PackageName, &Version)>,

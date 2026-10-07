@@ -21,7 +21,7 @@ use crate::{
 #[derive(Debug, Default, Clone)]
 pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 
-/// [`PrioritizedDist`] is boxed because [`Dist`] is large.
+/// The contents of a [`PrioritizedDist`], boxed to keep the outer type small.
 #[derive(Debug, Clone)]
 struct PrioritizedDistInner {
     /// The highest-priority source distribution. Between compatible source distributions this priority is arbitrary.

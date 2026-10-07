@@ -296,7 +296,7 @@ impl RequiresPython {
         }
     }
 
-    /// Returns the [`Range`] bounding the `Requires-Python` specifier.
+    /// Returns the [`RequiresPythonRange`] bounding the `Requires-Python` specifier.
     pub fn range(&self) -> &RequiresPythonRange {
         &self.range
     }
@@ -529,7 +529,7 @@ impl<'de> serde::Deserialize<'de> for RequiresPython {
 pub struct RequiresPythonRange(LowerBound, UpperBound);
 
 impl RequiresPythonRange {
-    /// Initialize a [`RequiresPythonRange`] from a [`Range`].
+    /// Initialize a [`RequiresPythonRange`] from a set of version [`Ranges`].
     fn from_range(range: &Ranges<Version>) -> Self {
         let (lower, upper) = range
             .bounding_range()

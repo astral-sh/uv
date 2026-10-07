@@ -175,7 +175,7 @@ pub struct GlobalArgs {
     #[arg(global = true, long, help_heading = "Python options")]
     pub no_python_downloads: bool,
 
-    /// Deprecated version of [`Self::python_downloads`].
+    /// Deprecated option for configuring automatic Python downloads.
     #[arg(global = true, long, hide = true)]
     pub python_fetch: Option<PythonDownloads>,
 
@@ -1053,8 +1053,7 @@ pub enum ProjectCommand {
     Audit(AuditArgs),
 }
 
-/// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
-/// [`parse_index_url`].
+/// A re-implementation of [`Option`], used to avoid `clap`'s automatic `Option` flattening.
 #[derive(Debug, Clone)]
 pub enum Maybe<T> {
     Some(T),
@@ -1276,7 +1275,7 @@ fn parse_default_index(input: &str) -> Result<Maybe<IndexArg>, String> {
     }
 }
 
-/// Parse a string into an [`Url`], mapping the empty string to `None`.
+/// Parse a string into a [`TrustedHost`], mapping the empty string to `None`.
 fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
