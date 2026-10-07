@@ -1537,6 +1537,7 @@ pub(crate) struct PythonListSettings {
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) graalpy_install_mirror: Option<String>,
 }
 
 impl PythonListSettings {
@@ -1564,13 +1565,15 @@ impl PythonListSettings {
             python_downloads_json_url_option,
             python_install_mirror_option,
             pypy_install_mirror_option,
+            graalpy_install_mirror_option,
         ) = match &options {
             Some(options) => (
                 options.install_mirrors.python_downloads_json_url.clone(),
                 options.install_mirrors.python_install_mirror.clone(),
                 options.install_mirrors.pypy_install_mirror.clone(),
+                options.install_mirrors.graalpy_install_mirror.clone(),
             ),
-            None => (None, None, None),
+            None => (None, None, None, None),
         };
 
         let python_downloads_json_url = python_downloads_json_url_arg
@@ -1592,6 +1595,12 @@ impl PythonListSettings {
             .clone()
             .or(pypy_install_mirror_option);
 
+        let graalpy_install_mirror = environment
+            .install_mirrors
+            .graalpy_install_mirror
+            .clone()
+            .or(graalpy_install_mirror_option);
+
         let kinds = if only_installed {
             PythonListKinds::Installed
         } else if only_downloads {
@@ -1611,6 +1620,7 @@ impl PythonListSettings {
             python_downloads_json_url,
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
         }
     }
 }
@@ -1643,6 +1653,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) graalpy_install_mirror: Option<String>,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) compile_bytecode: bool,
@@ -1667,6 +1678,7 @@ impl PythonInstallSettings {
         let PythonInstallMirrors {
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             python_downloads_json_url,
         } = install_mirrors;
 
@@ -1682,6 +1694,7 @@ impl PythonInstallSettings {
             upgrade,
             mirror: _,
             pypy_mirror: _,
+            graalpy_mirror: _,
             python_downloads_json_url: _,
             default,
             compile_bytecode,
@@ -1710,6 +1723,7 @@ impl PythonInstallSettings {
             },
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             python_downloads_json_url,
             default,
             compile_bytecode: flag(
@@ -1732,6 +1746,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) graalpy_install_mirror: Option<String>,
     pub(crate) reinstall: bool,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
@@ -1758,6 +1773,7 @@ impl PythonUpgradeSettings {
         let PythonInstallMirrors {
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             python_downloads_json_url,
         } = install_mirrors;
 
@@ -1777,6 +1793,7 @@ impl PythonUpgradeSettings {
             targets,
             mirror: _,
             pypy_mirror: _,
+            graalpy_mirror: _,
             reinstall,
             python_downloads_json_url: _,
             compile_bytecode,
@@ -1789,6 +1806,7 @@ impl PythonUpgradeSettings {
             registry,
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             reinstall,
             python_downloads_json_url,
             default,
@@ -1874,6 +1892,7 @@ impl PythonFindSettings {
         let PythonInstallMirrors {
             python_install_mirror: _,
             pypy_install_mirror: _,
+            graalpy_install_mirror: _,
             python_downloads_json_url,
         } = install_mirrors;
 

@@ -1225,9 +1225,14 @@ impl ManagedPythonDownload {
         reinstall: bool,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        graalpy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
+        let urls = self.download_urls(
+            python_install_mirror,
+            pypy_install_mirror,
+            graalpy_install_mirror,
+        )?;
         if urls.is_empty() {
             return Err(Error::NoPythonDownloadUrlFound);
         }
@@ -1552,11 +1557,13 @@ impl ManagedPythonDownload {
         &self,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        graalpy_install_mirror: Option<&str>,
     ) -> Result<Vec<DisplaySafeUrl>, Error> {
         let custom_astral_mirror = astral_mirror_url_from_env();
         self.download_urls_with_astral_mirror(
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             custom_astral_mirror.as_deref(),
         )
     }
@@ -1565,6 +1572,7 @@ impl ManagedPythonDownload {
         &self,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        graalpy_install_mirror: Option<&str>,
         astral_mirror_url: Option<&str>,
     ) -> Result<Vec<DisplaySafeUrl>, Error> {
         let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
@@ -1604,6 +1612,23 @@ impl ManagedPythonDownload {
                     else {
                         return Err(Error::Mirror(
                             EnvVars::UV_PYPY_INSTALL_MIRROR,
+                            self.url.to_string(),
+                        ));
+                    };
+                    return Ok(vec![DisplaySafeUrl::parse(
+                        format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
+                    )?]);
+                }
+            }
+
+            LenientImplementationName::Known(ImplementationName::GraalPy) => {
+                if let Some(mirror) = graalpy_install_mirror {
+                    let Some(suffix) = self
+                        .url
+                        .strip_prefix("https://github.com/oracle/graalpython/releases/download/")
+                    else {
+                        return Err(Error::Mirror(
+                            EnvVars::UV_GRAALPY_INSTALL_MIRROR,
                             self.url.to_string(),
                         ));
                     };
@@ -2388,6 +2413,7 @@ mod tests {
             .download_urls_with_astral_mirror(
                 None,
                 None,
+                None,
                 Some("https://nexus.example.com/repository/releases.astral.sh/"),
             )
             .expect("download URLs should be valid");
@@ -2414,6 +2440,7 @@ mod tests {
             .download_urls_with_astral_mirror(
                 Some("https://python-mirror.example.com/releases/"),
                 None,
+                None,
                 Some("https://nexus.example.com/repository/releases.astral.sh/"),
             )
             .expect("download URLs should be valid");
@@ -2437,10 +2464,10 @@ mod tests {
         );
 
         let default_urls = download
-            .download_urls_with_astral_mirror(None, None, None)
+            .download_urls_with_astral_mirror(None, None, None, None)
             .expect("download URLs should be valid");
         let empty_urls = download
-            .download_urls_with_astral_mirror(None, None, Some(""))
+            .download_urls_with_astral_mirror(None, None, None, Some(""))
             .expect("download URLs should be valid");
 
         assert_eq!(default_urls, empty_urls);
