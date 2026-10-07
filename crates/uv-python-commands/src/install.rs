@@ -700,7 +700,7 @@ async fn perform_install(
         if !matches!(registry, Some(false)) {
             #[cfg(windows)]
             {
-                match uv_python::windows_registry::create_registry_entry(installation) {
+                match uv_python::managed::windows_registry::create_registry_entry(installation) {
                     Ok(()) => {}
                     Err(err) => {
                         errors.push((

@@ -112,7 +112,7 @@ async fn do_uninstall(
             // Clear any remnants in the registry
             #[cfg(windows)]
             {
-                uv_python::windows_registry::remove_orphan_registry_entries(
+                uv_python::managed::windows_registry::remove_orphan_registry_entries(
                     &installed_installations,
                 );
             }
@@ -143,12 +143,14 @@ async fn do_uninstall(
     let mut errors = vec![];
     #[cfg(windows)]
     {
-        uv_python::windows_registry::remove_registry_entry(
+        uv_python::managed::windows_registry::remove_registry_entry(
             &matching_installations,
             all,
             &mut errors,
         );
-        uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
+        uv_python::managed::windows_registry::remove_orphan_registry_entries(
+            &installed_installations,
+        );
     }
 
     // Find and remove all relevant Python executables
