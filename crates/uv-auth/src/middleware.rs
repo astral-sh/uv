@@ -841,6 +841,23 @@ impl AuthMiddleware {
                 }) {
                 debug!("Found credentials in netrc file for `{url}`");
                 Some(credentials)
+            } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
+                debug!("Checking text store for credentials for `{url}`");
+                match text_store.get_credentials(
+                    url,
+                    credentials
+                        .as_ref()
+                        .and_then(|credentials| credentials.username()),
+                ) {
+                    Ok(credentials) => credentials.cloned(),
+                    Err(err) => {
+                        debug!("Failed to get credentials from text store: {err}");
+                        None
+                    }
+                }
+            }) {
+                debug!("Found credentials in plaintext store for `{url}`");
+                Some(credentials)
             } else {
                 None
             };
@@ -859,29 +876,10 @@ impl AuthMiddleware {
             self.cache().fetches.done(provider_key, None);
         }
 
-        // Text and native stores can scope credentials to a URL path, so consult them for each
-        // request instead of retaining every path in the process-wide fetch cache.
-        let text_store = self.text_store.get().await;
-        let path_sensitive_store_enabled =
-            text_store.is_some() || self.preview.is_enabled(PreviewFeature::NativeAuth);
-        let store_credentials = if let Some(credentials) = text_store.and_then(|text_store| {
-            debug!("Checking text store for credentials for `{url}`");
-            match text_store.get_credentials(
-                url,
-                credentials
-                    .as_ref()
-                    .and_then(|credentials| credentials.username()),
-            ) {
-                Ok(credentials) => credentials.cloned(),
-                Err(err) => {
-                    debug!("Failed to get credentials from text store: {err}");
-                    None
-                }
-            }
-        }) {
-            debug!("Found credentials in plaintext store for `{url}`");
-            Some(credentials)
-        } else if self.preview.is_enabled(PreviewFeature::NativeAuth) {
+        // Native credentials must be selected for each path, while text credentials are
+        // reused across the realm for registries with separate index and download paths.
+        let native_store_enabled = self.preview.is_enabled(PreviewFeature::NativeAuth);
+        let store_credentials = if native_store_enabled {
             let native_store = KeyringProvider::native();
             let username = credentials.and_then(|credentials| credentials.username());
             let display_username =
@@ -936,7 +934,7 @@ impl AuthMiddleware {
         }
 
         // The subprocess provider is slow, but its lookup target is realm- or index-scoped. Keep
-        // its memoization separate so path-sensitive store lookups still run first on every path.
+        // its memoization separate so native store lookups still run first on every path.
         if let Some(credentials) = self
             .cache()
             .keyring_fetches
@@ -997,7 +995,7 @@ impl AuthMiddleware {
 
         let keyring_credentials = keyring_credentials.map(|credentials| FetchedCredentials {
             credentials: Arc::new(Authentication::from(credentials)),
-            cache_scope: if path_sensitive_store_enabled {
+            cache_scope: if native_store_enabled {
                 CredentialsCacheScope::FetchOnly
             } else {
                 CredentialsCacheScope::Realm
@@ -2594,7 +2592,8 @@ mod tests {
 
         // Create a text credential store with matching credentials
         let mut store = TextCredentialStore::default();
-        let service = crate::Service::try_from(base_url.to_string()).unwrap();
+        let index_url = base_url.join("index/simple")?;
+        let service = crate::Service::try_from(index_url.to_string()).unwrap();
         let credentials =
             Credentials::basic(Some(username.to_string()), Some(password.to_string()));
         store.insert(service.clone(), credentials);
@@ -2603,207 +2602,26 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
+                    .with_indexes(indexes_for(&index_url, AuthPolicy::Auto))
                     .with_text_store(Some(store)),
             )
             .build();
 
         assert_eq!(
-            client.get(server.uri()).send().await?.status(),
+            client.get(index_url).send().await?.status(),
             200,
             "Credentials should be pulled from the text store"
         );
 
-        Ok(())
-    }
-
-    #[test(tokio::test)]
-    async fn test_text_store_credentials_do_not_mask_more_specific_paths() -> Result<(), Error> {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(path_regex("/root$"))
-            .and(basic_auth("root-user", "root-password"))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path_regex("/root/private.*"))
-            .and(basic_auth("private-user", "private-password"))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(401))
-            .mount(&server)
-            .await;
-
-        let base_url = Url::parse(&server.uri())?;
-        let mut store = TextCredentialStore::default();
-        store.insert(
-            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("root")?))?,
-            Credentials::basic(
-                Some("root-user".to_string()),
-                Some("root-password".to_string()),
-            ),
-        );
-        store.insert(
-            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("root/private")?))?,
-            Credentials::basic(
-                Some("private-user".to_string()),
-                Some("private-password".to_string()),
-            ),
-        );
-
-        let client = test_client_builder()
-            .with(
-                AuthMiddleware::new()
-                    .with_cache(CredentialsCache::new())
-                    .with_text_store(Some(store)),
-            )
-            .build();
-
-        assert_eq!(
-            client.get(base_url.join("root")?).send().await?.status(),
-            200
-        );
+        // Registries can serve downloads under a different path in the same realm.
         assert_eq!(
             client
-                .get(base_url.join("root/private/package")?)
+                .get(base_url.join("downloads/package.whl")?)
                 .send()
                 .await?
                 .status(),
             200,
-            "Root credentials must not mask a more-specific credential"
-        );
-
-        Ok(())
-    }
-
-    #[test(tokio::test)]
-    async fn test_text_store_miss_does_not_mask_another_path() -> Result<(), Error> {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(path_regex("/second.*"))
-            .and(basic_auth("second-user", "second-password"))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(401))
-            .mount(&server)
-            .await;
-
-        let base_url = Url::parse(&server.uri())?;
-        let mut store = TextCredentialStore::default();
-        store.insert(
-            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("first")?))?,
-            Credentials::basic(
-                Some("first-user".to_string()),
-                Some("first-password".to_string()),
-            ),
-        );
-        store.insert(
-            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("second")?))?,
-            Credentials::basic(
-                Some("second-user".to_string()),
-                Some("second-password".to_string()),
-            ),
-        );
-
-        let client = test_client_builder()
-            .with(
-                AuthMiddleware::new()
-                    .with_cache(CredentialsCache::new())
-                    .with_text_store(Some(store)),
-            )
-            .build();
-
-        assert_eq!(
-            client
-                .get(base_url.join("first/package")?)
-                .send()
-                .await?
-                .status(),
-            401
-        );
-        assert_eq!(
-            client
-                .get(base_url.join("second/package")?)
-                .send()
-                .await?
-                .status(),
-            200,
-            "A failed fetch for another path must not poison this lookup"
-        );
-
-        Ok(())
-    }
-
-    #[test(tokio::test)]
-    async fn test_keyring_credentials_do_not_mask_a_more_specific_text_credential()
-    -> Result<(), Error> {
-        let server = MockServer::start().await;
-        let username = "user";
-
-        Mock::given(method("GET"))
-            .and(path_regex("/root$"))
-            .and(basic_auth(username, "keyring-password"))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path_regex("/root/private.*"))
-            .and(basic_auth(username, "text-password"))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(401))
-            .mount(&server)
-            .await;
-
-        let base_url = Url::parse(&server.uri())?;
-        let mut store = TextCredentialStore::default();
-        store.insert(
-            crate::Service::try_from(DisplaySafeUrl::from_url(base_url.join("root/private")?))?,
-            Credentials::basic(
-                Some(username.to_string()),
-                Some("text-password".to_string()),
-            ),
-        );
-        let keyring_service = format!(
-            "{}:{}",
-            base_url.host_str().expect("mock server URL has a host"),
-            base_url.port().expect("mock server URL has a port")
-        );
-        let client = test_client_builder()
-            .with(
-                AuthMiddleware::new()
-                    .with_cache(CredentialsCache::new())
-                    .with_text_store(Some(store))
-                    .with_keyring(Some(KeyringProvider::dummy([(
-                        keyring_service,
-                        username,
-                        "keyring-password",
-                    )]))),
-            )
-            .build();
-
-        let mut root_url = base_url.join("root")?;
-        root_url
-            .set_username(username)
-            .expect("HTTP URL accepts a username");
-        assert_eq!(client.get(root_url).send().await?.status(), 200);
-
-        let mut private_url = base_url.join("root/private/package")?;
-        private_url
-            .set_username(username)
-            .expect("HTTP URL accepts a username");
-        assert_eq!(
-            client.get(private_url).send().await?.status(),
-            200,
-            "A realm-cached keyring credential must not mask a path-specific text credential"
+            "Downloads should reuse the credentials used for the index"
         );
 
         Ok(())
