@@ -67,7 +67,7 @@ mod cache_size;
 pub(crate) mod diagnostics;
 mod help;
 pub(crate) use uv_pip_commands as pip;
-pub(crate) use uv_project_commands::project;
+pub(crate) use uv_project_commands as project;
 pub(crate) use uv_python_commands as python;
 pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
@@ -88,7 +88,7 @@ mod error_tests {
 
     use uv_command_support::UvError;
     use uv_environment_operations::EnvironmentError;
-    use uv_project_commands::project::ProjectError;
+    use uv_project_commands::ProjectError;
     use uv_resolve_operations::Error as ResolveError;
 
     #[test]

@@ -43,8 +43,8 @@ use uv_workspace::{
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
-use crate::project::ProjectError;
-use crate::project::edit::{ProjectEdit, PythonTarget};
+use crate::ProjectError;
+use crate::edit::{ProjectEdit, PythonTarget};
 
 /// Version information for a project (`uv version`).
 #[derive(serde::Serialize)]

@@ -84,7 +84,7 @@ mod tests {
     use insta::assert_debug_snapshot;
 
     use uv_lock_operations::LockError;
-    use uv_project_commands::project::ProjectError;
+    use uv_project_commands::ProjectError;
     use uv_settings::{LockedFlag, LockedSource};
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 

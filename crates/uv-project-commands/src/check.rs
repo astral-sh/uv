@@ -37,7 +37,7 @@ use uv_settings::{
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::project;
+use crate::toolchain;
 
 mod ty;
 
@@ -609,7 +609,7 @@ pub async fn check(
 
         if ty_path.is_none()
             && ty_version.is_none()
-            && let Some(tool) = project::toolchain::find_locked_tool(
+            && let Some(tool) = toolchain::find_locked_tool(
                 project,
                 result.lock(),
                 lock_interpreter,
@@ -628,7 +628,7 @@ pub async fn check(
                 // locked tool is excluded from it. Install only the locked `ty` subgraph.
                 let base_interpreter =
                     CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
-                let resolution = project::toolchain::resolution_from_lock(
+                let resolution = toolchain::resolution_from_lock(
                     project,
                     result.lock(),
                     &tool,

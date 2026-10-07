@@ -62,9 +62,9 @@ use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, Tool
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
+use crate::ProjectError;
 use crate::ScriptPath;
-use crate::project::ProjectError;
-use crate::project::edit::{EditTarget, ProjectEdit, PythonTarget};
+use crate::edit::{EditTarget, ProjectEdit, PythonTarget};
 use uv_resolve_operations::reporters::ResolverReporter;
 
 /// A failed dependency addition, with `uv add`-specific recovery context.
