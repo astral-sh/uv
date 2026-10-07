@@ -543,3 +543,60 @@ uploaded
 at 18:45:01 UTC on October 7, 2026. Its creation time and upload log identify it as the repeat,
 despite sharing an artifact name with attempt 1. The archive digest was verified, and both
 observations' reports and outputs were retained separately.
+
+### Full debug with one codegen unit
+
+[Run 37684681738](https://github.com/astral-sh/uv/actions/runs/37684681738), at commit
+`dd77ecdf26cf3d0ca3867be2f77bd8a8925a023d`, compares a fresh no-debug baseline with full debug using
+one codegen unit for both modes and their PGO training. Rust 1.99.0, LLVM 23.1.1, Maturin 1.15.0,
+optimization level 3, fat LTO, Cargo job counts, and runner profiles match the earlier comparisons.
+The codegen-unit count is the intentional optimization change. Linux x86-64 is complete; Linux
+ARM64, macOS ARM64, and Windows x86-64 are still running as of October 7, 2026, 21:28 UTC.
+
+Combined wall times below include instrumented compilation, training, and the final build and wheel.
+Each cell is no debug → full debug, with overhead against that run's own baseline:
+
+| Native target            |           16 codegen units |            1 codegen unit |
+| ------------------------ | -------------------------: | ------------------------: |
+| x86_64-unknown-linux-gnu | 17m 22s → 26m 38s (+53.3%) | 14m 9s → 20m 51s (+47.4%) |
+
+The one-unit stages, with the same baseline → full convention, were:
+
+| Native target            | Instrumented build and training |   Final build and wheel |
+| ------------------------ | ------------------------------: | ----------------------: |
+| x86_64-unknown-linux-gnu |       8m 58s → 12m 48s (+42.9%) | 5m 11s → 8m 3s (+55.3%) |
+
+Sizes below are bytes. Executable and wheel cells show no debug → full debug and their paired delta.
+Companion symbols are uncompressed and excluded from the wheel:
+
+| Native target            |                              Stripped `uv` |                            Processed wheel | Full `uv` symbols |
+| ------------------------ | -----------------------------------------: | -----------------------------------------: | ----------------: |
+| x86_64-unknown-linux-gnu | 39,926,920 → 39,950,384 (+23,464; +0.059%) | 17,304,686 → 17,321,965 (+17,279; +0.100%) |       574,947,544 |
+
+Compared with the earlier 16-unit full-debug build, the Linux full-debug pipeline took 21.7% less
+time, the stripped `uv` binary was 17.3% smaller, its wheel was 13.9% smaller, and its separate
+symbols were 15.6% smaller (681,367,000 → 574,947,544 bytes). The no-debug pipeline was also 18.6%
+faster and its executable was 17.0% smaller. These are comparisons with historical runs, including
+variation in runner load, caches, and training workloads. They do not isolate a causal timing effect
+or establish repeatability. Full debug's paired overhead remains higher than the earlier 16-unit
+line-table and limited observations (+11.0% and +11.1%); comparing their absolute times with this
+run would also change the codegen-unit setting.
+
+Rust, AWS-LC, and jitterentropy source lookups, negative lookups with symbols hidden, matching ELF
+build IDs, SBOM retention, wheel installation, executable hashes, and smoke checks passed. Both
+modes reported 18 missing-profile warnings confined to `uvx`, with zero profile mismatches. `uvx`'s
+companion symbols were 2,114,776 bytes. Downloaded executable/profile hashes, wheel contents, symbol
+sizes, artifact digest, and benchmark output hashes were verified. Final `uv` compiler commands
+explicitly contain `codegen-units=1`; instrumented training inherits the same Cargo profile
+environment, although its log does not print individual compiler commands.
+
+Twenty cached resolutions per mode produced identical outputs. Median baseline/full times were
+8.579/8.605 ms for Jupyter (+0.3%) and 6.873/6.932 ms for Trio (+0.9%). These short workloads do not
+establish overall runtime equivalence. Earlier 16-unit full-debug medians were 8.582/8.915 ms and
+7.229/7.123 ms, respectively; comparisons across runs also include runner variation.
+
+The successful
+[Linux job](https://github.com/astral-sh/uv/actions/runs/37684681738/job/113009336877) uploaded
+[artifact 11512143673](https://github.com/astral-sh/uv/actions/runs/37684681738/artifacts/11512143673)
+at 21:24:19 UTC on October 7, 2026. Reports, outputs, and provenance are retained separately with
+the `pgo-linux-full-cgu1` prefix.
