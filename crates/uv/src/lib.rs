@@ -60,7 +60,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::{ParsedRunCommand, RunCommand, ScriptPath};
 
-pub mod commands;
+mod commands;
 #[cfg(not(feature = "self-update"))]
 mod install_source;
 mod logging;

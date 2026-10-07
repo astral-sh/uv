@@ -49,7 +49,6 @@ pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 pub(crate) use uv_build_commands::build_frontend;
-pub use uv_command_support::ExitStatus;
 pub(crate) use uv_console::human_readable_bytes;
 pub(crate) use uv_publish_commands::publish;
 pub(crate) use venv::venv;
