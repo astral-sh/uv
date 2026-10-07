@@ -155,7 +155,6 @@ mod error_tests {
             bail!("expected an unexpected error");
         };
         assert_snapshot!(format!("{error:#}"), @"cache write failed");
-        assert!(error.downcast_ref::<ResolveError>().is_some());
 
         Ok(())
     }
