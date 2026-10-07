@@ -77,8 +77,8 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
-    ProjectEnvironmentTarget, ProjectError, ProjectPythonRequest, ScriptEnvironment,
-    ScriptInterpreter, update_environment,
+    ProjectEnvironmentTarget, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter,
+    update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
@@ -270,7 +270,7 @@ pub(crate) async fn run(
             .await
             {
                 Ok(result) => result.into_lock(),
-                Err(ProjectError::Resolve(err)) => {
+                Err(project::LockError::Resolve(err)) => {
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
@@ -313,7 +313,8 @@ pub(crate) async fn run(
             .await
             {
                 Ok(_) => {}
-                Err(ProjectError::Resolve(err)) => {
+                Err(project::EnvironmentError::Resolve(err)) => {
+                    let err = *err;
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
@@ -460,7 +461,8 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(ProjectError::Resolve(err)) => {
+                    Err(project::EnvironmentError::Resolve(err)) => {
+                        let err = *err;
                         return Err(UvError::from(err.with_resolution_context("script")).into());
                     }
                     Err(err) => return Err(UvError::from(err).into()),
@@ -987,7 +989,8 @@ pub(crate) async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Resolve(err)) => {
+                Err(project::EnvironmentError::Resolve(err)) => {
+                    let err = *err;
                     return Err(UvError::from(err.with_resolution_context("`--with`")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),

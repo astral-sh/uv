@@ -20,8 +20,8 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::{RequiresPythonDeclaration, RequiresPythonSources, Workspace};
 
-use crate::commands::project::ProjectError;
 use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::{EnvironmentError, PythonContextError};
 use crate::commands::reporters::PythonDownloadReporter;
 
 /// An interpreter that satisfies the Python requirement used to select it.
@@ -89,15 +89,15 @@ impl ProjectPythonRequest {
         groups: &DependencyGroupsWithDefaults,
         project_dir: &Path,
         config_discovery: ConfigDiscovery,
-    ) -> Result<Self, ProjectError> {
-        Self::from_requirements(
+    ) -> Result<Self, EnvironmentError> {
+        Ok(Self::from_requirements(
             python_request,
             Some(target.install_path()),
             Some(find_lockfile_requires_python(target, groups)?),
             project_dir,
             config_discovery,
         )
-        .await
+        .await?)
     }
 
     /// Determine the [`ProjectPythonRequest`] for the current [`Workspace`].
@@ -107,7 +107,7 @@ impl ProjectPythonRequest {
         groups: &DependencyGroupsWithDefaults,
         project_dir: &Path,
         config_discovery: ConfigDiscovery,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, PythonContextError> {
         let requirement = workspace
             .map(|workspace| find_workspace_python_requirement(workspace, groups))
             .transpose()?
@@ -130,7 +130,7 @@ impl ProjectPythonRequest {
         requirement: Option<ProjectPythonRequirement>,
         project_dir: &Path,
         config_discovery: ConfigDiscovery,
-    ) -> Result<Self, ProjectError> {
+    ) -> Result<Self, PythonContextError> {
         let (source, python_request) = if let Some(request) = python_request {
             // (1) Explicit request from user
             let source = PythonRequestSource::UserRequest;
@@ -192,7 +192,7 @@ impl ProjectPythonRequest {
     ///
     /// Unlike [`Self::validate`], this borrows the interpreter so warning-only commands can
     /// continue using it after an incompatibility.
-    pub(crate) fn check(&self, interpreter: &Interpreter) -> Result<(), ProjectError> {
+    pub(crate) fn check(&self, interpreter: &Interpreter) -> Result<(), PythonContextError> {
         let Some(requirement) = &self.requirement else {
             return Ok(());
         };
@@ -211,7 +211,7 @@ impl ProjectPythonRequest {
     pub(super) fn validate(
         &self,
         interpreter: Interpreter,
-    ) -> Result<CompatibleProjectPython, ProjectError> {
+    ) -> Result<CompatibleProjectPython, PythonContextError> {
         self.check(&interpreter)?;
         Ok(CompatibleProjectPython(interpreter))
     }
@@ -229,7 +229,7 @@ impl ProjectPythonRequest {
         cache: &Cache,
         reporter: &PythonDownloadReporter,
         install_mirrors: &PythonInstallMirrors,
-    ) -> Result<CompatibleProjectPython, ProjectError> {
+    ) -> Result<CompatibleProjectPython, PythonContextError> {
         let interpreter = PythonInstallation::find_or_download(
             self.python_request.as_ref(),
             environment_preference,
@@ -255,7 +255,7 @@ impl ProjectPythonRequest {
 pub(crate) fn find_requires_python(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
-) -> Result<Option<RequiresPython>, ProjectError> {
+) -> Result<Option<RequiresPython>, PythonContextError> {
     Ok(find_workspace_python_requirement(workspace, groups)?
         .map(|requirement| requirement.requires_python))
 }
@@ -266,7 +266,7 @@ pub(crate) fn find_requires_python(
 fn find_workspace_python_requirement(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
-) -> Result<Option<ProjectPythonRequirement>, ProjectError> {
+) -> Result<Option<ProjectPythonRequirement>, PythonContextError> {
     let requires_python = workspace.requires_python(groups)?;
     // If there are no `Requires-Python` specifiers in the workspace, return `None`.
     if requires_python.is_empty() {
@@ -299,7 +299,7 @@ fn find_workspace_python_requirement(
                 multiple_members: workspace.packages().len() > 1,
             },
         })),
-        None => Err(ProjectError::DisjointRequiresPython(requires_python)),
+        None => Err(PythonContextError::DisjointRequiresPython(requires_python)),
     }
 }
 
@@ -307,7 +307,7 @@ fn find_workspace_python_requirement(
 fn find_lockfile_requires_python(
     target: InstallTarget<'_>,
     groups: &DependencyGroupsWithDefaults,
-) -> Result<ProjectPythonRequirement, ProjectError> {
+) -> Result<ProjectPythonRequirement, EnvironmentError> {
     let lock = target.lock();
     let mut group_requirements = RequiresPythonSources::new();
 
@@ -348,7 +348,7 @@ fn find_lockfile_requires_python(
     let Some(requires_python) = RequiresPython::intersection(
         std::iter::once(lock.requires_python().specifiers()).chain(group_requirements.values()),
     ) else {
-        return Err(ProjectError::DisjointLockedRequiresPython {
+        return Err(EnvironmentError::DisjointLockedRequiresPython {
             locked: lock.requires_python().clone(),
             groups: group_requirements,
         });
@@ -472,7 +472,7 @@ pub(super) fn validate_python_requirement(
     requires_python: &RequiresPython,
     source: &PythonRequestSource,
     requirement_source: &PythonRequirementSource,
-) -> Result<(), ProjectError> {
+) -> Result<(), PythonContextError> {
     if requires_python.contains(interpreter.python_version()) {
         return Ok(());
     }
@@ -508,14 +508,14 @@ pub(super) fn validate_python_requirement(
 
     match source {
         PythonRequestSource::UserRequest => {
-            Err(ProjectError::RequestedPythonProjectIncompatibility(
+            Err(PythonContextError::RequestedPythonProjectIncompatibility(
                 interpreter.python_version().clone(),
                 requires_python.clone(),
                 Box::new(conflicting_requires),
             ))
         }
         PythonRequestSource::DotPythonVersion(file) => {
-            Err(ProjectError::DotPythonVersionProjectIncompatibility {
+            Err(PythonContextError::DotPythonVersionProjectIncompatibility {
                 python_request: file.path().user_display().to_string(),
                 version: interpreter.python_version().clone(),
                 requires_python: requires_python.clone(),
@@ -523,7 +523,7 @@ pub(super) fn validate_python_requirement(
             })
         }
         PythonRequestSource::RequiresPython => {
-            Err(ProjectError::RequiresPythonProjectIncompatibility(
+            Err(PythonContextError::RequiresPythonProjectIncompatibility(
                 interpreter.python_version().clone(),
                 requires_python.clone(),
                 Box::new(conflicting_requires),

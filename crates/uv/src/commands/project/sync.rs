@@ -60,8 +60,8 @@ use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
-    EnvironmentUpdate, LinkErrorReporting, MalwareFindings, MissingLockfileSource,
-    ProjectEnvironment, ProjectEnvironmentTarget, ProjectError, ScriptEnvironment,
+    EnvironmentError, EnvironmentUpdate, LinkErrorReporting, LockError, MalwareFindings,
+    MissingLockfileSource, ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment,
     detect_conflicts, update_environment,
 };
 use crate::commands::{ExitStatus, UvError};
@@ -177,7 +177,7 @@ pub(crate) async fn sync(
                 .read_frozen(MissingLockfileSource::from(source))
                 .await
                 .map_err(|err| match (err, *manifest) {
-                    (ProjectError::MissingLockfile(..), SyncManifest::Script(script)) => anyhow::anyhow!(
+                    (LockError::MissingLockfile(..), SyncManifest::Script(script)) => anyhow::anyhow!(
                         "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
                         format!("uv lock --script {}", script.path.user_display()).green(),
                     ),
@@ -416,7 +416,8 @@ pub(crate) async fn sync(
                     )?;
                     return Ok(ExitStatus::Success);
                 }
-                Err(ProjectError::Install(error)) => {
+                Err(EnvironmentError::Install(error)) => {
+                    let error = *error;
                     if let Some(changelog) = error.outdated_environment() {
                         write_sync_report(
                             &target,
@@ -494,19 +495,16 @@ pub(crate) async fn sync(
             };
             let outcome = match result {
                 Ok(result) => Outcome::Success(result),
-                Err(ProjectError::Resolve(err)) => return Err(UvError::from(err).into()),
-                Err(err @ ProjectError::LockFormat(..)) => return Err(UvError::user(err).into()),
-                Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
+                Err(LockError::Resolve(err)) => return Err(UvError::from(*err).into()),
+                Err(err @ LockError::LockFormat(..)) => return Err(UvError::user(err).into()),
+                Err(LockError::LockMismatch(prev, cur, lock_source)) => {
                     if dry_run.enabled() {
                         // A dry run continues with the new resolution but exits unsuccessfully.
                         Outcome::LockMismatch(prev, cur, lock_source)
                     } else {
-                        return Err(UvError::user(ProjectError::LockMismatch(
-                            prev,
-                            cur,
-                            lock_source,
-                        ))
-                        .into());
+                        return Err(
+                            UvError::user(LockError::LockMismatch(prev, cur, lock_source)).into(),
+                        );
                     }
                 }
                 Err(err) => return Err(UvError::from(err).into()),
@@ -569,7 +567,8 @@ pub(crate) async fn sync(
     .await
     {
         Ok(changelog) => changelog,
-        Err(ProjectError::Install(error)) => {
+        Err(EnvironmentError::Install(error)) => {
+            let error = *error;
             if let Some(changelog) = error.outdated_environment() {
                 write_sync_report(
                     &target,
@@ -599,7 +598,7 @@ pub(crate) async fn sync(
     match outcome {
         Outcome::Success(..) | Outcome::Frozen(..) => Ok(ExitStatus::Success),
         Outcome::LockMismatch(prev, cur, lock_source) => {
-            Err(UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into())
+            Err(UvError::user(LockError::LockMismatch(prev, cur, lock_source)).into())
         }
     }
 }
@@ -777,7 +776,7 @@ pub(crate) async fn do_sync(
     printer: Printer,
     preview: Preview,
     malware_context: MalwareCheckContext<'_>,
-) -> Result<Changelog, ProjectError> {
+) -> Result<Changelog, EnvironmentError> {
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -877,7 +876,7 @@ pub(crate) async fn do_sync(
         .requires_python()
         .contains(venv.interpreter().python_version())
     {
-        return Err(ProjectError::LockedPythonIncompatibility(
+        return Err(EnvironmentError::LockedPythonIncompatibility(
             venv.interpreter().python_version().clone(),
             target.lock().requires_python().clone(),
         ));
@@ -900,7 +899,7 @@ pub(crate) async fn do_sync(
             .iter()
             .any(|env| env.evaluate(&marker_env, &[]))
         {
-            return Err(ProjectError::LockedPlatformIncompatibility(
+            return Err(EnvironmentError::LockedPlatformIncompatibility(
                 // For error reporting, we use the "simplified"
                 // supported environments, because these correspond to
                 // what the end user actually wrote. The non-simplified
@@ -918,7 +917,8 @@ pub(crate) async fn do_sync(
     }
 
     // Determine the tags to use for the resolution.
-    let tags = resolution_tags(None, python_platform, venv.interpreter())?;
+    let tags = resolution_tags(None, python_platform, venv.interpreter())
+        .map_err(EnvironmentError::from)?;
 
     // Read the lockfile.
     let resolution = target.to_resolution(
@@ -1124,7 +1124,7 @@ pub(super) async fn check_resolution_malware(
     malware_settings: &MalwareCheckSettings,
     cache: &Cache,
     preview: Preview,
-) -> Result<(), ProjectError> {
+) -> Result<(), EnvironmentError> {
     if !malware_settings.enabled {
         return Ok(());
     }
@@ -1173,7 +1173,7 @@ async fn maybe_check_malware(
     cache: &Cache,
     preview: Preview,
     malware_context: &MalwareCheckContext<'_>,
-) -> Result<(), ProjectError> {
+) -> Result<(), EnvironmentError> {
     if !malware_context.settings.enabled {
         return Ok(());
     }
@@ -1204,7 +1204,7 @@ async fn check_malware(
     concurrency: &Concurrency,
     malware_check_url: Option<DisplaySafeUrl>,
     cache: &Cache,
-) -> Result<(), ProjectError> {
+) -> Result<(), EnvironmentError> {
     let installed_dependencies: FxHashSet<_> = resolution
         .distributions()
         .filter_map(|dist| {
@@ -1257,7 +1257,7 @@ async fn check_malware_dependencies(
     concurrency: &Concurrency,
     malware_check_url: Option<DisplaySafeUrl>,
     cache: &Cache,
-) -> Result<(), ProjectError> {
+) -> Result<(), EnvironmentError> {
     let osv_url = malware_check_url.unwrap_or_else(|| osv::API_BASE.clone());
 
     let base_client = client_builder.build()?;
@@ -1296,7 +1296,7 @@ async fn check_malware_dependencies(
             .any(|(dependency, _)| installed_dependencies.contains(dependency));
 
         if has_installed_malware {
-            Err(ProjectError::MalwareFound)
+            Err(EnvironmentError::MalwareFound)
         } else {
             Ok(())
         }

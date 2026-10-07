@@ -29,7 +29,6 @@ pub(crate) use pip::show::pip_show;
 pub(crate) use pip::sync::pip_sync;
 pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
-pub(crate) use project::ProjectError;
 pub(crate) use project::add::add;
 pub(crate) use project::audit::audit;
 pub(crate) use project::check::check;
@@ -156,23 +155,6 @@ impl UvError {
     }
 }
 
-impl From<project::ProjectError> for UvError {
-    fn from(error: project::ProjectError) -> Self {
-        match error {
-            error @ (project::ProjectError::LockMismatch(..)
-            | project::ProjectError::LockFormat(..)
-            | project::ProjectError::MissingLockfile(..)
-            | project::ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
-            project::ProjectError::Resolve(error) => Self::from(error),
-            project::ProjectError::Install(error) => Self::from(error),
-            project::ProjectError::Requirements(error) => {
-                Self::from(operations::resolution::Error::Requirements(error))
-            }
-            error => Self::unexpected(error.into()),
-        }
-    }
-}
-
 #[cfg(test)]
 mod error_tests {
     use std::io::{Error, ErrorKind};
@@ -181,7 +163,7 @@ mod error_tests {
     use insta::assert_snapshot;
 
     use crate::commands::operations::resolution::Error as ResolveError;
-    use crate::commands::project::ProjectError;
+    use crate::commands::project::{EnvironmentError, ProjectError};
 
     use super::UvError;
 
@@ -201,7 +183,11 @@ mod error_tests {
             bail!("expected a user error");
         };
         assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
-        assert!(error.downcast_ref::<ResolveError>().is_some());
+        assert!(
+            error
+                .chain()
+                .any(<dyn std::error::Error>::is::<uv_requirements::Error>)
+        );
 
         Ok(())
     }
@@ -222,7 +208,11 @@ mod error_tests {
             bail!("expected an unexpected error");
         };
         assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
-        assert!(error.downcast_ref::<ResolveError>().is_some());
+        assert!(
+            error
+                .chain()
+                .any(<dyn std::error::Error>::is::<uv_requirements::Error>)
+        );
 
         Ok(())
     }
@@ -248,13 +238,13 @@ mod error_tests {
 
     #[test]
     fn project_requirements_use_operation_classification() -> anyhow::Result<()> {
-        let error = ProjectError::Requirements(uv_requirements::Error::Io(Error::new(
+        let error = EnvironmentError::Requirements(uv_requirements::Error::Io(Error::new(
             ErrorKind::NotFound,
             "requirements failure",
         )));
 
-        // A missing requirements file is a user error.
-        let UvError::User(_) = UvError::from(error) else {
+        // A project wrapper retains the requirements error's classification.
+        let UvError::User(_) = UvError::from(ProjectError::from(error)) else {
             bail!("expected a user error");
         };
 

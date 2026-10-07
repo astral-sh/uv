@@ -44,13 +44,14 @@ use crate::commands::operations::resolution::loggers::{
 use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
 use crate::commands::operations::{self, Modifications};
 use crate::commands::project::{
-    EnvironmentResolution, EnvironmentSpecification, ProjectError, resolve_environment,
-    resolve_names, sync_environment, update_environment,
+    EnvironmentError, EnvironmentResolution, EnvironmentSpecification, LockValidationError,
+    resolve_environment, resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
     tool_environment_spec,
 };
+use crate::commands::tool::error::ToolLockError;
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{UvError, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
@@ -554,8 +555,10 @@ pub(crate) async fn install(
             .await
             {
                 Ok(lock) => Some(lock),
-                Err(ProjectError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
-                    return Err(ProjectError::Lock(err).into());
+                Err(ToolLockError::Validation(LockValidationError::Lock(err)))
+                    if err.is_resolution() || err.is_no_build() =>
+                {
+                    return Err(err.into());
                 }
                 Err(err) => {
                     warn_user_with_chain!(
@@ -941,7 +944,8 @@ pub(crate) async fn install(
             let (resolution, interpreter) = match resolution {
                 Ok(resolution) => (resolution, interpreter),
                 Err(err) => match err {
-                    ProjectError::Resolve(err) => {
+                    EnvironmentError::Resolve(err) => {
+                        let err = *err;
                         // If the resolution failed due to the discovered interpreter not satisfying the
                         // `requires-python` constraint, we can try to refine the interpreter.
                         //
