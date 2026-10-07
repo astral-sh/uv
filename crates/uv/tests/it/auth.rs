@@ -1046,6 +1046,18 @@ async fn login_text_store() {
     ----- stderr -----
     Stored credentials for testuser@http://localhost/
     ");
+
+    // HTTP should be allowed on IPv6 loopback
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("http://[::1]:1324/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Stored credentials for testuser@http://[::1]:1324/
+    ");
 }
 
 #[test]
