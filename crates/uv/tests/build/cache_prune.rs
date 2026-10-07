@@ -571,3 +571,34 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
 
     Ok(())
 }
+
+/// `cache prune` should remove any temporary build environments left in the cache.
+#[test]
+fn prune_temporary_build_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_sizes_and_units()
+        .with_filter((
+            r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
+            "[CACHE_DIR]/$2/[ENTRY]",
+        ));
+
+    // Populate the cache with a temporary build environment.
+    let builds = context.cache_dir.child("builds-v0").child(".tmp123456");
+    builds.create_dir_all()?;
+    builds.child("pyvenv.cfg").write_str("home = /usr/bin")?;
+
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing temporary build environment: [CACHE_DIR]/builds-v0/[ENTRY]
+    Removed [N] files ([SIZE])
+    ");
+
+    assert!(!builds.exists());
+
+    Ok(())
+}

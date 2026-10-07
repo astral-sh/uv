@@ -338,22 +338,22 @@ impl Overrides {
             return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
         };
 
-        // ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part
-        // of the main conjunction.
-        let Some(extra_expression) = requirement.marker.top_level_extra() else {
-            // Case 2: A non-optional dependency with override(s).
-            return Either::Right(Either::Right(overrides.iter().map(Cow::Borrowed)));
+        // Overrides replace environmental conditions, but optional dependencies must retain
+        // their extra conditions. Project away the environment rather than extracting one extra:
+        // valid metadata can contain alternatives and negative extra conditions.
+        // A false marker has no extra conditions left to retain; overrides can replace it too.
+        let extra_marker = if requirement.marker.is_false() {
+            MarkerTree::TRUE
+        } else {
+            requirement.marker.only_extras()
         };
+        if extra_marker.is_true() {
+            return Either::Right(Either::Right(overrides.iter().map(Cow::Borrowed)));
+        }
 
-        // Case 3: An optional dependency with override(s).
-        //
-        // When the original requirement is an optional dependency, the override(s) need to
-        // be optional for the same extra, otherwise we activate extras that should be inactive.
         Either::Right(Either::Left(overrides.iter().map(
             move |override_requirement| {
-                // Add the extra to the override marker.
-                let joint_marker = MarkerTree::expression(extra_expression.clone())
-                    .and(override_requirement.marker);
+                let joint_marker = extra_marker.and(override_requirement.marker);
                 Cow::Owned(Requirement {
                     marker: joint_marker,
                     ..override_requirement.clone()

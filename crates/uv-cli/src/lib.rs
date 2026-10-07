@@ -6410,6 +6410,15 @@ pub struct PythonInstallArgs {
     #[arg(long, value_hint = ValueHint::Url)]
     pub pypy_mirror: Option<String>,
 
+    /// Set the URL to use as the source for downloading GraalPy installations.
+    ///
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g.,
+    /// `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub graalpy_mirror: Option<String>,
+
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
@@ -6468,6 +6477,7 @@ impl PythonInstallArgs {
         PythonInstallMirrors {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
+            graalpy_install_mirror: self.graalpy_mirror.clone(),
             python_downloads_json_url: self.python_downloads_json_url.clone(),
         }
     }
@@ -6510,6 +6520,15 @@ pub struct PythonUpgradeArgs {
     #[arg(long, value_hint = ValueHint::Url)]
     pub pypy_mirror: Option<String>,
 
+    /// Set the URL to use as the source for downloading GraalPy installations.
+    ///
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g.,
+    /// `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, value_hint = ValueHint::Url)]
+    pub graalpy_mirror: Option<String>,
+
     /// Reinstall the latest Python patch, if it's already installed.
     ///
     /// By default, uv will exit successfully if the latest patch is already
@@ -6531,6 +6550,7 @@ impl PythonUpgradeArgs {
         PythonInstallMirrors {
             python_install_mirror: self.mirror.clone(),
             pypy_install_mirror: self.pypy_mirror.clone(),
+            graalpy_install_mirror: self.graalpy_mirror.clone(),
             python_downloads_json_url: self.python_downloads_json_url.clone(),
         }
     }
@@ -6683,14 +6703,11 @@ pub struct AuthLogoutArgs {
     #[arg(long, short, value_hint = ValueHint::Other)]
     pub username: Option<String>,
 
-    /// The keyring provider to use for storage of credentials.
-    ///
-    /// Only `--keyring-provider native` is supported for `logout`, which uses the system keyring
-    /// via an integration built into uv.
     #[arg(
         long,
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
+        hide = true,
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 }
@@ -6719,14 +6736,11 @@ pub struct AuthLoginArgs {
     #[arg(long, short, conflicts_with = "username", conflicts_with = "password", value_hint = ValueHint::Other)]
     pub token: Option<String>,
 
-    /// The keyring provider to use for storage of credentials.
-    ///
-    /// Only `--keyring-provider native` is supported for `login`, which uses the system keyring via
-    /// an integration built into uv.
     #[arg(
         long,
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
+        hide = true,
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 }
@@ -6741,11 +6755,11 @@ pub struct AuthTokenArgs {
     #[arg(long, short, value_hint = ValueHint::Other)]
     pub username: Option<String>,
 
-    /// The keyring provider to use for reading credentials.
     #[arg(
         long,
         value_enum,
         env = EnvVars::UV_KEYRING_PROVIDER,
+        hide = true,
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 }
@@ -7986,4 +8000,79 @@ pub enum BuildBackendCommand {
     GetRequiresForBuildEditable,
     /// PEP 660 hook `prepare_metadata_for_build_editable`.
     PrepareMetadataForBuildEditable { wheel_directory: PathBuf },
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::{CommandFactory, Parser};
+
+    use super::{AuthCommand, Cli, Commands};
+
+    #[test]
+    fn auth_keyring_provider_hidden_from_help() {
+        let mut command = Cli::command();
+        let auth = command
+            .find_subcommand_mut("auth")
+            .expect("auth subcommand should exist");
+
+        let login_help = auth
+            .find_subcommand_mut("login")
+            .expect("auth login subcommand should exist")
+            .render_help()
+            .to_string();
+        assert!(!login_help.contains("--keyring-provider"));
+
+        let logout_help = auth
+            .find_subcommand_mut("logout")
+            .expect("auth logout subcommand should exist")
+            .render_help()
+            .to_string();
+        assert!(!logout_help.contains("--keyring-provider"));
+
+        let token_help = auth
+            .find_subcommand_mut("token")
+            .expect("auth token subcommand should exist")
+            .render_help()
+            .to_string();
+        assert!(!token_help.contains("--keyring-provider"));
+    }
+
+    #[test]
+    fn auth_login_logout_still_accept_keyring_provider() {
+        let login = Cli::try_parse_from([
+            "uv",
+            "auth",
+            "login",
+            "https://example.com",
+            "--username",
+            "user",
+            "--password",
+            "password",
+            "--keyring-provider",
+            "disabled",
+        ])
+        .expect("auth login should accept hidden keyring provider");
+
+        assert!(matches!(
+            *login.command,
+            Commands::Auth(ref auth)
+                if matches!(auth.command, AuthCommand::Login(ref login) if login.keyring_provider.is_some())
+        ));
+
+        let logout = Cli::try_parse_from([
+            "uv",
+            "auth",
+            "logout",
+            "https://example.com",
+            "--keyring-provider",
+            "disabled",
+        ])
+        .expect("auth logout should accept hidden keyring provider");
+
+        assert!(matches!(
+            *logout.command,
+            Commands::Auth(ref auth)
+                if matches!(auth.command, AuthCommand::Logout(ref logout) if logout.keyring_provider.is_some())
+        ));
+    }
 }

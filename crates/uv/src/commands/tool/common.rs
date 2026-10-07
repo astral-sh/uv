@@ -17,7 +17,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
     ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
@@ -111,7 +111,7 @@ impl Hinted for NoExecutablesError {
     }
 }
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, PreferenceLocation, ProjectError, PythonRequestSource,
+    EnvironmentSpecification, PreferenceLocation, ProjectError, PythonRequestSource,
     lock::ValidatedLock,
 };
 use crate::commands::reporters::PythonDownloadReporter;
@@ -709,8 +709,7 @@ pub(crate) async fn refine_interpreter(
         client_builder,
         cache,
         Some(reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.mirrors(),
         install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?

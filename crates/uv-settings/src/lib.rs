@@ -446,6 +446,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
             PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
+                graalpy_install_mirror,
                 python_downloads_json_url,
             },
         publish:
@@ -629,6 +630,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if pypy_install_mirror.is_some() {
         masked_fields.push("pypy-install-mirror");
+    }
+    if graalpy_install_mirror.is_some() {
+        masked_fields.push("graalpy-install-mirror");
     }
     if python_downloads_json_url.is_some() {
         masked_fields.push("python-downloads-json-url");
@@ -862,6 +866,9 @@ impl EnvironmentOptions {
                 )?,
                 pypy_install_mirror: parse_string_environment_variable(
                     EnvVars::UV_PYPY_INSTALL_MIRROR,
+                )?,
+                graalpy_install_mirror: parse_string_environment_variable(
+                    EnvVars::UV_GRAALPY_INSTALL_MIRROR,
                 )?,
                 python_downloads_json_url: parse_string_environment_variable(
                     EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL,

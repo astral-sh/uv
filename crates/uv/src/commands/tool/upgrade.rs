@@ -10,6 +10,7 @@ use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
+use uv_dispatch::PlatformState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
@@ -32,7 +33,7 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::{operations::Modifications, resolution_tags};
 use crate::commands::project::{
-    EnvironmentResolution, EnvironmentUpdate, PlatformState, resolve_environment, sync_environment,
+    EnvironmentResolution, EnvironmentUpdate, resolve_environment, sync_environment,
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
@@ -110,8 +111,7 @@ pub(crate) async fn upgrade(
                 &client_builder,
                 cache,
                 Some(&reporter),
-                install_mirrors.python_install_mirror.as_deref(),
-                install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.mirrors(),
                 install_mirrors.python_downloads_json_url.as_deref(),
             )
             .await?

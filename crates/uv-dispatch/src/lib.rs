@@ -692,7 +692,7 @@ impl SharedState {
     /// State that is universally applicable (like the Git resolver and index capabilities)
     /// are retained.
     #[must_use]
-    pub fn fork(&self) -> Self {
+    fn fork(&self) -> Self {
         Self {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
@@ -713,12 +713,60 @@ impl SharedState {
 
     /// Return mutable access to the index owner. Removing cached entries additionally requires
     /// exclusive access to the index's shared storage.
-    pub fn index_mut(&mut self) -> &mut InMemoryIndex {
+    fn index_mut(&mut self) -> &mut InMemoryIndex {
         &mut self.index
     }
 
     /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
+    }
+}
+
+/// A [`SharedState`] instance to use for universal resolution.
+#[derive(Default, Clone)]
+pub struct UniversalState(SharedState);
+
+impl std::ops::Deref for UniversalState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl UniversalState {
+    /// Return mutable access to the index owner between lock operations.
+    pub fn index_mut(&mut self) -> &mut InMemoryIndex {
+        self.0.index_mut()
+    }
+
+    /// Fork the [`UniversalState`] to create a [`PlatformState`].
+    pub fn fork(&self) -> PlatformState {
+        PlatformState(self.0.fork())
+    }
+}
+
+/// A [`SharedState`] instance to use for platform-specific resolution.
+#[derive(Default, Clone)]
+pub struct PlatformState(SharedState);
+
+impl std::ops::Deref for PlatformState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PlatformState {
+    /// Fork the [`PlatformState`] to create a [`UniversalState`].
+    pub fn fork(&self) -> UniversalState {
+        UniversalState(self.0.fork())
+    }
+
+    /// Create a [`SharedState`] from the [`PlatformState`].
+    pub fn into_inner(self) -> SharedState {
+        self.0
     }
 }

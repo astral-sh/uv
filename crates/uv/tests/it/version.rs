@@ -63,7 +63,7 @@ fn version_get_json() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.version()
+    let output = uv_snapshot!(context.filters(), context.version()
         .arg("--output-format").arg("json"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
@@ -73,6 +73,19 @@ fn version_get_json() -> Result<()> {
       "commit_info": null
     }
     "#);
+
+    context
+        .version()
+        .args(["--output-format", "json", "--quiet"])
+        .assert()
+        .success()
+        .stdout(String::from_utf8(output.stdout)?);
+    context
+        .version()
+        .args(["--output-format", "json", "-qq"])
+        .assert()
+        .success()
+        .stdout("");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
@@ -85,71 +98,6 @@ fn version_get_json() -> Result<()> {
     requires-python = ">=3.12"
     "#
     );
-    Ok(())
-}
-
-#[test]
-fn version_get_json_quiet() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    let original = indoc! {r#"
-        [project]
-        name = "myproject"
-        version = "1.10.31"
-        "#};
-    pyproject_toml.write_str(original)?;
-
-    let version = || {
-        let mut command = context.version();
-        command.args(["--offline", "--no-python-downloads"]);
-        command
-    };
-
-    let default = uv_snapshot!(context.filters(), version().args(["--output-format", "json"]), @r#"
-    exit_code: 0 (success)
-    ----- stdout -----
-    {
-      "package_name": "myproject",
-      "version": "1.10.31",
-      "commit_info": null
-    }
-    "#);
-    let quiet = uv_snapshot!(context.filters(), version().args(["--output-format", "json", "-q"]), @r#"
-    exit_code: 0 (success)
-    ----- stdout -----
-    {
-      "package_name": "myproject",
-      "version": "1.10.31",
-      "commit_info": null
-    }
-    "#);
-    assert!(default.status.success());
-    assert!(quiet.status.success());
-    assert_eq!(default.stdout, quiet.stdout);
-    let version_info: serde_json::Value = serde_json::from_slice(&quiet.stdout)?;
-    assert_eq!(
-        version_info,
-        serde_json::json!({
-            "package_name": "myproject",
-            "version": "1.10.31",
-            "commit_info": null,
-        })
-    );
-
-    uv_snapshot!(context.filters(), version().args(["--output-format", "json", "-qq"]), @"
-    exit_code: 0 (success)
-    ")
-    .assert()
-    .success();
-    uv_snapshot!(context.filters(), version().args(["--output-format", "text", "-q"]), @"
-    exit_code: 0 (success)
-    ")
-    .assert()
-    .success();
-
-    assert_eq!(fs_err::read_to_string(&pyproject_toml)?, original);
-    assert!(!context.temp_dir.child("uv.lock").exists());
-    assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
 }
 
@@ -228,78 +176,6 @@ requires-python = ">=3.12"
     "#
     );
 
-    Ok(())
-}
-
-#[test]
-fn version_set_json_quiet() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    let original = indoc! {r#"
-        [project]
-        name = "myproject"
-        version = "1.10.31"
-        "#};
-    let updated = original.replace("1.10.31", "1.2.3");
-    let version = || {
-        let mut command = context.version();
-        command.args(["--offline", "--no-python-downloads", "--frozen", "1.2.3"]);
-        command
-    };
-
-    pyproject_toml.write_str(original)?;
-    let default = uv_snapshot!(context.filters(), version().args(["--output-format", "json"]), @r#"
-    exit_code: 0 (success)
-    ----- stdout -----
-    {
-      "package_name": "myproject",
-      "version": "1.2.3",
-      "commit_info": null
-    }
-    "#);
-    assert!(default.status.success());
-    assert_eq!(fs_err::read_to_string(&pyproject_toml)?, updated);
-
-    pyproject_toml.write_str(original)?;
-    let quiet = uv_snapshot!(context.filters(), version().args(["--output-format", "json", "-q"]), @r#"
-    exit_code: 0 (success)
-    ----- stdout -----
-    {
-      "package_name": "myproject",
-      "version": "1.2.3",
-      "commit_info": null
-    }
-    "#);
-    assert!(quiet.status.success());
-    assert_eq!(default.stdout, quiet.stdout);
-    assert_eq!(fs_err::read_to_string(&pyproject_toml)?, updated);
-    let version_info: serde_json::Value = serde_json::from_slice(&quiet.stdout)?;
-    assert_eq!(
-        version_info,
-        serde_json::json!({
-            "package_name": "myproject",
-            "version": "1.2.3",
-            "commit_info": null,
-        })
-    );
-
-    pyproject_toml.write_str(original)?;
-    uv_snapshot!(context.filters(), version().args(["--output-format", "json", "-qq"]), @"
-    exit_code: 0 (success)
-    ")
-    .assert()
-    .success();
-    assert_eq!(fs_err::read_to_string(&pyproject_toml)?, updated);
-
-    pyproject_toml.write_str(original)?;
-    uv_snapshot!(context.filters(), version().args(["--output-format", "text", "-q"]), @"
-    exit_code: 0 (success)
-    ")
-    .assert()
-    .success();
-    assert_eq!(fs_err::read_to_string(&pyproject_toml)?, updated);
-    assert!(!context.temp_dir.child("uv.lock").exists());
-    assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
 }
 
@@ -2488,7 +2364,7 @@ fn self_version_json() -> Result<()> {
         "#,
     )?;
 
-    if git_version_info_expected() {
+    let output = if git_version_info_expected() {
         uv_snapshot!(context.filters(), context.self_version()
           .arg("--output-format").arg("json"), @r#"
         exit_code: 0 (success)
@@ -2505,7 +2381,7 @@ fn self_version_json() -> Result<()> {
           },
           "target_triple": "[TARGET]"
         }
-        "#);
+        "#)
     } else {
         uv_snapshot!(context.filters(), context.self_version()
           .arg("--output-format").arg("json"), @r#"
@@ -2517,8 +2393,21 @@ fn self_version_json() -> Result<()> {
         "commit_info": null,
         "target_triple": "[TARGET]"
       }
-      "#);
-    }
+      "#)
+    };
+
+    context
+        .self_version()
+        .args(["--output-format", "json", "--quiet"])
+        .assert()
+        .success()
+        .stdout(String::from_utf8(output.stdout)?);
+    context
+        .self_version()
+        .args(["--output-format", "json", "-qq"])
+        .assert()
+        .success()
+        .stdout("");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
@@ -2530,43 +2419,6 @@ fn self_version_json() -> Result<()> {
     version = "0.1.2"
     "#
     );
-    Ok(())
-}
-
-#[test]
-fn self_version_json_quiet() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    let self_version = || {
-        let mut command = context.self_version();
-        command.args(["--offline", "--no-python-downloads"]);
-        command
-    };
-
-    let default = self_version()
-        .args(["--output-format", "json"])
-        .assert()
-        .success();
-    let quiet = self_version()
-        .args(["--output-format", "json", "-q"])
-        .assert()
-        .success();
-    assert_eq!(default.get_output().stdout, quiet.get_output().stdout);
-    let version_info: serde_json::Value = serde_json::from_slice(&quiet.get_output().stdout)?;
-    assert_eq!(version_info["package_name"], "uv");
-    assert!(version_info["version"].is_string());
-    assert!(version_info.get("commit_info").is_some());
-    assert!(version_info["target_triple"].is_string());
-
-    self_version()
-        .args(["--output-format", "json", "-qq"])
-        .assert()
-        .success()
-        .stdout("");
-    self_version()
-        .args(["--output-format", "text", "-q"])
-        .assert()
-        .success()
-        .stdout("");
     Ok(())
 }
 

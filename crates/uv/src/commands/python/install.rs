@@ -35,6 +35,7 @@ use uv_python::{
     PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
 use uv_warnings::warn_user;
@@ -214,9 +215,7 @@ pub(crate) async fn install(
     bin: Option<bool>,
     registry: Option<bool>,
     force: bool,
-    python_install_mirror: Option<String>,
-    pypy_install_mirror: Option<String>,
-    python_downloads_json_url: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     client_builder: BaseClientBuilder<'_>,
     default: bool,
     python_arch: Option<PythonArchitecture>,
@@ -262,9 +261,7 @@ pub(crate) async fn install(
         bin,
         registry,
         force,
-        python_install_mirror,
-        pypy_install_mirror,
-        python_downloads_json_url,
+        install_mirrors,
         client_builder,
         cache,
         default,
@@ -322,9 +319,7 @@ async fn perform_install(
     bin: Option<bool>,
     registry: Option<bool>,
     force: bool,
-    python_install_mirror: Option<String>,
-    pypy_install_mirror: Option<String>,
-    python_downloads_json_url: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     client_builder: BaseClientBuilder<'_>,
     cache: &Cache,
     default: bool,
@@ -370,7 +365,7 @@ async fn perform_install(
     let download_list = ManagedPythonDownloadList::new(
         &client_builder,
         cache,
-        python_downloads_json_url.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?;
     // Python downloads are performing their own retries to catch stream errors, disable the
@@ -634,8 +629,7 @@ async fn perform_install(
                         installations_dir,
                         &scratch_dir,
                         reinstall || replacements.contains(download.key()),
-                        python_install_mirror.as_deref(),
-                        pypy_install_mirror.as_deref(),
+                        install_mirrors.mirrors(),
                         Some(&reporter),
                     )
                     .await,

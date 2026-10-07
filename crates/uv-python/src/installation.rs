@@ -27,8 +27,9 @@ use crate::downloads::{
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
-    Error, ImplementationName, Interpreter, MissingPythonHint, PythonArchitecture, PythonDownloads,
-    PythonPreference, PythonSource, PythonVariant, PythonVersion, downloads,
+    Error, ImplementationName, Interpreter, MissingPythonHint, PythonArchitecture,
+    PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonSource, PythonVariant,
+    PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -145,8 +146,7 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
-        python_install_mirror: Option<&str>,
-        pypy_install_mirror: Option<&str>,
+        mirrors: PythonDownloadMirrors<'_>,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         let downloads_enabled = preference.allows_managed()
@@ -161,8 +161,7 @@ impl PythonInstallation {
             client_builder,
             cache,
             reporter,
-            python_install_mirror,
-            pypy_install_mirror,
+            mirrors,
             python_downloads_json_url,
         )
         .await?;
@@ -189,8 +188,7 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
-        python_install_mirror: Option<&str>,
-        pypy_install_mirror: Option<&str>,
+        mirrors: PythonDownloadMirrors<'_>,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
@@ -311,8 +309,7 @@ impl PythonInstallation {
             &retry_policy,
             cache,
             reporter,
-            python_install_mirror,
-            pypy_install_mirror,
+            mirrors,
         )
         .await?;
 
@@ -328,8 +325,7 @@ impl PythonInstallation {
         retry_policy: &ExponentialBackoff,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
-        python_install_mirror: Option<&str>,
-        pypy_install_mirror: Option<&str>,
+        mirrors: PythonDownloadMirrors<'_>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
@@ -344,8 +340,7 @@ impl PythonInstallation {
                 installations_dir,
                 &scratch_dir,
                 false,
-                python_install_mirror,
-                pypy_install_mirror,
+                mirrors,
                 reporter,
             )
             .await?;

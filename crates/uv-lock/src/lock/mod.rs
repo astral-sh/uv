@@ -9513,13 +9513,7 @@ impl WheelTagHint {
     ) -> Option<Self> {
         let incompatibility = filenames
             .iter()
-            .map(|filename| {
-                tags.compatibility(
-                    filename.python_tags().iter(),
-                    filename.abi_tags().iter(),
-                    filename.platform_tags().iter(),
-                )
-            })
+            .map(|filename| filename.compatibility(tags))
             .max()?;
         match incompatibility {
             TagCompatibility::Incompatible(IncompatibleTag::Python) => {

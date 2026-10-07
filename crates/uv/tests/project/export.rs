@@ -359,6 +359,114 @@ fn requirements_txt_conditional_transitive_extra() -> Result<()> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn requirements_txt_does_not_activate_extra_through_incompatible_path() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "shared==1.0.0 ; sys_platform == 'linux'",
+            "shared==2.0.0 ; sys_platform != 'linux'",
+        ]
+
+        [project.optional-dependencies]
+        feature = ["bridge==1.0.0 ; sys_platform == 'linux'"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [manifest]
+        members = ["root"]
+
+        [[package]]
+        name = "root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'" },
+            { name = "shared", version = "2.0.0", source = { registry = "https://other.example/simple" }, marker = "sys_platform != 'linux'" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [{ name = "bridge", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'" }]
+
+        [package.metadata]
+        provides-extras = ["feature"]
+
+        [[package]]
+        name = "bridge"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        dependencies = [
+            { name = "shared", version = "1.0.0", source = { registry = "https://example.com/simple" }, marker = "sys_platform == 'linux'", extra = ["a"] },
+            { name = "shared", version = "2.0.0", source = { registry = "https://other.example/simple" }, marker = "sys_platform != 'linux'", extra = ["a"] },
+        ]
+
+        [[package]]
+        name = "shared"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        resolution-markers = ["sys_platform == 'linux'"]
+
+        [package.optional-dependencies]
+        a = [{ name = "leaf-b", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
+
+        [package.metadata]
+        provides-extras = ["a"]
+
+        [[package]]
+        name = "shared"
+        version = "2.0.0"
+        source = { registry = "https://other.example/simple" }
+        resolution-markers = ["sys_platform != 'linux'"]
+        dependencies = [{ name = "leaf-b", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
+
+        [package.optional-dependencies]
+        a = [{ name = "leaf-c", version = "1.0.0", source = { registry = "https://example.com/simple" } }]
+
+        [package.metadata]
+        provides-extras = ["a"]
+
+        [[package]]
+        name = "leaf-b"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+
+        [[package]]
+        name = "leaf-c"
+        version = "1.0.0"
+        source = { registry = "https://example.com/simple" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--extra").arg("feature")
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    bridge==1.0.0 ; sys_platform == 'linux'
+    leaf-b==1.0.0
+    shared==1.0.0 ; sys_platform == 'linux'
+    shared==2.0.0 ; sys_platform != 'linux'
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn requirements_txt_project_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

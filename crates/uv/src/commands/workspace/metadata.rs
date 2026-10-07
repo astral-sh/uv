@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
+use uv_dispatch::UniversalState;
 use uv_lock::{Lock, Metadata, Package};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
@@ -25,7 +26,6 @@ use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectError, ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter,
-    UniversalState,
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::{Printer, Stdout};

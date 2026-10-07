@@ -23,6 +23,7 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
 use uv_fs::which::is_executable;
@@ -37,7 +38,10 @@ use uv_python::{
     PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{
+    RequirementsSource, RequirementsSpecification, script_extra_build_requires,
+    script_specification,
+};
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -71,8 +75,7 @@ use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
     ProjectEnvironmentTarget, ProjectError, ProjectPythonRequest, ScriptEnvironment,
-    ScriptInterpreter, UniversalState, script_extra_build_requires, script_specification,
-    update_environment,
+    ScriptInterpreter, update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
@@ -863,8 +866,7 @@ pub(crate) async fn run(
                     &client_builder,
                     &cache,
                     Some(&download_reporter),
-                    install_mirrors.python_install_mirror.as_deref(),
-                    install_mirrors.pypy_install_mirror.as_deref(),
+                    install_mirrors.mirrors(),
                     install_mirrors.python_downloads_json_url.as_deref(),
                 )
                 .await?;

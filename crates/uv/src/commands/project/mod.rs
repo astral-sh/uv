@@ -9,21 +9,19 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
 use uv_audit::osv;
 use uv_audit::{Dependency, VulnerabilityID};
-use uv_auth::{CredentialsCache, CredentialsFromUrlError};
+use uv_auth::CredentialsFromUrlError;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, NoSources, Override, PackageOverride,
-    Reinstall, TargetTriple, Upgrade,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Reinstall, TargetTriple, Upgrade,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
+use uv_dispatch::{BuildDispatch, PlatformState, SharedState};
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, HashCollection, Index, IndexCredentialsError,
-    IndexLocations, IndexUrlError, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ExtraBuildRequires, HashCollection, Index, IndexCredentialsError, IndexUrlError, Requirement,
+    RequiresPython, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
@@ -41,10 +39,12 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
     PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
+use uv_requirements::{
+    NamedRequirementsResolver, RequirementsSpecification, ScriptRequirementsError,
+};
 use uv_resolver::{
-    DependencyMode, FlatIndex, InMemoryIndex, OptionsBuilder, Preference, PythonRequirement,
-    ResolverEnvironment, ResolverOutput,
+    DependencyMode, FlatIndex, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -53,7 +53,6 @@ use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
@@ -371,6 +370,16 @@ pub(crate) enum ProjectError {
     Anyhow(#[from] anyhow::Error),
 }
 
+impl From<ScriptRequirementsError> for ProjectError {
+    fn from(error: ScriptRequirementsError) -> Self {
+        match error {
+            ScriptRequirementsError::Io(error) => Self::Io(error),
+            ScriptRequirementsError::IndexUrl(error) => Self::IndexUrl(error),
+            ScriptRequirementsError::Lowering(error) => Self::Lowering(*error),
+        }
+    }
+}
+
 impl From<LockParseError> for ProjectError {
     fn from(error: LockParseError) -> Self {
         match error {
@@ -533,54 +542,6 @@ impl std::fmt::Display for ConflictError {
 }
 
 impl std::error::Error for ConflictError {}
-
-/// A [`SharedState`] instance to use for universal resolution.
-#[derive(Default, Clone)]
-pub(crate) struct UniversalState(SharedState);
-
-impl std::ops::Deref for UniversalState {
-    type Target = SharedState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl UniversalState {
-    /// Return mutable access to the index owner between lock operations.
-    fn index_mut(&mut self) -> &mut InMemoryIndex {
-        self.0.index_mut()
-    }
-
-    /// Fork the [`UniversalState`] to create a [`PlatformState`].
-    pub(crate) fn fork(&self) -> PlatformState {
-        PlatformState(self.0.fork())
-    }
-}
-
-/// A [`SharedState`] instance to use for platform-specific resolution.
-#[derive(Default, Clone)]
-pub(crate) struct PlatformState(SharedState);
-
-impl std::ops::Deref for PlatformState {
-    type Target = SharedState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl PlatformState {
-    /// Fork the [`PlatformState`] to create a [`UniversalState`].
-    fn fork(&self) -> UniversalState {
-        UniversalState(self.0.fork())
-    }
-
-    /// Create a [`SharedState`] from the [`PlatformState`].
-    pub(crate) fn into_inner(self) -> SharedState {
-        self.0
-    }
-}
 
 /// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
 fn validate_script_requires_python(
@@ -788,8 +749,7 @@ impl ScriptInterpreter {
             client_builder,
             cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?
@@ -1475,8 +1435,7 @@ impl ProjectInterpreter {
             client_builder,
             cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
@@ -3090,8 +3049,7 @@ pub(crate) async fn init_script_python_requirement(
         client_builder,
         cache,
         Some(reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.mirrors(),
         install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
@@ -3143,214 +3101,6 @@ pub(crate) fn detect_conflicts(
         }
     }
     Ok(())
-}
-
-/// Determine the [`RequirementsSpecification`] for a script.
-pub(crate) async fn script_specification(
-    script: Pep723ItemRef<'_>,
-    sources: &NoSources,
-    index_locations: &IndexLocations,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
-    credentials_cache: &CredentialsCache,
-) -> Result<Option<RequirementsSpecification>, ProjectError> {
-    let Some(dependencies) = script.metadata().dependencies.as_ref() else {
-        return Ok(None);
-    };
-
-    let script_dir = script.directory()?;
-    let script_indexes = script
-        .indexes(sources)
-        .iter()
-        .cloned()
-        .map(|index| index.relative_to(&script_dir))
-        .collect::<Result<Vec<_>, _>>()?;
-    let script_sources = script.sources(sources);
-
-    let mut requirements = Vec::new();
-    for requirement in dependencies.iter().cloned() {
-        requirements.extend(
-            LoweredRequirement::from_non_workspace_requirement(
-                requirement,
-                script_dir.as_ref(),
-                script_sources.as_ref(),
-                &script_indexes,
-                index_locations,
-                cache,
-                workspace_cache,
-                credentials_cache,
-            )
-            .await
-            .map_ok(LoweredRequirement::into_inner)
-            .collect::<Result<Vec<_>, _>>()?,
-        );
-    }
-    let constraint_dependencies = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.constraint_dependencies.as_ref())
-        .into_iter()
-        .flatten()
-        .cloned();
-    let mut constraints = Vec::new();
-    for requirement in constraint_dependencies {
-        constraints.extend(
-            LoweredRequirement::from_non_workspace_requirement(
-                requirement,
-                script_dir.as_ref(),
-                script_sources.as_ref(),
-                &script_indexes,
-                index_locations,
-                cache,
-                workspace_cache,
-                credentials_cache,
-            )
-            .await
-            .map_ok(LoweredRequirement::into_inner)
-            .collect::<Result<Vec<_>, _>>()?,
-        );
-    }
-    let overrides = {
-        let override_entries = script
-            .metadata()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.override_dependencies.as_ref())
-            .into_iter()
-            .flatten()
-            .cloned();
-        let mut overrides = Vec::new();
-        for entry in override_entries {
-            match entry {
-                Override::Requirement(requirement) => {
-                    overrides.extend(
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script_dir.as_ref(),
-                            script_sources.as_ref(),
-                            &script_indexes,
-                            index_locations,
-                            cache,
-                            workspace_cache,
-                            credentials_cache,
-                        )
-                        .await
-                        .map_ok(LoweredRequirement::into_inner)
-                        .map_ok(Override::Requirement)
-                        .collect::<Result<Vec<_>, _>>()?,
-                    );
-                }
-                Override::Package(package) => {
-                    let mut dependencies = Vec::new();
-                    for requirement in package.dependencies.into_vec() {
-                        dependencies.extend(
-                            LoweredRequirement::from_non_workspace_requirement(
-                                requirement,
-                                script_dir.as_ref(),
-                                script_sources.as_ref(),
-                                &script_indexes,
-                                index_locations,
-                                cache,
-                                workspace_cache,
-                                credentials_cache,
-                            )
-                            .await
-                            .map_ok(LoweredRequirement::into_inner)
-                            .collect::<Result<Vec<_>, _>>()?,
-                        );
-                    }
-                    overrides.push(Override::Package(PackageOverride {
-                        package: package.package,
-                        dependencies: dependencies.into_boxed_slice(),
-                    }));
-                }
-            }
-        }
-        overrides
-    };
-    let excludes = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.exclude_dependencies.as_ref())
-        .into_iter()
-        .flatten()
-        .cloned()
-        .collect::<Vec<_>>();
-
-    let mut specification =
-        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), Vec::new());
-    specification.override_dependencies = overrides;
-    specification.excludes = excludes;
-    Ok(Some(specification))
-}
-
-/// Determine the extra build requires for a script.
-pub(crate) async fn script_extra_build_requires(
-    script: Pep723ItemRef<'_>,
-    sources: &NoSources,
-    index_locations: &IndexLocations,
-    cache: &Cache,
-    workspace_cache: &WorkspaceCache,
-    credentials_cache: &CredentialsCache,
-) -> Result<LoweredExtraBuildDependencies, ProjectError> {
-    let script_dir = script.directory()?;
-    let script_indexes = script
-        .indexes(sources)
-        .iter()
-        .cloned()
-        .map(|index| index.relative_to(&script_dir))
-        .collect::<Result<Vec<_>, _>>()?;
-    let script_sources = script.sources(sources);
-
-    // Collect any `tool.uv.extra-build-dependencies` from the script.
-    let empty = BTreeMap::default();
-    let script_extra_build_dependencies = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.extra_build_dependencies.as_ref())
-        .unwrap_or(&empty);
-
-    // Lower the extra build dependencies.
-    let mut extra_build_requires = ExtraBuildRequires::default();
-    for (name, requirements) in script_extra_build_dependencies {
-        let mut lowered_requirements = Vec::new();
-        for ExtraBuildDependency {
-            requirement,
-            match_runtime,
-        } in requirements.iter().cloned()
-        {
-            lowered_requirements.extend(
-                LoweredRequirement::from_non_workspace_requirement(
-                    requirement,
-                    script_dir.as_ref(),
-                    script_sources.as_ref(),
-                    &script_indexes,
-                    index_locations,
-                    cache,
-                    workspace_cache,
-                    credentials_cache,
-                )
-                .await
-                .map_ok(|requirement| ExtraBuildRequirement {
-                    requirement: requirement.into_inner(),
-                    match_runtime,
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            );
-        }
-        extra_build_requires.insert(name.clone(), lowered_requirements);
-    }
-
-    Ok(LoweredExtraBuildDependencies::from_lowered(
-        extra_build_requires,
-    ))
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.

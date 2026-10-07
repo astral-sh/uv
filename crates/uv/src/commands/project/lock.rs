@@ -15,7 +15,7 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
     ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, UniversalState};
 use uv_distribution::{DistributionDatabase, FirstPartyPackages, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
@@ -32,7 +32,7 @@ use uv_python::{
     ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonEnvironment,
     PythonPreference, PythonRequest,
 };
-use uv_requirements::ExtrasResolver;
+use uv_requirements::{ExtrasResolver, script_extra_build_requires};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Options, OptionsBuilder, PythonRequirement, ResolverEnvironment,
     UniversalMarker,
@@ -50,8 +50,7 @@ use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, Summary
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
     MissingLockfileSource, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError,
-    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, UniversalState,
-    init_script_python_requirement, script_extra_build_requires,
+    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, pip};

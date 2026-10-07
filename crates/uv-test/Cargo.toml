@@ -38,7 +38,7 @@ uv-version = { workspace = true }
 anyhow = { workspace = true }
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 base64 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

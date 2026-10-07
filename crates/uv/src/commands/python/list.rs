@@ -18,6 +18,7 @@ use uv_python::{
     EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
     PythonSource, find_all_python_installations,
 };
+use uv_settings::PythonInstallMirrors;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -62,9 +63,7 @@ pub(crate) async fn list(
     all_arches: bool,
     show_urls: bool,
     output_format: PythonListFormat,
-    python_downloads_json_url: Option<String>,
-    python_install_mirror: Option<String>,
-    pypy_install_mirror: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
@@ -123,7 +122,7 @@ pub(crate) async fn list(
         let download_list = ManagedPythonDownloadList::new(
             client_builder,
             cache,
-            python_downloads_json_url.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
 
@@ -138,10 +137,7 @@ pub(crate) async fn list(
                 Kind::Download,
                 Either::Right(
                     download
-                        .download_urls(
-                            python_install_mirror.as_deref(),
-                            pypy_install_mirror.as_deref(),
-                        )?
+                        .download_urls(install_mirrors.mirrors())?
                         .into_iter()
                         .next()
                         .ok_or(PythonDownloadError::NoPythonDownloadUrlFound)?,

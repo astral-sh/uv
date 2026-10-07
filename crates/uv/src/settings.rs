@@ -1534,14 +1534,11 @@ pub(crate) struct PythonListSettings {
     pub(crate) all_versions: bool,
     pub(crate) show_urls: bool,
     pub(crate) output_format: PythonListFormat,
-    pub(crate) python_downloads_json_url: Option<String>,
-    pub(crate) python_install_mirror: Option<String>,
-    pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
 }
 
 impl PythonListSettings {
     /// Resolve the [`PythonListSettings`] from the CLI and filesystem configuration.
-    #[expect(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: PythonListArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1559,38 +1556,16 @@ impl PythonListSettings {
             python_downloads_json_url: python_downloads_json_url_arg,
         } = args;
 
-        let options = filesystem.map(FilesystemOptions::into_options);
-        let (
-            python_downloads_json_url_option,
-            python_install_mirror_option,
-            pypy_install_mirror_option,
-        ) = match &options {
-            Some(options) => (
-                options.install_mirrors.python_downloads_json_url.clone(),
-                options.install_mirrors.python_install_mirror.clone(),
-                options.install_mirrors.pypy_install_mirror.clone(),
-            ),
-            None => (None, None, None),
-        };
+        let filesystem_install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
 
-        let python_downloads_json_url = python_downloads_json_url_arg
-            .or(environment
-                .install_mirrors
-                .python_downloads_json_url
-                .clone())
-            .or(python_downloads_json_url_option);
-
-        let python_install_mirror = environment
-            .install_mirrors
-            .python_install_mirror
-            .clone()
-            .or(python_install_mirror_option);
-
-        let pypy_install_mirror = environment
-            .install_mirrors
-            .pypy_install_mirror
-            .clone()
-            .or(pypy_install_mirror_option);
+        let install_mirrors = PythonInstallMirrors {
+            python_downloads_json_url: python_downloads_json_url_arg,
+            ..Default::default()
+        }
+        .combine(environment.install_mirrors)
+        .combine(filesystem_install_mirrors);
 
         let kinds = if only_installed {
             PythonListKinds::Installed
@@ -1608,9 +1583,7 @@ impl PythonListSettings {
             all_versions,
             show_urls,
             output_format,
-            python_downloads_json_url,
-            python_install_mirror,
-            pypy_install_mirror,
+            install_mirrors,
         }
     }
 }
@@ -1641,9 +1614,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) upgrade: PythonUpgrade,
     pub(crate) bin: Option<bool>,
     pub(crate) registry: Option<bool>,
-    pub(crate) python_install_mirror: Option<String>,
-    pub(crate) pypy_install_mirror: Option<String>,
-    pub(crate) python_downloads_json_url: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) default: bool,
     pub(crate) compile_bytecode: bool,
 }
@@ -1664,12 +1635,6 @@ impl PythonInstallSettings {
             .combine(environment.install_mirrors)
             .combine(filesystem_install_mirrors);
 
-        let PythonInstallMirrors {
-            python_install_mirror,
-            pypy_install_mirror,
-            python_downloads_json_url,
-        } = install_mirrors;
-
         let PythonInstallArgs {
             install_dir,
             targets,
@@ -1682,6 +1647,7 @@ impl PythonInstallSettings {
             upgrade,
             mirror: _,
             pypy_mirror: _,
+            graalpy_mirror: _,
             python_downloads_json_url: _,
             default,
             compile_bytecode,
@@ -1708,9 +1674,7 @@ impl PythonInstallSettings {
                     },
                 ),
             },
-            python_install_mirror,
-            pypy_install_mirror,
-            python_downloads_json_url,
+            install_mirrors,
             default,
             compile_bytecode: flag(
                 compile_bytecode.compile_bytecode,
@@ -1730,10 +1694,8 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) targets: Vec<String>,
     pub(crate) force: bool,
     pub(crate) registry: Option<bool>,
-    pub(crate) python_install_mirror: Option<String>,
-    pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) reinstall: bool,
-    pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) bin: Option<bool>,
     pub(crate) compile_bytecode: bool,
@@ -1755,12 +1717,6 @@ impl PythonUpgradeSettings {
             .combine(environment.install_mirrors)
             .combine(filesystem_install_mirrors);
 
-        let PythonInstallMirrors {
-            python_install_mirror,
-            pypy_install_mirror,
-            python_downloads_json_url,
-        } = install_mirrors;
-
         let force = false;
         let default = false;
         let bin = None;
@@ -1777,6 +1733,7 @@ impl PythonUpgradeSettings {
             targets,
             mirror: _,
             pypy_mirror: _,
+            graalpy_mirror: _,
             reinstall,
             python_downloads_json_url: _,
             compile_bytecode,
@@ -1787,10 +1744,8 @@ impl PythonUpgradeSettings {
             targets,
             force,
             registry,
-            python_install_mirror,
-            pypy_install_mirror,
+            install_mirrors,
             reinstall,
-            python_downloads_json_url,
             default,
             bin,
             compile_bytecode: flag(
@@ -1874,6 +1829,7 @@ impl PythonFindSettings {
         let PythonInstallMirrors {
             python_install_mirror: _,
             pypy_install_mirror: _,
+            graalpy_install_mirror: _,
             python_downloads_json_url,
         } = install_mirrors;
 

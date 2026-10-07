@@ -24,7 +24,7 @@ uv-threads = { workspace = true }
 
 astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "zstd"] }
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 blake2 = { workspace = true }
 blake3 = { workspace = true, features = ["mmap", "rayon"] }
 flate2 = { workspace = true }
