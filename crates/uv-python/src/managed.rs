@@ -282,7 +282,7 @@ impl ManagedPythonInstallations {
         &self.root
     }
 
-    pub(crate) fn absolute_root(&self) -> Result<PathBuf, Error> {
+    fn absolute_root(&self) -> Result<PathBuf, Error> {
         let root = if self.root.is_absolute() {
             self.root.clone()
         } else {
@@ -290,6 +290,34 @@ impl ManagedPythonInstallations {
         };
 
         normalize_absolute_path(&root).map_err(|err| Error::AbsolutePath(self.root.clone(), err))
+    }
+
+    /// Return whether the interpreter's base prefix belongs to these managed installations.
+    pub(crate) fn contains(&self, interpreter: &Interpreter) -> bool {
+        self.installation_path(interpreter).is_some()
+    }
+
+    /// Locate an interpreter's installation by its base prefix and installation key.
+    fn installation_path(&self, interpreter: &Interpreter) -> Option<PathBuf> {
+        let root = self.absolute_root().ok()?;
+
+        // Canonicalize both paths to handle Windows path format differences
+        // (e.g., \\?\ prefix, different casing, junction vs actual path).
+        // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
+        let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix())
+            .unwrap_or_else(|_| interpreter.sys_base_prefix().to_path_buf());
+        let root = dunce::canonicalize(&root).unwrap_or(root);
+
+        // Verify the interpreter's base prefix is within the managed root
+        let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
+
+        let first_component = suffix.components().next()?;
+        let name = first_component.as_os_str().to_str()?;
+
+        // Verify it's a valid installation key
+        PythonInstallationKey::from_str(name).ok()?;
+
+        Some(root.join(name))
     }
 }
 
@@ -369,27 +397,8 @@ impl ManagedPythonInstallation {
     ///
     /// Returns `None` if the interpreter is not a managed installation.
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
-        let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
-        let root = managed_root.absolute_root().ok()?;
-
-        // Canonicalize both paths to handle Windows path format differences
-        // (e.g., \\?\ prefix, different casing, junction vs actual path).
-        // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
-        let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix())
-            .unwrap_or_else(|_| interpreter.sys_base_prefix().to_path_buf());
-        let root = dunce::canonicalize(&root).unwrap_or(root);
-
-        // Verify the interpreter's base prefix is within the managed root
-        let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
-
-        let first_component = suffix.components().next()?;
-        let name = first_component.as_os_str().to_str()?;
-
-        // Verify it's a valid installation key
-        PythonInstallationKey::from_str(name).ok()?;
-
-        // Construct the installation from the path within the managed root
-        let path = root.join(name);
+        let installations = ManagedPythonInstallations::from_settings(None).ok()?;
+        let path = installations.installation_path(interpreter)?;
         Self::from_path(path).ok()
     }
 

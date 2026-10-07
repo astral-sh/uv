@@ -3,7 +3,6 @@ use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
-use std::str::FromStr;
 use std::sync::OnceLock;
 use std::{env, io};
 
@@ -31,13 +30,12 @@ use uv_static::EnvVars;
 
 use crate::downloads::PythonDownloadRequest;
 use crate::implementation::LenientImplementationName;
-use crate::managed::ManagedPythonInstallations;
 use crate::pointer_size::PointerSize;
 use crate::virtualenv::virtualenv_python_executable;
-use crate::{ImplementationName, PythonPreference, PythonRequest};
+use crate::{ImplementationName, PythonRequest};
 use crate::{
-    Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
-    VersionRequest, VirtualEnvironment,
+    Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, Target, VersionRequest,
+    VirtualEnvironment,
 };
 use which::which;
 
@@ -327,52 +325,6 @@ impl Interpreter {
         self.prefix.is_some()
     }
 
-    /// Returns `true` if this interpreter is managed by uv.
-    ///
-    /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
-    pub(crate) fn is_managed(&self) -> bool {
-        if let Ok(test_managed) =
-            std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
-        {
-            // During testing, we collect interpreters into an artificial search path and need to
-            // be able to mock whether an interpreter is managed or not.
-            return test_managed.split_ascii_whitespace().any(|item| {
-                let version = <PythonVersion as std::str::FromStr>::from_str(item).expect(
-                    "`UV_INTERNAL__TEST_PYTHON_MANAGED` items should be valid Python versions",
-                );
-                if version.patch().is_some() {
-                    version.version() == self.python_version()
-                } else {
-                    (version.major(), version.minor()) == self.python_tuple()
-                }
-            });
-        }
-
-        let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
-            return false;
-        };
-        let Ok(root) = installations.absolute_root() else {
-            return false;
-        };
-        let sys_base_prefix = dunce::canonicalize(&self.sys_base_prefix)
-            .unwrap_or_else(|_| self.sys_base_prefix.clone());
-        let root = dunce::canonicalize(&root).unwrap_or(root);
-
-        let Ok(suffix) = sys_base_prefix.strip_prefix(&root) else {
-            return false;
-        };
-
-        let Some(first_component) = suffix.components().next() else {
-            return false;
-        };
-
-        let Some(name) = first_component.as_os_str().to_str() else {
-            return false;
-        };
-
-        PythonInstallationKey::from_str(name).is_ok()
-    }
-
     /// Returns `Some` if the environment is externally managed, optionally including an error
     /// message from the `EXTERNALLY-MANAGED` file.
     ///
@@ -608,14 +560,6 @@ impl Interpreter {
     #[cfg(unix)]
     pub fn is_standalone(&self) -> bool {
         self.standalone
-    }
-
-    /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
-    // TODO(john): Replace this approach with patching sysconfig on Windows to
-    // set `PYTHON_BUILD_STANDALONE=1`.`
-    #[cfg(windows)]
-    pub fn is_standalone(&self) -> bool {
-        self.standalone || (self.is_managed() && self.markers().implementation_name() == "cpython")
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -961,15 +905,6 @@ impl Interpreter {
                     && self.matches_implementation(*implementation)
             }
             PythonRequest::Key(request) => self.matches_download_request(request),
-        }
-    }
-
-    /// Check whether this interpreter satisfies the given preference.
-    pub(crate) fn satisfies_preference(&self, preference: PythonPreference) -> bool {
-        match preference {
-            PythonPreference::OnlyManaged => self.is_managed(),
-            PythonPreference::OnlySystem => !self.is_managed(),
-            PythonPreference::Managed | PythonPreference::System => true,
         }
     }
 }
