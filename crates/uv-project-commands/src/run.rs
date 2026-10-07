@@ -18,7 +18,6 @@ use tracing::{debug, trace, warn};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_command_support::{
     ExitStatus, Printer, UvError, child::read_env_files, child::run_to_completion,
 };
@@ -39,6 +38,7 @@ use uv_environment_operations::{
 };
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
+use uv_http::BaseClientBuilder;
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_lock::{Installable, Lock};

@@ -9,11 +9,11 @@ use thiserror::Error;
 use tracing::warn;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
-    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
+    IndexStrategy, KeyringProviderType, MetadataRangeRequest, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -21,6 +21,7 @@ use uv_distribution_types::{
     Requirement,
 };
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
@@ -75,6 +76,7 @@ pub(crate) async fn venv(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
+    metadata_range_request: MetadataRangeRequest,
     client_builder: &BaseClientBuilder<'_>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
@@ -286,6 +288,7 @@ pub(crate) async fn venv(
         let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
             .index_locations(index_locations.clone())
             .index_strategy(index_strategy)
+            .metadata_range_request(metadata_range_request)
             .keyring(keyring_provider)
             .markers(interpreter.markers())
             .platform(interpreter.platform())

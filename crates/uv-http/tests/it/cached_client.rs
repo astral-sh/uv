@@ -8,9 +8,10 @@ use wiremock::matchers::{any, header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_cache::CacheEntry;
-use uv_client::{
+use uv_http::ErrorKind;
+use uv_http::{
     BaseClientBuilder, CacheControl, CachedClient, CachedClientError, DataWithCachePolicy,
-    ErrorKind, RetryState,
+    RetryState,
 };
 
 #[test]

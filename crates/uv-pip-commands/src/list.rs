@@ -12,7 +12,7 @@ use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::ListFormat;
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
@@ -20,6 +20,7 @@ use uv_distribution_types::{
     DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython,
 };
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;

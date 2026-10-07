@@ -15,22 +15,23 @@ use rustc_hash::FxHashSet;
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
-use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::{
     ActiveEnvironment, AnnotationStyle, BuildIsolation, BuildOptions, Concurrency,
     DependencyGroups, DependencyMode, DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency,
     ExcludeNewer, ExcludeNewerPackage, ExportFormat, ExtrasSpecification, ForkStrategy,
     GitLfsSetting, HashCheckingMode, IndexStrategy, InitKind, InitProjectKind, InstallOptions,
-    KeyringProviderType, Modifications, NoBinary, NoBuild, NoSources, Override, PackageOverride,
-    PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl, PythonUpgrade,
-    PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput, ResolutionMode,
-    TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    KeyringProviderType, MetadataRangeRequest, Modifications, NoBinary, NoBuild, NoSources,
+    Override, PackageOverride, PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl,
+    PythonUpgrade, PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput,
+    ResolutionMode, TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExcludeNewerOverride, ExtraBuildVariables, Index,
     IndexLocations, IndexUrl, MinimumLibcVersion, NameRequirementSpecification,
     PackageConfigSettings, Requirement,
 };
+use uv_http::{Certificates, Connectivity};
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
@@ -289,7 +290,6 @@ pub struct NetworkSettings {
     pub read_timeout: Duration,
     pub connect_timeout: Duration,
     pub retries: u32,
-    pub metadata_range_request: MetadataRangeRequest,
 }
 
 impl NetworkSettings {
@@ -416,10 +416,6 @@ impl NetworkSettings {
             read_timeout: environment.http_read_timeout,
             connect_timeout: environment.http_connect_timeout,
             retries: environment.http_retries,
-            metadata_range_request: environment
-                .require_metadata_range_requests
-                .unwrap_or_default()
-                .into(),
         })
     }
 
@@ -990,6 +986,11 @@ impl ToolRunSettings {
             .unwrap_or_default();
 
         let mut settings = ResolverInstallerSettings::from(options.clone());
+        settings.resolver.metadata_range_request = MetadataRangeRequest::from(
+            environment
+                .require_metadata_range_requests
+                .unwrap_or_default(),
+        );
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
@@ -1122,6 +1123,11 @@ impl ToolInstallSettings {
             .unwrap_or_default();
 
         let mut settings = ResolverInstallerSettings::from(options.clone());
+        settings.resolver.metadata_range_request = MetadataRangeRequest::from(
+            environment
+                .require_metadata_range_requests
+                .unwrap_or_default(),
+        );
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
@@ -1186,6 +1192,7 @@ pub struct ToolUpgradeSettings {
     pub install_mirrors: PythonInstallMirrors,
     pub args: ResolverInstallerOptions,
     pub filesystem: ResolverInstallerOptions,
+    pub metadata_range_request: MetadataRangeRequest,
 }
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
@@ -1263,6 +1270,11 @@ impl ToolUpgradeSettings {
             python_platform,
             args,
             filesystem: top_level,
+            metadata_range_request: MetadataRangeRequest::from(
+                environment
+                    .require_metadata_range_requests
+                    .unwrap_or_default(),
+            ),
             install_mirrors: environment
                 .install_mirrors
                 .clone()
@@ -4440,6 +4452,11 @@ fn combine_resolver_settings(
     ));
 
     ResolverSettings {
+        metadata_range_request: MetadataRangeRequest::from(
+            environment
+                .require_metadata_range_requests
+                .unwrap_or_default(),
+        ),
         cuda_driver_version: environment.cuda_driver_version.clone(),
         amd_gpu_architecture: environment.amd_gpu_architecture,
         ..ResolverSettings::from(options)
@@ -4480,6 +4497,11 @@ fn combine_resolver_installer_settings(
     let base = ResolverInstallerSettings::from(options);
     ResolverInstallerSettings {
         resolver: ResolverSettings {
+            metadata_range_request: MetadataRangeRequest::from(
+                environment
+                    .require_metadata_range_requests
+                    .unwrap_or_default(),
+            ),
             cuda_driver_version: environment.cuda_driver_version.clone(),
             amd_gpu_architecture: environment.amd_gpu_architecture,
             ..base.resolver
@@ -4521,6 +4543,7 @@ pub struct PipSettings {
     pub prefix: Option<Prefix>,
     pub index_strategy: IndexStrategy,
     pub keyring_provider: KeyringProviderType,
+    pub metadata_range_request: MetadataRangeRequest,
     pub torch_backend: Option<TorchMode>,
     pub cuda_driver_version: Option<Version>,
     pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
@@ -4804,6 +4827,11 @@ impl PipSettings {
                 .keyring_provider
                 .combine(keyring_provider)
                 .unwrap_or_default(),
+            metadata_range_request: MetadataRangeRequest::from(
+                environment
+                    .require_metadata_range_requests
+                    .unwrap_or_default(),
+            ),
             generate_hashes: args
                 .generate_hashes
                 .combine(generate_hashes)

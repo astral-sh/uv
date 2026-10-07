@@ -5,7 +5,6 @@ use anyhow::{Result, bail};
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
 use uv_audit_operations::{AuditResults, artifact_uri, audit_lock, warn_unmatched_ignores};
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, AuditOutputFormat, Concurrency, DependencyGroups, ExtrasSpecification,
@@ -15,6 +14,7 @@ use uv_dispatch::UniversalState;
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
+use uv_http::BaseClientBuilder;
 use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};

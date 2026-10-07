@@ -3,10 +3,10 @@ use std::fmt::Write;
 use std::path::Path;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads,
     PythonInstallation, PythonPreference, PythonRequest,

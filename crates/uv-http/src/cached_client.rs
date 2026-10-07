@@ -29,7 +29,7 @@ use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetrySta
 /// [`CachedClient::get_cacheable_with_retry`]. If your types fit into the
 /// `rkyvutil::OwnedArchive` mold, then an implementation of `Cacheable` is
 /// already provided for that type.
-pub(crate) trait Cacheable: Sized {
+pub trait Cacheable: Sized {
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
@@ -217,7 +217,7 @@ impl CachedClient {
         &self.0
     }
 
-    pub(crate) fn certificate_source(&self) -> CertificateSource {
+    pub fn certificate_source(&self) -> CertificateSource {
         self.0.certificate_source()
     }
 
@@ -744,7 +744,7 @@ impl CachedClient {
     ///
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     #[instrument(skip_all)]
-    pub(crate) async fn get_cacheable_with_retry<
+    pub async fn get_cacheable_with_retry<
         Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response, &mut RetryState) -> Result<Payload, CallBackError>,

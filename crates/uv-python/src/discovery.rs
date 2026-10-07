@@ -12,10 +12,10 @@ use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
+use uv_http::BaseClientBuilder;
 use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,

@@ -8,11 +8,12 @@ use rustc_hash::FxHashMap;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::Concurrency;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, RequiresPython};
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_normalize::PackageName;
 use uv_python::LenientImplementationName;
 use uv_settings::{Combine, ResolverInstallerOptions};
@@ -143,6 +144,7 @@ pub async fn list(
                     )
                     .index_locations(settings.resolver.index_locations.clone())
                     .index_strategy(settings.resolver.index_strategy)
+                    .metadata_range_request(settings.resolver.metadata_range_request)
                     .markers(interpreter.markers())
                     .platform(interpreter.platform())
                     .build()?;

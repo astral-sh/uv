@@ -93,7 +93,7 @@ pub enum Error {
     Download(#[from] downloads::Error),
 
     #[error(transparent)]
-    ClientBuild(#[from] uv_client::ClientBuildError),
+    ClientBuild(#[from] uv_http::ClientBuildError),
 
     // TODO(zanieb) We might want to ensure this is always wrapped in another type
     #[error(transparent)]
@@ -109,7 +109,7 @@ pub enum Error {
     InvalidEnvironment(#[from] environment::InvalidEnvironment),
 
     #[error(transparent)]
-    RetryParsing(#[from] uv_client::RetryParsingError),
+    RetryParsing(#[from] uv_http::RetryParsingError),
 }
 
 /// The reason a managed Python download could not be used.
@@ -223,7 +223,7 @@ mod tests {
     use indoc::{formatdoc, indoc};
     use temp_env::with_vars;
     use test_log::test;
-    use uv_client::BaseClientBuilder;
+    use uv_http::BaseClientBuilder;
     use uv_preview::PreviewFeature;
     use uv_static::EnvVars;
 

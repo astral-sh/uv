@@ -12,7 +12,7 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
@@ -34,6 +34,7 @@ use uv_environment_operations::{
 use uv_errors::HintOrdering;
 use uv_fs::Simplified;
 use uv_git::store_credentials;
+use uv_http::BaseClientBuilder;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
@@ -435,6 +436,7 @@ pub async fn add(
             let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
                 .index_locations(settings.resolver.index_locations.clone())
                 .index_strategy(settings.resolver.index_strategy)
+                .metadata_range_request(settings.resolver.metadata_range_request)
                 .markers(python_target.interpreter().markers())
                 .platform(python_target.interpreter().platform())
                 .build()?;

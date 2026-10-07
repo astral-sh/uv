@@ -5,10 +5,11 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 
 use uv_extract::hash::{HashReader, Hasher};
+use uv_http::WrappedReqwestError;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
 
-use crate::{RegistryClient, WrappedReqwestError};
+use crate::RegistryClient;
 
 /// An error while reading or downloading a distribution file to compute its hash.
 #[derive(Debug, thiserror::Error)]

@@ -11,13 +11,12 @@ use owo_colors::OwoColorize;
 use tracing::{debug, info, trace};
 use uv_auth::Credentials;
 use uv_cache::Cache;
-use uv_client::{
-    AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
-};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
+use uv_http::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
 use uv_publish::{
     PreparedDistribution, PublishFinalizeError, PublishOutcome, PublishSession,
     PublishingCredentials, TrustedPublishResult, UploadOutcome, check_trusted_publishing,

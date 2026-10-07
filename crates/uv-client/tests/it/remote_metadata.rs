@@ -13,10 +13,12 @@ use wiremock::matchers::{basic_auth, header_exists, header_regex, method, path};
 use wiremock::{Match, Mock, MockServer, Request, ResponseTemplate};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, MetadataRangeRequest, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
+use uv_configuration::MetadataRangeRequest;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
 use uv_git::GitResolver;
+use uv_http::BaseClientBuilder;
 use uv_pep508::VerbatimUrl;
 use uv_redacted::DisplaySafeUrl;
 
@@ -70,11 +72,9 @@ async fn remote_metadata_requires_range_requests() -> Result<()> {
         .await;
 
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(
-        BaseClientBuilder::default().metadata_range_request(MetadataRangeRequest::Require),
-        cache,
-    )
-    .build()?;
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
+        .metadata_range_request(MetadataRangeRequest::Require)
+        .build()?;
 
     let url = format!("{}/ok-1.0.0-py3-none-any.whl", server.uri());
     let filename = WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?;

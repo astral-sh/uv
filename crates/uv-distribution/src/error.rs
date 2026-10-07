@@ -6,11 +6,11 @@ use tokio::task::JoinError;
 
 use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
-use uv_client::WrappedReqwestError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
 use uv_fs::Simplified;
 use uv_git::GitError;
+use uv_http::WrappedReqwestError;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Platform;
@@ -51,7 +51,7 @@ pub enum Error {
     #[error(transparent)]
     Client(#[from] uv_client::Error),
     #[error(transparent)]
-    ClientBuild(#[from] uv_client::ClientBuildError),
+    ClientBuild(#[from] uv_http::ClientBuildError),
 
     // Cache writing error
     #[error("Failed to read from the distribution cache")]
@@ -399,6 +399,12 @@ impl Error {
                 }
             }
         }
+    }
+}
+
+impl From<uv_http::Error> for Error {
+    fn from(error: uv_http::Error) -> Self {
+        Self::Client(uv_client::Error::from(error))
     }
 }
 

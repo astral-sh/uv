@@ -454,6 +454,73 @@ async fn direct_url_http_404() {
     ");
 }
 
+/// Requiring metadata range requests applies to both pip compilation and project locking.
+#[cfg(feature = "test-python")]
+#[tokio::test]
+async fn metadata_range_requests_required() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+    )?;
+    let hash = hex::encode(Sha256::digest(&wheel));
+
+    // The wheel is available for streaming, but HEAD requests return 404.
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wheel, "application/octet-stream"))
+        .mount(&server)
+        .await;
+    let wheel_url = format!("{}/ok-1.0.0-py3-none-any.whl", server.uri());
+
+    // Pip compilation must reject the server instead of streaming the wheel.
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("ok @ {wheel_url}"))?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--no-index")
+        .env(EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS, "true"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl`
+      cause: Wheel metadata range requests are required, but not supported for: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl
+      cause: Failed to fetch: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    // Provide the hash so project locking can request metadata without downloading the wheel.
+    // The range-request setting must apply to this metadata request.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ok @ {wheel_url}#sha256={hash}"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--no-index")
+        .env(EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS, "true"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f`
+      cause: Wheel metadata range requests are required, but not supported for: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+      cause: Failed to fetch: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
 /// Check the direct package URL error message when the server returns HTTP status 500, a retryable
 /// error.
 #[tokio::test]

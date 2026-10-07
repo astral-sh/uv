@@ -15,7 +15,7 @@ pub(crate) enum ToolError {
     #[error(transparent)]
     Resolve(Box<uv_resolve_operations::Error>),
     #[error(transparent)]
-    ClientBuild(#[from] uv_client::ClientBuildError),
+    ClientBuild(#[from] uv_http::ClientBuildError),
     #[error(transparent)]
     Client(#[from] uv_client::Error),
     #[error(transparent)]
@@ -69,7 +69,7 @@ pub(crate) enum ToolLockError {
     #[error(transparent)]
     Validation(#[from] uv_lock_operations::LockValidationError),
     #[error(transparent)]
-    ClientBuild(#[from] uv_client::ClientBuildError),
+    ClientBuild(#[from] uv_http::ClientBuildError),
     #[error(transparent)]
     FlatIndex(Box<uv_client::FlatIndexError>),
     #[error(transparent)]

@@ -9,13 +9,16 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_http::{
+    CacheControl, CachedClient, CachedClientError, Connectivity, ErrorKind as HttpErrorKind,
+    OwnedArchive, RetryState,
+};
 use uv_pypi_types::HashDigests;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
-use crate::cached_client::{CacheControl, CachedClientError};
+use crate::Error;
 use crate::html::SimpleDetailHTML;
-use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive, RetryState};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -211,7 +214,7 @@ impl<'a> FlatIndexClient<'a> {
             Connectivity::Online => CacheControl::from(
                 self.cache
                     .freshness(&cache_entry, None, None)
-                    .map_err(ErrorKind::Io)?,
+                    .map_err(HttpErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
@@ -225,7 +228,7 @@ impl<'a> FlatIndexClient<'a> {
             .header("Accept", "text/html")
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                HttpErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
         let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
@@ -234,11 +237,11 @@ impl<'a> FlatIndexClient<'a> {
                 let url = DisplaySafeUrl::from_url(response.url().clone());
 
                 let text = response.text().await.map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                    HttpErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
                 let unarchived = Self::parse_html(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                OwnedArchive::from_unarchived(&unarchived)
+                OwnedArchive::from_unarchived(&unarchived).map_err(Error::from)
             }
             .boxed_local()
             .instrument(info_span!("parse_flat_index_html", url = % url))
@@ -275,7 +278,7 @@ impl<'a> FlatIndexClient<'a> {
     ) -> Result<FlatIndexEntries, Error> {
         let text = fs_err::tokio::read_to_string(path)
             .await
-            .map_err(ErrorKind::Io)?;
+            .map_err(HttpErrorKind::Io)?;
         let files = Self::parse_html(&text, flat_index.url())
             .map_err(|err| Error::from_html_err(err, flat_index.url().clone()))?;
         Ok(Self::entries_from_files(files, flat_index))

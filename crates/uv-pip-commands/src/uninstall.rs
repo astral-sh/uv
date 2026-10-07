@@ -6,11 +6,11 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_configuration::{DryRun, KeyringProviderType};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_pep508::UnnamedRequirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;

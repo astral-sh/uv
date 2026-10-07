@@ -12,7 +12,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
     ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
@@ -30,6 +30,7 @@ use uv_errors::{ErrorWithHints, Hinted, Hints};
 use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
+use uv_http::BaseClientBuilder;
 use uv_installer::SitePackages;
 use uv_lock::{Installable, Lock, ResolverManifest};
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
@@ -419,6 +420,7 @@ impl ToolLock {
             index_locations,
             index_strategy,
             keyring_provider,
+            metadata_range_request,
             resolution,
             prerelease,
             fork_strategy,
@@ -444,6 +446,7 @@ impl ToolLock {
         )
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .metadata_range_request(*metadata_range_request)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build()?;

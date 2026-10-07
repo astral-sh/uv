@@ -3,13 +3,14 @@ use std::sync::Arc;
 pub use uv_resolver_types::MetadataResponse;
 pub(crate) use uv_resolver_types::MetadataUnavailable;
 
-use uv_client::MetadataFormat;
+use uv_client::{Error as ClientError, ErrorKind as ClientErrorKind, MetadataFormat};
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
     Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
     MinimumLibcVersion, RequestedDist, RequiresPython,
 };
+use uv_http::ErrorKind as HttpErrorKind;
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
@@ -20,7 +21,7 @@ use crate::flat_index::{FlatDistributions, FlatIndex};
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
-pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
+pub type PackageVersionsResult = Result<VersionsResponse, ClientError>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
 
 /// The response when requesting versions for a package
@@ -204,14 +205,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     .collect(),
             )),
             Err(err) => match err.kind() {
-                uv_client::ErrorKind::RemotePackageNotFound(_) => {
+                ClientErrorKind::RemotePackageNotFound(_) => {
                     if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
                 }
-                uv_client::ErrorKind::NoIndex(_) => {
+                ClientErrorKind::NoIndex(_) => {
                     if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else if flat_index.is_some_and(FlatIndex::offline) {
@@ -220,7 +221,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         Ok(VersionsResponse::NoIndex)
                     }
                 }
-                uv_client::ErrorKind::Offline(_) => {
+                ClientErrorKind::Http(HttpErrorKind::Offline(_)) => {
                     if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
@@ -245,27 +246,27 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     let retries = client.retries();
                     let duration = client.duration();
                     match client.into_kind() {
-                        uv_client::ErrorKind::Offline(_) => {
+                        ClientErrorKind::Http(HttpErrorKind::Offline(_)) => {
                             Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
                         }
-                        uv_client::ErrorKind::MetadataParseError(_, _, err) => {
+                        ClientErrorKind::MetadataParseError(_, _, err) => {
                             Ok(MetadataResponse::Unavailable(
                                 MetadataUnavailable::InvalidMetadata(Arc::new(*err)),
                             ))
                         }
-                        uv_client::ErrorKind::Metadata(_, err) => {
-                            Ok(MetadataResponse::Unavailable(
-                                MetadataUnavailable::InvalidStructure(Arc::new(err)),
-                            ))
-                        }
-                        uv_client::ErrorKind::WrappedReqwestError(url, err) => {
+                        ClientErrorKind::Metadata(_, err) => Ok(MetadataResponse::Unavailable(
+                            MetadataUnavailable::InvalidStructure(Arc::new(err)),
+                        )),
+                        ClientErrorKind::Http(HttpErrorKind::WrappedReqwestError(url, err)) => {
                             let Some(status) = err.status().filter(|status| {
                                 dist.index().is_some_and(|index| {
                                     self.index_locations.ignores_error_code_for(index, *status)
                                 })
                             }) else {
-                                return Err(uv_client::Error::new(
-                                    uv_client::ErrorKind::WrappedReqwestError(url, err),
+                                return Err(ClientError::new(
+                                    ClientErrorKind::Http(HttpErrorKind::WrappedReqwestError(
+                                        url, err,
+                                    )),
                                     retries,
                                     duration,
                                 )
@@ -275,7 +276,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 status,
                             )))
                         }
-                        kind => Err(uv_client::Error::new(kind, retries, duration).into()),
+                        kind => Err(ClientError::new(kind, retries, duration).into()),
                     }
                 }
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {

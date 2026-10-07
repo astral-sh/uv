@@ -57,7 +57,6 @@ fn show_settings_returns_before_running_commands() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
-            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -194,7 +193,6 @@ fn pip_compile_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
-            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -288,6 +286,7 @@ fn pip_compile_baseline() {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            metadata_range_request: Fallback,
             torch_backend: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
@@ -405,7 +404,6 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
-            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -592,7 +590,6 @@ fn pip_install_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
-            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -684,6 +681,7 @@ fn pip_install_baseline() {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            metadata_range_request: Fallback,
             torch_backend: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
@@ -786,7 +784,6 @@ fn lock_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
-            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -859,6 +856,7 @@ fn lock_baseline() {
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            metadata_range_request: Fallback,
             link_mode: Clone,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
@@ -916,7 +914,6 @@ fn version_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
-            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -996,6 +993,7 @@ fn version_baseline() {
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
+                metadata_range_request: Fallback,
                 link_mode: Clone,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(
@@ -1061,7 +1059,6 @@ fn tool_install_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
-            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -1172,6 +1169,7 @@ fn tool_install_baseline() {
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
+                metadata_range_request: Fallback,
                 link_mode: Clone,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(

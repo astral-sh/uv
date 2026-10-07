@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::Result;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -15,6 +14,7 @@ use uv_environment_operations::install_target::InstallTarget;
 use uv_environment_operations::malware::MalwareCheckContext;
 use uv_environment_operations::sync_from_lock;
 use uv_fs::PortablePathBuf;
+use uv_http::BaseClientBuilder;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_installer::SitePackages;
 use uv_lock::{Installable, Metadata};
@@ -57,6 +57,7 @@ pub(super) async fn collect_module_owners(
             index_locations: &settings.index_locations,
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
+            metadata_range_request: settings.metadata_range_request,
             dependency_metadata: &settings.dependency_metadata,
             config_setting: &settings.config_setting,
             config_settings_package: &settings.config_settings_package,

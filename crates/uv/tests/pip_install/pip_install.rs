@@ -3411,7 +3411,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
 #[tokio::test]
 #[cfg(feature = "test-git")]
 async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
-    use uv_client::DEFAULT_RETRIES;
+    use uv_http::DEFAULT_RETRIES;
 
     let context = uv_test::test_context!("3.12");
 

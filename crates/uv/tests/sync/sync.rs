@@ -1511,10 +1511,10 @@ fn frozen() -> Result<()> {
     ");
 
     // A no-op frozen sync should determine the installation plan without constructing a registry
-    // client, so the `uv_client::base_client` debug target emits no messages.
+    // client, so the `uv_http::base_client` debug target emits no messages.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--frozen")
-        .env(EnvVars::RUST_LOG, "uv_client::base_client=debug"), @"
+        .env(EnvVars::RUST_LOG, "uv_http::base_client=debug"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Checked 3 packages in [TIME]

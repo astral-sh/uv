@@ -3,7 +3,7 @@
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, trace};
 use url::Url;
-use uv_client::BaseClient;
+use uv_http::BaseClient;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::trusted_publishing::{

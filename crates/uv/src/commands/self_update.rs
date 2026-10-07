@@ -16,9 +16,9 @@ use tokio::process::Command;
 use tracing::{debug, warn};
 use url::Url;
 use uv_bin_install::{Binary, find_matching_version};
-use uv_client::{BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_with_url_fallback};
 use uv_command_support::{ExitStatus, Printer};
 use uv_fs::Simplified;
+use uv_http::{BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_with_url_fallback};
 use uv_pep440::{Version as Pep440Version, VersionSpecifier, VersionSpecifiers};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::{

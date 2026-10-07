@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
+uv-http = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-pep440 = { workspace = true }

@@ -15,10 +15,10 @@ use tokio::sync::mpsc;
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, PythonUpgrade, PythonUpgradeSource};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::downloads::{

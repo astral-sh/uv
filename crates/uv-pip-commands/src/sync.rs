@@ -7,11 +7,11 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, Modifications, NoSources,
-    PipInstallFormat, Reinstall, TargetTriple, Upgrade,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, MetadataRangeRequest, Modifications,
+    NoSources, PipInstallFormat, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -20,6 +20,7 @@ use uv_distribution_types::{
     PackageConfigSettings, Resolution,
 };
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
@@ -71,6 +72,7 @@ pub async fn pip_sync(
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
+    metadata_range_request: MetadataRangeRequest,
     client_builder: &BaseClientBuilder<'_>,
     allow_empty_requirements: bool,
     installer_metadata: bool,
@@ -326,6 +328,7 @@ pub async fn pip_sync(
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
+        .metadata_range_request(metadata_range_request)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())

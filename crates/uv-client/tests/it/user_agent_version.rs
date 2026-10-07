@@ -5,8 +5,8 @@ use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_client::RegistryClientBuilder;
+use uv_http::BaseClientBuilder;
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use uv_platform_tags::{Arch, Os, Platform};
 use uv_redacted::DisplaySafeUrl;

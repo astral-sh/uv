@@ -16,7 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-client = { workspace = true }
+uv-http = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-errors = { workspace = true }

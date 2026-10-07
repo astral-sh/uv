@@ -14,10 +14,10 @@ use uv_settings::ResolverInstallerSettings;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
-use uv_client::BaseClientBuilder;
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
+use uv_http::BaseClientBuilder;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_settings::MalwareCheckSettings;

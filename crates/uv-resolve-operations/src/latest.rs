@@ -1,11 +1,12 @@
 use tokio::sync::Semaphore;
 use tracing::debug;
 
-use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
+use uv_client::{ErrorKind as ClientErrorKind, MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
 };
+use uv_http::ErrorKind as HttpErrorKind;
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_resolver::{ExcludeNewer, Prerelease, PrereleaseMode};
@@ -136,9 +137,9 @@ impl LatestClient<'_> {
             Err(err)
                 if matches!(
                     err.kind(),
-                    uv_client::ErrorKind::RemotePackageNotFound(_)
-                        | uv_client::ErrorKind::NoIndex(_)
-                        | uv_client::ErrorKind::Offline(_)
+                    ClientErrorKind::RemotePackageNotFound(_)
+                        | ClientErrorKind::NoIndex(_)
+                        | ClientErrorKind::Http(HttpErrorKind::Offline(_))
                 ) =>
             {
                 Vec::new()

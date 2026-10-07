@@ -36,7 +36,6 @@ use tracing::instrument;
 use url::Url;
 
 use uv_cache_key::CanonicalUrl;
-use uv_client::BaseClientBuilder;
 use uv_configuration::{
     DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
     RequirementsInput,
@@ -47,6 +46,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, Simplified};
+use uv_http::BaseClientBuilder;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};

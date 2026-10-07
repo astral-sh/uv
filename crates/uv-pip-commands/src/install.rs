@@ -9,11 +9,12 @@ use tracing::{Level, debug, enabled, warn};
 use uv_errors::{Hinted, Hints};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
     ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    Modifications, NoSources, Override, PipInstallFormat, Reinstall, TargetTriple, Upgrade,
+    MetadataRangeRequest, Modifications, NoSources, Override, PipInstallFormat, Reinstall,
+    TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -22,6 +23,7 @@ use uv_distribution_types::{
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
 };
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
@@ -100,6 +102,7 @@ pub async fn pip_install(
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
+    metadata_range_request: MetadataRangeRequest,
     client_builder: &BaseClientBuilder<'_>,
     reinstall: Reinstall,
     link_mode: LinkMode,
@@ -448,6 +451,7 @@ pub async fn pip_install(
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
+        .metadata_range_request(metadata_range_request)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())

@@ -16,12 +16,12 @@ use uv_auth::CredentialsCache;
 use uv_build_backend::check_direct_build;
 use uv_build_frontend::SourceBuild;
 use uv_cache::{Cache, CacheBucket};
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
     DependencyGroupsWithDefaults, DependencyMode, DependencyModifiers, HashCheckingMode,
-    IndexStrategy, KeyringProviderType, NoSources,
+    IndexStrategy, KeyringProviderType, MetadataRangeRequest, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -34,6 +34,7 @@ use uv_distribution_types::{
 };
 use uv_errors::{Hinted, Hints};
 use uv_fs::{Simplified, normalize_path, relative_to};
+use uv_http::BaseClientBuilder;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -67,7 +68,7 @@ pub enum Error {
     #[error(transparent)]
     FlatIndex(#[from] uv_client::FlatIndexError),
     #[error(transparent)]
-    ClientBuild(#[from] uv_client::ClientBuildError),
+    ClientBuild(#[from] uv_http::ClientBuildError),
     #[error("Pass `--wheel` explicitly to build a wheel from a source distribution")]
     WheelFromSdistRequiresFlag,
     #[error("Building an `--sdist` from a source distribution is not supported")]
@@ -238,6 +239,7 @@ pub async fn build_frontend(
         index_locations,
         index_strategy,
         keyring_provider,
+        metadata_range_request,
         resolution: _,
         prerelease: _,
         fork_strategy: _,
@@ -428,6 +430,7 @@ pub async fn build_frontend(
             extra_build_variables,
             *index_strategy,
             *keyring_provider,
+            *metadata_range_request,
             exclude_newer.clone(),
             sources.clone(),
             &concurrency,
@@ -501,6 +504,7 @@ async fn build_package(
     extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
+    metadata_range_request: MetadataRangeRequest,
     exclude_newer: ExcludeNewer,
     sources: NoSources,
     concurrency: &Concurrency,
@@ -605,6 +609,7 @@ async fn build_package(
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
+        .metadata_range_request(metadata_range_request)
         .keyring(keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())

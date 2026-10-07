@@ -24,10 +24,7 @@ use url::Url;
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_client::{
-    BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
-    RegistryClient, RetryState,
-};
+use uv_client::RegistryClient;
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
@@ -39,6 +36,10 @@ use uv_distribution_types::{
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
 use uv_git::{Fetch, GIT_LFS, GitError, GitHttpSettings, GitResolver};
 use uv_git_types::{GitHubRepository, GitOid, GitUrl};
+use uv_http::{
+    BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
+    RetryState,
+};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
@@ -1030,7 +1031,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Client(err) => Error::from(err),
             })?;
 
         let expected_size = match source {
@@ -1067,7 +1068,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Client(err) => Error::from(err),
                         })
                 })
                 .await
@@ -2824,7 +2825,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback { err, .. } => err,
-                        CachedClientError::Client(err) => Error::Client(err),
+                        CachedClientError::Client(err) => Error::from(err),
                     })
             })
             .await

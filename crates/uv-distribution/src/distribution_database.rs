@@ -19,10 +19,7 @@ use url::Url;
 
 use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
-use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
-    RequestBuilder, RetryState,
-};
+use uv_client::RegistryClient;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
@@ -33,6 +30,9 @@ use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
 use uv_fs::{LockedFile, write_atomic};
 use uv_git::{GIT_LFS, GitError};
+use uv_http::{
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RequestBuilder, RetryState,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -916,7 +916,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Client(err) => Error::from(err),
             })?;
 
         if let (Some(expected), Some(actual)) = (expected_size, archive.size)
@@ -951,7 +951,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Client(err) => Error::from(err),
                         })
                 })
                 .await?
@@ -1044,7 +1044,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Client(err) => Error::from(err),
             })?;
 
         if let (Some(expected), Some(actual)) = (expected_size, archive.size)
@@ -1079,7 +1079,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Client(err) => Error::from(err),
                         })
                 })
                 .await?

@@ -31,15 +31,16 @@ use url::Url;
 
 use uv_auth::{Credentials, Realm};
 use uv_cache::{Cache, Refresh};
-use uv_client::{
-    BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
-    ProblemDetails, RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
-};
+use uv_client::{MetadataFormat, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
+use uv_http::{
+    BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, OwnedArchive, ProblemDetails,
+    RequestBuilder, RetryParsingError, RetryState,
+};
 use uv_metadata::read_archive_metadata;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
@@ -1428,8 +1429,8 @@ mod tests {
     use tempfile::NamedTempFile;
     use tokio::io::AsyncWriteExt as _;
     use uv_auth::Credentials;
-    use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
+    use uv_http::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
     use uv_preview::PreviewFeature;
     use uv_pypi_types::{HashDigest, Metadata23};
     use uv_redacted::DisplaySafeUrl;
@@ -2346,11 +2347,11 @@ mod tests {
                 ResponseTemplate::new(400)
                     .insert_header(
                         "content-type",
-                        uv_client::ProblemDetails::CONTENT_TYPE,
+                        uv_http::ProblemDetails::CONTENT_TYPE,
                     )
                     .set_body_raw(
                         r#"{"type": "about:blank", "status": 400, "title": "Bad Request", "detail": "Missing required field `name`"}"#,
-                        uv_client::ProblemDetails::CONTENT_TYPE,
+                        uv_http::ProblemDetails::CONTENT_TYPE,
                     ),
             )
             .mount(&mock_server)

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use uv_client::{BaseClientBuilder, RegistryClient};
+use uv_client::RegistryClient;
 use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyModifiers, ExcludeDependency, Excludes,
@@ -20,6 +20,7 @@ use uv_distribution_types::{
     ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
+use uv_http::BaseClientBuilder;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};

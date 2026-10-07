@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 uv-cache = { workspace = true }
 uv-cache-key = { workspace = true }
-uv-client = { workspace = true }
+uv-http = { workspace = true }
 uv-command-support = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }

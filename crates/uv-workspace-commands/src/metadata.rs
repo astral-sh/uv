@@ -4,7 +4,6 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use uv_cache::{Cache, Refresh};
-use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, Stdout, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Modifications,
@@ -15,6 +14,7 @@ use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectInterpreter, ScriptEnvironment,
 };
+use uv_http::BaseClientBuilder;
 use uv_lock::{Lock, Metadata, Package};
 use uv_lock_operations::{
     DiscoveredProject, FrozenWorkspace, LockError, LockMode, LockOperation, LockTarget,

@@ -10,7 +10,7 @@ use tracing::{debug, trace};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     Concurrency, Constraints, DependencyMode, DependencyModifiers, DryRun, Excludes, GitLfsSetting,
     HashCheckingMode, Modifications, Overrides, Reinstall, TargetTriple, Upgrade,
@@ -20,6 +20,7 @@ use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
+use uv_http::BaseClientBuilder;
 use uv_installer::{BuildSettings, InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -297,6 +298,7 @@ pub async fn install(
         )
         .index_locations(settings.resolver.index_locations.clone())
         .index_strategy(settings.resolver.index_strategy)
+        .metadata_range_request(settings.resolver.metadata_range_request)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build()?;

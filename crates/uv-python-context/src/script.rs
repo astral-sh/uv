@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
-use uv_client::BaseClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::ActiveEnvironment;
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
+use uv_http::BaseClientBuilder;
 use uv_pep440::Version;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads,

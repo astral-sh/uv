@@ -10,7 +10,6 @@ use serde::Serialize;
 use tracing::warn;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode,
@@ -26,6 +25,7 @@ use uv_environment_operations::{
     update_environment,
 };
 use uv_fs::{PortablePathBuf, Simplified};
+use uv_http::BaseClientBuilder;
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_install_operations::report::{PackageChangesReport, SchemaReport};

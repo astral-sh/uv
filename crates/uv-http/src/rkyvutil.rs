@@ -22,20 +22,20 @@ use rkyv::{
 
 use crate::{Error, ErrorKind};
 
-/// A convenient alias for the rkyv serializer used by `uv-client`.
+/// A convenient alias for the rkyv serializer used by `uv-http`.
 ///
 /// This utilizes rkyv's `HighSerializer` but fixes its type parameters where
 /// possible since we don't need the full flexibility of a generic serializer.
 pub(crate) type Serializer<'a> = HighSerializer<AlignedVec, ArenaHandle<'a>, rancor::Error>;
 
-/// A convenient alias for the rkyv deserializer used by `uv-client`.
+/// A convenient alias for the rkyv deserializer used by `uv-http`.
 ///
 /// This utilizes rkyv's `HighDeserializer` but fixes its type parameters
 /// where possible since we don't need the full flexibility of a generic
 /// deserializer.
 pub(crate) type Deserializer = HighDeserializer<rancor::Error>;
 
-/// A convenient alias for the rkyv validator used by `uv-client`.
+/// A convenient alias for the rkyv validator used by `uv-http`.
 ///
 /// This utilizes rkyv's `HighValidator` but fixes its type parameters where
 /// possible since we don't need the full flexibility of a generic validator.
@@ -96,7 +96,7 @@ where
     /// This can fail if creating an archive for the given type fails.
     /// Currently, this, at minimum, includes cases where an `A` contains a
     /// `PathBuf` that is not valid UTF-8.
-    pub(crate) fn from_unarchived(unarchived: &A) -> Result<Self, Error> {
+    pub fn from_unarchived(unarchived: &A) -> Result<Self, Error> {
         let raw = rkyv::to_bytes::<rancor::Error>(unarchived)
             .map_err(|e| ErrorKind::ArchiveWrite(e.to_string()))?;
         Ok(Self {

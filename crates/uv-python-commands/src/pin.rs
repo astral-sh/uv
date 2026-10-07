@@ -7,9 +7,9 @@ use tracing::debug;
 use uv_python::downloads::ManagedPythonDownloadList;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_python::{
     EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonArchitecture, PythonDownloads,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,

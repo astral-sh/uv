@@ -18,6 +18,7 @@ workspace = true
 
 [dependencies]
 uv-client = { workspace = true }
+uv-http = { workspace = true }
 uv-command-support = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }

@@ -13,9 +13,10 @@ use tokio::net::{TcpListener, TcpStream};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_distribution_types::IndexUrl;
 use uv_errors::{ErrorOptions, Hinted, write_error_chain_with_options};
+use uv_http::{BaseClientBuilder, Certificates};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 

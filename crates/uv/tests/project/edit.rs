@@ -509,7 +509,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Resul
 #[tokio::test]
 #[cfg(feature = "test-git")]
 async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Result<()> {
-    use uv_client::DEFAULT_RETRIES;
+    use uv_http::DEFAULT_RETRIES;
 
     let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);

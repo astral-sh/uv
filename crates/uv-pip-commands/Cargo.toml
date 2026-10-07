@@ -19,6 +19,7 @@ workspace = true
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-client = { workspace = true }
+uv-http = { workspace = true }
 uv-command-support = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }

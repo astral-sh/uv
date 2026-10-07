@@ -7,7 +7,7 @@ use futures::StreamExt;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple, TreeFormat,
@@ -18,6 +18,7 @@ use uv_environment_operations::install_target::{InstallTarget, PackageSelection}
 use uv_environment_operations::{
     EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
+use uv_http::BaseClientBuilder;
 use uv_lock::{PackageMap, TreeDisplay, TreeJsonTarget};
 use uv_lock_operations::{DiscoveredProject, FrozenWorkspace, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultGroups, PackageName};
@@ -290,6 +291,7 @@ pub async fn tree(
                 index_locations,
                 index_strategy: _,
                 keyring_provider,
+                metadata_range_request,
                 resolution: _,
                 prerelease: _,
                 fork_strategy: _,
@@ -317,6 +319,7 @@ pub async fn tree(
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
             .index_locations(index_locations.clone())
+            .metadata_range_request(*metadata_range_request)
             .keyring(*keyring_provider)
             .build()?;
             let download_concurrency = concurrency.downloads_semaphore.clone();

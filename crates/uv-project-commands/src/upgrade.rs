@@ -8,7 +8,6 @@ use anyhow::{Context, Result, anyhow, bail};
 use itertools::Itertools;
 
 use uv_cache::{Cache, Refresh};
-use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
@@ -19,6 +18,7 @@ use uv_distribution_types::{Identifier, RequiresPython};
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
+use uv_http::BaseClientBuilder;
 use uv_lock::implicit_constraints_marker;
 use uv_lock_operations::{LockMode, LockOperation, LockResult, LockTarget};
 use uv_normalize::PackageName;

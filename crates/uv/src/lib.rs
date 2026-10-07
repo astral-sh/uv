@@ -38,11 +38,11 @@ use uv_cli::{
     PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace,
     TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
-use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{PythonUpgrade, PythonUpgradeSource, ToolRunCommand};
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
+use uv_http::BaseClientBuilder;
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
@@ -76,7 +76,6 @@ fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
-    .metadata_range_request(globals.network_settings.metadata_range_request)
     .cache_read_concurrency(globals.concurrency.cache_reads)
     .http_proxy(globals.network_settings.http_proxy.clone())
     .https_proxy(globals.network_settings.https_proxy.clone())
@@ -799,6 +798,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
+                args.settings.metadata_range_request,
                 &client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]),
                 args.settings.config_setting,
                 args.settings.config_settings_package,
@@ -887,6 +887,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
+                args.settings.metadata_range_request,
                 &client_builder.subcommand(vec!["pip".to_owned(), "sync".to_owned()]),
                 args.settings.allow_empty_requirements,
                 globals.installer_metadata,
@@ -1048,6 +1049,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
+                args.settings.metadata_range_request,
                 &client_builder.subcommand(vec!["pip".to_owned(), "install".to_owned()]),
                 args.settings.reinstall,
                 args.settings.link_mode,
@@ -1430,6 +1432,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
+                args.settings.metadata_range_request,
                 &client_builder.subcommand(vec!["venv".to_owned()]),
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
@@ -1807,6 +1810,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.install_mirrors,
                 args.args,
                 args.filesystem,
+                args.metadata_range_request,
                 client_builder.subcommand(vec!["tool".to_owned(), "upgrade".to_owned()]),
                 globals.python_preference,
                 globals.python_arch,

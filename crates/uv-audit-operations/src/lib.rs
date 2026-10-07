@@ -13,7 +13,7 @@ use uv_audit::{
     VulnerabilityID, VulnerabilityServiceFormat, osv,
 };
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     AuditOutputFormat, Concurrency, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
@@ -21,6 +21,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
+use uv_http::{BaseClientBuilder, CachedClient};
 use uv_lock::Lock;
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;

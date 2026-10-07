@@ -41,7 +41,7 @@ use uv_warnings::warn_user_once_with_chain;
 use crate::linehaul::LineHaul;
 use crate::middleware::{AzureStorageMiddleware, OfflineMiddleware};
 use crate::tls::{Certificates, read_identity};
-use crate::{Connectivity, MetadataRangeRequest, RetriableError, RetryState, UvRetryableStrategy};
+use crate::{Connectivity, RetriableError, RetryState, UvRetryableStrategy};
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -115,7 +115,6 @@ pub struct BaseClientBuilder<'a> {
     indexes: Indexes,
     read_timeout: Duration,
     connect_timeout: Duration,
-    metadata_range_request: MetadataRangeRequest,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     http_proxy: Option<ProxyUrl>,
@@ -226,7 +225,6 @@ impl Default for BaseClientBuilder<'_> {
             indexes: Indexes::new(),
             read_timeout: DEFAULT_READ_TIMEOUT,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
-            metadata_range_request: MetadataRangeRequest::default(),
             extra_middleware: None,
             proxies: vec![],
             http_proxy: None,
@@ -306,18 +304,6 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
-    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
-    /// unavailable.
-    #[must_use]
-    pub fn metadata_range_request(mut self, request: MetadataRangeRequest) -> Self {
-        self.metadata_range_request = request;
-        self
-    }
-
-    pub(crate) fn configured_metadata_range_request(&self) -> MetadataRangeRequest {
-        self.metadata_range_request
-    }
-
     /// Set the number of workers available for reading cached HTTP responses.
     #[must_use]
     pub fn cache_read_concurrency(mut self, workers: usize) -> Self {
@@ -339,13 +325,13 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub(crate) fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
+    pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
     }
 
     #[must_use]
-    pub(crate) fn platform(mut self, platform: &'a Platform) -> Self {
+    pub fn platform(mut self, platform: &'a Platform) -> Self {
         self.platform = Some(platform);
         self
     }
@@ -357,7 +343,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub(crate) fn indexes(mut self, indexes: Indexes) -> Self {
+    pub fn indexes(mut self, indexes: Indexes) -> Self {
         self.indexes = indexes;
         self
     }
@@ -417,7 +403,7 @@ impl<'a> BaseClientBuilder<'a> {
     /// leakage to untrusted domains.
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn allow_cross_origin_credentials(mut self) -> Self {
+    fn allow_cross_origin_credentials(mut self) -> Self {
         self.cross_origin_credential_policy = CrossOriginCredentialsPolicy::Insecure;
         self
     }
@@ -514,7 +500,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// Share the underlying client between two different middleware configurations.
-    pub(crate) fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
+    pub fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
         // Wrap in any relevant middleware and handle connectivity.
         let client = RedirectClientWithMiddleware {
             client: self.apply_middleware(existing.raw_client.clone()),
@@ -768,7 +754,7 @@ pub struct BaseClient {
 
 /// The certificate roots used by a [`BaseClient`].
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum CertificateSource {
+pub enum CertificateSource {
     /// The system certificate roots.
     System,
     /// The bundled `WebPKI` certificate roots.
@@ -822,7 +808,7 @@ impl BaseClient {
     }
 
     /// The configured client read timeout.
-    pub(crate) fn read_timeout(&self) -> Duration {
+    pub fn read_timeout(&self) -> Duration {
         self.read_timeout
     }
 
@@ -836,7 +822,7 @@ impl BaseClient {
         retry_policy(self.retries, self.no_retry_delay)
     }
 
-    pub(crate) fn credentials_cache(&self) -> &CredentialsCache {
+    pub fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
     }
 
@@ -878,7 +864,7 @@ impl RedirectClientWithMiddleware {
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
-    pub(crate) fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
         RequestBuilder::new(self.client.head(url), self)
     }
 
@@ -1245,7 +1231,7 @@ mod tests {
 
     use anyhow::{Context, Result};
     use reqwest::{Client, Method};
-    use wiremock::matchers::method;
+    use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
@@ -1480,6 +1466,173 @@ mod tests {
 
             assert!(!redirect_request.headers().contains_key(REFERER));
         }
+
+        Ok(())
+    }
+
+    async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        server
+    }
+
+    #[tokio::test]
+    async fn test_redirect_to_server_with_credentials() -> Result<()> {
+        let username = "user";
+        let password = "password";
+
+        let auth_server = start_test_server(username, password).await;
+        let auth_base_url = DisplaySafeUrl::parse(&auth_server.uri())?;
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 302 to the auth server
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(302).insert_header("Location", format!("{auth_base_url}")),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
+
+        let client = BaseClientBuilder::default()
+            .redirect(RedirectPolicy::RetriggerMiddleware)
+            .allow_cross_origin_credentials()
+            .build()?;
+
+        assert_eq!(
+            client
+                .for_host(&redirect_server_url)
+                .get(redirect_server.uri())
+                .send()
+                .await?
+                .status(),
+            401,
+            "Requests should fail if credentials are missing"
+        );
+
+        let mut url = redirect_server_url.clone();
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
+
+        assert_eq!(
+            client
+                .for_host(&redirect_server_url)
+                .get(Url::from(url))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests should succeed if credentials are present"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_root_relative_url() -> Result<()> {
+        let username = "user";
+        let password = "password";
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 307 with a relative URL.
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/"))
+            .respond_with(
+                ResponseTemplate::new(307).insert_header("Location", "/bar/baz/".to_string()),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/bar/baz/"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&redirect_server)
+            .await;
+
+        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
+
+        let client = BaseClientBuilder::default()
+            .redirect(RedirectPolicy::RetriggerMiddleware)
+            .allow_cross_origin_credentials()
+            .build()?;
+
+        let mut url = redirect_server_url.clone();
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
+
+        assert_eq!(
+            client
+                .for_host(&url)
+                .get(Url::from(url))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests should succeed for relative URL"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_relative_url() -> Result<()> {
+        let username = "user";
+        let password = "password";
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 307 with a relative URL.
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/bar/baz/"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&redirect_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/"))
+            .and(basic_auth(username, password))
+            .respond_with(
+                ResponseTemplate::new(307).insert_header("Location", "bar/baz/".to_string()),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        let client = BaseClientBuilder::default()
+            .redirect(RedirectPolicy::RetriggerMiddleware)
+            .allow_cross_origin_credentials()
+            .build()?;
+
+        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
+        let mut url = redirect_server_url.clone();
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
+
+        assert_eq!(
+            client
+                .for_host(&url)
+                .get(Url::from(url))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests should succeed for relative URL"
+        );
 
         Ok(())
     }

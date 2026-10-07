@@ -4,11 +4,12 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use uv_client::{ClientBuildError, FlatIndexError};
+use uv_client::FlatIndexError;
 use uv_command_support::UvError;
 use uv_distribution::{LoweringError, MetadataError};
 use uv_distribution_types::{ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError};
 use uv_errors::{Hinted, Hints};
+use uv_http::ClientBuildError;
 use uv_lock::{Lock, LockError as LockDataError, LockParseError};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;

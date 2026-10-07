@@ -7,7 +7,6 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
@@ -21,6 +20,7 @@ use uv_environment_operations::{
     ProjectInterpreter, sync_from_lock,
 };
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, PackageName};

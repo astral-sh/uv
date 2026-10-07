@@ -10,7 +10,6 @@ use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{
     AuthorFrom, DependencyGroupsWithDefaults, InitKind, InitProjectKind, ProjectBuildBackend,
@@ -19,6 +18,7 @@ use uv_configuration::{
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
+use uv_http::BaseClientBuilder;
 use uv_install_wheel::reserved_script_name;
 use uv_normalize::PackageName;
 use uv_pep440::Version;

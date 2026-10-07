@@ -3,7 +3,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::{Concurrency, Constraints, GitLfsSetting, HashCheckingMode};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -11,6 +11,7 @@ use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_http::BaseClientBuilder;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::NamedRequirementsResolver;
@@ -66,6 +67,7 @@ pub(super) async fn resolve_names(
         index_locations,
         index_strategy,
         keyring_provider,
+        metadata_range_request,
         link_mode,
         build_isolation,
         extra_build_dependencies,
@@ -99,6 +101,7 @@ pub(super) async fn resolve_names(
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .metadata_range_request(*metadata_range_request)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())

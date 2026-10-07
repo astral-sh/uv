@@ -9,14 +9,15 @@ use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
-use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, HashCheckingMode, Modifications, TargetTriple,
+    Concurrency, Constraints, DryRun, HashCheckingMode, MetadataRangeRequest, Modifications,
+    TargetTriple,
 };
 use uv_dispatch::PlatformState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
+use uv_http::BaseClientBuilder;
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -51,6 +52,7 @@ pub async fn upgrade(
     install_mirrors: PythonInstallMirrors,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
+    metadata_range_request: MetadataRangeRequest,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_arch: Option<PythonArchitecture>,
@@ -146,6 +148,7 @@ pub async fn upgrade(
             cache,
             workspace_cache,
             &filesystem,
+            metadata_range_request,
             installer_metadata,
             &concurrency,
             preview,
@@ -279,6 +282,7 @@ async fn upgrade_tool(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     filesystem: &ResolverInstallerOptions,
+    metadata_range_request: MetadataRangeRequest,
     installer_metadata: bool,
     concurrency: &Concurrency,
     preview: Preview,
@@ -348,7 +352,8 @@ async fn upgrade_tool(
 
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
     let options = args.clone().combine(receipt.combine(filesystem.clone()));
-    let settings = ResolverInstallerSettings::from(options.clone());
+    let mut settings = ResolverInstallerSettings::from(options.clone());
+    settings.resolver.metadata_range_request = metadata_range_request;
 
     let build_constraints = existing_tool_receipt.build_constraints().to_vec();
     let manifest_constraints = existing_tool_receipt

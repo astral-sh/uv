@@ -5,7 +5,6 @@ use anyhow::Result;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, ColorChoice, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
@@ -20,6 +19,7 @@ use uv_environment_operations::{
     ProjectInterpreter, ScriptEnvironment, store_credentials_from_target, sync_from_lock,
 };
 use uv_fs::normalize_path;
+use uv_http::BaseClientBuilder;
 use uv_install_operations::loggers::SummaryInstallLogger;
 use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};

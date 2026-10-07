@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use tracing::info_span;
 
-use uv_client::BaseClientBuilder;
 use uv_configuration::{BuildOptions, HashCheckingMode, RequirementsInput, TargetTriple};
 use uv_distribution_types::Resolution;
+use uv_http::BaseClientBuilder;
 use uv_lock::PylockToml;
 use uv_normalize::{ExtraName, GroupName};
 use uv_python::{Interpreter, PythonVersion};

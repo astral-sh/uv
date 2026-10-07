@@ -10,7 +10,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
     ExtrasSpecification, HashCheckingMode, Modifications, Reinstall, TargetTriple, Upgrade,
@@ -22,6 +22,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
+use uv_http::BaseClientBuilder;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_lock::{Installable, Lock};
 use uv_normalize::PackageName;
@@ -1367,6 +1368,7 @@ pub async fn resolve_environment(
         index_locations,
         index_strategy,
         keyring_provider,
+        metadata_range_request,
         resolution,
         prerelease,
         fork_strategy,
@@ -1446,6 +1448,7 @@ pub async fn resolve_environment(
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .metadata_range_request(*metadata_range_request)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -1607,6 +1610,7 @@ pub async fn sync_environment(
         index_locations,
         index_strategy,
         keyring_provider,
+        metadata_range_request,
         dependency_metadata,
         config_setting,
         config_settings_package,
@@ -1633,6 +1637,7 @@ pub async fn sync_environment(
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
+        .metadata_range_request(metadata_range_request)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build()?;
@@ -1768,6 +1773,7 @@ pub async fn update_environment(
                 index_locations,
                 index_strategy,
                 keyring_provider,
+                metadata_range_request,
                 link_mode,
                 build_isolation,
                 extra_build_dependencies: _,
@@ -1873,6 +1879,7 @@ pub async fn update_environment(
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .metadata_range_request(*metadata_range_request)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())

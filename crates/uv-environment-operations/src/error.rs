@@ -77,7 +77,7 @@ pub enum EnvironmentError {
     Client(#[from] uv_client::Error),
 
     #[error(transparent)]
-    ClientBuild(#[from] uv_client::ClientBuildError),
+    ClientBuild(#[from] uv_http::ClientBuildError),
 
     #[error(transparent)]
     Credentials(#[from] CredentialsFromUrlError),
@@ -149,7 +149,7 @@ pub enum EnvironmentError {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    RetryParsing(#[from] uv_client::RetryParsingError),
+    RetryParsing(#[from] uv_http::RetryParsingError),
 
     #[error(transparent)]
     Accelerator(#[from] uv_torch::AcceleratorError),

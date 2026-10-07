@@ -18,7 +18,7 @@ mod macos {
     use criterion::{BatchSize, Criterion, measurement::WallTime};
     use tempfile::TempDir;
 
-    use uv_client::BaseClientBuilder;
+    use uv_http::BaseClientBuilder;
     use uv_preview::Preview;
     use uv_python::PythonDownloadMirrors;
     use uv_python::downloads::{DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList};

@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, DependencyGroupsWithDefaults, DryRun, EditableMode,
@@ -10,6 +10,7 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{Dist, Resolution, ResolvedDist, SourceDist};
+use uv_http::BaseClientBuilder;
 use uv_install_operations::editable::apply_editable_mode;
 use uv_install_operations::loggers::InstallLogger;
 use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan};
@@ -61,6 +62,7 @@ pub async fn sync_from_lock(
         index_locations,
         index_strategy,
         keyring_provider,
+        metadata_range_request,
         dependency_metadata,
         config_setting,
         config_settings_package,
@@ -270,6 +272,7 @@ pub async fn sync_from_lock(
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
+        .metadata_range_request(metadata_range_request)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build()?;

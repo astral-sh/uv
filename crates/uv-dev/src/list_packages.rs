@@ -3,8 +3,9 @@ use anyhow::Result;
 use clap::Parser;
 
 use uv_cache::{Cache, CacheArgs};
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_distribution_types::IndexUrl;
+use uv_http::BaseClientBuilder;
 use uv_settings::EnvironmentOptions;
 
 #[derive(Parser)]
@@ -23,13 +24,7 @@ pub(crate) async fn list_packages(
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default()
             .read_timeout(environment.http_read_timeout)
-            .connect_timeout(environment.http_connect_timeout)
-            .metadata_range_request(
-                environment
-                    .require_metadata_range_requests
-                    .unwrap_or_default()
-                    .into(),
-            ),
+            .connect_timeout(environment.http_connect_timeout),
         cache,
     )
     .build()?;

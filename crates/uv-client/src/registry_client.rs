@@ -18,8 +18,7 @@ use url::Url;
 
 use uv_auth::{CredentialsCache, Indexes};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
-use uv_configuration::IndexStrategy;
-use uv_configuration::KeyringProviderType;
+use uv_configuration::{IndexStrategy, KeyringProviderType, MetadataRangeRequest};
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
@@ -28,6 +27,11 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
+use uv_http::{
+    BaseClient, BaseClientBuilder, CacheControl, CachedClient, ClientBuildError, Connectivity,
+    ErrorKind as HttpErrorKind, ExtraMiddleware, OwnedArchive, RedirectClientWithMiddleware,
+    RedirectPolicy, RetryState,
+};
 use uv_metadata::{read_archive_metadata, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -39,16 +43,10 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
-use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
-use crate::{
-    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
-    RetryState,
-};
+use crate::{Error, ErrorKind, FlatIndexClient};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -63,14 +61,13 @@ pub struct RegistryClientBuilder<'a> {
 
 impl<'a> RegistryClientBuilder<'a> {
     pub fn new(base_client_builder: BaseClientBuilder<'a>, cache: Cache) -> Self {
-        let metadata_range_request = base_client_builder.configured_metadata_range_request();
         Self {
             index_locations: IndexLocations::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
             base_client_builder: base_client_builder.redirect(RedirectPolicy::RetriggerMiddleware),
-            metadata_range_request,
+            metadata_range_request: MetadataRangeRequest::default(),
         }
     }
 
@@ -89,6 +86,13 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn index_strategy(mut self, index_strategy: IndexStrategy) -> Self {
         self.index_strategy = index_strategy;
+        self
+    }
+
+    /// Set whether wheel metadata requests may fall back to downloading the entire wheel.
+    #[must_use]
+    pub fn metadata_range_request(mut self, request: MetadataRangeRequest) -> Self {
+        self.metadata_range_request = request;
         self
     }
 
@@ -131,18 +135,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn proxy(mut self, proxy: Proxy) -> Self {
         self.base_client_builder = self.base_client_builder.proxy(proxy);
-        self
-    }
-
-    /// Allows credentials to be propagated on cross-origin redirects.
-    ///
-    /// WARNING: This should only be available for tests. In production code, propagating credentials
-    /// during cross-origin redirects can lead to security vulnerabilities including credential
-    /// leakage to untrusted domains.
-    #[cfg(test)]
-    #[must_use]
-    fn allow_cross_origin_credentials(mut self) -> Self {
-        self.base_client_builder = self.base_client_builder.allow_cross_origin_credentials();
         self
     }
 
@@ -243,26 +235,6 @@ pub struct RegistryClient {
     parse_memory: Arc<Semaphore>,
     /// The behavior when metadata range requests are unsupported.
     metadata_range_request: MetadataRangeRequest,
-}
-
-/// The behavior when wheel metadata cannot be fetched with HTTP range requests.
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
-pub enum MetadataRangeRequest {
-    /// Download the entire wheel to read the metadata.
-    #[default]
-    Fallback,
-    /// Fail instead of downloading the entire wheel.
-    Require,
-}
-
-impl From<bool> for MetadataRangeRequest {
-    fn from(require: bool) -> Self {
-        if require {
-            Self::Require
-        } else {
-            Self::Fallback
-        }
-    }
 }
 
 /// The format of the package metadata returned by querying an index.
@@ -456,7 +428,9 @@ impl RegistryClient {
                 Connectivity::Online => {
                     Err(ErrorKind::RemotePackageNotFound(package_name.clone()).into())
                 }
-                Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
+                Connectivity::Offline => {
+                    Err(HttpErrorKind::Offline(package_name.to_string()).into())
+                }
             };
         }
 
@@ -567,7 +541,7 @@ impl RegistryClient {
             Connectivity::Online => CacheControl::from(
                 self.cache
                     .freshness(&cache_entry, Some(package_name), None)
-                    .map_err(ErrorKind::Io)?,
+                    .map_err(HttpErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
@@ -576,7 +550,7 @@ impl RegistryClient {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = cache_entry.with_file(format!("{package_name}.lock"));
-            lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
+            lock_entry.lock().await.map_err(HttpErrorKind::CacheLock)?
         };
 
         let result = if matches!(index, IndexUrl::Path(_)) {
@@ -590,7 +564,7 @@ impl RegistryClient {
             Ok(metadata) => Ok(SimpleMetadataSearchOutcome::Found(metadata)),
             Err(err) => match err.kind() {
                 // The package could not be found in the remote index.
-                ErrorKind::WrappedReqwestError(.., reqwest_err) => {
+                ErrorKind::Http(HttpErrorKind::WrappedReqwestError(.., reqwest_err)) => {
                     let Some(status_code) = reqwest_err.status() else {
                         return Err(err);
                     };
@@ -608,7 +582,9 @@ impl RegistryClient {
                 }
 
                 // The package is unavailable due to a lack of connectivity.
-                ErrorKind::Offline(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
+                ErrorKind::Http(HttpErrorKind::Offline(_)) => {
+                    Ok(SimpleMetadataSearchOutcome::NotFound)
+                }
 
                 // The package could not be found in the local index.
                 ErrorKind::LocalPackageNotFound(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
@@ -633,7 +609,7 @@ impl RegistryClient {
             .header("Accept", MediaType::pypi())
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                HttpErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
         let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
@@ -660,7 +636,7 @@ impl RegistryClient {
                 match media_type {
                     MediaType::PypiV1Json => {
                         let bytes = response.bytes().await.map_err(|err| {
-                            ErrorKind::from_reqwest(
+                            HttpErrorKind::from_reqwest(
                                 url.clone(),
                                 err,
                                 self.client.certificate_source(),
@@ -676,13 +652,13 @@ impl RegistryClient {
                                 data.project_status,
                                 &url,
                             );
-                            OwnedArchive::from_unarchived(&unarchived)
+                            OwnedArchive::from_unarchived(&unarchived).map_err(Error::from)
                         })
                         .await
                     }
                     MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response.text().await.map_err(|err| {
-                            ErrorKind::from_reqwest(
+                            HttpErrorKind::from_reqwest(
                                 url.clone(),
                                 err,
                                 self.client.certificate_source(),
@@ -691,7 +667,7 @@ impl RegistryClient {
                         self.parse_simple_body(text.len(), move || {
                             let unarchived =
                                 SimpleDetailMetadata::from_html(&text, &package_name, &url)?;
-                            OwnedArchive::from_unarchived(&unarchived)
+                            OwnedArchive::from_unarchived(&unarchived).map_err(Error::from)
                         })
                         .await
                     }
@@ -769,11 +745,11 @@ impl RegistryClient {
                 )));
             }
             Err(err) => {
-                return Err(Error::from(ErrorKind::Io(err)));
+                return Err(Error::from(HttpErrorKind::Io(err)));
             }
         };
         let metadata = SimpleDetailMetadata::from_html(&text, package_name, url)?;
-        OwnedArchive::from_unarchived(&metadata)
+        OwnedArchive::from_unarchived(&metadata).map_err(Error::from)
     }
 
     /// Fetch the list of projects from a Simple API index at a remote URL.
@@ -822,7 +798,7 @@ impl RegistryClient {
             Connectivity::Online => CacheControl::from(
                 self.cache
                     .freshness(&cache_entry, None, None)
-                    .map_err(ErrorKind::Io)?,
+                    .map_err(HttpErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
@@ -851,7 +827,7 @@ impl RegistryClient {
                 let metadata = match media_type {
                     MediaType::PypiV1Json => {
                         let bytes = response.bytes().await.map_err(|err| {
-                            ErrorKind::from_reqwest(
+                            HttpErrorKind::from_reqwest(
                                 url.clone(),
                                 err,
                                 self.client.certificate_source(),
@@ -863,7 +839,7 @@ impl RegistryClient {
                     }
                     MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response.text().await.map_err(|err| {
-                            ErrorKind::from_reqwest(
+                            HttpErrorKind::from_reqwest(
                                 url.clone(),
                                 err,
                                 self.client.certificate_source(),
@@ -873,7 +849,7 @@ impl RegistryClient {
                     }
                 };
 
-                OwnedArchive::from_unarchived(&metadata)
+                OwnedArchive::from_unarchived(&metadata).map_err(Error::from)
             }
         };
 
@@ -884,7 +860,7 @@ impl RegistryClient {
             .header("Accept", MediaType::pypi())
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                HttpErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
 
         let index = self
@@ -915,11 +891,11 @@ impl RegistryClient {
                 return Err(Error::from(ErrorKind::LocalIndexNotFound(path)));
             }
             Err(err) => {
-                return Err(Error::from(ErrorKind::Io(err)));
+                return Err(Error::from(HttpErrorKind::Io(err)));
             }
         };
         let metadata = SimpleIndexMetadata::from_html(&text, url)?;
-        OwnedArchive::from_unarchived(&metadata)
+        OwnedArchive::from_unarchived(&metadata).map_err(Error::from)
     }
 
     /// Fetch the metadata for a remote wheel file.
@@ -1050,7 +1026,7 @@ impl RegistryClient {
         let filename = filename.clone();
         let built_dist = built_dist.to_string();
         tokio::task::spawn_blocking(move || {
-            let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
+            let file = fs_err::File::open(path).map_err(HttpErrorKind::Io)?;
             let contents = read_archive_metadata(&filename, BufReader::new(file))
                 .map_err(|err| ErrorKind::Metadata(metadata_path, err))?;
             ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
@@ -1058,7 +1034,7 @@ impl RegistryClient {
             })
         })
         .await
-        .map_err(|err| ErrorKind::Io(err.into()))?
+        .map_err(|err| HttpErrorKind::Io(err.into()))?
     }
 
     /// Fetch the metadata from a wheel file.
@@ -1095,7 +1071,7 @@ impl RegistryClient {
                 Connectivity::Online => CacheControl::from(
                     self.cache
                         .freshness(&cache_entry, Some(&filename.name), None)
-                        .map_err(ErrorKind::Io)?,
+                        .map_err(HttpErrorKind::Io)?,
                 ),
                 Connectivity::Offline => CacheControl::AllowStale,
             };
@@ -1104,12 +1080,12 @@ impl RegistryClient {
             #[cfg(windows)]
             let _lock = {
                 let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
-                lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
+                lock_entry.lock().await.map_err(HttpErrorKind::CacheLock)?
             };
 
             let response_callback = async |response: Response, _: &mut RetryState| {
                 let bytes = response.bytes().await.map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                    HttpErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
 
                 // Verify the downloaded bytes before parsing or caching the metadata.
@@ -1141,7 +1117,7 @@ impl RegistryClient {
                 .get(Url::from(url.clone()))
                 .build()
                 .map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                    HttpErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
             Ok(self
                 .cached_client()
@@ -1186,7 +1162,7 @@ impl RegistryClient {
             Connectivity::Online => CacheControl::from(
                 self.cache
                     .freshness(&cache_entry, Some(&filename.name), None)
-                    .map_err(ErrorKind::Io)?,
+                    .map_err(HttpErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
@@ -1195,7 +1171,7 @@ impl RegistryClient {
         #[cfg(windows)]
         let _lock = {
             let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
+            lock_entry.lock().await.map_err(HttpErrorKind::CacheLock)?
         };
 
         // Attempt to fetch via a range request.
@@ -1209,7 +1185,7 @@ impl RegistryClient {
                 )
                 .build()
                 .map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                    HttpErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
 
             // Copy authorization headers from the HEAD request to subsequent requests
@@ -1306,7 +1282,7 @@ impl RegistryClient {
             )
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                HttpErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
 
         // Stream the file, searching for the METADATA.
@@ -1793,41 +1769,21 @@ impl std::fmt::Display for MediaType {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
-pub enum Connectivity {
-    /// Allow access to the network.
-    #[default]
-    Online,
-
-    /// Do not allow access to the network.
-    Offline,
-}
-
-impl Connectivity {
-    pub fn is_online(&self) -> bool {
-        matches!(self, Self::Online)
-    }
-
-    pub fn is_offline(&self) -> bool {
-        matches!(self, Self::Offline)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
     use std::str::FromStr;
 
     use tokio::sync::Semaphore;
-    use url::Url;
+    use uv_http::{BaseClientBuilder, Connectivity};
     use uv_normalize::PackageName;
     use uv_pypi_types::{HashDigest, HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
-        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        RegistryClient, RegistryClientBuilder, SimpleDetailMetadata, SimpleDetailMetadatum,
+        html::SimpleDetailHTML,
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
@@ -1835,27 +1791,9 @@ mod tests {
         IndexUrl, ToUrlError,
     };
     use uv_small_str::SmallString;
-    use wiremock::matchers::{basic_auth, method, path_regex};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::MockServer;
 
     type Error = Box<dyn std::error::Error>;
-
-    async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(basic_auth(username, password))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&server)
-            .await;
-
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(401))
-            .mount(&server)
-            .await;
-
-        server
-    }
 
     fn no_index_client(flat_indexes: Vec<Index>) -> Result<RegistryClient, Error> {
         Ok(
@@ -1965,162 +1903,6 @@ mod tests {
 
         assert_no_index(&registry_client, "validation", None).await?;
         assert_no_requests(&server).await;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_redirect_to_server_with_credentials() -> Result<(), Error> {
-        let username = "user";
-        let password = "password";
-
-        let auth_server = start_test_server(username, password).await;
-        let auth_base_url = DisplaySafeUrl::parse(&auth_server.uri())?;
-
-        let redirect_server = MockServer::start().await;
-
-        // Configure the redirect server to respond with a 302 to the auth server
-        Mock::given(method("GET"))
-            .respond_with(
-                ResponseTemplate::new(302).insert_header("Location", format!("{auth_base_url}")),
-            )
-            .mount(&redirect_server)
-            .await;
-
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
-
-        let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
-            .allow_cross_origin_credentials()
-            .build()
-            .expect("failed to build registry client");
-        let client = registry_client.cached_client().uncached();
-
-        assert_eq!(
-            client
-                .for_host(&redirect_server_url)
-                .get(redirect_server.uri())
-                .send()
-                .await?
-                .status(),
-            401,
-            "Requests should fail if credentials are missing"
-        );
-
-        let mut url = redirect_server_url.clone();
-        let _ = url.set_username(username);
-        let _ = url.set_password(Some(password));
-
-        assert_eq!(
-            client
-                .for_host(&redirect_server_url)
-                .get(Url::from(url))
-                .send()
-                .await?
-                .status(),
-            200,
-            "Requests should succeed if credentials are present"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_redirect_root_relative_url() -> Result<(), Error> {
-        let username = "user";
-        let password = "password";
-
-        let redirect_server = MockServer::start().await;
-
-        // Configure the redirect server to respond with a 307 with a relative URL.
-        Mock::given(method("GET"))
-            .and(path_regex("/foo/"))
-            .respond_with(
-                ResponseTemplate::new(307).insert_header("Location", "/bar/baz/".to_string()),
-            )
-            .mount(&redirect_server)
-            .await;
-
-        Mock::given(method("GET"))
-            .and(path_regex("/bar/baz/"))
-            .and(basic_auth(username, password))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&redirect_server)
-            .await;
-
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
-
-        let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
-            .allow_cross_origin_credentials()
-            .build()
-            .expect("failed to build registry client");
-        let client = registry_client.cached_client().uncached();
-
-        let mut url = redirect_server_url.clone();
-        let _ = url.set_username(username);
-        let _ = url.set_password(Some(password));
-
-        assert_eq!(
-            client
-                .for_host(&url)
-                .get(Url::from(url))
-                .send()
-                .await?
-                .status(),
-            200,
-            "Requests should succeed for relative URL"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_redirect_relative_url() -> Result<(), Error> {
-        let username = "user";
-        let password = "password";
-
-        let redirect_server = MockServer::start().await;
-
-        // Configure the redirect server to respond with a 307 with a relative URL.
-        Mock::given(method("GET"))
-            .and(path_regex("/foo/bar/baz/"))
-            .and(basic_auth(username, password))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&redirect_server)
-            .await;
-
-        Mock::given(method("GET"))
-            .and(path_regex("/foo/"))
-            .and(basic_auth(username, password))
-            .respond_with(
-                ResponseTemplate::new(307).insert_header("Location", "bar/baz/".to_string()),
-            )
-            .mount(&redirect_server)
-            .await;
-
-        let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
-            .allow_cross_origin_credentials()
-            .build()
-            .expect("failed to build registry client");
-        let client = registry_client.cached_client().uncached();
-
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
-        let mut url = redirect_server_url.clone();
-        let _ = url.set_username(username);
-        let _ = url.set_password(Some(password));
-
-        assert_eq!(
-            client
-                .for_host(&url)
-                .get(Url::from(url))
-                .send()
-                .await?
-                .status(),
-            200,
-            "Requests should succeed for relative URL"
-        );
-
         Ok(())
     }
 

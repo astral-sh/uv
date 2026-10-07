@@ -4,8 +4,8 @@ use indoc::indoc;
 use std::path::Path;
 use url::Url;
 
-use uv_client::BaseClientBuilder;
 use uv_configuration::RequirementsInput;
+use uv_http::BaseClientBuilder;
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 

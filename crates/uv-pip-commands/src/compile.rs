@@ -12,11 +12,11 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
-    Reinstall, Upgrade,
+    HashCheckingMode, IndexStrategy, MetadataRangeRequest, NoBinary, NoBuild, NoSources, Override,
+    PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -28,6 +28,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
+use uv_http::BaseClientBuilder;
 use uv_install_wheel::LinkMode;
 use uv_lock::PylockToml;
 use uv_normalize::PackageName;
@@ -106,6 +107,7 @@ pub async fn pip_compile(
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
+    metadata_range_request: MetadataRangeRequest,
     client_builder: &BaseClientBuilder<'_>,
     config_settings: ConfigSettings,
     config_settings_package: PackageConfigSettings,
@@ -457,6 +459,7 @@ pub async fn pip_compile(
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
+        .metadata_range_request(metadata_range_request)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())

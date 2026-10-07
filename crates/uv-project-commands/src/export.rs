@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet;
 use serde::Deserialize;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::{ExitStatus, OutputWriter, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
@@ -24,6 +24,7 @@ use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, detect_conflicts,
 };
 use uv_fs::CWD;
+use uv_http::BaseClientBuilder;
 use uv_lock::{Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_lock_operations::{DiscoveredProject, FrozenWorkspace, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
@@ -693,6 +694,7 @@ async fn render_export<'output>(
             if export.has_missing_hashes() {
                 let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
                     .index_locations(settings.index_locations.clone())
+                    .metadata_range_request(settings.metadata_range_request)
                     .build()?;
                 export
                     .generate_missing_hashes(&client, concurrency.downloads, output_dir)

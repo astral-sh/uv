@@ -5,10 +5,10 @@ use std::path::Path;
 use itertools::Itertools;
 use tracing::debug;
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
+use uv_http::BaseClientBuilder;
 use uv_pep440::TildeVersionSpecifier;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads,

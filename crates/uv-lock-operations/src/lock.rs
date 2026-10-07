@@ -5,7 +5,7 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_command_support::Printer;
 use uv_configuration::{
     Concurrency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
@@ -17,6 +17,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
+use uv_http::BaseClientBuilder;
 use uv_lock::{GroupMetadata, Lock, ResolverManifest};
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
@@ -307,6 +308,7 @@ async fn do_lock(
         index_locations,
         index_strategy,
         keyring_provider,
+        metadata_range_request,
         resolution,
         prerelease,
         fork_strategy,
@@ -616,6 +618,7 @@ async fn do_lock(
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .metadata_range_request(*metadata_range_request)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build()?;

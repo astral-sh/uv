@@ -7,7 +7,7 @@ use jiff::Timestamp;
 use pubgrub::Ranges;
 use tracing::{instrument, trace};
 
-use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
+use uv_client::{FlatIndexEntry, SimpleDetailMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -15,6 +15,7 @@ use uv_distribution_types::{
     PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
     SourceDistCompatibility, WheelCompatibility,
 };
+use uv_http::OwnedArchive;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
