@@ -49,7 +49,7 @@ pub enum Error {
     DependencyGroups {
         path: PathBuf,
         #[source]
-        source: uv_distribution::MetadataError,
+        source: Box<uv_distribution::MetadataError>,
     },
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),

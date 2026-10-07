@@ -223,7 +223,7 @@ pub async fn resolve(
             .await
             .map_err(|source| Error::DependencyGroups {
                 path: pyproject_path.clone(),
-                source,
+                source: Box::new(source),
             })?;
 
             // Complain if dependency groups are named that don't appear.
