@@ -655,7 +655,7 @@ async fn python_list_only_installed_skips_download_metadata() {
 
 #[tokio::test]
 async fn python_list_remote_python_downloads_json_url() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_http_retries();
     let server = MockServer::start().await;
 
     let remote_json = r#"

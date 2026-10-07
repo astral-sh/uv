@@ -1886,7 +1886,9 @@ fn build_workspace_transitive_build_dependency() -> Result<()> {
 
 #[test]
 fn build_sha() -> Result<()> {
-    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION).with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
+        .with_filter((r"\\\.", ""))
+        .with_filtered_http_retries();
 
     let project = context.temp_dir.child("project");
 

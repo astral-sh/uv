@@ -361,7 +361,7 @@ fn cache_init_failure() -> Result<()> {
 /// Index hashes must be checked before building an sdist or reading its metadata.
 #[tokio::test]
 async fn index_source_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let name = "ok".parse()?;
     let server = PackageServer::new(&name).await;
     let index_url = server.index_url();

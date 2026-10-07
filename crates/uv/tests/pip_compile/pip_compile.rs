@@ -5556,7 +5556,7 @@ fn generate_hashes_built_distribution_url() -> Result<()> {
 /// Reuse a URL hash while fetching only wheel metadata, then validate it during installation.
 #[tokio::test]
 async fn generate_hashes_url_fragment() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let filename = "ok-1.0.0-py3-none-any.whl";
     let wheel = read(context.workspace_root.join("test/links").join(filename))?;
@@ -5645,7 +5645,7 @@ async fn generate_hashes_url_fragment() -> Result<()> {
 /// A full-wheel metadata fallback must not cache a declared hash as a computed artifact hash.
 #[tokio::test]
 async fn generate_hashes_url_fragment_no_range_requests() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let filename = "ok-1.0.0-py3-none-any.whl";
     let wheel = read(context.workspace_root.join("test/links").join(filename))?;
@@ -5759,7 +5759,7 @@ fn generate_hashes_url_fragment_dependency_metadata() -> Result<()> {
 /// Validate and reuse source URL hashes when reading metadata from a subdirectory.
 #[tokio::test]
 async fn generate_hashes_url_fragment_source_subdirectory() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let mut source = Vec::new();
     write_tar_gz(
@@ -5858,7 +5858,7 @@ async fn generate_hashes_url_fragment_source_subdirectory() -> Result<()> {
 /// URL hashes must be checked before running a source distribution's build backend.
 #[tokio::test]
 async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let name = "source-package".parse()?;
     let server = PackageServer::new(&name).await;
     let filename = "source.tar.gz";
@@ -12538,7 +12538,7 @@ fn metadata_2_2() -> Result<()> {
 /// Resolve a direct URL package with a URL that doesn't exist (i.e., returns a 404).
 #[test]
 fn not_found_direct_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl")?;
 

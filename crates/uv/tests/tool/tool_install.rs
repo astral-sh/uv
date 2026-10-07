@@ -5338,7 +5338,8 @@ async fn tool_install_default_credentials() -> Result<()> {
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_tool_dirs()
+        .with_filtered_http_retries();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -5796,7 +5797,7 @@ fn tool_install_removed_python() {
             fs_err::remove_file(&tool_python).unwrap();
             fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
                 .unwrap();
-        },
+        }
         windows => {
             let pyvenv_cfg = tool_root.child("pyvenv.cfg");
             let broken_home = context.temp_dir.join("missing-python");
@@ -5813,7 +5814,7 @@ fn tool_install_removed_python() {
                 .collect::<Vec<_>>()
                 .join("\n");
             fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
-        },
+        }
     }
 
     // Reinstalling should skip the broken Python install.
