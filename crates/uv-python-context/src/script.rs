@@ -213,7 +213,7 @@ impl ScriptInterpreter {
         let root = Self::root(script, active, cache);
         match PythonEnvironment::from_root(&root, cache) {
             Ok(environment) => Some(environment),
-            Err(uv_python::Error::MissingEnvironment(_)) => None,
+            Err(uv_python::PythonEnvironmentError::MissingEnvironment(_)) => None,
             Err(err) => {
                 warn!("Ignoring existing script environment: {err}");
                 None

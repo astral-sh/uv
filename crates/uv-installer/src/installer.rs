@@ -232,14 +232,16 @@ pub trait Reporter: Send + Sync {
 mod tests {
     use uv_cache::Cache;
     use uv_preview::Preview;
-    use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+    use uv_python::{
+        EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, find_environment,
+    };
 
     use super::Installer;
 
     fn environment() -> PythonEnvironment {
         let _preview = uv_preview::test::with_features(&[]);
         let cache = Cache::temp().expect("cache should be available");
-        PythonEnvironment::find(
+        find_environment(
             &PythonRequest::Any,
             EnvironmentPreference::Any,
             PythonPreference::System,

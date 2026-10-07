@@ -78,7 +78,7 @@ pub enum Error {
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
-    EnvironmentError(#[from] uv_python::Error),
+    EnvironmentError(#[from] uv_python::PythonEnvironmentError),
     #[error("Failed to find a receipt for tool `{0}` at `{1}`")]
     MissingToolReceipt(String, PathBuf),
     #[error("Failed to read tool environment packages at `{0}`: {1}")]
@@ -282,10 +282,10 @@ impl InstalledTools {
                 );
                 Ok(Some(ToolEnvironment::new(venv, name.clone())))
             }
-            Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
-            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
-                interpreter_path,
-            ))) => {
+            Err(uv_python::PythonEnvironmentError::MissingEnvironment(_)) => Ok(None),
+            Err(uv_python::PythonEnvironmentError::Query(
+                uv_python::InterpreterError::NotFound(interpreter_path),
+            )) => {
                 warn!(
                     "Ignoring existing virtual environment with missing Python interpreter: {}",
                     interpreter_path.user_display()
@@ -293,11 +293,13 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
-                path,
-                unix,
-                venv: _,
-            }))) => {
+            Err(uv_python::PythonEnvironmentError::Query(
+                uv_python::InterpreterError::BrokenLink(BrokenLink {
+                    path,
+                    unix,
+                    venv: _,
+                }),
+            )) => {
                 if unix {
                     let target_path = fs_err::read_link(&path)?;
                     warn!(

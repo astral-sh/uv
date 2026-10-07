@@ -12,10 +12,12 @@ pub use crate::discovery::{
     PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
     find_all_python_installations,
 };
-pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
+pub use crate::environment::{
+    Error as PythonEnvironmentError, InvalidEnvironmentKind, PythonEnvironment,
+};
 pub use crate::implementation::{ImplementationName, LenientImplementationName};
 pub use crate::installation::{
-    PythonInstallation, PythonInstallationKey, PythonInstallationMinorVersionKey,
+    PythonInstallation, PythonInstallationKey, PythonInstallationMinorVersionKey, find_environment,
 };
 pub use crate::interpreter::{
     BrokenLink, Error as InterpreterError, Interpreter, canonicalize_executable,
@@ -200,6 +202,18 @@ impl Error {
 impl From<PythonNotFound> for Error {
     fn from(err: PythonNotFound) -> Self {
         Self::MissingPython(err, None)
+    }
+}
+
+impl From<PythonEnvironmentError> for Error {
+    fn from(error: PythonEnvironmentError) -> Self {
+        match error {
+            PythonEnvironmentError::Io(error) => Self::Io(error),
+            PythonEnvironmentError::Query(error) => Self::Query(error),
+            PythonEnvironmentError::VirtualEnv(error) => Self::VirtualEnv(error),
+            PythonEnvironmentError::MissingEnvironment(error) => Self::MissingEnvironment(error),
+            PythonEnvironmentError::InvalidEnvironment(error) => Self::InvalidEnvironment(error),
+        }
     }
 }
 

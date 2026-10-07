@@ -24,12 +24,13 @@ use crate::downloads::{
     DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, PythonDownloadRequest,
     Reporter,
 };
+use crate::environment::EnvironmentNotFound;
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
     Error, ImplementationName, Interpreter, MissingPythonHint, PythonArchitecture,
-    PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonSource, PythonVariant,
-    PythonVersion, downloads,
+    PythonDownloadMirrors, PythonDownloads, PythonEnvironment, PythonPreference, PythonSource,
+    PythonVariant, PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -97,7 +98,7 @@ impl PythonInstallation {
     ///
     /// This is the standard interface for discovering a Python installation for creating
     /// an environment. If interested in finding an existing environment, see
-    /// [`PythonEnvironment::find`] instead.
+    /// [`find_environment`] instead.
     ///
     /// Note we still require an [`EnvironmentPreference`] as this can either bypass virtual environments
     /// or prefer them. In most cases, this should be [`EnvironmentPreference::OnlySystem`]
@@ -908,6 +909,32 @@ impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
     fn from(key: PythonInstallationKey) -> Self {
         Self(key)
     }
+}
+
+/// Find a [`PythonEnvironment`] matching the given request and preference.
+///
+/// If looking for a Python interpreter to create a new environment, use [`PythonInstallation::find`]
+/// instead.
+pub fn find_environment(
+    request: &PythonRequest,
+    preference: EnvironmentPreference,
+    python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
+    cache: &Cache,
+) -> Result<PythonEnvironment, Error> {
+    let installation =
+        match find_python_installation(request, preference, python_preference, python_arch, cache)?
+        {
+            Ok(installation) => installation,
+            Err(err) => {
+                return Err(
+                    EnvironmentNotFound::new(err.request, err.environment_preference).into(),
+                );
+            }
+        };
+    Ok(PythonEnvironment::from_interpreter(
+        installation.into_interpreter(),
+    ))
 }
 
 #[cfg(test)]

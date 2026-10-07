@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::{env, fmt};
 
 use owo_colors::OwoColorize;
+use thiserror::Error;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -11,14 +12,36 @@ use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
 use uv_static::EnvVars;
 
-use crate::discovery::find_python_installation;
-use crate::installation::PythonInstallation;
 use crate::interpreter::InterpreterInfo;
 use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
-use crate::{
-    EnvironmentPreference, Error, Interpreter, Prefix, PythonArchitecture, PythonNotFound,
-    PythonPreference, PythonRequest, Target,
-};
+use crate::{EnvironmentPreference, Interpreter, Prefix, PythonRequest, Target};
+
+/// A failure while inspecting an existing Python environment.
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Query(#[from] crate::InterpreterError),
+    #[error(transparent)]
+    VirtualEnv(#[from] crate::VirtualEnvError),
+    #[error(transparent)]
+    MissingEnvironment(#[from] EnvironmentNotFound),
+    #[error(transparent)]
+    InvalidEnvironment(#[from] InvalidEnvironment),
+}
+
+impl uv_errors::Hinted for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Query(error) => error.hints(),
+            Self::Io(_)
+            | Self::VirtualEnv(_)
+            | Self::MissingEnvironment(_)
+            | Self::InvalidEnvironment(_) => uv_errors::Hints::none(),
+        }
+    }
+}
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -32,7 +55,7 @@ struct PythonEnvironmentShared {
 
 /// The result of failed environment discovery.
 ///
-/// Generally this is cast from [`PythonNotFound`] by [`PythonEnvironment::find`].
+/// Records the requested Python and the environment kinds that were searched.
 #[derive(Clone, Debug, Error)]
 pub struct EnvironmentNotFound {
     request: PythonRequest,
@@ -51,11 +74,11 @@ pub enum InvalidEnvironmentKind {
     MissingExecutable(PathBuf),
 }
 
-impl From<PythonNotFound> for EnvironmentNotFound {
-    fn from(value: PythonNotFound) -> Self {
+impl EnvironmentNotFound {
+    pub fn new(request: PythonRequest, preference: EnvironmentPreference) -> Self {
         Self {
-            request: value.request,
-            preference: value.environment_preference,
+            request,
+            preference,
         }
     }
 }
@@ -146,30 +169,6 @@ impl fmt::Display for InvalidEnvironmentKind {
 }
 
 impl PythonEnvironment {
-    /// Find a [`PythonEnvironment`] matching the given request and preference.
-    ///
-    /// If looking for a Python interpreter to create a new environment, use [`PythonInstallation::find`]
-    /// instead.
-    pub fn find(
-        request: &PythonRequest,
-        preference: EnvironmentPreference,
-        python_preference: PythonPreference,
-        python_arch: Option<PythonArchitecture>,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        let installation = match find_python_installation(
-            request,
-            preference,
-            python_preference,
-            python_arch,
-            cache,
-        )? {
-            Ok(installation) => installation,
-            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
-        };
-        Ok(Self::from_installation(installation))
-    }
-
     /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
     ///
     /// N.B. This function also works for system Python environments and users depend on this.
@@ -186,7 +185,7 @@ impl PythonEnvironment {
                     request: PythonRequest::Directory(root.as_ref().to_owned()),
                 }));
             }
-            Err(err) => return Err(Error::Discovery(err.into())),
+            Err(err) => return Err(Error::Io(err)),
         }
 
         if root.as_ref().is_file() {
@@ -229,11 +228,6 @@ impl PythonEnvironment {
             root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
         })))
-    }
-
-    /// Create a [`PythonEnvironment`] from an existing [`PythonInstallation`].
-    pub fn from_installation(installation: PythonInstallation) -> Self {
-        Self::from_interpreter(installation.into_interpreter())
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`].

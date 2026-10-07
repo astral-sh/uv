@@ -14,8 +14,8 @@ use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonArchitecture, PythonPreference};
-use uv_python::{Prefix, PythonEnvironment, Target};
+use uv_python::{EnvironmentPreference, PythonArchitecture, PythonPreference, find_environment};
+use uv_python::{Prefix, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::reporters::report_target_environment;
@@ -45,7 +45,7 @@ pub async fn pip_uninstall(
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Detect the current Python interpreter.
-    let environment = PythonEnvironment::find(
+    let environment = find_environment(
         &python
             .as_deref()
             .map(PythonRequest::parse)
