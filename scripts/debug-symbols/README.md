@@ -383,10 +383,10 @@ symbols timings both decreased by roughly 3.5–3.7%. macOS baselines were withi
 
 Windows completed on `namespace-profile-windows-2022-x86-64-16x32` with four Cargo jobs. The limited
 instrumented build and training took 30m 1s, and the final build took 10m 29s. Its combined symbols
-time was 22.0% longer than the line-table run despite a 1.5% shorter no-debug baseline. This
-warrants repeat measurement before attributing the whole difference to the debug level. Full-debug
-PGO previously exhausted memory on this runner profile; there is no completed full-debug PGO timing
-or PDB size for comparison. Peak memory was not measured.
+time was 22.0% longer than the line-table run despite a 1.5% shorter no-debug baseline. The Windows
+repeat below shows substantial timing variation, so this difference cannot be attributed entirely to
+the debug level. Full-debug PGO previously exhausted memory on this runner profile; there is no
+completed full-debug PGO timing or PDB size for comparison. Peak memory was not measured.
 
 Limited `uv` symbols were 48.2%, 45.0%, and 49.4% larger than line tables on Linux x86-64, Linux
 ARM64, and macOS respectively. On Windows, `uv.pdb` was 150,351,872 bytes versus 150,409,216 bytes
@@ -434,3 +434,69 @@ Completed limited uv jobs:
 - [Linux ARM64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430665)
 - [macOS ARM64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430285)
 - [Windows x86-64](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112869430170)
+
+### Windows limited PGO repeat
+
+The second Windows `limited` comparison passed at the same commit
+`b00c5d1791ca87f9fba676dfb01b9e2aa8b06c50`, using four Cargo jobs and the same
+`namespace-profile-windows-2022-x86-64-16x32` profile. The runner reported 16 logical processors and
+34,359,107,584 bytes of physical memory. Rust 1.99.0, LLVM 23.1.1, Maturin 1.15.0, optimization
+level 3, fat LTO, static CRT linkage, and independent PGO training remained unchanged.
+
+Each observation includes its own fresh no-debug baseline. Wall times exclude setup, symbol
+processing, verification, and uploads; overheads use unrounded durations:
+
+| Comparison      | Stage                           | No debug | Symbols | Paired overhead |
+| --------------- | ------------------------------- | -------: | ------: | --------------: |
+| Line tables     | Instrumented build and training |  19m 14s |  24m 6s |          +25.3% |
+| Line tables     | Final build and wheel           |  11m 18s |   9m 7s |          -19.3% |
+| Line tables     | Combined                        |  30m 31s | 33m 13s |           +8.8% |
+| Limited, first  | Instrumented build and training |  20m 16s |  30m 1s |          +48.2% |
+| Limited, first  | Final build and wheel           |   9m 47s | 10m 29s |           +7.1% |
+| Limited, first  | Combined                        |   30m 3s | 40m 30s |          +34.8% |
+| Limited, repeat | Instrumented build and training |  18m 47s | 22m 29s |          +19.7% |
+| Limited, repeat | Final build and wheel           |   8m 38s | 10m 40s |          +23.5% |
+| Limited, repeat | Combined                        |  27m 25s |  33m 8s |          +20.9% |
+
+The original 34.8% total overhead did not repeat: the second observation measured 20.9%. The limited
+pipeline was 18.2% faster than the first limited run, while its baseline was 8.8% faster. Most of
+the symbols-build improvement came from instrumented compilation and training, which fell by 25.1%;
+the final build was 1.7% slower. Its total symbols time was within 0.3% of the line-table run, but
+its baseline was 10.2% faster. Two limited observations and one line-table observation do not
+establish a stable debug-level overhead or isolate the cause of the variation. Baselines always run
+first, and separate PGO training and runner conditions remain sources of variation.
+
+All sizes below are bytes. Executable and wheel pairs are no-debug baseline / symbols build; PDB
+sizes are uncompressed and excluded from the wheels:
+
+| Comparison      |    `uv.pdb` | `uv.exe` baseline / symbols | Executable delta | Wheel baseline / symbols | Wheel delta |
+| --------------- | ----------: | --------------------------: | ---------------: | -----------------------: | ----------: |
+| Line tables     | 150,409,216 |     40,245,760 / 40,176,640 |          -69,120 |  18,137,249 / 18,104,535 |     -32,714 |
+| Limited, first  | 150,351,872 |     40,146,432 / 40,152,064 |           +5,632 |  18,097,496 / 18,099,655 |      +2,159 |
+| Limited, repeat | 150,392,832 |     40,158,208 / 40,156,672 |           -1,536 |  18,102,103 / 18,102,519 |        +416 |
+
+The repeat's `uv.pdb` grew by only 40,960 bytes (0.03%) from the first limited observation and was
+16,384 bytes smaller than the line-table PDB. Its `uvx.pdb` was 4,509,696 bytes and `uvw.pdb` was
+4,501,504 bytes; both launchers' PDBs were 4,509,696 bytes in the earlier observations. The repeat's
+shipped `uv.exe` changed by -0.004% and its wheel by +0.002% relative to its own baseline. These
+measurements do not guarantee identical binaries or establish additional debugger capabilities.
+
+Rust source lookups in all three executables, AWS-LC `RAND_bytes`, jitterentropy, negative lookups
+with PDBs hidden, SBOM checks, static CRT checks, wheel installation, and smoke checks passed.
+Downloaded executable and profile hashes, wheel contents, symbol sizes, and benchmark output hashes
+matched the report. Both modes reported 19 missing-profile warnings, confined to `uvx` and `uvw`,
+and zero mismatches, matching the first limited and line-table observations.
+
+Twenty timed cached resolutions per mode produced identical outputs. Repeat median baseline /
+limited wall times were 31.151 / 32.331 ms for Jupyter (+3.8%, or 1.181 ms) and 21.528 / 21.299 ms
+for Trio (-1.1%, or 0.229 ms). The first limited observation measured 32.777 / 32.379 ms and 22.111
+/ 21.527 ms respectively. Jupyter's direction changed between observations; these short workloads do
+not establish an overall runtime regression or equivalence.
+
+The
+[attempt-2 Windows job](https://github.com/astral-sh/uv/actions/runs/37643868981/job/112928391792)
+uploaded
+[artifact 11503259981](https://github.com/astral-sh/uv/actions/runs/37643868981/artifacts/11503259981)
+at 18:45:01 UTC on October 7, 2026. Its creation time and upload log identify it as the repeat,
+despite sharing an artifact name with attempt 1. The archive digest was verified, and both
+observations' reports and outputs were retained separately.
