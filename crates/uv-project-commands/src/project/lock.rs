@@ -33,10 +33,10 @@ use uv_settings::{FrozenSource, LockCheck, PythonInstallMirrors, ResolverSetting
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::ScriptPath;
+use crate::ScriptPath;
 
 /// Resolve the project requirements into a lockfile.
-pub(crate) async fn lock(
+pub async fn lock(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,

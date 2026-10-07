@@ -62,15 +62,15 @@ use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, Tool
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::ScriptPath;
-use crate::commands::project::ProjectError;
-use crate::commands::project::edit::{EditTarget, ProjectEdit, PythonTarget};
+use crate::ScriptPath;
+use crate::project::ProjectError;
+use crate::project::edit::{EditTarget, ProjectEdit, PythonTarget};
 use uv_resolve_operations::reporters::ResolverReporter;
 
 /// A failed dependency addition, with `uv add`-specific recovery context.
 #[derive(Debug, thiserror::Error)]
 #[error("Failed to add dependencies")]
-pub(crate) struct AddDependencyError {
+pub struct AddDependencyError {
     #[source]
     cause: anyhow::Error,
     standard_library_package: Option<PackageName>,
@@ -94,7 +94,7 @@ impl uv_errors::Hinted for AddDependencyError {
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn add(
+pub async fn add(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,

@@ -14,7 +14,7 @@ use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::{VirtualProject, WorkspaceCache};
 
-use crate::commands::project::ProjectError;
+use crate::project::ProjectError;
 
 /// A project manifest or script metadata to edit.
 #[derive(Debug, Clone)]

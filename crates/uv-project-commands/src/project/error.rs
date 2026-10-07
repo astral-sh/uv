@@ -9,7 +9,7 @@ use uv_workspace::WorkspaceError;
 
 /// A failure from project metadata, editing, or a shared workflow.
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum ProjectError {
+pub enum ProjectError {
     #[error("Failed to parse `pyproject.toml`")]
     PyprojectTomlParse(#[source] uv_workspace::pyproject::PyprojectTomlError),
 
