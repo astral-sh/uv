@@ -41,6 +41,7 @@ Ok(
                 ),
             },
             fork_strategy: RequiresPython,
+            minimum_libc_version: None,
             exclude_newer: ExcludeNewer {
                 global: None,
                 package: ExcludeNewerPackage(
@@ -65,6 +66,8 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dependency_groups: {},
+                default_groups: None,
+                group_requires_python: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],
@@ -94,10 +97,8 @@ Ok(
                         ),
                         metadata: SourceDistMetadata {
                             hash: Some(
-                                Hash(
-                                    Sha256(
-                                        "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
-                                    ),
+                                Sha256(
+                                    "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
                                 ),
                             ),
                             size: Some(
@@ -112,6 +113,8 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dependency_groups: {},
+                default_groups: None,
+                group_requires_python: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],
@@ -141,10 +144,8 @@ Ok(
                         ),
                         metadata: SourceDistMetadata {
                             hash: Some(
-                                Hash(
-                                    Sha256(
-                                        "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
-                                    ),
+                                Sha256(
+                                    "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
                                 ),
                             ),
                             size: Some(
@@ -179,6 +180,8 @@ Ok(
                 ],
                 optional_dependencies: {},
                 dependency_groups: {},
+                default_groups: None,
+                group_requires_python: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],
@@ -233,8 +236,11 @@ Ok(
                 2,
             ),
         },
+        workspace_members: {},
         manifest: ResolverManifest {
             members: {},
+            default_groups: None,
+            group_requires_python: {},
             requirements: {},
             dependency_groups: {},
             constraints: {},

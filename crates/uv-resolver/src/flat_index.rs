@@ -11,8 +11,8 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -75,7 +75,7 @@ impl FlatIndex {
 /// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
 /// by [`Version`].
 #[derive(Debug, Clone, Default)]
-pub(crate) struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
+pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 
 impl FlatDistributions {
     /// Rank the entries for a package using the resolver's platform and hash policies.
@@ -85,11 +85,20 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
-            distributions.add_file(file, filename, tags, hasher, build_options, index);
+            distributions.add_file(
+                file,
+                filename,
+                tags,
+                hasher,
+                build_options,
+                index,
+                minimum_libc_version,
+            );
         }
         distributions
     }
@@ -108,6 +117,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
@@ -128,10 +138,12 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                self.0
-                    .entry(version)
-                    .or_default()
-                    .insert_built(dist, vec![], compatibility);
+                self.0.entry(version).or_default().insert_built(
+                    dist,
+                    vec![],
+                    compatibility,
+                    minimum_libc_version,
+                );
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -250,5 +262,11 @@ impl IntoIterator for FlatDistributions {
 impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
     fn from(distributions: FlatDistributions) -> Self {
         distributions.0
+    }
+}
+
+impl From<BTreeMap<Version, PrioritizedDist>> for FlatDistributions {
+    fn from(distributions: BTreeMap<Version, PrioritizedDist>) -> Self {
+        Self(distributions)
     }
 }

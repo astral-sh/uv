@@ -7,21 +7,16 @@ use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
-use indoc::indoc;
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
-use serde_json::json;
 use sha2::{Digest, Sha256};
-use wiremock::{
-    Mock, MockServer, ResponseTemplate,
-    matchers::{method, path},
-};
 
 use uv_cache::CacheBucket;
 use uv_fs::PortablePath;
 #[cfg(unix)]
 use uv_fs::create_symlink;
-use uv_test::archive::write_tar_gz;
+use uv_test::archive::generate_source_archive;
+use uv_test::package_server::PackageServer;
 use uv_test::{TestContext, get_bin, uv_snapshot};
 
 /// A custom cache directory must configure commands and snapshot filters together.
@@ -367,80 +362,23 @@ fn cache_init_failure() -> Result<()> {
 #[tokio::test]
 async fn index_source_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
-    let index_url = format!("{}/simple/", server.uri());
+    let name = "ok".parse()?;
+    let server = PackageServer::new(&name).await;
+    let index_url = server.index_url();
+    let filename = "ok-1.0.0.tar.gz";
     let marker = context.temp_dir.child("backend-marker");
-    let wheel = context
-        .workspace_root
-        .join("test/links/ok-1.0.0-py3-none-any.whl");
-    let context = context
-        .with_env("INDEX_SOURCE_MARKER", marker.path())
-        .with_env("INDEX_SOURCE_WHEEL", wheel);
     context
         .temp_dir
         .child("requirements.txt")
         .write_str("ok==1.0.0")?;
 
-    let mut archive = Vec::new();
-    write_tar_gz(
-        &mut archive,
-        &[
-            (
-                "ok-1.0.0/pyproject.toml",
-                indoc! {r#"
-                    [build-system]
-                    requires = []
-                    build-backend = "backend"
-                    backend-path = ["."]
-                "#},
-            ),
-            (
-                "ok-1.0.0/backend.py",
-                indoc! {r#"
-                    import os
-                    import shutil
-                    from pathlib import Path
-
-                    Path(os.environ["INDEX_SOURCE_MARKER"]).write_text("executed")
-
-                    def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                        wheel = Path(os.environ["INDEX_SOURCE_WHEEL"])
-                        shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
-                        return wheel.name
-                "#},
-            ),
-        ],
-    )?;
+    let archive = generate_source_archive(&name, &"1.0.0".parse()?, "", Some(marker.path()))?;
     let source_hash = hex::encode(Sha256::digest(&archive));
     let wrong_hash = "0".repeat(64);
     let context = context
         .with_filter((source_hash.clone(), "[SOURCE_HASH]"))
         .with_filter((wrong_hash.clone(), "[WRONG_HASH]"));
-    Mock::given(method("GET"))
-        .and(path("/ok-1.0.0.tar.gz"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(archive))
-        .mount(&server)
-        .await;
-    let source_url = format!("{}/ok-1.0.0.tar.gz", server.uri());
-    let index_response = |hash: &str| {
-        ResponseTemplate::new(200).set_body_raw(
-            json!({
-                "files": [{
-                    "filename": "ok-1.0.0.tar.gz",
-                    "url": source_url,
-                    "hashes": {"sha256": hash},
-                    "upload-time": "2024-01-01T00:00:00Z"
-                }]
-            })
-            .to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        )
-    };
-    let index = Mock::given(method("GET"))
-        .and(path("/simple/ok/"))
-        .respond_with(index_response(&wrong_hash))
-        .mount_as_scoped(&server)
-        .await;
+    server.serve(filename, &archive, Some(&wrong_hash)).await;
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt").arg("--index-url").arg(&index_url), @"
@@ -472,12 +410,7 @@ async fn index_source_hashes() -> Result<()> {
     marker.assert(predicate::path::missing());
 
     // The same source is usable once the index supplies its actual hash.
-    drop(index);
-    Mock::given(method("GET"))
-        .and(path("/simple/ok/"))
-        .respond_with(index_response(&source_hash))
-        .mount(&server)
-        .await;
+    server.serve(filename, &archive, Some(&source_hash)).await;
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--refresh"), @"
     exit_code: 0 (success)
@@ -494,22 +427,16 @@ async fn index_source_hashes() -> Result<()> {
 
 #[tokio::test]
 async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"binary-payload".parse()?).await;
+    let filename = "binary_payload-0.1.0-py3-none-any.whl";
     for streaming in [false, true] {
         let context = uv_test::test_context!("3.12")
             .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
         if streaming {
-            Mock::given(method("GET"))
-                .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
-                .mount(&server)
-                .await;
-            command.arg(format!(
-                "{}/binary_payload-0.1.0-py3-none-any.whl",
-                server.uri()
-            ));
+            server.serve(filename, &fs_err::read(&wheel)?, None).await;
+            command.arg(server.file_url(filename));
         } else {
             command.arg(&wheel);
         }
@@ -542,7 +469,8 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
 
 #[tokio::test]
 async fn all_files_except_record_use_archive_file_store() -> Result<()> {
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"binary-payload".parse()?).await;
+    let filename = "binary_payload-0.1.0-py3-none-any.whl";
     for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
         let context = uv_test::test_context!("3.12")
             .with_concurrent_installs(concurrent_installs)
@@ -551,15 +479,8 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
         let mut command = context.pip_install();
         command.args(["--preview-features", "content-addressed-cache"]);
         if streaming {
-            Mock::given(method("GET"))
-                .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
-                .mount(&server)
-                .await;
-            command.arg(format!(
-                "{}/binary_payload-0.1.0-py3-none-any.whl",
-                server.uri()
-            ));
+            server.serve(filename, &fs_err::read(&wheel)?, None).await;
+            command.arg(server.file_url(filename));
         } else {
             command.arg(&wheel);
         }

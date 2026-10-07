@@ -1,6 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::collections::{BTreeSet, hash_map::Entry};
 
 use petgraph::{
     Directed, Direction,
@@ -8,46 +7,37 @@ use petgraph::{
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{Constraints, Overrides};
-use uv_distribution::Metadata;
+use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
-    Dist, DistributionId, HashCollection, Identifier, IndexUrl, Name, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
+    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
+    ResolutionDiagnostic, parse_url_hashes,
 };
-use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
-use crate::pins::FilePins;
 use crate::preferences::Preferences;
-use crate::redirect::url_to_precise;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
-use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
+use crate::resolver::{
+    ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, ResolvedFork, SelectedDistribution,
+};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-struct PackageRef<'a> {
-    package: &'a ResolutionPackage,
-    version: &'a Version,
-}
-
 /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
 pub(crate) fn from_state(
-    resolutions: &[Resolution],
+    mut resolutions: Vec<ResolvedFork>,
     project: Option<&PackageName>,
     workspace_members: &BTreeSet<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
-    overrides: Overrides,
+    modifiers: DependencyModifiers,
     preferences: &Preferences,
     hasher: &HashStrategy,
     index: &InMemoryIndex,
-    git: &GitResolver,
     requires_python: RequiresPython,
     conflicts: &Conflicts,
     resolution_strategy: &ResolutionStrategy,
@@ -56,39 +46,41 @@ pub(crate) fn from_state(
     let size_guess = resolutions[0].nodes.len();
     let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
         Graph::with_capacity(size_guess, size_guess);
-    let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
+    let mut inverse: FxHashMap<ResolutionNode, NodeIndex<u32>> =
         FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
     let mut diagnostics = Vec::new();
 
     // Add the root node.
     let root_index = graph.add_node(ResolutionGraphNode::Root);
 
-    let mut seen = FxHashSet::default();
-    for resolution in resolutions {
+    for resolution in &mut resolutions {
         // Add every package to the graph.
-        for (package, version) in &resolution.nodes {
-            if !seen.insert((package, version)) {
+        for (package, selected) in resolution.nodes.drain(..) {
+            let node = ResolutionNode {
+                package,
+                version: selected.version().clone(),
+            };
+            let Entry::Vacant(entry) = inverse.entry(node) else {
                 // Insert each node only once.
                 continue;
-            }
-            add_version(
+            };
+            let package = &entry.key().package;
+            let node = add_version(
                 &mut graph,
-                &mut inverse,
                 &mut diagnostics,
                 preferences,
                 hasher,
-                &resolution.pins,
                 index,
-                git,
                 package,
-                version,
+                selected,
                 project == Some(&package.name) || workspace_members.contains(&package.name),
-            )?;
+            );
+            entry.insert(node);
         }
     }
 
     let mut seen = FxHashSet::default();
-    for resolution in resolutions {
+    for resolution in &resolutions {
         let marker = resolution.env.try_universal_markers().unwrap_or_default();
 
         // Add every edge to the graph, propagating the marker for the current fork, if
@@ -99,11 +91,11 @@ pub(crate) fn from_state(
                 continue;
             }
 
-            add_edge(&mut graph, &mut inverse, root_index, edge, marker);
+            add_edge(&mut graph, &inverse, root_index, edge, marker);
         }
     }
 
-    let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
+    let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions.as_slice() {
         // In the case of a singleton marker, we only include it if it's not
         // always true. Otherwise, we keep our `fork_markers` empty as there
         // are no forks.
@@ -142,7 +134,7 @@ pub(crate) fn from_state(
     graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
     if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-        report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
+        report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &modifiers);
     }
 
     let output = ResolverOutput {
@@ -152,7 +144,7 @@ pub(crate) fn from_state(
         diagnostics,
         requirements,
         constraints,
-        overrides,
+        modifiers,
         options,
     };
 
@@ -177,7 +169,7 @@ pub(crate) fn from_state(
             tracing::warn!(
                 "found {} conflicting distributions in resolution, \
                  please report this as a bug at \
-                 https://github.com/astral-sh/uv/issues/new",
+                 `https://github.com/astral-sh/uv/issues/new`",
                 conflicting.len()
             );
         }
@@ -199,21 +191,13 @@ pub(crate) fn from_state(
 
 fn add_edge(
     graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
-    inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
+    inverse: &FxHashMap<ResolutionNode, NodeIndex>,
     root_index: NodeIndex,
     edge: &ResolutionDependencyEdge,
     marker: UniversalMarker,
 ) {
-    let from_index = edge.from.as_ref().map_or(root_index, |from| {
-        inverse[&PackageRef {
-            package: &from.package,
-            version: &from.version,
-        }]
-    });
-    let to_index = inverse[&PackageRef {
-        package: &edge.to.package,
-        version: &edge.to.version,
-    }];
+    let from_index = edge.from.as_ref().map_or(root_index, |from| inverse[from]);
+    let to_index = inverse[&edge.to];
 
     let edge_marker = {
         let mut edge_marker = edge.universal_marker();
@@ -233,39 +217,46 @@ fn add_edge(
     }
 }
 
-fn add_version<'a>(
+fn add_version(
     graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
-    inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
     preferences: &Preferences,
     hasher: &HashStrategy,
-    pins: &FilePins,
     in_memory: &InMemoryIndex,
-    git: &GitResolver,
-    package: &'a ResolutionPackage,
-    version: &'a Version,
+    package: &ResolutionPackage,
+    selected: SelectedDistribution,
     is_workspace_member: bool,
-) -> Result<(), ResolveError> {
+) -> NodeIndex {
     let ResolutionPackage {
         name,
-        extra,
-        dev: group,
+        kind,
         url,
         index,
     } = &package;
-    // Map the package to a distribution.
-    let (dist, hashes, metadata) = parse_dist(
+    let hashes = get_hashes(
         name,
         index.as_ref(),
         url.as_ref(),
-        version,
-        pins,
-        diagnostics,
+        &selected.hashes_id(),
+        selected.version(),
         preferences,
         hasher,
         in_memory,
-        git,
-    )?;
+    );
+    let (version, dist, metadata) = selected.into_parts();
+
+    // Track yanks for registry distributions.
+    match dist.yanked() {
+        None | Some(Yanked::Bool(false)) => {}
+        Some(Yanked::Bool(true)) => diagnostics.push(ResolutionDiagnostic::YankedVersion {
+            dist: dist.clone(),
+            reason: None,
+        }),
+        Some(Yanked::Reason(reason)) => diagnostics.push(ResolutionDiagnostic::YankedVersion {
+            dist: dist.clone(),
+            reason: Some(reason.to_string()),
+        }),
+    }
 
     // We normally write dependency paths relative to the lockfile. For the current project and
     // workspace members, preserve the user's choice of relative or absolute paths instead.
@@ -279,7 +270,7 @@ fn add_version<'a>(
 
     if let Some(metadata) = metadata.as_ref() {
         // Validate the extra.
-        if let Some(extra) = extra {
+        if let Some(extra) = kind.extra() {
             if !metadata.provides_extra.contains(extra) {
                 diagnostics.push(ResolutionDiagnostic::MissingExtra {
                     dist: dist.clone(),
@@ -289,7 +280,7 @@ fn add_version<'a>(
         }
 
         // Validate the development dependency group.
-        if let Some(dev) = group {
+        if let Some(dev) = kind.group() {
             if !metadata.dependency_groups.contains_key(dev) {
                 diagnostics.push(ResolutionDiagnostic::MissingGroup {
                     dist: dist.clone(),
@@ -300,126 +291,15 @@ fn add_version<'a>(
     }
 
     // Add the distribution to the graph.
-    let node = graph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
+    graph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
         dist,
         name: name.clone(),
-        version: version.clone(),
-        extra: extra.clone(),
-        group: group.clone(),
+        version,
+        kind: kind.clone(),
         hashes,
         metadata,
         marker: UniversalMarker::TRUE,
-    }));
-    inverse.insert(PackageRef { package, version }, node);
-    Ok(())
-}
-
-fn parse_dist(
-    name: &PackageName,
-    index: Option<&IndexUrl>,
-    url: Option<&VerbatimParsedUrl>,
-    version: &Version,
-    pins: &FilePins,
-    diagnostics: &mut Vec<ResolutionDiagnostic>,
-    preferences: &Preferences,
-    hasher: &HashStrategy,
-    in_memory: &InMemoryIndex,
-    git: &GitResolver,
-) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
-    Ok(if let Some(url) = url {
-        // Create the locked distribution and recover the metadata using the original URL that
-        // was requested during resolution.
-        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
-        let metadata_id = Dist::from_url(name.clone(), url.clone())?.distribution_id();
-
-        // Extract the hashes.
-        let hashes = get_hashes(
-            name,
-            index,
-            Some(url),
-            &metadata_id,
-            version,
-            preferences,
-            hasher,
-            in_memory,
-        );
-
-        // Extract the metadata.
-        let metadata = {
-            let response = in_memory
-                .distributions()
-                .get(&metadata_id)
-                .unwrap_or_else(|| {
-                    panic!("Every URL distribution should have metadata: {metadata_id:?}")
-                });
-
-            let MetadataResponse::Found(archive) = &*response else {
-                panic!("Every URL distribution should have metadata: {metadata_id:?}")
-            };
-
-            archive.metadata.clone()
-        };
-
-        (
-            ResolvedDist::Installable {
-                dist: Arc::new(dist),
-                version: Some(version.clone()),
-            },
-            hashes,
-            Some(metadata),
-        )
-    } else {
-        let (dist, metadata_id) = pins
-            .dist_and_id(name, version)
-            .expect("Every package should be pinned");
-        let dist = dist.clone();
-        let hashes_id = dist.distribution_id();
-
-        // Track yanks for any registry distributions.
-        match dist.yanked() {
-            None | Some(Yanked::Bool(false)) => {}
-            Some(Yanked::Bool(true)) => {
-                diagnostics.push(ResolutionDiagnostic::YankedVersion {
-                    dist: dist.clone(),
-                    reason: None,
-                });
-            }
-            Some(Yanked::Reason(reason)) => {
-                diagnostics.push(ResolutionDiagnostic::YankedVersion {
-                    dist: dist.clone(),
-                    reason: Some(reason.to_string()),
-                });
-            }
-        }
-
-        // Extract the hashes.
-        let hashes = get_hashes(
-            name,
-            index,
-            None,
-            &hashes_id,
-            version,
-            preferences,
-            hasher,
-            in_memory,
-        );
-
-        // Extract the metadata.
-        let metadata = {
-            in_memory
-                .distributions()
-                .get(metadata_id)
-                .and_then(|response| {
-                    if let MetadataResponse::Found(archive) = &*response {
-                        Some(archive.metadata.clone())
-                    } else {
-                        None
-                    }
-                })
-        };
-
-        (dist, hashes, metadata)
-    })
+    }))
 }
 
 /// Identify the hashes for a concrete distribution, preserving any hashes that were provided
@@ -441,7 +321,16 @@ fn get_hashes(
         }
     }
 
-    // 2. Reuse a direct URL's declared hash when collecting hashes without validation.
+    // 2. Preserve trusted hashes for this URL or path. Wheel metadata lookup does not always
+    // hash the archive, so installation still needs the original hashes to verify its contents.
+    if let Some(url) = url {
+        let policy = hasher.archive_policy_for_url(&url.verbatim);
+        if !policy.digests().is_empty() {
+            return HashDigests::from(policy.digests());
+        }
+    }
+
+    // 3. Reuse a direct URL's declared hash when collecting hashes without validation.
     if let Some(url) = url
         && let ParsedUrl::Archive(_) = &url.parsed_url
         && hasher.collection() != HashCollection::None
@@ -453,7 +342,7 @@ fn get_hashes(
         return hashes;
     }
 
-    // 3. Look for hashes computed for the specific wheel or source distribution.
+    // 4. Look for hashes computed for the specific wheel or source distribution.
     if let Some(metadata_response) = in_memory.distributions().get(metadata_id) {
         if let MetadataResponse::Found(ref archive) = *metadata_response {
             let mut digests = archive.hashes.clone();
@@ -464,7 +353,7 @@ fn get_hashes(
         }
     }
 
-    // 4. Look for hashes from the registry, which are served at the package level.
+    // 5. Look for hashes from the registry, which are served at the package level.
     if url.is_none() {
         // Query the implicit and explicit indexes (lazily) for the hashes.
         let implicit_response = in_memory.implicit().get(name);
@@ -520,19 +409,24 @@ fn report_missing_lower_bounds(
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
     constraints: &Constraints,
-    overrides: &Overrides,
+    modifiers: &DependencyModifiers,
 ) {
+    let mut missing_lower_bounds = Vec::new();
     for node_index in graph.node_indices() {
         let ResolutionGraphNode::Dist(dist) = graph.node_weight(node_index).unwrap() else {
             // Ignore the root package.
             continue;
         };
-        if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
-            diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
-                package_name: dist.name().clone(),
-            });
+        if !has_lower_bound(node_index, dist.name(), graph, constraints, modifiers) {
+            missing_lower_bounds.push(dist.name());
         }
     }
+    missing_lower_bounds.sort_unstable();
+    diagnostics.extend(missing_lower_bounds.into_iter().map(|package_name| {
+        ResolutionDiagnostic::MissingLowerBound {
+            package_name: package_name.clone(),
+        }
+    }));
 }
 
 /// Whether the given package has a lower version bound by another package.
@@ -541,7 +435,7 @@ fn has_lower_bound(
     package_name: &PackageName,
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     constraints: &Constraints,
-    overrides: &Overrides,
+    modifiers: &DependencyModifiers,
 ) -> bool {
     for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
         let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
@@ -565,13 +459,15 @@ fn has_lower_bound(
 
         // Get all individual specifier for the current package and check if any has a lower
         // bound.
-        for requirement in overrides
-            .apply_for(
-                neighbor_dist.name(),
-                &neighbor_dist.version,
+        for requirement in modifiers
+            .apply(
+                DependencyModifierScope::Package(neighbor_dist.name(), &neighbor_dist.version),
                 metadata.requires_dist.iter(),
             )
-            .chain(overrides.apply(metadata.dependency_groups.values().flatten()))
+            .chain(modifiers.apply(
+                DependencyModifierScope::Global,
+                metadata.dependency_groups.values().flatten(),
+            ))
             // Constraints are missing from the graph.
             .chain(constraints.requirements().map(Cow::Borrowed))
         {

@@ -133,12 +133,16 @@ pub enum PylockTomlErrorKind {
     MissingHashes(PackageName, &'static str),
     #[error(transparent)]
     FileHash(#[from] FileHashError),
-    #[error("URL must end in a valid wheel filename: `{0}`")]
+    #[error("URL must end in a valid wheel filename: {0}")]
     UrlMissingFilename(DisplaySafeUrl),
-    #[error("Invalid artifact URL: `{0}`")]
+    #[error("Invalid artifact URL: {0}")]
     InvalidArtifactUrl(UrlString),
-    #[error("Path must end in a valid wheel filename: `{0}`")]
+    #[error("Path must end in a valid wheel filename: {0}")]
     PathMissingFilename(Box<Path>),
+    #[error("Wheel filename `{0}` does not match package name `{1}`")]
+    WheelNameMismatch(WheelFilename, PackageName),
+    #[error("Wheel filename `{0}` does not match package version `{1}`")]
+    WheelVersionMismatch(WheelFilename, Version),
     #[error("Failed to convert path to URL")]
     PathToUrl,
     #[error(
@@ -764,9 +768,10 @@ impl<'lock> PylockToml {
         Ok(Some(wheels))
     }
 
-    /// Construct a [`PylockToml`] from a uv lockfile.
+    /// Construct a [`PylockToml`] from a uv lockfile. Relative paths are based on `output_dir`.
     pub fn from_lock(
         target: &impl Installable<'lock>,
+        output_dir: &Path,
         prune: &[PackageName],
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
@@ -882,12 +887,13 @@ impl<'lock> PylockToml {
             let directory = match &sdist {
                 Some(SourceDist::Directory(sdist)) => Some(PylockTomlDirectory {
                     path: PortablePathBuf::from(
-                        sdist
-                            .url
-                            .given()
-                            .map(PathBuf::from)
-                            .unwrap_or_else(|| sdist.install_path.to_path_buf())
-                            .into_boxed_path(),
+                        try_relative_to_if(
+                            &sdist.install_path,
+                            output_dir,
+                            sdist.url.prefers_relative(),
+                        )
+                        .map(Box::<Path>::from)
+                        .unwrap_or_else(|_| sdist.install_path.clone()),
                     ),
                     editable: match editable
                         .and_then(|editable| editable.for_package(&package.id.name))
@@ -930,12 +936,13 @@ impl<'lock> PylockToml {
                 Some(SourceDist::Path(sdist)) => Some(PylockTomlArchive {
                     url: None,
                     path: Some(PortablePathBuf::from(
-                        sdist
-                            .url
-                            .given()
-                            .map(PathBuf::from)
-                            .unwrap_or_else(|| sdist.install_path.to_path_buf())
-                            .into_boxed_path(),
+                        try_relative_to_if(
+                            &sdist.install_path,
+                            output_dir,
+                            sdist.url.prefers_relative(),
+                        )
+                        .map(Box::<Path>::from)
+                        .unwrap_or_else(|_| sdist.install_path.clone()),
                     )),
                     size,
                     upload_time: None,
@@ -944,13 +951,18 @@ impl<'lock> PylockToml {
                 }),
                 _ => match &package.id.source {
                     Source::Registry(..) => None,
-                    Source::Path(source) => package.wheels.first().map(|wheel| PylockTomlArchive {
-                        url: None,
-                        path: Some(PortablePathBuf::from(source.clone())),
-                        size: wheel.size,
-                        upload_time: None,
-                        subdirectory: None,
-                        hashes: wheel.hash.clone().map(Hashes::from).unwrap_or_default(),
+                    Source::Path(source) => package.wheels.first().map(|wheel| {
+                        let path = target.install_path().join(source);
+                        let path = try_relative_to_if(&path, output_dir, source.is_relative())
+                            .unwrap_or(path);
+                        PylockTomlArchive {
+                            url: None,
+                            path: Some(PortablePathBuf::from(path.into_boxed_path())),
+                            size: wheel.size,
+                            upload_time: None,
+                            subdirectory: None,
+                            hashes: wheel.hash.clone().map(Hashes::from).unwrap_or_default(),
+                        }
                     }),
                     Source::Git(..) => None,
                     Source::Direct(source, ..) => {
@@ -1299,6 +1311,13 @@ impl<'lock> PylockToml {
                 _ => {}
             }
 
+            // Validate every active wheel before selecting the compatible candidate. Otherwise an
+            // incompatible or malformed wheel can be silently ignored when an sdist is present.
+            for wheel in package.wheels.iter().flatten() {
+                let filename = wheel.filename(&package.name)?;
+                validate_wheel_filename(&filename, &package.name, package.version.as_ref())?;
+            }
+
             let no_binary = build_options.no_binary_package(&package.name);
             let no_build = build_options.no_build_package(&package.name);
             let is_wheel = package
@@ -1317,6 +1336,7 @@ impl<'lock> PylockToml {
                     wheels: vec![best_wheel.to_registry_wheel(
                         install_path,
                         &package.name,
+                        package.version.as_ref(),
                         package.index.as_ref(),
                     )?],
                     best_wheel_index: 0,
@@ -1603,9 +1623,11 @@ impl PylockTomlWheel {
         &self,
         install_path: &Path,
         name: &PackageName,
+        version: Option<&Version>,
         index: Option<&DisplaySafeUrl>,
     ) -> Result<RegistryBuiltWheel, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
+        validate_wheel_filename(&filename, name, version)?;
 
         let file_url = if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
@@ -1840,6 +1862,7 @@ impl PylockTomlArchive {
             match ext {
                 DistExtension::Wheel => {
                     let filename = WheelFilename::from_str(filename)?;
+                    validate_wheel_filename(&filename, name, version)?;
                     let install_path = install_path.join(path);
                     validate_path_size(&install_path, self.size)?;
                     let url = VerbatimUrl::from_absolute_path(&install_path)
@@ -1873,6 +1896,7 @@ impl PylockTomlArchive {
             match ext {
                 DistExtension::Wheel => {
                     let filename = WheelFilename::from_str(&filename)?;
+                    validate_wheel_filename(&filename, name, version)?;
                     Ok(Dist::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                         filename,
                         location: Box::new(url.clone()),
@@ -1920,6 +1944,30 @@ impl PylockTomlArchive {
             Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()))
         }
     }
+}
+
+fn validate_wheel_filename(
+    filename: &WheelFilename,
+    name: &PackageName,
+    version: Option<&Version>,
+) -> Result<(), PylockTomlErrorKind> {
+    if filename.name != *name {
+        return Err(PylockTomlErrorKind::WheelNameMismatch(
+            filename.clone(),
+            name.clone(),
+        ));
+    }
+
+    if let Some(version) = version
+        && filename.version != *version
+    {
+        return Err(PylockTomlErrorKind::WheelVersionMismatch(
+            filename.clone(),
+            version.clone(),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Convert a Jiff timestamp to a TOML datetime.

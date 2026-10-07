@@ -7,7 +7,7 @@ use petgraph::{
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
-use uv_configuration::{BuildOptions, Constraints, Overrides};
+use uv_configuration::{BuildOptions, Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
     BuiltDist, Dist, Edge, Identifier, Name, Node, Requirement, RequiresPython,
     ResolutionDiagnostic, ResolvedDist, SourceDist,
@@ -35,8 +35,8 @@ pub struct ResolverOutput {
     pub requirements: Vec<Requirement>,
     /// The constraints that were used to build the graph.
     pub constraints: Constraints,
-    /// The overrides that were used to build the graph.
-    pub overrides: Overrides,
+    /// The dependency modifiers that were used to build the graph.
+    pub modifiers: DependencyModifiers,
     /// The options that were used to build the graph.
     pub options: Options,
 }
@@ -60,7 +60,7 @@ impl ResolutionGraphNode {
         match self {
             Self::Root => None,
             Self::Dist(dist) => {
-                let extra = dist.extra.as_ref()?;
+                let extra = dist.kind.extra()?;
                 Some((&dist.name, extra))
             }
         }
@@ -70,7 +70,7 @@ impl ResolutionGraphNode {
         match self {
             Self::Root => None,
             Self::Dist(dist) => {
-                let group = dist.group.as_ref()?;
+                let group = dist.kind.group()?;
                 Some((&dist.name, group))
             }
         }
@@ -230,6 +230,12 @@ impl ResolverOutput {
                         add_marker_params_from_tree(tree, set);
                     }
                 }
+                MarkerTreeKind::VersionString(marker) => {
+                    set.insert(MarkerParam::String(marker.key()));
+                    for (_, tree) in marker.edges() {
+                        add_marker_params_from_tree(tree, set);
+                    }
+                }
                 MarkerTreeKind::String(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
@@ -278,9 +284,8 @@ impl ResolverOutput {
             let MetadataResponse::Found(archive, ..) = &*res else {
                 panic!("Every package should have metadata: {metadata_id:?}")
             };
-            for req in self.constraints.apply(self.overrides.apply_for(
-                &dist.name,
-                &dist.version,
+            for req in self.constraints.apply(self.modifiers.apply(
+                DependencyModifierScope::Package(&dist.name, &dist.version),
                 archive.metadata.requires_dist.iter(),
             )) {
                 add_marker_params_from_tree(req.marker, &mut seen_marker_values);
@@ -288,10 +293,10 @@ impl ResolverOutput {
         }
 
         // Ensure that we consider markers from direct dependencies.
-        for direct_req in self
-            .constraints
-            .apply(self.overrides.apply(self.requirements.iter()))
-        {
+        for direct_req in self.constraints.apply(
+            self.modifiers
+                .apply(DependencyModifierScope::Global, self.requirements.iter()),
+        ) {
             add_marker_params_from_tree(direct_req.marker, &mut seen_marker_values);
         }
 
@@ -464,9 +469,9 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
                     let source = inverse[&source_dist.name()];
                     let target = inverse[&target_dist.name()];
 
-                    let edge = if let Some(extra) = source_dist.extra.as_ref() {
+                    let edge = if let Some(extra) = source_dist.kind.extra() {
                         Edge::Optional(extra.clone())
-                    } else if let Some(group) = source_dist.group.as_ref() {
+                    } else if let Some(group) = source_dist.kind.group() {
                         Edge::Dev(group.clone())
                     } else {
                         Edge::Prod

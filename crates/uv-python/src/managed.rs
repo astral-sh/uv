@@ -54,9 +54,9 @@ pub enum Error {
     ExtractError(#[from] uv_extract::Error),
     #[error(transparent)]
     SysconfigError(#[from] sysconfig::Error),
-    #[error("Missing expected Python executable at {}", _0.user_display())]
+    #[error("Missing expected Python executable at `{}`", _0.user_display())]
     MissingExecutable(PathBuf),
-    #[error("Missing expected target directory for Python minor version link at {}", _0.user_display())]
+    #[error("Missing expected target directory for Python minor version link at `{}`", _0.user_display())]
     MissingPythonMinorVersionLinkTargetDirectory(PathBuf),
     #[error("Failed to create canonical Python executable")]
     CanonicalizeExecutable(#[source] io::Error),
@@ -301,6 +301,8 @@ pub struct ManagedPythonInstallation {
     path: PathBuf,
     /// An install key for the Python version.
     key: PythonInstallationKey,
+    /// The implementation recorded in the key. Managed installations require a known name.
+    implementation: ImplementationName,
     /// The URL with the Python archive.
     ///
     /// Empty when self was constructed from a path.
@@ -316,14 +318,16 @@ pub struct ManagedPythonInstallation {
 }
 
 impl ManagedPythonInstallation {
-    pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Self {
-        Self {
+    pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
+        let implementation = ImplementationName::try_from(&download.key().implementation)?;
+        Ok(Self {
             path,
             key: download.key().clone(),
+            implementation,
             url: Some(download.url().clone()),
             sha256: download.sha256().cloned(),
             build: download.build().map(Cow::Borrowed),
-        }
+        })
     }
 
     fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
@@ -335,6 +339,8 @@ impl ManagedPythonInstallation {
                 .to_str()
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
+
+        let implementation = ImplementationName::try_from(&key.implementation)?;
 
         let path = std::path::absolute(path)
             .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
@@ -349,6 +355,7 @@ impl ManagedPythonInstallation {
         Ok(Self {
             path,
             key,
+            implementation,
             url: None,
             sha256: None,
             build,
@@ -467,12 +474,16 @@ impl ManagedPythonInstallation {
         self.key.version()
     }
 
+    /// Return the implementation in the key without interpreting Emscripten as Pyodide.
+    pub(crate) fn key_implementation(&self) -> ImplementationName {
+        self.implementation
+    }
+
     pub fn implementation(&self) -> ImplementationName {
-        match self.key.implementation().into_owned() {
-            LenientImplementationName::Known(implementation) => implementation,
-            LenientImplementationName::Unknown(_) => {
-                panic!("Managed Python installations should have a known implementation")
-            }
+        if self.key.os().is_emscripten() {
+            ImplementationName::Pyodide
+        } else {
+            self.implementation
         }
     }
 
@@ -516,7 +527,7 @@ impl ManagedPythonInstallation {
             match symlink_or_copy_file(&python, &executable) {
                 Ok(()) => {
                     debug!(
-                        "Created link {} -> {}",
+                        "Created link `{}` -> `{}`",
                         executable.user_display(),
                         python.user_display(),
                     );
@@ -801,7 +812,7 @@ impl PythonMinorVersionLink {
         ) {
             Ok(()) => {
                 debug!(
-                    "Created link {} -> {}",
+                    "Created link `{}` -> `{}`",
                     &self.symlink_directory.user_display(),
                     &self.target_directory.user_display(),
                 );
@@ -1027,6 +1038,7 @@ mod tests {
         ManagedPythonInstallation {
             path: PathBuf::from("/test/path"),
             key,
+            implementation,
             url: None,
             sha256: None,
             build: build.map(|s| Cow::Owned(s.to_owned())),

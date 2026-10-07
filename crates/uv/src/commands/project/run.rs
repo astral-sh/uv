@@ -18,12 +18,12 @@ use tracing::{debug, trace, warn};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExtrasSpecification, InstallOptions, TargetTriple,
+    ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
+use uv_dispatch::UniversalState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
 use uv_fs::which::is_executable;
@@ -33,24 +33,24 @@ use uv_lock::{Installable, Lock};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonArchitecture,
+    PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
+    PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{
+    RequirementsSource, RequirementsSpecification, script_extra_build_requires,
+    script_specification,
+};
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
-use uv_settings::{
-    EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
-};
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
-use crate::base_client_builder;
 use crate::child::run_to_completion;
 
 /// GitHub Gist API response structure
@@ -68,21 +68,20 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
-use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
-    ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    script_extra_build_requires, script_specification, update_environment,
-    validate_project_requires_python,
+    ProjectEnvironmentTarget, ProjectError, ProjectPythonRequest, ScriptEnvironment,
+    ScriptInterpreter, update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, GlobalSettings, LockCheck, LockedSource, ResolverInstallerSettings,
-    ResolverSettings,
+    FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings, ResolverSettings,
 };
 
 /// Run a command.
@@ -112,6 +111,7 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -150,7 +150,7 @@ pub(crate) async fn run(
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::Extensionless(path) if path == Path::new("-") => {
+            RequirementsSource::Extensionless(RequirementsInput::Stdin) => {
                 requirements_from_stdin = true;
             }
             _ => {}
@@ -170,7 +170,7 @@ pub(crate) async fn run(
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
 
-    let env_file_environment = read_env_files(env_file.iter())?;
+    let env_file_environment = read_env_files(env_file.as_slice())?;
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
@@ -214,6 +214,7 @@ pub(crate) async fn run(
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 no_sync,
@@ -304,7 +305,7 @@ pub(crate) async fn run(
                 DryRun::Disabled,
                 printer,
                 preview,
-                &malware_settings,
+                MalwareCheckContext::from(&malware_settings),
             )
             .await
             {
@@ -380,7 +381,8 @@ pub(crate) async fn run(
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification(
                 (&script).into(),
-                &settings.resolver,
+                &settings.resolver.sources,
+                &settings.resolver.index_locations,
                 &cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
@@ -389,7 +391,8 @@ pub(crate) async fn run(
             {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
-                    &settings.resolver,
+                    &settings.resolver.sources,
+                    &settings.resolver.index_locations,
                     &cache,
                     workspace_cache,
                     client_builder.credentials_cache(),
@@ -401,6 +404,7 @@ pub(crate) async fn run(
                     python.as_deref().map(PythonRequest::parse),
                     &client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
                     no_sync,
@@ -465,6 +469,7 @@ pub(crate) async fn run(
                     python.as_deref().map(PythonRequest::parse),
                     &client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
                     no_sync,
@@ -646,11 +651,7 @@ pub(crate) async fn run(
                 // base environment for the project.
 
                 // Resolve the Python request and requirement for the workspace.
-                let WorkspacePython {
-                    source,
-                    python_request,
-                    requires_python,
-                } = WorkspacePython::from_request(
+                let project_python = ProjectPythonRequest::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
                     &groups,
@@ -659,36 +660,24 @@ pub(crate) async fn run(
                 )
                 .await?;
 
-                let interpreter = PythonInstallation::find_or_download(
-                    python_request.as_ref(),
-                    EnvironmentPreference::Any,
-                    python_preference,
-                    python_downloads,
-                    &client_builder,
-                    &cache,
-                    Some(&download_reporter),
-                    install_mirrors.python_install_mirror.as_deref(),
-                    install_mirrors.pypy_install_mirror.as_deref(),
-                    install_mirrors.python_downloads_json_url.as_deref(),
-                )
-                .await?
-                .into_interpreter();
-
-                if let Some(requires_python) = requires_python.as_ref() {
-                    validate_project_requires_python(
-                        &interpreter,
-                        Some(project.workspace()),
-                        &groups,
-                        requires_python,
-                        &source,
-                    )?;
-                }
+                let interpreter = project_python
+                    .find_or_download(
+                        EnvironmentPreference::Any,
+                        python_preference,
+                        python_arch,
+                        python_downloads,
+                        &client_builder,
+                        &cache,
+                        &download_reporter,
+                        &install_mirrors,
+                    )
+                    .await?;
 
                 // Create a virtual environment
                 temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    interpreter.into_interpreter(),
                     uv_virtualenv::Prompt::None,
                     false,
                     uv_virtualenv::OnExisting::Remove(
@@ -702,12 +691,14 @@ pub(crate) async fn run(
                 // If we're not isolating the environment, reuse the base environment for the
                 // project.
                 ProjectEnvironment::get_or_init(
-                    project.workspace(),
+                    ProjectEnvironmentTarget::from(project.workspace()),
+                    None,
                     &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
                     &client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     no_sync,
                     config_discovery,
@@ -793,49 +784,15 @@ pub(crate) async fn run(
                 };
 
                 // Identify the installation target.
-                let target = match &project {
-                    VirtualProject::Project(project) => {
-                        if all_packages {
-                            InstallTarget::Workspace {
-                                workspace: project.workspace(),
-                                lock: result.lock(),
-                            }
-                        } else if let Some(package) = package.as_ref() {
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: package,
-                                lock: result.lock(),
-                            }
-                        } else {
-                            // By default, install the root package.
-                            InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: project.project_name(),
-                                lock: result.lock(),
-                            }
-                        }
-                    }
-                    VirtualProject::NonProject(workspace) => {
-                        if all_packages {
-                            InstallTarget::NonProjectWorkspace {
-                                workspace,
-                                lock: result.lock(),
-                            }
-                        } else if let Some(package) = package.as_ref() {
-                            InstallTarget::Project {
-                                workspace,
-                                name: package,
-                                lock: result.lock(),
-                            }
-                        } else {
-                            // By default, install the entire workspace.
-                            InstallTarget::NonProjectWorkspace {
-                                workspace,
-                                lock: result.lock(),
-                            }
-                        }
-                    }
-                };
+                let target = InstallTarget::from_project(
+                    &project,
+                    result.lock(),
+                    PackageSelection::from_args(
+                        all_packages,
+                        package.as_slice(),
+                        project.project_name(),
+                    ),
+                );
 
                 let install_options = InstallOptions::default();
                 // Validate that the set of requested extras and development groups are defined in the lockfile.
@@ -866,7 +823,7 @@ pub(crate) async fn run(
                     DryRun::Disabled,
                     printer,
                     preview,
-                    &malware_settings,
+                    MalwareCheckContext::from(&malware_settings),
                 )
                 .await
                 {
@@ -904,12 +861,12 @@ pub(crate) async fn run(
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &client_builder,
                     &cache,
                     Some(&download_reporter),
-                    install_mirrors.python_install_mirror.as_deref(),
-                    install_mirrors.pypy_install_mirror.as_deref(),
+                    install_mirrors.mirrors(),
                     install_mirrors.python_downloads_json_url.as_deref(),
                 )
                 .await?;
@@ -1049,7 +1006,7 @@ pub(crate) async fn run(
         .as_ref()
         .map(|dir| {
             debug!(
-                "Creating ephemeral environment at: `{}`",
+                "Creating ephemeral environment at: {}",
                 dir.path().simplified_display()
             );
 
@@ -1168,7 +1125,7 @@ pub(crate) async fn run(
                     }
                     match create_symlink(&source, &target) {
                         Ok(()) => trace!(
-                            "Created link for {} -> {}",
+                            "Created link for `{}` -> `{}`",
                             target.user_display(),
                             source.user_display()
                         ),
@@ -1324,7 +1281,7 @@ pub(crate) async fn run(
     // TODO(zanieb): Throw a nicer error message if the command is not found
     let handle = process
         .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
+        .with_context(|| format!("Failed to spawn: {}", command.display_executable()))?;
 
     run_to_completion(handle).await
 }
@@ -1342,6 +1299,7 @@ fn can_skip_ephemeral(
             ResolverSettings {
                 config_setting,
                 config_settings_package,
+                dependency_metadata,
                 extra_build_dependencies,
                 extra_build_variables,
                 ..
@@ -1372,6 +1330,7 @@ fn can_skip_ephemeral(
         &spec.overrides,
         &spec.override_dependencies,
         &spec.excludes,
+        dependency_metadata,
         DependencyMode::Transitive,
         InstallationStrategy::Permissive,
         &markers,
@@ -1478,11 +1437,12 @@ impl ParsedRunCommand {
     }
 
     /// Resolve the parsed target into a [`RunCommand`] and any associated PEP 723 metadata.
+    ///
+    /// The client factory is called only for remote scripts, so local target discovery does not
+    /// resolve global or network settings before reading the target's configuration.
     pub(crate) async fn resolve(
         self,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
+        client_builder: &(dyn Fn() -> anyhow::Result<BaseClientBuilder<'static>> + Sync),
     ) -> anyhow::Result<(Option<Pep723Item>, RunCommand)> {
         match self {
             Self::Ready(run_command) => {
@@ -1490,8 +1450,7 @@ impl ParsedRunCommand {
                 Ok((script, run_command))
             }
             Self::PendingRemote(remote_command) => {
-                let settings = GlobalSettings::resolve(global_args, filesystem, environment, None)?;
-                let client_builder = base_client_builder(&settings);
+                let client_builder = client_builder()?;
 
                 let (url, downloaded_script, args) =
                     remote_command.download(&client_builder).await?;
@@ -1509,13 +1468,12 @@ impl ParsedRunCommand {
 
     /// Determine the [`ParsedRunCommand`] for a given set of arguments.
     pub(crate) fn from_args(
-        command: &ExternalCommand,
+        command: &[OsString],
         module: bool,
         script: bool,
         gui_script: bool,
     ) -> anyhow::Result<Self> {
-        let (target, args) = command.split();
-        let Some(target) = target else {
+        let Some((target, args)) = command.split_first() else {
             return Ok(Self::Ready(RunCommand::Empty));
         };
 
@@ -2123,7 +2081,7 @@ fn copy_entrypoint(
         .open(target)?;
     file.write_all(contents.as_bytes())?;
 
-    trace!("Updated entrypoint at {}", target.user_display());
+    trace!("Updated entrypoint at `{}`", target.user_display());
 
     Ok(())
 }
@@ -2158,7 +2116,7 @@ fn copy_entrypoint(
         .open(target)?;
     launcher.write_to_file(&mut file, is_gui)?;
 
-    trace!("Updated entrypoint at {}", target.user_display());
+    trace!("Updated entrypoint at `{}`", target.user_display());
 
     Ok(())
 }

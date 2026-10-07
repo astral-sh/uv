@@ -632,3 +632,6 @@ distribution (like PyTorch), as such packages can _only_ be installed on environ
 set of pre-built binary distributions (wheels) published by that package.
 
 See the [resolution documentation](../resolution.md#required-environments) for more.
+
+For Linux, use [`minimum-libc-version`](../resolution.md#minimum-libc-version) alongside
+`required-environments` to select the libc implementations and minimum versions to support.

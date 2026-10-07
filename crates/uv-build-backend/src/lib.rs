@@ -33,11 +33,11 @@ use crate::settings::ModuleName;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Failed to persist temporary file to {}", _0.user_display())]
+    #[error("Failed to persist temporary file to `{}`", _0.user_display())]
     Persist(PathBuf, #[source] io::Error),
     #[error("Invalid metadata format in: {}", _0.user_display())]
     Toml(PathBuf, #[source] toml::de::Error),
-    #[error("Failed to serialize pyproject.toml")]
+    #[error("Failed to serialize `pyproject.toml`")]
     TomlSerialize(#[source] toml::ser::Error),
     #[error("Invalid project metadata")]
     Validation(#[from] ValidationError),
@@ -66,7 +66,7 @@ pub enum Error {
     },
     #[error("Failed to write wheel zip archive")]
     AsyncZip(#[from] async_zip::error::ZipError),
-    #[error("Failed to write RECORD file")]
+    #[error("Failed to write `RECORD` file")]
     Csv(#[from] csv::Error),
     #[error("Failed to write JSON metadata file")]
     Json(#[source] serde_json::Error),
@@ -84,14 +84,14 @@ pub enum Error {
     VenvInSourceTree(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
-    #[error("Failed to write tar archive to {}", _0.user_display())]
+    #[error("Failed to write tar archive to `{}`", _0.user_display())]
     TarWrite(PathBuf, #[source] io::Error),
-    #[error("Failed to write tar archive to {}", _0.user_display())]
+    #[error("Failed to write tar archive to `{}`", _0.user_display())]
     TarCodecWrite(
         PathBuf,
         #[source] tar_codec::BuildError<tar_codec::EncodeError>,
     ),
-    #[error("Failed to finish gzip stream for {}", _0.user_display())]
+    #[error("Failed to finish gzip stream for `{}`", _0.user_display())]
     GzipWrite(PathBuf, #[source] io::Error),
 }
 
@@ -207,7 +207,7 @@ fn check_metadata_directory(
     };
 
     debug!(
-        "Checking metadata directory {}",
+        "Checking metadata directory `{}`",
         metadata_directory.user_display()
     );
 
@@ -479,6 +479,7 @@ pub(crate) fn error_on_venv(file_name: &OsStr, path: &Path) -> Result<(), Error>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_zip::Compression;
     use async_zip::base::read::mem::ZipFileReader;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
@@ -521,7 +522,7 @@ mod tests {
 
         assert_snapshot!(format_err(&err), @r#"
         Unsupported glob expression in: tool.uv.build-backend.source-include
-          Caused by: Invalid character `@` at position 3 in glob: `**/@test`
+          Caused by: Invalid character `@` at position 3 in glob `**/@test`
 
         hint: Characters can be escaped with a backslash
         "#);
@@ -717,6 +718,34 @@ mod tests {
             &[],
             "1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508",
         );
+    }
+
+    #[test]
+    fn editable_wheel_compression() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let source = Path::new("../../test/packages/built-by-uv");
+        let dist = TempDir::new()?;
+
+        let filename = build_wheel(source, dist.path(), None, MOCK_UV_VERSION, false)?;
+        let wheel = block_on(read_wheel(&dist.path().join(filename.to_string())));
+        let filename = build_editable(source, dist.path(), None, MOCK_UV_VERSION, false)?;
+        let editable = block_on(read_wheel(&dist.path().join(filename.to_string())));
+
+        for (archive, compression) in [
+            (wheel, Compression::Deflate),
+            (editable, Compression::Stored),
+        ] {
+            assert!(!archive.file().entries().is_empty());
+            for entry in archive.file().entries() {
+                let expected = if entry.dir()? {
+                    Compression::Stored
+                } else {
+                    compression
+                };
+                assert_eq!(entry.compression(), expected);
+            }
+        }
+        Ok(())
     }
 
     #[test]

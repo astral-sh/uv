@@ -28,7 +28,7 @@ fn missing_requirements_txt() {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.txt`
+    error: File not found: requirements.txt
     ");
 
     requirements_txt.assert(predicates::path::missing());
@@ -1084,6 +1084,200 @@ fn warn_on_yanked_dry_run() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn json() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig==2.0.0")?;
+
+    context.pip_install().arg("idna==3.6").assert().success();
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--check")
+        .arg("--output-format=json")
+        .arg("--quiet"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [
+        {
+          "name": "idna",
+          "version": "3.6",
+          "action": "uninstalled"
+        },
+        {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "action": "installed"
+        }
+      ],
+      "dry_run": true
+    }
+    "#);
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--output-format=json"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [
+        {
+          "name": "idna",
+          "version": "3.6",
+          "action": "uninstalled"
+        },
+        {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "action": "installed"
+        }
+      ],
+      "dry_run": true
+    }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - idna==3.6
+     + iniconfig==2.0.0
+    "#);
+
+    context
+        .pip_freeze()
+        .assert()
+        .success()
+        .stdout("idna==3.6\n");
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--output-format=json")
+        .arg("--quiet"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [
+        {
+          "name": "idna",
+          "version": "3.6",
+          "action": "uninstalled"
+        },
+        {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "action": "installed"
+        }
+      ],
+      "dry_run": false
+    }
+    "#);
+
+    context
+        .pip_freeze()
+        .assert()
+        .success()
+        .stdout("iniconfig==2.0.0\n");
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--output-format=json")
+        .arg("--quiet"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [],
+      "dry_run": false
+    }
+    "#);
+
+    requirements_txt.write_str("")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--output-format=json"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [],
+      "dry_run": false
+    }
+
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    No requirements found (hint: use `--allow-empty-requirements` to clear the environment)
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig==2.0.0")?;
+
+    uv_snapshot!(context.pip_sync().arg("requirements.txt").arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    // Checking must leave the environment unchanged.
+    uv_snapshot!(context.pip_sync().arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    uv_snapshot!(context.pip_sync().arg("requirements.txt").arg("--check").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked 1 package in [TIME]
+    Would make no changes
+    ");
+
+    // Sync also checks for packages that would be removed.
+    requirements_txt.write_str("")?;
+    uv_snapshot!(context.pip_sync().arg("requirements.txt").arg("--allow-empty-requirements").arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Resolved in [TIME]
+    Would uninstall 1 package
+     - iniconfig==2.0.0
+    ");
+
+    context.assert_command("import iniconfig").success();
+
+    Ok(())
+}
+
 /// Resolve a local wheel.
 #[test]
 fn install_local_wheel() -> Result<()> {
@@ -1220,7 +1414,7 @@ fn install_unnamed_wheel_url_rejects_path_traversal() -> Result<()> {
         .arg("--strict"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: The wheel filename "pkg-1.0-py3-none-../../../target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    error: The wheel filename `pkg-1.0-py3-none-../../../target.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
     "#
     );
 
@@ -1241,7 +1435,7 @@ fn install_unnamed_wheel_url_rejects_stream_separator() -> Result<()> {
         .arg("--strict"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: The wheel filename "pkg-1.0-py3-none-target:stream.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    error: The wheel filename `pkg-1.0-py3-none-target:stream.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
     "#
     );
 
@@ -1320,7 +1514,7 @@ fn mismatched_name() -> Result<()> {
       cause: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
-      Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+      Caused by: The .dist-info directory `tomli-2.0.1` does not start with the normalized package name: foo
     "
     );
 
@@ -1524,15 +1718,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters = if cfg!(windows) {
-        [("Removed 2 files", "Removed 3 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, context.clean()
+    uv_snapshot!(context.filters(), context.clean()
         .arg("werkzeug"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3781,7 +3967,7 @@ fn require_hashes_git() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
-      cause: Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      cause: Hash-checking is not supported for Git repositories: anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82
     "
     );
 
@@ -3808,7 +3994,7 @@ fn require_hashes_source_tree() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
-      cause: Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
+      cause: Hash-checking is not supported for local directories: black @ file://[WORKSPACE]/test/packages/black_editable
     "
     );
 
@@ -5631,6 +5817,245 @@ fn pep_751() -> Result<()> {
      - sniffio==1.3.1
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        default-groups = ["default"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_empty_public_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        dependency-groups = []
+        default-groups = ["default"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_unrelated_public_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        dependency-groups = ["test"]
+        default-groups = ["default"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_overlapping_public_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        dependency-groups = ["default", "test"]
+        default-groups = ["default"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_explicit_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        dependency-groups = ["test"]
+        default-groups = ["default"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml")
+        .arg("--group")
+        .arg("test"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_absent() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        dependency-groups = ["default", "test"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked in [TIME]
+    Would make no changes
+    ");
 
     Ok(())
 }

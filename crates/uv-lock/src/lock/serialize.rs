@@ -128,7 +128,6 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             &lock.requires_python,
             simplified_environment,
             &dist_count_by_name,
-            lock.supports_missing_package_metadata(),
         )?;
     }
 
@@ -140,6 +139,7 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
         || options.prerelease.global != PrereleaseMode::default()
         || !options.prerelease.package.is_empty()
         || options.fork_strategy != ForkStrategy::default()
+        || options.minimum_libc_version.is_some()
         || !options.exclude_newer.is_empty();
     if !has_options {
         return Ok(());
@@ -154,6 +154,9 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     }
     if options.fork_strategy != ForkStrategy::default() {
         writer.key_value("fork-strategy", options.fork_strategy.to_string())?;
+    }
+    if let Some(version) = options.minimum_libc_version {
+        writer.key_value("minimum-libc-version", serialize_value(&version)?)?;
     }
 
     let exclude_newer = &options.exclude_newer;
@@ -209,27 +212,26 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
 }
 
 fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Result<(), WriteError> {
-    let has_dependency_groups = manifest
-        .dependency_groups
-        .values()
-        .any(|requirements| !requirements.is_empty());
-    let has_manifest = !manifest.members.is_empty()
+    let has_dependency_groups = !manifest.dependency_groups.is_empty();
+    let has_manifest = manifest.default_groups.is_some()
+        || !manifest.members.is_empty()
         || !manifest.requirements.is_empty()
         || !manifest.constraints.is_empty()
         || !manifest.overrides.is_empty()
         || !manifest.excludes.is_empty()
-        || !manifest.build_constraints.is_empty()
-        || has_dependency_groups
-        || !manifest.dependency_metadata.is_empty();
-    if !has_manifest {
-        return Ok(());
+        || !manifest.build_constraints.is_empty();
+    // Subtables define their parent implicitly, so only write the header for direct entries.
+    if has_manifest {
+        writer.table(&["manifest"])?;
     }
 
-    writer.table(&["manifest"])?;
     if !manifest.members.is_empty() {
         writer.key_multiline_array("members", &manifest.members, |writer, member| {
             writer.value(member.as_ref())
         })?;
+    }
+    if let Some(groups) = &manifest.default_groups {
+        writer.key_value("default-groups", serialize_value(groups)?)?;
     }
     write_serialized_non_empty_array(writer, "requirements", &manifest.requirements)?;
     write_serialized_non_empty_array(writer, "constraints", &manifest.constraints)?;
@@ -240,10 +242,16 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     if has_dependency_groups {
         writer.table(&["manifest", "dependency-groups"])?;
         for (group, requirements) in &manifest.dependency_groups {
-            if requirements.is_empty() {
-                continue;
+            write_serialized_array(writer, group.as_ref(), requirements)?;
+        }
+    }
+
+    if !manifest.group_requires_python.is_empty() {
+        writer.table(&["manifest", "group-requires-python"])?;
+        for (group, metadata) in &manifest.group_requires_python {
+            if let Some(requires_python) = &metadata.requires_python {
+                writer.key_value(group.as_ref(), serialize_value(requires_python)?)?;
             }
-            write_serialized_non_empty_array(writer, group.as_ref(), requirements)?;
         }
     }
 
@@ -275,10 +283,12 @@ fn write_package(
     requires_python: &RequiresPython,
     simplified_environment: MarkerTree,
     dist_count_by_name: &FxHashMap<PackageName, u64>,
-    preserve_empty_contexts: bool,
 ) -> Result<(), WriteError> {
     writer.array_of_tables(&["package"])?;
     write_package_id(writer, &package.id, None, PackageIdLocation::Table)?;
+    if let Some(groups) = &package.default_groups {
+        writer.key_value("default-groups", serialize_value(groups)?)?;
+    }
 
     if !package.fork_markers.is_empty() {
         let markers = simplified_universal_markers(&package.fork_markers, requires_python);
@@ -314,18 +324,12 @@ fn write_package(
         writer.key_multiline_array("wheels", &package.wheels, write_wheel_inline)?;
     }
 
-    if package
-        .optional_dependencies
-        .values()
-        .any(|dependencies| preserve_empty_contexts || !dependencies.is_empty())
-    {
+    if !package.optional_dependencies.is_empty() {
         writer.table(&["package", "optional-dependencies"])?;
         for (extra, dependencies) in &package.optional_dependencies {
             if dependencies.is_empty() {
-                if preserve_empty_contexts {
-                    writer.key_start(extra.as_ref())?;
-                    writer.raw("[]\n");
-                }
+                writer.key_start(extra.as_ref())?;
+                writer.raw("[]\n");
                 continue;
             }
             writer.key_multiline_array(extra.as_ref(), dependencies, |writer, dependency| {
@@ -339,18 +343,12 @@ fn write_package(
         }
     }
 
-    if package
-        .dependency_groups
-        .values()
-        .any(|dependencies| preserve_empty_contexts || !dependencies.is_empty())
-    {
+    if !package.dependency_groups.is_empty() {
         writer.table(&["package", "dev-dependencies"])?;
         for (group, dependencies) in &package.dependency_groups {
             if dependencies.is_empty() {
-                if preserve_empty_contexts {
-                    writer.key_start(group.as_ref())?;
-                    writer.raw("[]\n");
-                }
+                writer.key_start(group.as_ref())?;
+                writer.raw("[]\n");
                 continue;
             }
             writer.key_multiline_array(group.as_ref(), dependencies, |writer, dependency| {
@@ -361,6 +359,15 @@ fn write_package(
                     dist_count_by_name,
                 )
             })?;
+        }
+    }
+
+    if !package.group_requires_python.is_empty() {
+        writer.table(&["package", "group-requires-python"])?;
+        for (group, metadata) in &package.group_requires_python {
+            if let Some(requires_python) = &metadata.requires_python {
+                writer.key_value(group.as_ref(), serialize_value(requires_python)?)?;
+            }
         }
     }
 

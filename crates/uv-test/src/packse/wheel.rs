@@ -116,7 +116,7 @@ pub fn generate_wheel_with_files(
     let record_entry =
         ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), ZipCompression::Stored);
     block_on(zip.write_entry_whole(record_entry, record.as_bytes()))
-        .expect("failed to write RECORD file");
+        .expect("failed to write `RECORD` file");
 
     let bytes = block_on(zip.close()).expect("failed to finish in-memory wheel");
     let filename = format!("{normalized}-{version}-{tag}.whl");

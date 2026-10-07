@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
 use std::io::Write;
@@ -23,8 +23,8 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    Verbatim,
+    MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
+    RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -35,8 +35,8 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::{
     GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
@@ -49,8 +49,8 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
-use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -77,6 +77,7 @@ pub(crate) async fn pip_compile(
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
+    minimum_libc_version: Option<MinimumLibcVersion>,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -124,6 +125,7 @@ pub(crate) async fn pip_compile(
     mut python: Option<String>,
     system: bool,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     concurrency: Concurrency,
     quiet: bool,
     cache: Cache,
@@ -211,6 +213,7 @@ pub(crate) async fn pip_compile(
         mut override_dependencies,
         excludes,
         pylock,
+        pylock_groups: _,
         source_trees,
         groups,
         extras: used_extras,
@@ -291,12 +294,12 @@ pub(crate) async fn pip_compile(
             Some(&request),
             environment_preference,
             python_preference,
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await
@@ -313,12 +316,12 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await
@@ -326,7 +329,7 @@ pub(crate) async fn pip_compile(
     .into_interpreter();
 
     debug!(
-        "Using Python {} interpreter at {} for builds",
+        "Using Python {} interpreter at `{}` for builds",
         interpreter.python_version(),
         interpreter.sys_executable().user_display().cyan()
     );
@@ -355,10 +358,9 @@ pub(crate) async fn pip_compile(
     // Create the shared state.
     let state = SharedState::default();
 
-    // If we're resolving against a different Python version, use a separate index. Source
-    // distributions will be built against the installed version, and so the index may contain
-    // different package priorities than in the top-level resolution.
-    let top_level_index = if python_version.is_some() {
+    // Universal or cross-version resolution ranks artifacts differently from build dependencies,
+    // which use the installed interpreter. Keep their policy-dependent version maps separate.
+    let top_level_index = if universal || python_version.is_some() {
         InMemoryIndex::default()
     } else {
         state.index().clone()
@@ -539,6 +541,16 @@ pub(crate) async fn pip_compile(
         preview,
     );
 
+    if universal
+        && minimum_libc_version.is_some()
+        && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
+    {
+        warn_user_once!(
+            "Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumLibcVersion
+        );
+    }
+
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease(prerelease)
@@ -549,6 +561,11 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments)
+        .minimum_libc_version(if universal {
+            minimum_libc_version
+        } else {
+            None
+        })
         .build();
 
     // Resolve the requirements.
@@ -560,11 +577,11 @@ pub(crate) async fn pip_compile(
         excludes,
         source_trees,
         project,
-        BTreeSet::default(),
+        BTreeMap::default(),
         &extras,
         &groups,
         preferences,
-        EmptyInstalledPackages,
+        None,
         &hasher,
         &Reinstall::None,
         &upgrade,
@@ -579,6 +596,7 @@ pub(crate) async fn pip_compile(
         &build_dispatch,
         &concurrency,
         options,
+        None,
         Box::new(DefaultResolveLogger),
         printer,
     )

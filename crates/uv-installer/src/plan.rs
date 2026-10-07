@@ -26,7 +26,7 @@ use uv_python::PythonEnvironment;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
 
-use crate::satisfies::RequirementSatisfaction;
+use crate::satisfies::{BuildSettings, RequirementSatisfaction};
 use crate::{InstallationStrategy, SitePackages};
 
 /// A wheel dependency is incompatible with the current platform.
@@ -334,10 +334,12 @@ impl<'a> Planner<'a> {
                             dist.version(),
                             installation,
                             tags,
-                            config_settings,
-                            config_settings_package,
-                            extra_build_requires,
-                            extra_build_variables,
+                            Some(BuildSettings {
+                                config_settings,
+                                config_settings_package,
+                                extra_build_requires,
+                                extra_build_variables,
+                            }),
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
@@ -536,7 +538,7 @@ impl<'a> Planner<'a> {
                                 }
                             }
                             Err(err) => {
-                                debug!("Failed to get timestamp for wheel {wheel} ({err})");
+                                debug!("Failed to get timestamp for wheel `{wheel}` ({err})");
                             }
                         },
                         Ok(None) => {}
@@ -619,7 +621,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );
@@ -647,7 +649,7 @@ impl<'a> Planner<'a> {
                         }
 
                         warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                             sdist,
                             wheel.filename()
                         );
@@ -668,7 +670,7 @@ impl<'a> Planner<'a> {
                         }
 
                         warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                             sdist,
                             wheel.filename()
                         );
@@ -695,7 +697,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );
@@ -731,7 +733,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                "Cached wheel filename does not match requested distribution `{}` (found `{}`)",
                                 sdist,
                                 wheel.filename()
                             );

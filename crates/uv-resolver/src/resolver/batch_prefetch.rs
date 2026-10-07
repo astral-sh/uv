@@ -5,13 +5,13 @@ use itertools::Itertools;
 use pubgrub::Term;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
+use uv_resolver_types::PackageNodeKind;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
-use crate::resolver::Request;
-use crate::resolver::requests::MetadataRequests;
+use crate::resolver::requests::{MetadataRequest, MetadataRequests};
 use crate::{PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse};
-use uv_distribution_types::{CompatibleDist, Identifier, IndexCapabilities, IndexMetadata};
+use uv_distribution_types::{CompatibleDist, IndexCapabilities, IndexMetadata};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -83,8 +83,7 @@ impl BatchPrefetcher {
     ) -> Result<(), ResolveError> {
         let PubGrubPackageInner::Package {
             name,
-            extra: None,
-            group: None,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**next
         else {
@@ -101,7 +100,8 @@ impl BatchPrefetcher {
         let versions_response = self
             .prefetch_runner
             .requests
-            .wait_for_versions(name, index.map(IndexMetadata::url))?;
+            .request_package(name, index)?
+            .wait();
 
         let phase = BatchPrefetchStrategy::Compatible {
             compatible: current_range.clone(),
@@ -129,8 +129,7 @@ impl BatchPrefetcher {
         // Only track base packages, no virtual packages from extras.
         let PubGrubPackageInner::Package {
             name,
-            extra: None,
-            group: None,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**package
         else {
@@ -148,8 +147,7 @@ impl BatchPrefetcher {
     fn should_prefetch(&self, next: &PubGrubPackage) -> (usize, bool) {
         let PubGrubPackageInner::Package {
             name,
-            extra: None,
-            group: None,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**next
         else {
@@ -296,7 +294,7 @@ impl BatchPrefetcherRunner {
             prefetch_count += 1;
 
             self.requests
-                .request_metadata(dist.distribution_id(), || Ok(Request::from(dist)))?;
+                .enqueue_metadata(MetadataRequest::Resolved(dist))?;
         }
 
         match prefetch_count {

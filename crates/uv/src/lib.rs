@@ -33,7 +33,6 @@ use uv_cli::{
     TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
 use uv_client::BaseClientBuilder;
-use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
@@ -47,6 +46,7 @@ use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
+use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -69,7 +69,7 @@ pub(crate) mod printer;
 pub(crate) mod settings;
 
 /// Construct the shared HTTP client builder from the resolved global settings.
-pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
+fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
         globals.network_settings.system_certs,
@@ -166,7 +166,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }) = **command
     {
         Some(ParsedRunCommand::from_args(
-            command, module, script, gui_script,
+            command.as_slice(),
+            module,
+            script,
+            gui_script,
         )?)
     } else {
         None
@@ -350,11 +353,15 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     // If the target is a PEP 723 script, parse it.
     let (run_script, run_command) = if let Some(parsed_run_command) = parsed_run_command {
         let (script, run_command) = parsed_run_command
-            .resolve(
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            )
+            .resolve(&|| {
+                let settings = GlobalSettings::resolve(
+                    &cli.top_level.global_args,
+                    filesystem.as_ref(),
+                    &environment,
+                    None,
+                )?;
+                Ok(base_client_builder(&settings))
+            })
             .await?;
         (script, Some(run_command))
     } else {
@@ -564,10 +571,15 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     anstream::ColorChoice::write_global(globals.color.into());
 
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
+    RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 
     // Write out any resolved settings.
     macro_rules! show_settings {
+        () => {
+            if globals.show_settings {
+                return Ok(ExitStatus::Success);
+            }
+        };
         ($arg:expr) => {
             if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
@@ -760,6 +772,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.required_environments,
+                args.minimum_libc_version,
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),
@@ -807,6 +820,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.python,
                 args.settings.system,
                 globals.python_preference,
+                globals.python_arch,
                 globals.concurrency,
                 globals.quiet > 0,
                 cache,
@@ -897,10 +911,12 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.prefix,
                 args.settings.sources,
                 globals.python_preference,
+                globals.python_arch,
                 globals.concurrency,
                 cache,
                 workspace_cache,
                 args.dry_run,
+                args.output_format,
                 printer,
                 globals.preview,
             ))
@@ -973,7 +989,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                             }) = &url.parsed_url
                             {
                                 debug!(
-                                    "Marking explicit source tree for reinstall: `{}`",
+                                    "Marking explicit source tree for reinstall: {}",
                                     install_path.display()
                                 );
                                 args.settings.reinstall = args
@@ -988,7 +1004,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                             &requirement.url.parsed_url
                         {
                             debug!(
-                                "Marking explicit source tree for reinstall: `{}`",
+                                "Marking explicit source tree for reinstall: {}",
                                 install_path.display()
                             );
                             args.settings.reinstall =
@@ -1060,10 +1076,12 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.target,
                 args.settings.prefix,
                 globals.python_preference,
+                globals.python_arch,
                 globals.concurrency,
                 cache,
                 workspace_cache,
                 args.dry_run,
+                args.output_format,
                 printer,
                 globals.preview,
             ))
@@ -1093,6 +1111,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                     .collect::<Result<Vec<_>, _>>()?,
             );
             commands::pip_uninstall(
+                globals.python_arch,
                 &sources,
                 args.settings.python,
                 args.settings.system,
@@ -1119,6 +1138,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             let cache = cache.init().await?;
 
             commands::pip_freeze(
+                globals.python_arch,
                 args.exclude_editable,
                 &args.exclude,
                 args.settings.strict,
@@ -1146,6 +1166,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             let cache = cache.init().await?;
 
             commands::pip_list(
+                globals.python_arch,
                 args.editable,
                 &args.exclude,
                 &args.format,
@@ -1180,6 +1201,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             let cache = cache.init().await?;
 
             commands::pip_show(
+                globals.python_arch,
                 args.package,
                 args.settings.strict,
                 &args.settings.dependency_metadata,
@@ -1198,11 +1220,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipTreeSettings::resolve(args, filesystem, environment)?;
+            show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init().await?;
 
             commands::pip_tree(
+                globals.python_arch,
                 args.show_version_specifiers,
                 args.depth,
                 &args.prune,
@@ -1238,6 +1262,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             let cache = cache.init().await?;
 
             commands::pip_check(
+                globals.python_arch,
                 args.settings.python.as_deref(),
                 args.settings.system,
                 args.settings.python_version.as_ref(),
@@ -1268,10 +1293,14 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
-        }) => commands::cache_dir(&cache, printer),
+        }) => {
+            show_settings!();
+            commands::cache_dir(&cache, printer)
+        }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Size(args),
         }) => {
+            show_settings!(args);
             let output_format = if args.human {
                 CacheSizeOutputFormat::Human
             } else {
@@ -1304,6 +1333,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
 
             commands::build_frontend(
                 &project_dir,
+                args.skip_dependency_check,
                 args.src,
                 args.package,
                 args.all_packages,
@@ -1324,6 +1354,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &client_builder.subcommand(vec!["build".to_owned()]),
                 config_discovery,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 &cache,
@@ -1393,6 +1424,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 python_request,
                 args.settings.install_mirrors,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 args.settings.link_mode,
                 &args.settings.index_locations,
@@ -1591,6 +1623,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 invocation_source,
                 args.isolated,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1692,6 +1725,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings,
                 client_builder.subcommand(vec!["tool".to_owned(), "install".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1776,6 +1810,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.filesystem,
                 client_builder.subcommand(vec!["tool".to_owned(), "upgrade".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -1783,6 +1818,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &workspace_cache,
                 printer,
                 globals.preview,
+                commands::diagnostics::write_error_chain,
             ))
             .await
         }
@@ -1829,10 +1865,9 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.all_arches,
                 args.show_urls,
                 args.output_format,
-                args.python_downloads_json_url,
-                args.python_install_mirror,
-                args.pypy_install_mirror,
+                args.install_mirrors,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),
                 &cache,
@@ -1859,11 +1894,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.bin,
                 args.registry,
                 args.force,
-                args.python_install_mirror,
-                args.pypy_install_mirror,
-                args.python_downloads_json_url,
+                args.install_mirrors,
                 client_builder.subcommand(vec!["python".to_owned(), "install".to_owned()]),
                 args.default,
+                globals.python_arch,
                 globals.python_downloads,
                 config_discovery,
                 args.compile_bytecode,
@@ -1894,11 +1928,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.bin,
                 args.registry,
                 args.force,
-                args.python_install_mirror,
-                args.pypy_install_mirror,
-                args.python_downloads_json_url,
+                args.install_mirrors,
                 client_builder.subcommand(vec!["python".to_owned(), "upgrade".to_owned()]),
                 args.default,
+                globals.python_arch,
                 globals.python_downloads,
                 config_discovery,
                 args.compile_bytecode,
@@ -1923,6 +1956,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonFindSettings::resolve(args, filesystem, environment)?;
+            show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1935,6 +1969,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                     // TODO(zsol): is this the right thing to do here?
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     globals.python_preference,
+                    globals.python_arch,
                     globals.python_downloads,
                     config_discovery,
                     &cache,
@@ -1951,6 +1986,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                     args.system,
                     config_discovery,
                     globals.python_preference,
+                    globals.python_arch,
                     args.python_downloads_json_url.as_deref(),
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     &cache,
@@ -1965,6 +2001,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonPinSettings::resolve(args, filesystem, environment)?;
+            show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1974,6 +2011,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.request,
                 args.resolved,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 args.no_project,
                 args.global,
@@ -2077,7 +2115,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                     &project_dir,
                     args.lock_check,
                     args.frozen,
-                    args.dry_run,
                     args.refresh,
                     args.sync,
                     args.active,
@@ -2088,6 +2125,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                     client_builder.subcommand(vec!["workspace".to_owned(), "metadata".to_owned()]),
                     script,
                     globals.python_preference,
+                    globals.python_arch,
                     globals.python_downloads,
                     globals.concurrency,
                     config_discovery,
@@ -2099,6 +2137,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 .await
             }
             WorkspaceCommand::Dir(args) => {
+                show_settings!(args);
                 commands::dir(
                     args.package,
                     &project_dir,
@@ -2109,6 +2148,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 .await
             }
             WorkspaceCommand::List(args) => {
+                show_settings!(args);
                 commands::list(
                     &project_dir,
                     args.paths,
@@ -2274,6 +2314,7 @@ async fn run_project(
                 args.no_workspace,
                 &client_builder.subcommand(vec!["init".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 config_discovery,
                 &cache,
@@ -2339,6 +2380,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["run".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2395,6 +2437,7 @@ async fn run_project(
                 args.python_platform,
                 args.install_mirrors,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 args.settings,
                 client_builder.subcommand(vec!["sync".to_owned()]),
@@ -2453,6 +2496,7 @@ async fn run_project(
                 client_builder.subcommand(vec!["lock".to_owned()]),
                 script,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -2465,7 +2509,7 @@ async fn run_project(
         }
         ProjectCommand::Upgrade(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::UpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::UpgradeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -2482,6 +2526,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["upgrade".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -2538,7 +2583,7 @@ async fn run_project(
                             }) = &url.parsed_url
                             {
                                 debug!(
-                                    "Marking explicit source tree for reinstall: `{}`",
+                                    "Marking explicit source tree for reinstall: {}",
                                     install_path.display()
                                 );
                                 args.settings.reinstall = args
@@ -2553,7 +2598,7 @@ async fn run_project(
                             &requirement.url.parsed_url
                         {
                             debug!(
-                                "Marking explicit source tree for reinstall: `{}`",
+                                "Marking explicit source tree for reinstall: {}",
                                 install_path.display()
                             );
                             args.settings.reinstall =
@@ -2616,6 +2661,7 @@ async fn run_project(
                 client_builder.subcommand(vec!["add".to_owned()]),
                 script,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2666,6 +2712,7 @@ async fn run_project(
                 client_builder.subcommand(vec!["remove".to_owned()]),
                 script,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2717,6 +2764,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["version".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2766,6 +2814,7 @@ async fn run_project(
                 &client_builder.subcommand(vec!["tree".to_owned()]),
                 script,
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -2816,6 +2865,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["export".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,
@@ -2898,6 +2948,7 @@ async fn run_project(
                 script,
                 client_builder.subcommand(vec!["check".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
@@ -2939,6 +2990,7 @@ async fn run_project(
                 args.settings,
                 client_builder.subcommand(vec!["audit".to_owned()]),
                 globals.python_preference,
+                globals.python_arch,
                 globals.python_downloads,
                 globals.concurrency,
                 config_discovery,

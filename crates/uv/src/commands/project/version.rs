@@ -8,18 +8,20 @@ use thiserror::Error;
 
 use tracing::debug;
 use uv_cache::Cache;
-use uv_cli::version::ProjectVersionInfo;
 use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
+use uv_dispatch::UniversalState;
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
@@ -31,40 +33,45 @@ use uv_workspace::{
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::add::{AddTarget, PythonTarget};
-use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::edit::{ProjectEdit, PythonTarget};
+use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
-    ProjectInterpreter, UniversalState, WorkspacePython,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectError, ProjectInterpreter, ProjectPythonRequest,
 };
 use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
-/// Display version information for uv itself (`uv self version`)
-pub(crate) fn self_version(
-    short: bool,
-    output_format: VersionFormat,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    let version_info = uv_cli::version::uv_self_version();
-    match output_format {
-        VersionFormat::Text => {
-            if short {
-                writeln!(printer.stdout(), "{}", version_info.version().cyan())?;
-            } else {
-                writeln!(printer.stdout(), "uv {}", version_info.cyan())?;
-            }
-        }
-        VersionFormat::Json => {
-            let string = serde_json::to_string_pretty(&version_info)?;
-            writeln!(printer.stdout(), "{string}")?;
+/// Version information for a project (`uv version`).
+#[derive(serde::Serialize)]
+struct ProjectVersionInfo {
+    /// Name of the package.
+    package_name: Option<String>,
+    /// Version, such as "0.5.1".
+    version: String,
+    /// Always `null` for project versions, kept for backwards compatibility.
+    // TODO(zanieb): Remove this field in a breaking release.
+    commit_info: Option<()>,
+}
+
+impl ProjectVersionInfo {
+    fn new(package_name: Option<&PackageName>, version: &Version) -> Self {
+        Self {
+            package_name: package_name.map(ToString::to_string),
+            version: version.to_string(),
+            commit_info: None,
         }
     }
+}
 
-    Ok(ExitStatus::Success)
+impl std::fmt::Display for ProjectVersionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.version)
+    }
 }
 
 /// Read or update project version (`uv version`)
@@ -87,6 +94,7 @@ pub(crate) async fn project_version(
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -331,6 +339,13 @@ pub(crate) async fn project_version(
     let status = if dry_run {
         ExitStatus::Success
     } else if let Some(new_version) = &new_version {
+        let edit = ProjectEdit::new(
+            [pyproject_path.clone()].into_iter().chain(
+                frozen
+                    .is_none()
+                    .then(|| LockTarget::from(project.workspace()).lock_path()),
+            ),
+        )?;
         let project = update_project(
             project,
             new_version,
@@ -338,7 +353,7 @@ pub(crate) async fn project_version(
             &pyproject_path,
             workspace_cache,
         )?;
-        Box::pin(lock_and_sync(
+        let status = Box::pin(lock_and_sync(
             project,
             project_dir,
             lock_check,
@@ -350,6 +365,7 @@ pub(crate) async fn project_version(
             &settings,
             client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             installer_metadata,
             &concurrency,
@@ -359,7 +375,9 @@ pub(crate) async fn project_version(
             preview,
             &malware_settings,
         ))
-        .await?
+        .await?;
+        edit.commit();
+        status
     } else {
         debug!("No changes to version; skipping update");
         ExitStatus::Success
@@ -541,6 +559,7 @@ async fn lock_and_sync(
     settings: &ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
@@ -562,10 +581,10 @@ async fn lock_and_sync(
     let extras = ExtrasSpecification::default().with_defaults(default_extras);
     let install_options = InstallOptions::default();
 
-    // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
-    let target = if no_sync {
+    // Discover the interpreter or environment used to lock and sync the project.
+    let python_target = if no_sync {
         // Discover the interpreter.
-        let workspace_python = WorkspacePython::from_request(
+        let project_python = ProjectPythonRequest::from_request(
             python.as_deref().map(PythonRequest::parse),
             Some(project.workspace()),
             &groups,
@@ -574,11 +593,11 @@ async fn lock_and_sync(
         )
         .await?;
         let interpreter = ProjectInterpreter::discover(
-            project.workspace(),
-            &groups,
-            workspace_python,
+            ProjectEnvironmentTarget::from(project.workspace()),
+            project_python,
             &client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             &install_mirrors,
             ProjectEnvironmentPolicy::Optional,
@@ -589,16 +608,18 @@ async fn lock_and_sync(
         .await?
         .into_interpreter();
 
-        AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
+        PythonTarget::Interpreter(interpreter)
     } else {
         // Discover or create the virtual environment.
         let environment = ProjectEnvironment::get_or_init(
-            project.workspace(),
+            ProjectEnvironmentTarget::from(project.workspace()),
+            None,
             &groups,
             python.as_deref().map(PythonRequest::parse),
             &install_mirrors,
             &client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             no_sync,
             config_discovery,
@@ -611,14 +632,14 @@ async fn lock_and_sync(
         .await?
         .into_environment()?;
 
-        AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
+        PythonTarget::Environment(environment)
     };
 
     // Determine the lock mode.
     let mode = if let LockCheck::Enabled(lock_check) = lock_check {
-        LockMode::Locked(target.interpreter(), lock_check)
+        LockMode::Locked(python_target.interpreter(), lock_check)
     } else {
-        LockMode::Write(target.interpreter())
+        LockMode::Write(python_target.interpreter())
     };
 
     // Initialize any shared state.
@@ -639,7 +660,7 @@ async fn lock_and_sync(
             printer,
             preview,
         )
-        .execute((&target).into()),
+        .execute(project.workspace().into()),
     )
     .await
     {
@@ -647,12 +668,7 @@ async fn lock_and_sync(
         Err(err) => return Err(UvError::from(err).into()),
     };
 
-    let AddTarget::Project(project, environment) = target else {
-        // If we're not adding to a project, exit early.
-        return Ok(ExitStatus::Success);
-    };
-
-    let PythonTarget::Environment(venv) = &*environment else {
+    let PythonTarget::Environment(venv) = &python_target else {
         // If we're not syncing, exit early.
         return Ok(ExitStatus::Success);
     };
@@ -660,17 +676,11 @@ async fn lock_and_sync(
     // Perform a full sync, because we don't know what exactly is affected by the version.
 
     // Identify the installation target.
-    let target = match &project {
-        VirtualProject::Project(project) => InstallTarget::Project {
-            workspace: project.workspace(),
-            name: project.project_name(),
-            lock: &lock,
-        },
-        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-            workspace,
-            lock: &lock,
-        },
-    };
+    let target = InstallTarget::from_project(
+        &project,
+        &lock,
+        PackageSelection::from_args(false, &[], project.project_name()),
+    );
 
     let state = state.fork();
 
@@ -694,7 +704,7 @@ async fn lock_and_sync(
         DryRun::Disabled,
         printer,
         preview,
-        malware_settings,
+        MalwareCheckContext::from(malware_settings),
     )
     .await
     {

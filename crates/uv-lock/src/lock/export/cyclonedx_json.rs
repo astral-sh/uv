@@ -26,9 +26,7 @@ use uv_pypi_types::HashAlgorithm as UvHashAlgorithm;
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
-use crate::lock::{
-    Hash as LockHash, LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource,
-};
+use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource};
 use crate::{Installable, LockError};
 
 /// Character set for percent-encoding PURL components, copied from packageurl.rs (<https://github.com/scm-rs/packageurl.rs/blob/a725aa0ab332934c350641508017eb09ddfa0813/src/purl.rs#L18>).
@@ -229,29 +227,35 @@ impl<'a> ComponentBuilder<'a> {
         let external_references = if self.include_hashes {
             let mut external_references = Vec::new();
 
-            if let Some(sdist) = &package.sdist {
-                if let (Some(url), Some(hash)) = (sdist.url(), sdist.hash()) {
-                    if let Ok(uri) = Uri::try_from(url.to_string()) {
-                        external_references.push(ExternalReference {
-                            url: ExternalReferenceUri::Url(uri),
-                            comment: None,
-                            hashes: Some(Hashes(vec![Hash::from(hash)])),
-                            external_reference_type: ExternalReferenceType::Distribution,
-                        });
-                    }
-                }
-            }
+            let source_dist = package
+                .sdist
+                .iter()
+                .filter_map(|source_dist| Some((source_dist.url()?, source_dist.hash()?)));
+            let wheels = package.wheels.iter().filter_map(|wheel| {
+                let WheelWireSource::Url { url } = &wheel.url else {
+                    return None;
+                };
+                Some((url, wheel.hash.as_ref()?))
+            });
 
-            for wheel in &package.wheels {
-                if let (WheelWireSource::Url { url }, Some(hash)) = (&wheel.url, &wheel.hash) {
-                    if let Ok(uri) = Uri::try_from(url.to_string()) {
-                        external_references.push(ExternalReference {
-                            url: ExternalReferenceUri::Url(uri),
-                            comment: None,
-                            hashes: Some(Hashes(vec![Hash::from(hash)])),
-                            external_reference_type: ExternalReferenceType::Distribution,
-                        });
-                    }
+            for (url, hash) in source_dist.chain(wheels) {
+                if let Ok(uri) = Uri::try_from(url.to_string()) {
+                    let alg = match hash.algorithm() {
+                        UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
+                        UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
+                        UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
+                        UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
+                        UvHashAlgorithm::Blake2b256 => HashAlgorithm::BLAKE2b_256,
+                    };
+                    external_references.push(ExternalReference {
+                        url: ExternalReferenceUri::Url(uri),
+                        comment: None,
+                        hashes: Some(Hashes(vec![Hash {
+                            alg,
+                            content: HashValue(hash.digest().to_string()),
+                        }])),
+                        external_reference_type: ExternalReferenceType::Distribution,
+                    });
                 }
             }
 
@@ -492,21 +496,4 @@ enum PackageType<'a> {
     Root,
     Workspace(&'a Path),
     Dependency,
-}
-
-impl From<&LockHash> for Hash {
-    fn from(hash: &LockHash) -> Self {
-        let alg = match hash.0.algorithm() {
-            UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
-            UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
-            UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
-            UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
-            UvHashAlgorithm::Blake2b256 => HashAlgorithm::BLAKE2b_256,
-        };
-
-        Self {
-            alg,
-            content: HashValue(hash.0.digest().to_string()),
-        }
-    }
 }

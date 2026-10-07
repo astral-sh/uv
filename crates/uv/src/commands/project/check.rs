@@ -11,12 +11,13 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun,
     ExtrasSpecification, InstallOptions,
 };
+use uv_dispatch::UniversalState;
 use uv_fs::normalize_path;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -26,13 +27,13 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 use crate::commands::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::sync::MalwareCheckContext;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectInterpreter,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    validate_project_requires_python,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectInterpreter, ProjectPythonRequest, ScriptEnvironment, ScriptInterpreter,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project};
@@ -65,6 +66,7 @@ pub(crate) async fn check(
     script: Option<Pep723Script>,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -298,6 +300,7 @@ pub(crate) async fn check(
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 false,
@@ -310,11 +313,7 @@ pub(crate) async fn check(
             .into_interpreter()
         } else {
             let workspace = project.as_ref().map(VirtualProject::workspace);
-            let WorkspacePython {
-                source,
-                python_request,
-                requires_python,
-            } = WorkspacePython::from_request(
+            let project_python = ProjectPythonRequest::from_request(
                 python.as_deref().map(PythonRequest::parse),
                 workspace,
                 &groups,
@@ -324,31 +323,19 @@ pub(crate) async fn check(
             .await?;
 
             let reporter = PythonDownloadReporter::single(printer);
-            let interpreter = PythonInstallation::find_or_download(
-                python_request.as_ref(),
-                EnvironmentPreference::Any,
-                python_preference,
-                python_downloads,
-                &client_builder,
-                cache,
-                Some(&reporter),
-                install_mirrors.python_install_mirror.as_deref(),
-                install_mirrors.pypy_install_mirror.as_deref(),
-                install_mirrors.python_downloads_json_url.as_deref(),
-            )
-            .await?
-            .into_interpreter();
-
-            if let Some(requires_python) = requires_python.as_ref() {
-                validate_project_requires_python(
-                    &interpreter,
-                    workspace,
-                    &groups,
-                    requires_python,
-                    &source,
-                )?;
-            }
-            interpreter
+            project_python
+                .find_or_download(
+                    EnvironmentPreference::Any,
+                    python_preference,
+                    python_arch,
+                    python_downloads,
+                    &client_builder,
+                    cache,
+                    &reporter,
+                    &install_mirrors,
+                )
+                .await?
+                .into_interpreter()
         };
 
         temp_dir = cache.venv_dir()?;
@@ -368,7 +355,7 @@ pub(crate) async fn check(
 
     // Select an environment and, if we found a project, sync it before running checks.
     let mut locked_ty_path = None;
-    let venv_path = if let Some(script) = &script {
+    let venv = if let Some(script) = &script {
         let extras = extras.with_defaults(DefaultExtras::default());
         let venv = if let Some(venv) = isolated_venv {
             venv
@@ -378,6 +365,7 @@ pub(crate) async fn check(
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 no_sync,
@@ -476,7 +464,7 @@ pub(crate) async fn check(
             DryRun::Disabled,
             printer,
             preview,
-            &malware_settings,
+            MalwareCheckContext::from(&malware_settings),
         )
         .await
         {
@@ -490,21 +478,33 @@ pub(crate) async fn check(
             );
         }
 
-        Some(venv.root().to_owned())
+        Some(venv)
     } else if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
-        let mut malware_context = project::sync::MalwareCheckContext::from(&malware_settings);
+        let mut malware_context = MalwareCheckContext::from(&malware_settings);
+        let install_options = InstallOptions::new(
+            no_install_project,
+            false,
+            false,
+            false,
+            false,
+            false,
+            Vec::new(),
+            Vec::new(),
+        );
 
         let venv = if let Some(venv) = isolated_venv {
             venv
         } else {
             ProjectEnvironment::get_or_init(
-                project.workspace(),
+                ProjectEnvironmentTarget::from(project.workspace()),
+                None,
                 &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 no_sync,
                 config_discovery,
@@ -521,7 +521,7 @@ pub(crate) async fn check(
         // `--no-sync` intentionally permits an incompatible project environment, but locking must
         // still use an interpreter that satisfies the project and any explicit Python request.
         let lock_interpreter = if no_sync && !isolated && frozen.is_none() {
-            let workspace_python = WorkspacePython::from_request(
+            let project_python = ProjectPythonRequest::from_request(
                 python.as_deref().map(PythonRequest::parse),
                 Some(project.workspace()),
                 &groups,
@@ -531,11 +531,11 @@ pub(crate) async fn check(
             .await?;
             Some(
                 ProjectInterpreter::discover(
-                    project.workspace(),
-                    &groups,
-                    workspace_python,
+                    ProjectEnvironmentTarget::from(project.workspace()),
+                    project_python,
                     &client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
@@ -576,6 +576,7 @@ pub(crate) async fn check(
             LockMode::Write(lock_interpreter)
         };
 
+        let selection = PackageSelection::from_args(all_packages, &package, project.project_name());
         let result = match Box::pin(
             project::lock::LockOperation::new(
                 mode,
@@ -589,6 +590,11 @@ pub(crate) async fn check(
                 printer,
                 preview,
             )
+            .with_first_party_exclusions(selection.first_party_exclusions(
+                project.workspace(),
+                project.project_name(),
+                &install_options,
+            ))
             .execute(project.workspace().into()),
         )
         .await
@@ -597,12 +603,7 @@ pub(crate) async fn check(
             Err(err) => return Err(UvError::from(err).into()),
         };
 
-        let target = project::sync::identify_project_installation_target(
-            project,
-            result.lock(),
-            all_packages,
-            &package,
-        );
+        let target = InstallTarget::from_project(project, result.lock(), selection);
 
         target.validate_extras(&extras)?;
         target.validate_groups(&groups)?;
@@ -676,16 +677,7 @@ pub(crate) async fn check(
                 &extras,
                 &groups,
                 None,
-                InstallOptions::new(
-                    no_install_project,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                ),
+                install_options,
                 Modifications::Sufficient,
                 None,
                 (&settings).into(),
@@ -708,9 +700,40 @@ pub(crate) async fn check(
             }
         }
 
-        Some(venv.root().to_owned())
+        Some(venv)
     } else {
-        isolated_venv.map(|venv| venv.root().to_owned())
+        isolated_venv
+    };
+
+    // Forward the user's explicit Python request so ty can apply its own version selection rules.
+    let python_version = if let Some(python) = python {
+        let request = PythonRequest::parse(&python);
+        if let Some(venv) = venv.as_ref()
+            && request
+                .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
+                .satisfied(venv.interpreter(), cache)
+        {
+            Some(venv.interpreter().python_minor_version())
+        } else {
+            // Without syncing, the environment may not satisfy the explicit request.
+            let reporter = PythonDownloadReporter::single(printer);
+            let installation = PythonInstallation::find_or_download(
+                Some(&request),
+                EnvironmentPreference::Any,
+                python_preference,
+                python_arch,
+                python_downloads,
+                &client_builder,
+                cache,
+                Some(&reporter),
+                install_mirrors.mirrors(),
+                install_mirrors.python_downloads_json_url.as_deref(),
+            )
+            .await?;
+            Some(installation.interpreter().python_minor_version())
+        }
+    } else {
+        None
     };
 
     let exclude_newer = settings
@@ -726,10 +749,13 @@ pub(crate) async fn check(
         project
             .as_ref()
             .map(|project| project.workspace().install_path().as_path()),
+        lock_check,
+        frozen,
         &check_targets,
         &excluded_targets,
         explicit_targets,
-        venv_path.as_deref(),
+        venv.as_ref().map(PythonEnvironment::root),
+        python_version.as_ref(),
         exclude_newer,
         show_version,
         show_command,

@@ -21,7 +21,9 @@ use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
-use uv_distribution_types::{Index, IndexName, NameRequirementSpecification, RequirementSource};
+use uv_distribution_types::{
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+};
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
@@ -92,13 +94,27 @@ pub struct PyProjectToml {
 }
 
 impl PyProjectToml {
+    /// Return whether this manifest explicitly defines a workspace root.
+    pub fn is_workspace_root(&self) -> bool {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .is_some_and(|uv| uv.workspace.is_some())
+    }
+
+    /// Return explicitly configured default groups without validating the group names.
+    ///
+    /// `None` means the setting is absent, so uv uses `dev`; an empty list disables defaults.
+    pub fn configured_default_groups(&self) -> Option<&DefaultGroups> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.default_groups.as_ref())
+    }
+
     /// Return the default dependency groups, validating explicitly configured group names.
     pub(crate) fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
-        if let Some(defaults) = self
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
-        {
+        if let Some(defaults) = self.configured_default_groups() {
             if let DefaultGroups::List(defaults) = defaults {
                 for group in defaults {
                     if !self
@@ -112,7 +128,7 @@ impl PyProjectToml {
             }
             Ok(defaults.clone())
         } else {
-            Ok(DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()]))
+            Ok(DefaultGroups::from_groups(vec![DEV_DEPENDENCIES.clone()]))
         }
     }
 
@@ -665,7 +681,7 @@ pub struct ToolUv {
 
     /// A list of required platforms, for packages that lack source distributions.
     ///
-    /// When a package does not have a source distribution, it's availability will be limited to
+    /// When a package does not have a source distribution, its availability will be limited to
     /// the platforms supported by its built distributions (wheels). For example, if a package only
     /// publishes wheels for Linux, then it won't be installable on macOS or Windows.
     ///
@@ -705,6 +721,37 @@ pub struct ToolUv {
         "#
     )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
+
+    /// The minimum libc versions to support when resolving for Linux.
+    ///
+    /// During universal resolution, wheels must support the configured libc versions to satisfy
+    /// `required-environments`. For example, `{ glibc = "2.31" }` accepts `manylinux_2_17` wheels
+    /// as coverage, but not `manylinux_2_34` wheels. Both are retained in the lockfile so installation
+    /// can select the best wheel for the current machine. An omitted libc is not required.
+    ///
+    /// Use `required-environments` to specify the Linux architectures to support. Each configured
+    /// libc version needs compatible wheels for those environments. Generic Linux wheels do not
+    /// constrain libc and can satisfy either implementation. Packages with a usable source
+    /// distribution can still be selected.
+    ///
+    /// This setting is respected by `uv lock` and `uv pip compile --universal`.
+    ///
+    /// This option is in preview and may change in any future release. Use
+    /// `--preview-features minimum-libc-version` or configure
+    /// `preview-features = ["minimum-libc-version"]` to disable the warning.
+    #[option(
+        default = "None",
+        value_type = "dict[str, str]",
+        example = r#"
+            preview-features = ["minimum-libc-version"]
+            required-environments = [
+                "sys_platform == 'linux' and platform_machine == 'x86_64'",
+                "sys_platform == 'linux' and platform_machine == 'aarch64'",
+            ]
+            minimum-libc-version = { glibc = "2.31" }
+        "#
+    )]
+    pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).
@@ -1692,7 +1739,7 @@ pub enum SourceError {
     UnusedEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
-    #[error("Path contains invalid characters: `{}`", _0.display())]
+    #[error("Path contains invalid characters: {}", _0.display())]
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.")]
     OverlappingMarkers(String, String, String),

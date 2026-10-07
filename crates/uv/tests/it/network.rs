@@ -263,12 +263,12 @@ async fn invalid_ssl_cert_file_warns_default_roots_are_disabled() {
         .arg(&mock_server_uri)
         .env(EnvVars::SSL_CERT_FILE, context.temp_dir.join("missing.pem"))
         .env_remove(EnvVars::SSL_CERT_DIR)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     warning: Invalid `SSL_CERT_FILE`. Path does not exist: [TEMP_DIR]/missing.pem. No default certificates will be trusted.
     error: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      cause: Failed to fetch: http://[LOCALHOST]/tqdm/
       cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
     ");
 }
@@ -286,12 +286,12 @@ async fn invalid_ssl_cert_dir_warns_default_roots_are_disabled() {
         .arg(&mock_server_uri)
         .env_remove(EnvVars::SSL_CERT_FILE)
         .env(EnvVars::SSL_CERT_DIR, context.temp_dir.join("missing-certs"))
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     warning: Invalid `SSL_CERT_DIR`. The directory does not exist: [TEMP_DIR]/missing-certs. No default certificates will be trusted.
     error: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      cause: Failed to fetch: http://[LOCALHOST]/tqdm/
       cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
     ");
 }
@@ -308,11 +308,11 @@ async fn simple_http_500() {
         .arg("tqdm")
         .arg("--index-url")
         .arg(&mock_server_uri)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      cause: Failed to fetch: http://[LOCALHOST]/tqdm/
       cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
     ");
 }
@@ -329,11 +329,11 @@ async fn simple_io_err() {
         .arg("tqdm")
         .arg("--index-url")
         .arg(&mock_server_uri)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      cause: Failed to fetch: http://[LOCALHOST]/tqdm/
       cause: error sending request for url (http://[LOCALHOST]/tqdm/)
       cause: client error (SendRequest)
       cause: connection closed before message completed
@@ -353,12 +353,12 @@ async fn find_links_http_500() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(&mock_server_uri)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read `--find-links` URL: http://[LOCALHOST]/
       cause: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/`
+      cause: Failed to fetch: http://[LOCALHOST]/
       cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/)
     ");
 }
@@ -376,12 +376,12 @@ async fn find_links_io_error() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(&mock_server_uri)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read `--find-links` URL: http://[LOCALHOST]/
       cause: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/`
+      cause: Failed to fetch: http://[LOCALHOST]/
       cause: error sending request for url (http://[LOCALHOST]/)
       cause: client error (SendRequest)
       cause: connection closed before message completed
@@ -402,12 +402,12 @@ async fn find_links_mixed_error() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(&mock_server_uri)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read `--find-links` URL: http://[LOCALHOST]/
       cause: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/`
+      cause: Failed to fetch: http://[LOCALHOST]/
       cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/)
     ");
 }
@@ -430,7 +430,7 @@ async fn direct_url_http_404() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ http://[LOCALHOST]/tqdm-4.67.1-py3-none-any.whl`
-      cause: Failed to fetch: `http://[LOCALHOST]/tqdm-4.67.1-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/tqdm-4.67.1-py3-none-any.whl
       cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/tqdm-4.67.1-py3-none-any.whl)
     ");
 
@@ -441,7 +441,7 @@ async fn direct_url_http_404() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ http://[LOCALHOST]/tqdm-4.67.1-py3-none-any.whl`
-      cause: Failed to fetch: `http://[LOCALHOST]/tqdm-4.67.1-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/tqdm-4.67.1-py3-none-any.whl
       cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/tqdm-4.67.1-py3-none-any.whl)
     ");
 
@@ -468,12 +468,12 @@ async fn direct_url_http_500() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       cause: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl
       cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
@@ -491,12 +491,12 @@ async fn direct_url_io_error() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       cause: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl
       cause: error sending request for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
       cause: client error (SendRequest)
       cause: connection closed before message completed
@@ -517,12 +517,12 @@ async fn direct_url_mixed_error() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       cause: Request failed after 3 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl
       cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
@@ -572,12 +572,12 @@ async fn python_install_http_500() {
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
         .arg(python_downloads_json.path())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.10.0-[PLATFORM]
       cause: Request failed after 3 retries in [TIME]
-      cause: Failed to download http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst
+      cause: Failed to download `http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst`
       cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst)
     ");
 }
@@ -600,12 +600,12 @@ async fn python_install_io_error() {
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
         .arg(python_downloads_json.path())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.10.0-[PLATFORM]
       cause: Request failed after 3 retries in [TIME]
-      cause: Failed to download http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst
+      cause: Failed to download `http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst`
       cause: error sending request for url (http://[LOCALHOST]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-[PLATFORM]-pgo%2Blto-20211017T1616.tar.zst)
       cause: client error (SendRequest)
       cause: connection closed before message completed
@@ -663,11 +663,11 @@ async fn install_http_retries() {
         .arg("--index")
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "5")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 5 retries in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      cause: Failed to fetch: http://[LOCALHOST]/anyio/
       cause: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
     );
@@ -692,11 +692,11 @@ async fn install_http_retry_low_level() {
         .arg("--index")
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      cause: Failed to fetch: http://[LOCALHOST]/anyio/
       cause: error sending request for url (http://[LOCALHOST]/anyio/)
       cause: client error (SendRequest)
       cause: connection closed before message completed
@@ -742,7 +742,7 @@ async fn rfc9457_problem_details_license_violation() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
-      cause: Failed to fetch: `http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl
       cause: Server message: License Compliance Issue, This package version has a license that violates organizational policy.
       cause: HTTP status client error (403 Forbidden) for url (http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl)
     ");
@@ -767,7 +767,7 @@ async fn proxy_invalid_url_in_uv_toml() {
         .env_remove(EnvVars::HTTPS_PROXY), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`
+    error: Failed to parse: uv.toml
       cause: TOML parse error at line 1, column 14
                |
              1 | http-proxy = "ftp://proxy.example.com:8080"
@@ -795,13 +795,43 @@ async fn proxy_invalid_url_not_a_url_in_uv_toml() {
         .env_remove(EnvVars::HTTPS_PROXY), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`
+    error: Failed to parse: uv.toml
       cause: TOML parse error at line 1, column 14
                |
              1 | http-proxy = "not a valid url"
                |              ^^^^^^^^^^^^^^^^^
              invalid proxy URL: invalid international domain name
     "#);
+}
+
+/// Test that a SOCKS proxy URL without a host produces a configuration error.
+#[test]
+fn proxy_url_without_host() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("proxy.toml")
+        .write_str("http-proxy = \"socks5:foo\"\n")?;
+    context.temp_dir.child("requirements.in").write_str("")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--offline")
+        .arg("--config-file")
+        .arg("proxy.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse: proxy.toml
+      cause: TOML parse error at line 1, column 14
+               |
+             1 | http-proxy = "socks5:foo"
+               |              ^^^^^^^^^^^^
+             invalid proxy URL: empty host
+    "#);
+
+    Ok(())
 }
 
 /// Test that valid proxy URL in uv.toml routes requests through the proxy.
@@ -1039,7 +1069,7 @@ fn connect_timeout_index() {
         .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch: `https://[LOCALHOST]/tqdm/`
+    error: Failed to fetch: https://[LOCALHOST]/tqdm/
       cause: error sending request for url (https://[LOCALHOST]/tqdm/)
       cause: client error (Connect)
       cause: operation timed out
@@ -1070,7 +1100,7 @@ fn connect_timeout_stream() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
-      cause: Failed to fetch: `https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      cause: Failed to fetch: https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl
       cause: error sending request for url (https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl)
       cause: client error (Connect)
       cause: operation timed out
@@ -1098,7 +1128,7 @@ async fn retry_read_timeout_index() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      cause: Failed to fetch: http://[LOCALHOST]/tqdm/
       cause: error decoding response body for url (http://[LOCALHOST]/tqdm/)
       cause: request or response body error
       cause: operation timed out
@@ -1118,9 +1148,9 @@ async fn retry_read_timeout_python_downloads_json() {
         .arg(&server), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/'
+    error: Error while fetching remote python downloads json from `http://[LOCALHOST]/`
       cause: Request failed after 1 retry in [TIME]
-      cause: Failed to download http://[LOCALHOST]/
+      cause: Failed to download `http://[LOCALHOST]/`
       cause: error decoding response body for url (http://[LOCALHOST]/)
       cause: request or response body error
       cause: operation timed out
@@ -1140,7 +1170,7 @@ async fn retry_read_timeout_stream() {
     ----- stderr -----
     error: Failed to download `tqdm @ http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
       cause: Request failed after 1 retry in [TIME]
-      cause: Failed to read metadata: `http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      cause: Failed to read metadata: http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl
       cause: Failed to read from zip file
       cause: an upstream reader returned an error: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
       cause: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
@@ -1315,11 +1345,11 @@ fn assert_wheel_download(
             .arg("pylock.toml")
             .env(EnvVars::UV_HTTP_RETRIES, retries.to_string())
             .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-            .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+            .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
             .env(EnvVars::RUST_LOG, "warn"), @"
         exit_code: 0 (success)
         ----- stderr -----
-        WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+        WARN Streaming failed for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`; downloading wheel to disk (I/O operation failed during extraction)
         Prepared 1 package in [TIME]
         Installed 1 package in [TIME]
          + build-tag==1.0.0 (from http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl)
@@ -1369,12 +1399,12 @@ fn assert_wheel_download_timeout(
             .arg(format!("build-tag @ {wheel_url}"))
             .env(EnvVars::UV_HTTP_RETRIES, retries.to_string())
             .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-            .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+            .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
             .env(EnvVars::RUST_LOG, "warn"), @"
         exit_code: 2 (failure)
         ----- stderr -----
         Resolved 1 package in [TIME]
-        WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+        WARN Streaming failed for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`; downloading wheel to disk (I/O operation failed during extraction)
         error: Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
           cause: Failed to write to the distribution cache
           cause: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
@@ -1412,11 +1442,11 @@ fn direct_url_content_length_mismatch() -> Result<()> {
         .arg("pylock.toml")
         .env(EnvVars::UV_HTTP_RETRIES, "1")
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
         .env(EnvVars::RUST_LOG, "warn"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+    WARN Streaming failed for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`; downloading wheel to disk (I/O operation failed during extraction)
     error: Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
       cause: Content-Length mismatch for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`: expected 1 bytes, but the server advertised 932 bytes
     ");
@@ -1481,12 +1511,12 @@ fn direct_url_invalid_range_does_not_bypass_retry() -> Result<()> {
         .arg(format!("build-tag @ {wheel_url}"))
         .env(EnvVars::UV_HTTP_RETRIES, "1")
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
         .env(EnvVars::RUST_LOG, "warn"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+    WARN Streaming failed for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`; downloading wheel to disk (I/O operation failed during extraction)
     WARN Invalid range request response from server that declares HTTP range request support, abandoning resumed download: http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl
     error: Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
       cause: Failed to write to the distribution cache
@@ -1509,12 +1539,12 @@ fn direct_url_range_size_mismatch() -> Result<()> {
         .arg(format!("build-tag @ {wheel_url}"))
         .env(EnvVars::UV_HTTP_RETRIES, "1")
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
         .env(EnvVars::RUST_LOG, "warn"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+    WARN Streaming failed for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`; downloading wheel to disk (I/O operation failed during extraction)
     error: Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
       cause: Range response size mismatch for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`: expected 466 bytes from Content-Range, but received 465 bytes
     ");

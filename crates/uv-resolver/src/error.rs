@@ -437,7 +437,7 @@ pub struct NoSolutionError {
     /// These version sets are not filtered by `exclude-newer`. See
     /// [`NoSolutionError::included_versions`] instead if filtered versions are needed.
     ///
-    /// These versions are filtered by [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for
+    /// These versions are filtered by [`EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF`] for
     /// deterministic output in tests.
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
@@ -1964,6 +1964,7 @@ fn simplify_range(
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    use uv_resolver_types::PackageNodeKind;
 
     use super::*;
     use crate::resolver::UnavailableVersion;
@@ -1988,8 +1989,7 @@ mod tests {
     fn pubgrub_package(name: &str) -> PubGrubPackage {
         PubGrubPackage::from(PubGrubPackageInner::Package {
             name: package_name(name),
-            extra: None,
-            group: None,
+            kind: PackageNodeKind::Base,
             marker: uv_pep508::MarkerTree::TRUE,
         })
     }

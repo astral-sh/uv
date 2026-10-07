@@ -14,7 +14,8 @@ use uv_configuration::{
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
-    Index, IndexLocations, NameRequirementSpecification, Requirement, RequiresPython,
+    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
+    RequiresPython,
 };
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
@@ -259,6 +260,14 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Returns the supported libc implementations and their minimum versions.
+    pub(crate) fn minimum_libc_version(self) -> Option<MinimumLibcVersion> {
+        match self {
+            Self::Workspace(workspace) => workspace.minimum_libc_version(),
+            Self::Script(_) => None,
+        }
+    }
+
     /// Returns the set of conflicts for the [`LockTarget`].
     pub(crate) fn conflicts(self) -> Result<Conflicts, ProjectError> {
         match self {
@@ -389,15 +398,6 @@ impl<'lock> LockTarget<'lock> {
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
-        }
-    }
-
-    /// Read the lockfile from the workspace as bytes.
-    pub(crate) async fn read_bytes(self) -> Result<Option<Vec<u8>>, std::io::Error> {
-        match fs_err::tokio::read(self.lock_path()).await {
-            Ok(encoded) => Ok(Some(encoded)),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err),
         }
     }
 

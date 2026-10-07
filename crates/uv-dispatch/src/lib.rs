@@ -18,9 +18,9 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Overrides, Reinstall,
+    BuildKind, BuildOptions, Constraints, DependencyModifiers, IndexStrategy, NoSources, Reinstall,
 };
-use uv_configuration::{BuildOutput, Concurrency, Excludes};
+use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -328,14 +328,11 @@ impl BuildContext for BuildDispatch<'_> {
             .clone()
             .augment_with_requirements(requirements.iter())
             .map_err(uv_requirements::Error::from)?;
-        let overrides = Overrides::default();
-        let excludes = Excludes::default();
+        let modifiers = DependencyModifiers::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
             self.constraints,
-            &overrides,
-            &excludes,
-            self.dependency_metadata,
+            &modifiers,
             &hasher,
             &self.shared_state.index,
             DistributionDatabase::new(
@@ -407,11 +404,11 @@ impl BuildContext for BuildDispatch<'_> {
         let hasher = requirements.hasher();
 
         debug!(
-            "Installing in {} in {}",
+            "Installing `{}` in `{}`",
             resolution
                 .distributions()
                 .map(ToString::to_string)
-                .join(", "),
+                .join("`, `"),
             venv.root().display(),
         );
 
@@ -695,7 +692,7 @@ impl SharedState {
     /// State that is universally applicable (like the Git resolver and index capabilities)
     /// are retained.
     #[must_use]
-    pub fn fork(&self) -> Self {
+    fn fork(&self) -> Self {
         Self {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
@@ -714,8 +711,62 @@ impl SharedState {
         &self.index
     }
 
+    /// Return mutable access to the index owner. Removing cached entries additionally requires
+    /// exclusive access to the index's shared storage.
+    fn index_mut(&mut self) -> &mut InMemoryIndex {
+        &mut self.index
+    }
+
     /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
+    }
+}
+
+/// A [`SharedState`] instance to use for universal resolution.
+#[derive(Default, Clone)]
+pub struct UniversalState(SharedState);
+
+impl std::ops::Deref for UniversalState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl UniversalState {
+    /// Return mutable access to the index owner between lock operations.
+    pub fn index_mut(&mut self) -> &mut InMemoryIndex {
+        self.0.index_mut()
+    }
+
+    /// Fork the [`UniversalState`] to create a [`PlatformState`].
+    pub fn fork(&self) -> PlatformState {
+        PlatformState(self.0.fork())
+    }
+}
+
+/// A [`SharedState`] instance to use for platform-specific resolution.
+#[derive(Default, Clone)]
+pub struct PlatformState(SharedState);
+
+impl std::ops::Deref for PlatformState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PlatformState {
+    /// Fork the [`PlatformState`] to create a [`UniversalState`].
+    pub fn fork(&self) -> UniversalState {
+        UniversalState(self.0.fork())
+    }
+
+    /// Create a [`SharedState`] from the [`PlatformState`].
+    pub fn into_inner(self) -> SharedState {
+        self.0
     }
 }

@@ -60,7 +60,32 @@ pub struct Requirement {
     #[serde(flatten)]
     pub source: RequirementSource,
     #[serde(skip)]
+    pub scope: RequirementScope,
+    #[serde(skip)]
     pub origin: Option<RequirementOrigin>,
+}
+
+/// Whether a requirement is global or belongs to a package's dependency group.
+#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum RequirementScope {
+    #[default]
+    Global,
+    Group {
+        package: PackageName,
+        group: GroupName,
+    },
+}
+
+impl RequirementScope {
+    /// Return the conflict item whose activation makes this requirement visible.
+    pub fn conflict_item(&self) -> Option<ConflictItem> {
+        match self {
+            Self::Global => None,
+            Self::Group { package, group } => {
+                Some(ConflictItem::from((package.clone(), group.clone())))
+            }
+        }
+    }
 }
 
 impl Requirement {
@@ -133,6 +158,7 @@ impl std::hash::Hash for Requirement {
             groups,
             marker,
             source,
+            scope,
             origin: _,
         } = self;
         name.hash(state);
@@ -140,6 +166,7 @@ impl std::hash::Hash for Requirement {
         groups.hash(state);
         marker.hash(state);
         source.hash(state);
+        scope.hash(state);
     }
 }
 
@@ -151,6 +178,7 @@ impl PartialEq for Requirement {
             groups,
             marker,
             source,
+            scope,
             origin: _,
         } = self;
         let Self {
@@ -159,6 +187,7 @@ impl PartialEq for Requirement {
             groups: other_groups,
             marker: other_marker,
             source: other_source,
+            scope: other_scope,
             origin: _,
         } = other;
         name == other_name
@@ -166,6 +195,7 @@ impl PartialEq for Requirement {
             && groups == other_groups
             && marker == other_marker
             && source == other_source
+            && scope == other_scope
     }
 }
 
@@ -179,6 +209,7 @@ impl Ord for Requirement {
             groups,
             marker,
             source,
+            scope,
             origin: _,
         } = self;
         let Self {
@@ -187,6 +218,7 @@ impl Ord for Requirement {
             groups: other_groups,
             marker: other_marker,
             source: other_source,
+            scope: other_scope,
             origin: _,
         } = other;
         name.cmp(other_name)
@@ -194,6 +226,7 @@ impl Ord for Requirement {
             .then_with(|| groups.cmp(other_groups))
             .then_with(|| marker.cmp(other_marker))
             .then_with(|| source.cmp(other_source))
+            .then_with(|| scope.cmp(other_scope))
     }
 }
 
@@ -330,6 +363,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
             extras: requirement.extras,
             marker: requirement.marker,
             source,
+            scope: RequirementScope::Global,
             origin: requirement.origin,
         }
     }
@@ -1229,7 +1263,7 @@ mod tests {
 
     use uv_pep508::{MarkerTree, VerbatimUrl};
 
-    use crate::{Requirement, RequirementSource};
+    use crate::{Requirement, RequirementScope, RequirementSource};
 
     #[test]
     fn roundtrip() {
@@ -1243,6 +1277,7 @@ mod tests {
                 index: None,
                 conflict: None,
             },
+            scope: RequirementScope::Global,
             origin: None,
         };
 
@@ -1266,6 +1301,7 @@ mod tests {
                 r#virtual: Some(false),
                 url: VerbatimUrl::from_absolute_path(path).unwrap(),
             },
+            scope: RequirementScope::Global,
             origin: None,
         };
 
@@ -1292,6 +1328,7 @@ mod tests {
             groups: Box::new([]),
             marker: MarkerTree::TRUE,
             source,
+            scope: RequirementScope::Global,
             origin: None,
         };
         assert_eq!(

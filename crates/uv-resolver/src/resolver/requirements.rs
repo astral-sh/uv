@@ -8,7 +8,7 @@ use either::Either;
 use rustc_hash::FxHashSet;
 use tracing::trace;
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::Requirement;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
@@ -39,20 +39,14 @@ pub(super) enum RequirementContext<'a> {
 }
 
 impl<'a> RequirementContext<'a> {
-    fn package(self) -> Option<(&'a PackageName, &'a Version)> {
+    fn modifier_scope(self) -> DependencyModifierScope<'a> {
         match self {
-            Self::Root => None,
-            Self::Package { name, version }
-            | Self::Extra { name, version, .. }
-            | Self::Group { name, version } => Some((name, version)),
-        }
-    }
-
-    fn override_package(self) -> Option<(&'a PackageName, &'a Version)> {
-        match self {
-            Self::Root | Self::Group { .. } => None,
+            Self::Root => DependencyModifierScope::Global,
             Self::Package { name, version } | Self::Extra { name, version, .. } => {
-                Some((name, version))
+                DependencyModifierScope::Package(name, version)
+            }
+            Self::Group { name, version } => {
+                DependencyModifierScope::DependencyGroup(name, version)
             }
         }
     }
@@ -68,8 +62,7 @@ impl<'a> RequirementContext<'a> {
 /// Applies overrides, exclusions, extra activation, and constraints within a resolver fork.
 pub(super) struct RequirementExpander<'a> {
     constraints: &'a Constraints,
-    overrides: &'a Overrides,
-    excludes: &'a Excludes,
+    modifiers: &'a DependencyModifiers,
     env: &'a ResolverEnvironment,
     python_requirement: &'a PythonRequirement,
     python_marker: MarkerTree,
@@ -78,15 +71,13 @@ pub(super) struct RequirementExpander<'a> {
 impl<'a> RequirementExpander<'a> {
     pub(super) fn new(
         constraints: &'a Constraints,
-        overrides: &'a Overrides,
-        excludes: &'a Excludes,
+        modifiers: &'a DependencyModifiers,
         env: &'a ResolverEnvironment,
         python_requirement: &'a PythonRequirement,
     ) -> Self {
         Self {
             constraints,
-            overrides,
-            excludes,
+            modifiers,
             env,
             python_requirement,
             python_marker: python_requirement.to_marker_tree(),
@@ -154,6 +145,7 @@ impl<'a> RequirementExpander<'a> {
                             extras: requirement.extras.clone(),
                             groups: requirement.groups.clone(),
                             source: requirement.source.clone(),
+                            scope: requirement.scope.clone(),
                             origin: requirement.origin.clone(),
                             marker: marker.simplify_extras(slice::from_ref(&extra)),
                         }
@@ -197,6 +189,7 @@ impl<'a> RequirementExpander<'a> {
                     extras: Box::new([]),
                     groups: req.groups.clone(),
                     source: req.source.clone(),
+                    scope: req.scope.clone(),
                     origin: req.origin.clone(),
                     marker: req.marker,
                 });
@@ -221,13 +214,8 @@ impl<'a> RequirementExpander<'a> {
         'data: 'parameters,
     {
         let extra = context.extra();
-        self.overrides
-            .apply_for_package(context.override_package(), dependencies)
-            .filter(move |requirement| {
-                !self
-                    .excludes
-                    .contains_for_package(context.package(), &requirement.name)
-            })
+        self.modifiers
+            .apply(context.modifier_scope(), dependencies)
             .map(move |mut requirement| {
                 // Split the marker into production and optional components. If we have e.g.
                 // `foo; sys_platform == 'win32' or extra == 'feature'`
@@ -345,9 +333,9 @@ impl<'a> RequirementExpander<'a> {
 
                         if marker.is_false() {
                             trace!(
-                                "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                                constraint.marker.try_to_string().unwrap(),
-                                requirement.marker.try_to_string().unwrap(),
+                                "Skipping {constraint} because of disjoint markers: `{:?}` vs. `{:?}`",
+                                constraint.marker,
+                                requirement.marker,
                             );
                             return None;
                         }
@@ -357,6 +345,7 @@ impl<'a> RequirementExpander<'a> {
                             extras: constraint.extras.clone(),
                             groups: constraint.groups.clone(),
                             source: constraint.source.clone(),
+                            scope: constraint.scope.clone(),
                             origin: constraint.origin.clone(),
                             marker,
                         })
@@ -369,9 +358,9 @@ impl<'a> RequirementExpander<'a> {
 
                     if marker.is_false() {
                         trace!(
-                            "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                            constraint.marker.try_to_string().unwrap(),
-                            requirement.marker.try_to_string().unwrap(),
+                            "Skipping {constraint} because of disjoint markers: `{:?}` vs. `{:?}`",
+                            constraint.marker,
+                            requirement.marker,
                         );
                         return None;
                     }
@@ -394,6 +383,7 @@ impl<'a> RequirementExpander<'a> {
                             extras: constraint.extras.clone(),
                             groups: constraint.groups.clone(),
                             source: constraint.source.clone(),
+                            scope: constraint.scope.clone(),
                             origin: constraint.origin.clone(),
                             marker,
                         })

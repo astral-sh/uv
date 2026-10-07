@@ -1,4 +1,6 @@
 [bans]
+wildcards = "deny"
+
 # NOTE: Rust as a whole simply has too many split resolutions
 # for us to enforce a single version per crate. Maybe
 # in the distant future.
@@ -10,11 +12,13 @@ multiple-versions = "allow"
 # default features here.
 # See: https://github.com/EmbarkStudios/cargo-deny/issues/699
 #
-# For now, we work around this with our own `check-cargo-default-features.py`
+# For now, we work around this with our own `check-cargo-bans.py`
 # script.
 external-default-features = "allow"
 
 [bans.build]
+# Keep this list of crate names free of stale entries with
+# `scripts/check-cargo-bans.py`.
 allow-build-scripts = [
     "anyhow",
     "assert_cmd",
@@ -27,6 +31,7 @@ allow-build-scripts = [
     "codspeed",
     "codspeed-criterion-compat",
     "crc32fast",
+    "crossbeam-epoch",
     "crossbeam-utils",
     "crunchy",
     "erased-serde",
@@ -50,7 +55,6 @@ allow-build-scripts = [
     "num-traits",
     "objc2",
     "oid-registry",
-    "owo-colors",
     "parking_lot_core",
     "portable-atomic",
     "portable-atomic-util",
@@ -83,7 +87,6 @@ allow-build-scripts = [
     "windows_x86_64_gnu",
     "windows_x86_64_gnullvm",
     "windows_x86_64_msvc",
-    "wit-bindgen",
     "zerocopy",
     "zmij",
     "zstd-safe",

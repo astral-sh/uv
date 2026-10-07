@@ -17,6 +17,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_test::package_server::PackageServer;
 use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
@@ -48,6 +49,895 @@ fn sync() -> Result<()> {
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
+    Ok(())
+}
+
+/// Sync a frozen resolution after removing the project manifest.
+#[test]
+fn sync_lockfile_without_manifest() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Use local wheel fixtures so syncing remains offline after removing the manifest.
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        wheels.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+        wheels.child("validation-1.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
+        wheels.child("simple_launcher-0.1.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+
+        [dependency-groups]
+        dev = ["validation==1.0.0"]
+        docs = ["simple-launcher==0.1.0"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+        no-index = true
+        find-links = ["wheels"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Remove the manifest to sync using only the recorded resolution and local wheels.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    // Default groups from the lockfile are used without a project manifest.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    Would use project environment at: .venv
+    Would download 2 packages
+    Would install 2 packages
+     + ok==1.0.0
+     + simple-launcher==0.1.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--only-group", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `missing` is not defined in the project's `dependency-groups` table
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--package", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `missing` not found in lockfile workspace
+    ");
+
+    // Dry runs report the selected environment without creating it.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--offline", "--dry-run"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "custom"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Would create project environment at: custom
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+    assert!(!context.temp_dir.child("custom").exists());
+
+    // Create and reuse an explicitly selected project environment.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--offline"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "custom"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: custom
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--group", "dev", "--offline"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "custom"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + validation==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--only-group", "dev", "--offline"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "custom"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - ok==1.0.0
+    ");
+
+    // An active environment takes precedence over the project environment.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--offline", "--active"])
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: active
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
+/// Use the selected member's recorded default groups without project manifests.
+#[test]
+fn sync_lockfile_selected_member_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // The root and member select different local wheel fixtures.
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        wheels.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+        wheels.child("validation-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        root-group = ["ok==1.0.0"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["root-group"]
+        no-index = true
+        find-links = ["wheels"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        member-group = ["validation==1.0.0"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["member-group"]
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    // Remove both manifests so package selection and defaults come only from the lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("member/pyproject.toml"))?;
+
+    // Frozen sync uses the selected member's defaults, regardless of the current directory.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--package", "member", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + validation==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--package", "root", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(context.temp_dir.child("member"))
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--package", "member", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: [VENV]/
+    Would download 1 package
+    Would install 1 package
+     + validation==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(context.temp_dir.child("member"))
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--package", "root", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: [VENV]/
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
+/// Select workspace members from a frozen lockfile without the workspace manifest.
+#[test]
+fn sync_lockfile_workspace_members() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["alpha", "beta"]
+    "#})?;
+
+    let alpha = context.temp_dir.child("alpha");
+    alpha.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "alpha"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    alpha.child("src/alpha/__init__.py").touch()?;
+
+    let beta = context.temp_dir.child("beta");
+    beta.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "beta"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    beta.child("src/beta/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Remove only the root manifest so workspace members can still be built.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    // Exclude the current member while selecting the whole workspace.
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(context.temp_dir.child("alpha"))
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--all-packages", "--no-install-project", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + beta==1.0.0 (from file://[TEMP_DIR]/beta)
+    ");
+    // Select a different member explicitly.
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(context.temp_dir.child("beta"))
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--package", "alpha", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + alpha==1.0.0 (from file://[TEMP_DIR]/alpha)
+     - beta==1.0.0 (from file://[TEMP_DIR]/beta)
+    ");
+    // Exclude all workspace members.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--all-packages", "--no-install-workspace", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - alpha==1.0.0 (from file://[TEMP_DIR]/alpha)
+    ");
+
+    // The JSON report identifies the current member and the supplied lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(context.temp_dir.child("beta"))
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--all-packages", "--no-install-workspace", "--offline", "--output-format", "json"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "target": "project",
+      "project": {
+        "path": "[TEMP_DIR]/beta",
+        "workspace": {
+          "path": "[TEMP_DIR]/"
+        }
+      },
+      "sync": {
+        "environment": {
+          "path": "[VENV]/",
+          "python": {
+            "path": "[VENV]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]",
+            "implementation": "cpython"
+          }
+        },
+        "action": "check",
+        "changes": []
+      },
+      "lock": {
+        "path": "[TEMP_DIR]/uv.lock",
+        "action": "use"
+      },
+      "dry_run": false
+    }
+
+    ----- stderr -----
+    Checked in [TIME]
+    "#);
+    Ok(())
+}
+
+/// Sync workspace-level dependency groups without a root project.
+#[test]
+fn sync_lockfile_non_project_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["alpha"]
+
+        [tool.uv.sources]
+        alpha = { workspace = true }
+
+        [dependency-groups]
+        tools = ["alpha"]
+    "#})?;
+
+    let member = context.temp_dir.child("alpha");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "alpha"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    member.child("src/alpha/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Remove the root manifest so the workspace group must come from the lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--only-group", "tools", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + alpha==1.0.0 (from file://[TEMP_DIR]/alpha)
+    ");
+    Ok(())
+}
+
+/// Install dependencies without the manifests or sources of workspace members.
+#[test]
+fn sync_lockfile_without_workspace_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Keep the dependency available after removing all workspace sources.
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        wheels.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["alpha"]
+
+        [tool.uv]
+        package = false
+        no-index = true
+        find-links = ["wheels"]
+
+        [tool.uv.workspace]
+        members = ["alpha"]
+
+        [tool.uv.sources]
+        alpha = { workspace = true }
+    "#})?;
+
+    let member = context.temp_dir.child("alpha");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "alpha"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    member.child("src/alpha/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Remove all workspace sources to install only their locked third-party dependencies.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_dir_all(member.path())?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--no-install-workspace", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
+/// Frozen sync uses source mappings for extra build dependencies when the manifest is present.
+#[test]
+fn sync_frozen_project_build_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (helper_filename, helper_wheel) = generate_wheel(
+        &"build-helper".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    context
+        .temp_dir
+        .child(helper_filename)
+        .write_binary(&helper_wheel)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true, editable = false }
+        build-helper = { path = "build_helper-1.0.0-py3-none-any.whl" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["build-helper"]
+    "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+
+        [tool.uv.sources]
+        build-helper = { path = "../build_helper-1.0.0-py3-none-any.whl" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["build-helper"]
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    child.child("backend.py").write_str(indoc! {r#"
+        import pathlib
+        import shutil
+
+        import build_helper
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "child-1.0.0-py3-none-any.whl"
+            shutil.copy(pathlib.Path(__file__).parent / filename, wheel_directory)
+            return filename
+    "#})?;
+
+    let (child_filename, child_wheel) = generate_wheel(
+        &"child".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    child.child(child_filename).write_binary(&child_wheel)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--offline", "--no-cache"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==1.0.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Remove the root manifest to resolve build sources from the remaining member manifest.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(&child)
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--offline", "--no-cache"])
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "fallback-env"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/fallback-env
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==1.0.0 (from file://[TEMP_DIR]/child)
+    ");
+    Ok(())
+}
+
+/// Reuse the centralized environment created from the workspace manifest.
+#[test]
+fn sync_lockfile_centralized_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_centralized_environment_hashes();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--offline", "--preview-features", "centralized-project-envs"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment `root-cp3.12.[X]-[HASH]`
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // Remove the manifest to check that lockfile discovery reuses the same environment.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--offline", "--preview-features", "centralized-project-envs"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked in [TIME]
+    ");
+    Ok(())
+}
+
+/// Honor the Python version file and explicit requests when syncing a lockfile.
+#[test]
+fn sync_lockfile_python_selection() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--python", "3.12", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    // Remove the manifest so the version file controls lockfile-based Python selection.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.13")?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Checked in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--python", "3.12", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Checked in [TIME]
+    ");
+    Ok(())
+}
+
+/// A lockfile's Python requirement is enforced without a project manifest.
+#[test]
+fn sync_lockfile_incompatible_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.13"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--python", "3.13", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Resolved 1 package in [TIME]
+    ");
+
+    // Remove the manifest to enforce the Python requirement recorded in the lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--python", "3.12", "--offline"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `requires-python` in `uv.lock`).
+    ");
+    Ok(())
+}
+
+/// Check group-specific Python requirements from the lockfile without a manifest.
+#[test]
+fn sync_lockfile_group_python_requirement() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        newer = []
+        included = [{ include-group = "newer" }]
+
+        [tool.uv.dependency-groups]
+        newer = { requires-python = ">=3.13" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--only-group", "newer", "--python", "3.12", "--offline"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.newer.requires-python`).
+    ");
+
+    // Remove the manifest to enforce both direct and inherited group requirements from the lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--only-group", "newer", "--python", "3.12", "--offline"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `root:newer` in `uv.lock`).
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--only-group", "included", "--python", "3.12", "--offline"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `root:included` in `uv.lock`).
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--only-group", "newer", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Would create project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--only-group", "newer", "--python", "3.13", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Checked in [TIME]
+    ");
+    Ok(())
+}
+
+/// Reject incompatible Python requirements from selected groups.
+#[test]
+fn sync_lockfile_disjoint_group_python_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        newer = []
+        older = []
+
+        [tool.uv.dependency-groups]
+        newer = { requires-python = ">=3.13" }
+        older = { requires-python = "<3.13" }
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    // Remove the manifest to detect incompatible group requirements from the lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--no-default-groups", "--group", "newer", "--group", "older", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Found conflicting Python requirements:
+    - lockfile: >=3.12
+    - root:newer: >=3.13
+    - root:older: <3.13
+    ");
+    Ok(())
+}
+
+/// Sync requires a lockfile with revision 5 or later.
+#[test]
+fn sync_lockfile_requires_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+
+        [package.dev-dependencies]
+        newer = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--only-group", "newer", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
     Ok(())
 }
 
@@ -312,6 +1202,69 @@ fn sync_relocatable_envs_default() -> Result<()> {
     Ok(())
 }
 
+/// Moving a relocatable environment with its editable project leaves a stale source path.
+#[test]
+fn sync_relocatable_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project_dir = context.temp_dir.child("project");
+    project_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv-build"]
+        build-backend = "uv_build"
+    "#})?;
+    project_dir
+        .child("src/project/__init__.py")
+        .write_str("VALUE = 'hello'\n")?;
+
+    context
+        .venv()
+        .current_dir(project_dir.path())
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(project_dir.path())
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(project_dir.path())
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "python", "-I", "-c", "import project; print(project.VALUE)"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    hello
+    ");
+
+    let relocated_dir = context.temp_dir.child("relocated");
+    fs_err::rename(project_dir.path(), relocated_dir.path())?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(relocated_dir.path())
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "python", "-I", "-c", "import project; print(project.VALUE)"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Traceback (most recent call last):
+      File \"<string>\", line 1, in <module>
+    ModuleNotFoundError: No module named 'project'
+    ");
+
+    Ok(())
+}
+
 /// Ensure that `uv sync` reuses remote wheels cached by `uv pip install`.
 #[test]
 fn sync_reuses_pip_install_wheel_cache() -> Result<()> {
@@ -521,6 +1474,49 @@ fn frozen() -> Result<()> {
     Checked 3 packages in [TIME]
     ");
 
+    Ok(())
+}
+
+/// Frozen sync reads the project lockfile before selecting an environment.
+#[test]
+fn sync_frozen_lockfile_before_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.13"
+    "#})?;
+
+    // Report the missing lockfile before checking the requested Python.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--python", "3.12", "--offline"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // A malformed lockfile also fails before creating an environment.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r"
+        version = 1
+        revision = 4
+    "})?;
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "project", "--python", "3.12", "--offline"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: TOML parse error at line 1, column 1
+               |
+             1 | version = 1
+               | ^
+             missing field `requires-python`
+    ");
+
+    assert!(!context.venv.exists());
     Ok(())
 }
 
@@ -1162,6 +2158,125 @@ fn mixed_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// Non-project root groups constrain Python selection, including inherited group requirements.
+#[test]
+fn non_project_group_requires_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = ["docs"]
+
+        [dependency-groups]
+        test = []
+        docs = [{ include-group = "test" }]
+        lint = []
+
+        [tool.uv.dependency-groups]
+        test = { requires-python = ">=3.12" }
+        docs = { requires-python = "<3.13" }
+        lint = { requires-python = ">=3.13" }
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+
+        [tool.uv]
+        package = false
+        default-groups = ["lint"]
+
+        [dependency-groups]
+        lint = []
+        test = []
+    "#})?;
+    context
+        .lock()
+        .args(["--python", "3.11", "--offline"])
+        .assert()
+        .success();
+
+    // Default groups select Python 3.12 even though the workspace permits Python 3.11.
+    uv_snapshot!(context.filters(), context.sync().args(["--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Would create project environment at: .venv
+    Resolved 1 package in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Checked in [TIME]
+    Would make no changes
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from the workspace root's `tool.uv.dependency-groups.docs.requires-python`).
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--no-default-groups", "--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Would create project environment at: .venv
+    Resolved 1 package in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    // Explicit root groups also constrain `run` and frozen member sync.
+    uv_snapshot!(context.filters(), context.run().args(["--no-default-groups", "--group", "docs", "--python", "3.11", "--offline", "--", "python", "-V"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from the workspace root's `tool.uv.dependency-groups.docs.requires-python`).
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--package", "member", "--group", "docs", "--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `workspace:docs` in `uv.lock`).
+    ");
+
+    // A member's defaults and same-named groups do not activate the root's requirements.
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--package", "member", "--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Would create project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--package", "member", "--group", "test", "--python", "3.11", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Would create project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    // Conflicting root requirements identify both group declarations.
+    uv_snapshot!(context.filters(), context.sync().args(["--group", "lint", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Found conflicting Python requirements:
+    - member: >=3.11
+    - workspace:docs: >=3.12, <3.13
+    - workspace:lint: >=3.13
+    ");
+    Ok(())
+}
+
 /// Ensure that group requires-python solves an actual problem
 #[test]
 #[cfg(not(windows))]
@@ -1591,6 +2706,474 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Frozen sync uses the selected member's recorded default groups.
+#[test]
+fn sync_frozen_member_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Use local wheel fixtures to distinguish the root and member dependency groups.
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        wheels.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+        wheels.child("validation-1.0.0-py3-none-any.whl"),
+    )?;
+
+    // Record different default groups for the root and member.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        root-group = ["ok==1.0.0"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["root-group"]
+        no-index = true
+        find-links = ["wheels"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        member-group = ["validation==1.0.0"]
+        root-group = ["ok==1.0.0"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["member-group"]
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    // Without a package selection, use the current project's defaults.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+
+    // Selecting a package uses its recorded defaults.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + validation==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "root", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+
+    // Explicit group selection overrides the defaults.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--only-group", "root-group", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+
+    // Changing the manifest does not change a frozen selection.
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        member-group = ["validation==1.0.0"]
+        root-group = ["ok==1.0.0"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["root-group"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + validation==1.0.0
+    ");
+
+    // The same selection works without the member's manifest.
+    fs_err::remove_file(context.temp_dir.child("member/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + validation==1.0.0
+    ");
+
+    // Verify the selected dependencies are installed by a non-dry-run sync.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + validation==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Python requirements for selected default groups come from the lockfile, too.
+#[test]
+fn sync_frozen_member_default_groups_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // The root and member's `docs` groups have different Python requirements.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        docs = []
+
+        [tool.uv]
+        package = false
+        default-groups = []
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.dependency-groups]
+        docs = { requires-python = ">=3.14" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        docs = []
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+
+        [tool.uv.dependency-groups]
+        docs = { requires-python = ">=3.13" }
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    // The lockfile remains authoritative when the member's requirement changes.
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        docs = []
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+
+        [tool.uv.dependency-groups]
+        docs = { requires-python = ">=3.14" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `member:docs` in `uv.lock`).
+    ");
+
+    // The diagnostic still identifies the member's group without its manifest.
+    fs_err::remove_file(context.temp_dir.child("member/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `member:docs` in `uv.lock`).
+    ");
+
+    // Disabling the default groups removes the member group's requirement.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--no-default-groups", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    // Without a selected member, Python requirements still come from the manifest.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--group", "docs", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.14` (from `tool.uv.dependency-groups.docs.requires-python`).
+    ");
+
+    Ok(())
+}
+
+/// Frozen sync reports the lockfile requirements that exclude the requested Python.
+#[test]
+fn sync_frozen_member_default_groups_python_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+
+    // Record workspace and member group Python requirements.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.13"
+
+        [manifest]
+        members = ["member", "root"]
+
+        [[package]]
+        name = "member"
+        version = "1.0.0"
+        source = { virtual = "member" }
+        default-groups = ["docs"]
+
+        [package.dev-dependencies]
+        docs = []
+        test = []
+        unbounded = []
+
+        [package.group-requires-python]
+        docs = ">=3.14"
+        test = ">=3.13"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    // With no default groups, only the workspace requirement applies.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--no-default-groups", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `requires-python` in `uv.lock`).
+    ");
+
+    // Report all incompatible lockfile requirements when both groups are selected.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--all-groups", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.14`.
+    The following requirements in `uv.lock` do not permit this version:
+    - lockfile: >=3.13
+    - member:docs: >=3.14
+    - member:test: >=3.13
+    ");
+
+    // A `.python-version` request reports the requirements for the default group.
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The Python request from `.python-version` resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.14`.
+    The following requirements in `uv.lock` do not permit this version:
+    - lockfile: >=3.13
+    - member:docs: >=3.14
+    Use `uv python pin` to update the `.python-version` file to a compatible version
+    ");
+
+    Ok(())
+}
+
+/// Older lockfiles continue to use the current project's default groups.
+#[test]
+fn sync_frozen_member_default_groups_revision_4() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // The root's default group requires Python 3.13 or newer.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        root-group = []
+
+        [tool.uv]
+        package = false
+        default-groups = ["root-group"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.dependency-groups]
+        root-group = { requires-python = ">=3.13" }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        member-group = []
+
+        [tool.uv]
+        package = false
+        default-groups = ["member-group"]
+    "#})?;
+
+    // Revision 4 does not record the member's default groups or Python requirements.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [manifest]
+        members = ["member", "root"]
+
+        [[package]]
+        name = "member"
+        version = "1.0.0"
+        source = { virtual = "member" }
+
+        [package.dev-dependencies]
+        member-group = []
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+
+        [package.dev-dependencies]
+        root-group = []
+    "#})?;
+
+    // Frozen sync uses the current project's defaults when the member exists.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from workspace member `root`'s `tool.uv.dependency-groups.root-group.requires-python`).
+    ");
+
+    // The same defaults apply when the member manifest is missing.
+    fs_err::remove_file(context.temp_dir.child("member/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.root-group.requires-python`).
+    ");
+
+    // Explicitly disabling defaults allows Python 3.12.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--package", "member", "--no-default-groups", "--python", "3.12", "--offline", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    Ok(())
+}
+
 /// Sync development dependencies in a non-project workspace root with `--frozen`.
 #[test]
 fn sync_non_project_frozen() -> Result<()> {
@@ -1649,13 +3232,13 @@ fn sync_non_project_frozen() -> Result<()> {
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `foo`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/foo`
-    TRACE Processing workspace member: `bar`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/bar`
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: foo
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/foo
+    TRACE Processing workspace member: bar
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/bar
+    DEBUG Found project root: [TEMP_DIR]/
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
@@ -2354,7 +3937,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -2421,7 +4004,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -2487,7 +4070,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Found `anyio` module
@@ -2576,7 +4159,7 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
     ----- stderr -----
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -2675,7 +4258,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -2856,7 +4439,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Expected `anyio` version 3.0 but got 4.3.0
@@ -2905,7 +4488,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Expected `anyio` version 4.3 but got 3.5.0
@@ -2996,7 +4579,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Found system anyio instead of local anyio
@@ -3060,7 +4643,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -3121,7 +4704,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -3261,7 +4844,7 @@ fn sync_relative_wheel() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.12"
 
             [options]
@@ -4175,11 +5758,26 @@ fn sync_non_existent_default_group() -> Result<()> {
         foo = []
 
         [tool.uv]
+        default-groups = ["foo"]
+        "#,
+    )?;
+    context.lock().assert().success();
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = []
+
+        [tool.uv]
         default-groups = ["bar"]
         "#,
     )?;
-
-    context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 2 (failure)
@@ -4547,7 +6145,7 @@ fn sync_default_groups_gibberish() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 14, column 26
                 |
              14 |         default-groups = "gibberish"
@@ -4838,7 +6436,7 @@ fn sync_group_non_project_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -4991,7 +6589,7 @@ fn sync_group_self() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -5714,6 +7312,132 @@ fn no_install_project() -> Result<()> {
     Ok(())
 }
 
+/// Exclude the current project when syncing every workspace member.
+#[test]
+fn no_install_project_all_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Exclude the root project while retaining the child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-install-project").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // From the child, exclude the child even though the root depends on it.
+    uv_snapshot!(context.filters(), context.sync().current_dir(child.path()).arg("--all-packages").arg("--no-install-project").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - child==0.1.0 (from file://[TEMP_DIR]/child)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // The inverse filter should select the current project.
+    uv_snapshot!(context.filters(), context.sync().current_dir(child.path()).arg("--all-packages").arg("--only-install-project").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
+/// A virtual workspace root has no current project to exclude.
+#[test]
+fn no_install_project_all_packages_virtual_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["alpha", "beta"]
+        "#,
+    )?;
+
+    for name in ["alpha", "beta"] {
+        let member = context.temp_dir.child(name);
+        member.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+            "#,
+        ))?;
+        member.child(format!("src/{name}/__init__.py")).touch()?;
+    }
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-install-project").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + alpha==0.1.0 (from file://[TEMP_DIR]/alpha)
+     + beta==0.1.0 (from file://[TEMP_DIR]/beta)
+    ");
+
+    // From a member, only that member is the current project.
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("alpha")).arg("--all-packages").arg("--no-install-project").arg("--frozen").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - alpha==0.1.0 (from file://[TEMP_DIR]/alpha)
+    ");
+
+    Ok(())
+}
+
 /// Avoid syncing workspace members and the project when `--no-install-workspace` is provided, but
 /// include all dependencies.
 #[test]
@@ -5813,16 +7537,16 @@ fn no_install_workspace() -> Result<()> {
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `child`
-    DEBUG Found project root: `[TEMP_DIR]/`
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `child`
-    DEBUG Ignoring missing workspace member: `[TEMP_DIR]/child`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: child
+    DEBUG Found project root: [TEMP_DIR]/
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: child
+    DEBUG Ignoring missing workspace member: [TEMP_DIR]/child
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Installed 4 packages in [TIME]
@@ -5859,13 +7583,14 @@ fn no_install_workspace() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    // But we do require the root `pyproject.toml`.
+    // Frozen sync also works without the root `pyproject.toml`.
     fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace").arg("--frozen"), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: No `pyproject.toml` found in current directory or any parent directory
+    warning: Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    Checked 4 packages in [TIME]
     ");
 
     Ok(())
@@ -6133,25 +7858,77 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     let build_backend = context.temp_dir.child("build_backend.py");
     build_backend.write_str(indoc! {r#"
         import pathlib
+        from textwrap import dedent
 
         def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
             pathlib.Path("validation-hook-called").write_text("called")
             dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
             dist_info.mkdir()
-            dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.1\n"
-                "Name: project\n"
-                "Version: 0.1.0\n"
-                "Requires-Dist: anyio==3.7.0\n"
-            )
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+                Requires-Dist: anyio==3.7.0
+            """).lstrip())
             return dist_info.name
     "#})?;
+
+    let marker = context.temp_dir.child("validation-hook-called");
+
+    // Excluding the project also applies when no lockfile exists.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-package")
+        .arg("project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("example")
+        .arg("--group")
+        .arg("dev")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to add dependencies
+      cause: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
+    ");
+
+    uv_snapshot!(context.filters(), context.check()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!marker.exists());
 
     // Generate a lockfile, then remove the cached metadata so validation would need to invoke the
     // build backend again if it ignored `--no-build`.
     context.lock().assert().success();
 
-    let marker = context.temp_dir.child("validation-hook-called");
     assert!(marker.exists());
     fs_err::remove_file(marker.path())?;
     fs_err::remove_dir_all(&context.cache_dir)?;
@@ -6166,6 +7943,167 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     ");
 
     assert!(!marker.exists());
+
+    Ok(())
+}
+
+/// Exclude the current project from metadata builds when syncing all workspace packages.
+#[test]
+fn no_install_project_all_packages_no_build_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [dependency-groups]
+        dev = []
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+        from textwrap import dedent
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            pathlib.Path("metadata-hook-called").write_text("called")
+            dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+            """).lstrip())
+            return dist_info.name
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    let marker = context.temp_dir.child("metadata-hook-called");
+
+    // Resolving without a lockfile must not execute the excluded project's backend.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-packages")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!marker.exists());
+
+    context.lock().arg("--offline").assert().success();
+    assert!(marker.exists());
+    fs_err::remove_file(marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // Nor may lock validation execute the backend after cached metadata is removed.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-packages")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+    assert!(!marker.exists());
+
+    // Group-only selection can still execute the backend to validate the lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked in [TIME]
+    ");
+    assert!(marker.exists());
+
+    Ok(())
+}
+
+/// A first-party backend without a metadata hook can build a wheel to provide metadata.
+#[test]
+fn sync_no_build_first_party_wheel_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version", "dependencies"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+        import zipfile
+        from textwrap import dedent
+
+        def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+            pathlib.Path("wheel-hook-called").write_text("called")
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory, filename), "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", dedent("""
+                    Metadata-Version: 2.1
+                    Name: project
+                    Version: 0.1.0
+                """).lstrip())
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", dedent("""
+                    Wheel-Version: 1.0
+                    Generator: test
+                    Root-Is-Purelib: true
+                    Tag: py3-none-any
+                """).lstrip())
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    assert!(context.temp_dir.child("wheel-hook-called").exists());
 
     Ok(())
 }
@@ -6229,7 +8167,7 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -6582,7 +8520,7 @@ fn convert_to_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -6639,7 +8577,7 @@ fn convert_to_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -6705,7 +8643,7 @@ fn convert_to_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -6773,7 +8711,7 @@ fn convert_to_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -8831,6 +10769,124 @@ fn sync_scripts_workspace_member_not_packaged_not_synced() -> Result<()> {
 }
 
 #[test]
+fn sync_scripts_required_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        member-entry = "member:main"
+    "#})?;
+    member.child("member.py").write_str(indoc! {r#"
+        def main():
+            print("Hello from member")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&member), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + member==0.1.0 (from file://[TEMP_DIR]/member)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("member"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("member-entry"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from member
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_scripts_required_workspace_member_not_packaged() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        member-entry = "member:main"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: Skipping installation of entry points (`project.scripts`) for package `member` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_dynamic_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -8879,7 +10935,7 @@ fn sync_dynamic_extra() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.12"
 
             [options]
@@ -9159,7 +11215,7 @@ fn sync_invalid_environment() -> Result<()> {
         uv_snapshot!(context.filters(), context.sync(), @"
         exit_code: 0 (success)
         ----- stderr -----
-        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> does-not-exist
+        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: `.venv/[BIN]/[PYTHON]` -> `does-not-exist`
         Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
         Removed virtual environment at: .venv
         Creating virtual environment at: .venv
@@ -10100,7 +12156,7 @@ fn sync_derivation_chain() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -10155,7 +12211,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -10212,7 +12268,7 @@ fn sync_derivation_chain_group() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -10276,7 +12332,7 @@ fn sync_stale_egg_info() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.13"
 
             [options]
@@ -10377,7 +12433,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.13"
 
             [options]
@@ -10465,7 +12521,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.13"
 
             [options]
@@ -10577,7 +12633,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.13"
 
             [options]
@@ -10664,7 +12720,7 @@ fn sync_git_path_archive() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.13"
 
             [options]
@@ -10940,7 +12996,7 @@ fn sync_git_path_dependency() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.13"
 
             [options]
@@ -11094,7 +13150,7 @@ fn lock_git_poetry_path_dependency() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.13"
 
             [options]
@@ -11231,7 +13287,7 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.13"
 
             [options]
@@ -11333,7 +13389,7 @@ fn sync_build_tag() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -11897,10 +13953,52 @@ fn sync_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--frozen"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     error: `uv sync --frozen` requires a script lockfile; run `uv lock --script script.py` to lock the script
     ");
 
+    Ok(())
+}
+
+/// Frozen script locks are read before selecting or creating the script environment.
+#[test]
+fn sync_frozen_script_lockfile_before_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.13"
+        # dependencies = []
+        # ///
+    "#})?;
+
+    // Report the missing lockfile before checking the requested Python.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--script", "script.py", "--frozen", "--python", "3.12", "--offline"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `uv sync --frozen` requires a script lockfile; run `uv lock --script script.py` to lock the script
+    ");
+
+    // A malformed lockfile also fails before creating an environment.
+    context
+        .temp_dir
+        .child("script.py.lock")
+        .write_str(indoc! {r"
+        version = 1
+        revision = 4
+    "})?;
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--script", "script.py", "--frozen", "--python", "3.12", "--offline"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: TOML parse error at line 1, column 1
+               |
+             1 | version = 1
+               | ^
+             missing field `requires-python`
+    ");
+
+    assert!(!context.cache_dir.child("environments-v2").exists());
     Ok(())
 }
 
@@ -11936,7 +14034,7 @@ fn sync_locked_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
 
         [options]
@@ -12005,6 +14103,15 @@ fn sync_locked_script() -> Result<()> {
        "#
     })?;
 
+    // Frozen sync keeps the recorded resolution when the script's dependencies change.
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Checked 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("script.py.lock"), lock);
+
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @"
     exit_code: 1 (failure)
@@ -12034,7 +14141,7 @@ fn sync_locked_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
 
         [options]
@@ -12715,7 +14822,7 @@ fn locked_version_coherence() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -12810,7 +14917,7 @@ fn sync_build_constraints() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 3
+            revision = 5
             requires-python = ">=3.12"
 
             [options]
@@ -13668,7 +15775,7 @@ fn conflicting_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -13819,7 +15926,7 @@ fn undeclared_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -14307,7 +16414,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Expected `a` version 0.1 but got 0.3.0
@@ -14366,7 +16473,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Expected `a` version 0.2 but got 0.1.0
@@ -14516,7 +16623,7 @@ fn sync_extra_build_variables() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `parent @ file://[TEMP_DIR]/`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_editable` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_editable` failed (exit status: 1)
 
              [stderr]
              Expected `anyio` version 3.0 but got 4.3.0
@@ -14546,7 +16653,7 @@ fn sync_extra_build_variables() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `parent @ file://[TEMP_DIR]/`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_editable` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_editable` failed (exit status: 1)
 
              [stderr]
              Expected `anyio` version 3.0 but got 4.3.0
@@ -14656,7 +16763,7 @@ fn sync_git_lfs() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.13"
 
         [options]
@@ -14770,7 +16877,7 @@ fn sync_git_lfs() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.13"
 
         [options]
@@ -14908,7 +17015,7 @@ fn sync_git_lfs() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.13"
 
         [options]
@@ -14960,7 +17067,7 @@ fn sync_git_lfs() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.13"
 
         [options]
@@ -15286,38 +17393,11 @@ async fn sync_deprecated_zstd_wheel() -> Result<()> {
 /// extension (e.g., `.tar.bz2`). The resolver should reject it as incompatible.
 #[tokio::test]
 async fn sync_non_pep625_sdist() -> Result<()> {
-    use serde_json::json;
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path},
-    };
-
     let context = uv_test::test_context!("3.13");
-    let server = MockServer::start().await;
-
-    let sdist_url = format!("{}/files/basic_package-0.1.0.tar.bz2", server.uri());
-
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "basic-package",
-        "files": [{
-            "filename": "basic_package-0.1.0.tar.bz2",
-            "url": sdist_url,
-            "hashes": {
-                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
-            }
-        }]
-    });
-
-    Mock::given(method("GET"))
-        .and(path("/simple/basic-package/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string().into_bytes(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
+    let server = PackageServer::new(&"basic-package".parse()?).await;
+    // The unsupported filename must be rejected before the archive is downloaded.
+    server
+        .serve("basic_package-0.1.0.tar.bz2", b"", Some(&"0".repeat(64)))
         .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -15333,9 +17413,9 @@ async fn sync_non_pep625_sdist() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-registry"
-        url = "{}/simple"
+        url = "{}"
         "#,
-        server.uri()
+        server.index_url()
     })?;
 
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
@@ -15572,7 +17652,7 @@ fn toggle_workspace_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -15676,7 +17756,7 @@ fn toggle_workspace_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -15827,7 +17907,7 @@ fn workspace_editable_conflict() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -15921,7 +18001,7 @@ fn workspace_editable_conflict() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -16174,7 +18254,7 @@ fn sync_fails_ambiguous_url() -> Result<()> {
          |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
       ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 10, column 15
                 |
              10 |         url = "https://user/name:password@domain/a/b/c"
@@ -16602,7 +18682,7 @@ async fn sync_malware_check_network_error() {
         .arg("--preview-features").arg("malware-check")
         .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -16843,7 +18923,7 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -17196,7 +19276,7 @@ fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(context.read("script.py.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]

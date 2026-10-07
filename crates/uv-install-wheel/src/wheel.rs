@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -56,15 +56,12 @@ if __name__ == "__main__":
 pub(crate) fn read_scripts_from_section(
     scripts_section: &HashMap<String, Option<String>>,
     section_name: &str,
-    extras: Option<&[String]>,
 ) -> Result<Vec<Script>, Error> {
     let mut scripts = Vec::new();
     for (script_name, python_location) in scripts_section {
         match python_location {
             Some(value) => {
-                if let Some(script) = Script::from_value(script_name, value, extras)? {
-                    scripts.push(script);
-                }
+                scripts.push(Script::from_value(script_name, value)?);
             }
             None => {
                 return Err(Error::InvalidWheel(format!(
@@ -267,7 +264,7 @@ impl<'script> ValidatedScript<'script> {
             &layout.scheme.scripts,
         ) else {
             return Err(Error::InvalidWheel(format!(
-                "Script path must resolve to a file within the scripts directory: `{}`",
+                "Script path must resolve to a file within the scripts directory: {}",
                 script.name
             )));
         };
@@ -406,7 +403,7 @@ impl WheelFile {
             .and_then(|wheel_version| wheel_version.split_once('.'))
             .ok_or_else(|| {
                 Error::InvalidWheel(format!(
-                    "Invalid Wheel-Version in WHEEL file: {wheel_version:?}"
+                    "Invalid Wheel-Version in `WHEEL` file: {wheel_version:?}"
                 ))
             })?;
         // pip has some test wheels that use that ancient version,
@@ -554,7 +551,7 @@ fn install_script(
         })?;
 
     let path = file.path();
-    let mut script = File::open(&path)?;
+    let mut script = BufReader::new(File::open(&path)?);
 
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
     // > In wheel, scripts are packaged in {distribution}-{version}.data/scripts/.
@@ -581,7 +578,13 @@ fn install_script(
         loop {
             match script.read_exact(&mut byte) {
                 Ok(()) => {
-                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                    if byte[0] == b'\n' {
+                        break;
+                    }
+                    if byte[0] == b'\r' {
+                        if script.fill_buf()?.first() == Some(&b'\n') {
+                            script.consume(1);
+                        }
                         break;
                     }
 
@@ -651,7 +654,7 @@ fn install_script(
                 // If we have to modify the permissions, copy the file, since we might not own it,
                 // and we may not be allowed to change permissions on an unowned moved file.
                 warn!(
-                    "Copying script from {} to {} (permissions: {:o})",
+                    "Copying script from `{}` to `{}` (permissions: {:o})",
                     path.simplified_display(),
                     script_absolute.simplified_display(),
                     permissions.mode()
@@ -732,7 +735,7 @@ pub(crate) fn install_data(
             Some("data") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/data to {}",
+                    "Installing data/data to `{}`",
                     layout.scheme.data.user_display()
                 );
                 // Move the content of the folder to the root of the venv
@@ -747,7 +750,7 @@ pub(crate) fn install_data(
             Some("scripts") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/scripts to {}",
+                    "Installing data/scripts to `{}`",
                     layout.scheme.scripts.user_display()
                 );
                 let mut rename_or_copy = RenameOrCopy::default();
@@ -791,7 +794,7 @@ pub(crate) fn install_data(
                 let target_path = layout.scheme.include.join(dist_name.as_str());
                 trace!(
                     ?dist_name,
-                    "Installing data/headers to {}",
+                    "Installing data/headers to `{}`",
                     target_path.user_display()
                 );
                 move_folder_recorded(
@@ -805,7 +808,7 @@ pub(crate) fn install_data(
             Some("purelib") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/purelib to {}",
+                    "Installing data/purelib to `{}`",
                     layout.scheme.purelib.user_display()
                 );
                 move_folder_recorded(
@@ -819,7 +822,7 @@ pub(crate) fn install_data(
             Some("platlib") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/platlib to {}",
+                    "Installing data/platlib to `{}`",
                     layout.scheme.platlib.user_display()
                 );
                 move_folder_recorded(
@@ -1031,8 +1034,7 @@ pub fn validate_and_heal_record<'a>(
     // that weren't removed from files.
     if !extra_record_entries.is_empty() {
         debug!(
-            "RECORD contains files not in wheel archive for {}: `{}`",
-            dist,
+            "Files `{}` are listed in `RECORD` but missing from the wheel archive for `{dist}`",
             extra_record_entries
                 .iter()
                 .map(Simplified::simplified_display)
@@ -1041,8 +1043,7 @@ pub fn validate_and_heal_record<'a>(
     }
     if !files.is_empty() {
         debug!(
-            "Wheel archive contains files not in RECORD for {}: `{}`",
-            dist,
+            "Files `{}` are in the wheel archive for `{dist}` but missing from `RECORD`",
             files
                 .keys()
                 .map(Simplified::simplified_display)
@@ -1051,7 +1052,7 @@ pub fn validate_and_heal_record<'a>(
     }
     let healed = !extra_record_entries.is_empty() || !files.is_empty();
     if healed {
-        debug!("Rewriting RECORD to match actual wheel contents for {dist}");
+        debug!("Rewriting `RECORD` to match actual wheel contents for {dist}");
         // We already removed RECORD entries with no matching unpacked file, now add files that
         // were unpacked but not listed in the archive.
         for (path, size) in files {
@@ -1084,7 +1085,7 @@ fn parse_email_message_file(
 
     let headers = parse_headers(content.as_slice())
         .map_err(|err| {
-            Error::InvalidWheel(format!("Failed to parse {debug_filename} file: {err}"))
+            Error::InvalidWheel(format!("Failed to parse `{debug_filename}` file: {err}"))
         })?
         .0;
 
@@ -1170,11 +1171,10 @@ pub(crate) fn dist_info_metadata(
 ///
 /// Returns (`script_name`, module, function)
 ///
-/// Extras are supposed to be ignored, which happens if you pass None for extras.
+/// Extras declared by an entry point are accepted but ignored.
 pub(crate) fn parse_scripts(
     wheel: impl AsRef<Path>,
     dist_info_prefix: &str,
-    extras: Option<&[String]>,
     python_minor: u8,
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
     let entry_points_path = wheel
@@ -1184,7 +1184,7 @@ pub(crate) fn parse_scripts(
     let EntryPoints {
         console_scripts,
         gui_scripts,
-    } = EntryPoints::read(entry_points_path, extras, python_minor)?;
+    } = EntryPoints::read(entry_points_path, python_minor)?;
 
     Ok((console_scripts, gui_scripts))
 }
@@ -1317,7 +1317,7 @@ mod test {
             .child("example-1.0.0.dist-info/entry_points.txt")
             .write_binary(&[0xff])?;
 
-        let error = parse_scripts(&wheel, "example-1.0.0", None, 13)
+        let error = parse_scripts(&wheel, "example-1.0.0", 13)
             .err()
             .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
 
@@ -1357,42 +1357,20 @@ mod test {
     #[test]
     fn test_script_from_value() {
         assert_eq!(
-            Script::from_value("launcher", "foo.bar:main", None).unwrap(),
-            Some(Script {
+            Script::from_value("launcher", "foo.bar:main").unwrap(),
+            Script {
                 name: "launcher".to_string(),
                 module: "foo.bar".to_string(),
                 function: "main".to_string(),
-            })
+            }
         );
         assert_eq!(
-            Script::from_value(
-                "launcher",
-                "foo.bar:main",
-                Some(&["bar".to_string(), "baz".to_string()]),
-            )
-            .unwrap(),
-            Some(Script {
-                name: "launcher".to_string(),
-                module: "foo.bar".to_string(),
-                function: "main".to_string(),
-            })
-        );
-        assert_eq!(
-            Script::from_value("launcher", "foomod:main_bar [bar,baz]", Some(&[])).unwrap(),
-            None
-        );
-        assert_eq!(
-            Script::from_value(
-                "launcher",
-                "foomod:main_bar [bar,baz]",
-                Some(&["bar".to_string(), "baz".to_string()]),
-            )
-            .unwrap(),
-            Some(Script {
+            Script::from_value("launcher", "foomod:main_bar [bar,baz]").unwrap(),
+            Script {
                 name: "launcher".to_string(),
                 module: "foomod".to_string(),
                 function: "main_bar".to_string(),
-            })
+            }
         );
     }
 

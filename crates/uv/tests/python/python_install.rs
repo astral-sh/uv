@@ -123,6 +123,59 @@ fn python_install() {
     bin_python.assert(predicate::path::missing());
 }
 
+/// Regression test for a panic when `/install` in a sysconfig value is followed by a non-ASCII
+/// character.
+#[cfg(unix)]
+#[test]
+fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
+    let installation = context
+        .temp_dir
+        .child("managed")
+        .child(format!("cpython-3.12.9-{}", platform_key_from_env()?));
+    let lib = installation.child("lib").child("python3.12");
+    lib.create_dir_all()?;
+    let bin = installation.child("bin");
+    bin.create_dir_all()?;
+    bin.child("python3.12").touch()?;
+    let sysconfig = lib.child("_sysconfigdata__test.py");
+    sysconfig.write_str(indoc! {r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "PREFIX": "/install",
+            "SUBDIRECTORY": "/install/é",
+            "UNICODE_SUFFIX": "/installé",
+            "OTHER_PREFIX": "/installation"
+        }
+    "#})?;
+
+    context
+        .python_install()
+        .arg("3.12.9")
+        .arg("--no-bin")
+        .arg("--offline")
+        .assert()
+        .success();
+
+    let contents = fs_err::read_to_string(sysconfig.path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(contents, @r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "OTHER_PREFIX": "/installation",
+            "PREFIX": "[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]",
+            "PYTHON_BUILD_STANDALONE": 1,
+            "SUBDIRECTORY": "[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]/é",
+            "UNICODE_SUFFIX": "/installé"
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
 #[test]
 fn python_reinstall() {
     let context = uv_test::test_context_with_versions!(&[])
@@ -2532,8 +2585,8 @@ fn python_install_cached() {
 
     // 3.12 isn't cached, so it can't be installed
     let context = context.with_filter((
-        "cpython-3.12.*.tar.gz",
-        "cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz",
+        r"https://[^`]+/cpython-3\.12[^`]+\.tar\.gz",
+        "[PYTHON_DOWNLOAD_URL]",
     ));
     uv_snapshot!(context.filters(), context
         .python_install()
@@ -2543,7 +2596,7 @@ fn python_install_cached() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
-      cause: An offline Python installation was requested, but cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in python-cache
+      cause: An offline Python installation was requested, but `cpython-3.12.[LATEST]-[PLATFORM]` (from `[PYTHON_DOWNLOAD_URL]`) is missing in `python-cache`
     ");
 }
 
@@ -2634,8 +2687,8 @@ fn python_install_no_cache() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
-      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
-      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
     ");
 }
 
@@ -4069,9 +4122,6 @@ fn python_install_compile_bytecode_multiple() {
 #[test]
 fn python_install_compile_bytecode_pyodide() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
-        .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
         .with_empty_python_install_mirror();
 
@@ -4122,8 +4172,8 @@ fn python_install_compile_bytecode_pypy() {
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.11.15 in [TIME]
-     + pypy-3.11.15-[PLATFORM] (pypy3.11)
+    Installed Python 3.11.16 in [TIME]
+     + pypy-3.11.16-[PLATFORM] (pypy3.11)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }

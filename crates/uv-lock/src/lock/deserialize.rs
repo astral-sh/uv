@@ -342,9 +342,11 @@ enum MapKind {
     Manifest,
     ManifestDependencyGroups,
     ManifestDependencyMetadata,
+    ManifestGroupRequiresPython,
     Package,
     PackageOptionalDependencies,
     PackageDevDependencies,
+    PackageGroupRequiresPython,
     PackageMetadata,
     PackageMetadataRequiresDev,
 }
@@ -466,6 +468,19 @@ impl<'de> DocumentMapAccess<'_, 'de> {
             (MapKind::Root, "[manifest]") => {
                 Some(("manifest", Pending::Map(MapKind::Manifest), "[manifest]"))
             }
+            (
+                MapKind::Root,
+                "[manifest.dependency-groups]"
+                | "[[manifest.dependency-metadata]]"
+                | "[manifest.group-requires-python]",
+            ) => {
+                // The manifest map consumes the first subtable when its parent is implicit.
+                self.track_key("manifest")?;
+                self.pending = Some(Pending::Map(MapKind::Manifest));
+                return seed
+                    .deserialize(de::value::BorrowedStrDeserializer::new("manifest"))
+                    .map(Some);
+            }
             (MapKind::Root, "[[package]]") => Some((
                 "package",
                 Pending::Sequence(SequenceKind::Packages),
@@ -481,6 +496,11 @@ impl<'de> DocumentMapAccess<'_, 'de> {
                 Pending::Map(MapKind::ManifestDependencyGroups),
                 "[manifest.dependency-groups]",
             )),
+            (MapKind::Manifest, "[manifest.group-requires-python]") => Some((
+                "group-requires-python",
+                Pending::Map(MapKind::ManifestGroupRequiresPython),
+                "[manifest.group-requires-python]",
+            )),
             (MapKind::Manifest, "[[manifest.dependency-metadata]]") => Some((
                 "dependency-metadata",
                 Pending::Sequence(SequenceKind::ManifestDependencyMetadata),
@@ -490,6 +510,11 @@ impl<'de> DocumentMapAccess<'_, 'de> {
                 "optional-dependencies",
                 Pending::Map(MapKind::PackageOptionalDependencies),
                 "[package.optional-dependencies]",
+            )),
+            (MapKind::Package, "[package.group-requires-python]") => Some((
+                "group-requires-python",
+                Pending::Map(MapKind::PackageGroupRequiresPython),
+                "[package.group-requires-python]",
             )),
             (MapKind::Package, "[package.dev-dependencies]") => Some((
                 "dev-dependencies",
@@ -963,6 +988,38 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let actual = from_str(input).expect("valid nested canonical lock");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn implicit_manifest_matches_toml() {
+        for subtable in [
+            r#"[manifest.dependency-groups]
+dev = [{ name = "dependency", specifier = ">=1" }]
+"#,
+            r#"[[manifest.dependency-metadata]]
+name = "dependency"
+version = "1.0.0"
+"#,
+            r#"[manifest.dependency-groups]
+dev = [{ name = "dependency", specifier = ">=1" }]
+
+[[manifest.dependency-metadata]]
+name = "dependency"
+version = "1.0.0"
+"#,
+        ] {
+            let input =
+                format!("version = 1\nrevision = 3\nrequires-python = \">=3.12\"\n\n{subtable}");
+            let expected: Lock =
+                toml::from_str(&input).expect("valid TOML lock with an implicit manifest");
+            let actual = from_str(&input).expect("implicit manifest uses the direct parser");
+
+            assert_eq!(actual, expected);
+            assert_eq!(
+                actual.to_toml().expect("lock serializes canonically"),
+                input
+            );
+        }
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -14,16 +14,17 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExcludeDependency, Excludes,
-    ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DependencyModifiers, DryRun,
+    ExcludeDependency, Excludes, ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
     ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
-    NameRequirementSpecification, PackageConfigSettings, Requirement, ResolutionDiagnostic,
-    UnresolvedRequirement, UnresolvedRequirementSpecification, VersionOrUrlRef,
+    NameRequirementSpecification, PackageConfigSettings, Requirement, RequirementScope,
+    RequirementSource, ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
+    UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
 use uv_distribution_types::{
     DerivationChain, DistributionMetadata, InstalledMetadata, Name, Resolution,
@@ -49,7 +50,7 @@ use uv_resolver::{
     ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
 use uv_tool::InstalledTools;
-use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
+use uv_types::{BuildContext, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -101,7 +102,7 @@ pub(crate) async fn read_constraints(
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
-pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
+pub(crate) async fn resolve(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
@@ -109,11 +110,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     excludes: Vec<ExcludeDependency>,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
-    workspace_members: BTreeSet<PackageName>,
+    workspace_members: BTreeMap<PackageName, RequirementSource>,
     extras: &ExtrasSpecification,
     groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,
-    installed_packages: InstalledPackages,
+    installed_packages: Option<SitePackages>,
     hasher: &HashStrategy,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
@@ -128,6 +129,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     build_dispatch: &BuildDispatch<'_>,
     concurrency: &Concurrency,
     options: Options,
+    recorder: Option<ResolutionRecorder>,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
 ) -> Result<(ResolverOutput, HashStrategy), Error> {
@@ -158,7 +160,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         client,
                         build_dispatch,
                         concurrency.downloads_semaphore.clone(),
-                    ),
+                    )
+                    .with_recorder(recorder.clone()),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -176,7 +179,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     client,
                     build_dispatch,
                     concurrency.downloads_semaphore.clone(),
-                ),
+                )
+                .with_recorder(recorder.clone()),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter())
@@ -249,7 +253,18 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // Apply dependency-groups
             for (group_name, group) in &metadata.dependency_groups {
                 if groups.contains(group_name) {
+                    let scope =
+                        metadata
+                            .name
+                            .as_ref()
+                            .map_or(RequirementScope::Global, |package| {
+                                RequirementScope::Group {
+                                    package: package.clone(),
+                                    group: group_name.clone(),
+                                }
+                            });
                     requirements.extend(group.iter().cloned().map(|group| Requirement {
+                        scope: scope.clone(),
                         origin: Some(RequirementOrigin::Group(
                             pyproject_path.clone(),
                             metadata.name.clone(),
@@ -294,7 +309,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         client,
                         build_dispatch,
                         concurrency.downloads_semaphore.clone(),
-                    ),
+                    )
+                    .with_recorder(recorder.clone()),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -320,24 +336,26 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     )
     .map_err(anyhow::Error::from)?;
     let excludes = Excludes::from_entries(excludes);
+    let modifiers = DependencyModifiers::new(overrides, excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
+            let constraints = constraints.clone().with_recorder(recorder.clone());
+            let modifiers = modifiers.clone().with_recorder(recorder.clone());
             let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
-                &overrides,
-                &excludes,
-                build_dispatch.dependency_metadata(),
+                &modifiers,
                 &hasher,
                 index,
                 DistributionDatabase::new(
                     client,
                     build_dispatch,
                     concurrency.downloads_semaphore.clone(),
-                ),
+                )
+                .with_recorder(recorder.clone()),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
@@ -355,14 +373,14 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let manifest = Manifest::new(
         requirements,
         constraints,
-        overrides,
-        excludes,
+        modifiers,
         preferences,
         project,
         workspace_members,
         exclusions,
         lookaheads,
-    );
+    )
+    .with_recorder(recorder.clone());
 
     // Resolve the dependencies.
     let resolution = {
@@ -391,7 +409,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 client,
                 build_dispatch,
                 concurrency.downloads_semaphore.clone(),
-            ),
+            )
+            .with_recorder(recorder.clone()),
         )?
         .with_reporter(Arc::new(reporter));
 
@@ -904,14 +923,14 @@ fn python_source_files_for_installs<'a>(
     ];
     installs.iter().flat_map(move |install| {
         let dist_info = match installed_dist_info_path(&layout, install.path()).with_context(|| {
-            format!("Failed to locate installed distribution for bytecode compilation: `{install}`")
+            format!("Failed to locate installed distribution for bytecode compilation: {install}")
         }) {
             Ok(dist_info) => dist_info,
             Err(err) => return Box::new(std::iter::once(Err(err))) as PythonSourceFileIterator,
         };
         let Some(record_root) = dist_info.parent().map(|path| CWD.join(path)) else {
             return Box::new(std::iter::once(Err(anyhow!(
-                "Invalid installed distribution path: `{}`",
+                "Invalid installed distribution path: {}",
                 dist_info.user_display()
             ))));
         };
@@ -1107,7 +1126,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at `{}` due to missing `RECORD` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }
@@ -1115,7 +1134,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at `{}` due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }
@@ -1153,7 +1172,7 @@ pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
     printer: Printer,
-) -> Result<(), Error> {
+) -> std::fmt::Result {
     let managed = python.source().is_managed();
     let implementation = python.implementation();
     let interpreter = python.interpreter();
@@ -1214,7 +1233,7 @@ pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
     printer: Printer,
-) -> Result<(), Error> {
+) -> std::fmt::Result {
     // Resolve minor-version link directories (e.g., `cpython-3.12` → `cpython-3.12.12`).
     // On Windows, junction points aren't resolved by the interpreter's `sys.prefix`, so we
     // use the target directory from the minor-version link to display the actual installation.
@@ -1261,7 +1280,7 @@ pub(crate) fn report_target_environment(
         }
     }
 
-    Ok(writeln!(printer.stderr(), "{}", message.dimmed())?)
+    writeln!(printer.stderr(), "{}", message.dimmed())
 }
 
 /// Report on the results of a dry-run installation.
@@ -1427,6 +1446,42 @@ pub(crate) enum Error {
 }
 
 impl Error {
+    /// Return the solver failure for an unsatisfiable resolution.
+    pub(crate) fn as_no_solution(&self) -> Option<&NoSolutionError> {
+        match self {
+            Self::NoSolution { source, .. } | Self::Resolve(ResolveError::NoSolution(source)) => {
+                Some(source)
+            }
+            Self::Resolve(_)
+            | Self::Prepare(_)
+            | Self::Uninstall(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Requirements(_)
+            | Self::RequirementsWithContext { .. }
+            | Self::Anyhow(_)
+            | Self::OutdatedEnvironment(_) => None,
+        }
+    }
+
+    /// Return the changes required by an environment that failed an up-to-date check.
+    pub(crate) fn outdated_environment(&self) -> Option<&Changelog> {
+        match self {
+            Self::OutdatedEnvironment(changelog) => Some(changelog),
+            Self::NoSolution { .. }
+            | Self::Resolve(_)
+            | Self::Prepare(_)
+            | Self::Uninstall(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Requirements(_)
+            | Self::RequirementsWithContext { .. }
+            | Self::Anyhow(_) => None,
+        }
+    }
+
     /// Add the default heading when this operation is the final command error.
     ///
     /// Nested operation errors may already have a more specific heading from their caller.

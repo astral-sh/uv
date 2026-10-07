@@ -17,7 +17,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
     ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
@@ -37,9 +37,9 @@ use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVariant,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{FlatIndex, OptionsBuilder, Preference, ResolverOutput};
@@ -111,7 +111,7 @@ impl Hinted for NoExecutablesError {
     }
 }
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, PreferenceLocation, ProjectError, PythonRequestSource,
+    EnvironmentSpecification, PreferenceLocation, ProjectError, PythonRequestSource,
     lock::ValidatedLock,
 };
 use crate::commands::reporters::PythonDownloadReporter;
@@ -152,10 +152,10 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
 /// Remove the entrypoints at the given paths.
 fn remove_entrypoint_paths<'a>(entrypoints: impl IntoIterator<Item = &'a Path>) {
     for executable in entrypoints {
-        debug!("Removing executable: `{}`", executable.simplified_display());
+        debug!("Removing executable: {}", executable.simplified_display());
         if let Err(err) = fs_err::remove_file(executable) {
             warn!(
-                "Failed to remove executable: `{}`: {err}",
+                "Failed to remove executable `{}`: {err}",
                 executable.simplified_display()
             );
         }
@@ -528,6 +528,8 @@ impl ToolLock {
             &BTreeMap::new(),
             requirements,
             &BTreeMap::new(),
+            &BTreeMap::new(),
+            None,
             constraints,
             &overrides,
             excludes,
@@ -645,12 +647,11 @@ pub(crate) async fn refine_interpreter(
     reporter: &PythonDownloadReporter,
     install_mirrors: &PythonInstallMirrors,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
-) -> anyhow::Result<Option<Interpreter>, ProjectError> {
-    let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
-        err
-    else {
+) -> Result<Option<Interpreter>, uv_python::Error> {
+    let Some(no_solution_err) = err.as_no_solution() else {
         return Ok(None);
     };
 
@@ -703,12 +704,12 @@ pub(crate) async fn refine_interpreter(
         Some(&requires_python_request),
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_arch,
         python_downloads,
         client_builder,
         cache,
         Some(reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.mirrors(),
         install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
@@ -717,7 +718,10 @@ pub(crate) async fn refine_interpreter(
     // If the user passed a `--python` request, and the refined interpreter is incompatible, we
     // can't use it.
     if let Some(python_request) = python_request {
-        if !python_request.satisfied(&interpreter, cache) {
+        if !python_request
+            .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
+            .satisfied(&interpreter, cache)
+        {
             return Ok(None);
         }
     }
@@ -897,7 +901,7 @@ pub(crate) fn finalize_tool_install(
 
         let mut names = BTreeSet::new();
         for (name, src, target) in target_entrypoints {
-            debug!("Installing executable: `{name}`");
+            debug!("Installing executable: {name}");
 
             #[cfg(unix)]
             replace_symlink(src, &target).context("Failed to install executable")?;

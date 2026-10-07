@@ -13,8 +13,8 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
-    Index, IndexLocations, IndexUrl, IndexUrlError, Origin, PackageConfigSettings, PipExtraIndex,
-    PipFindLinks, PipIndex, StaticMetadata,
+    Index, IndexLocations, IndexUrl, IndexUrlError, MinimumLibcVersion, Origin,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -22,7 +22,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::{
@@ -164,6 +164,9 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub required_environments: Option<SupportedEnvironments>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub minimum_libc_version: Option<MinimumLibcVersion>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -1355,6 +1358,22 @@ pub struct PythonInstallMirrors {
         "#
     )]
     pub pypy_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed GraalPy installations.
+    ///
+    /// By default, managed GraalPy installations are downloaded from [GitHub](https://github.com/oracle/graalpython/releases).
+    /// This variable can be set to a mirror URL to use a different source for GraalPy installations.
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g., `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            graalpy-install-mirror = "https://github.com/oracle/graalpython/releases/download"
+        "#
+    )]
+    pub graalpy_install_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     #[option(
@@ -1369,11 +1388,21 @@ pub struct PythonInstallMirrors {
 }
 
 impl PythonInstallMirrors {
+    /// Return the mirrors to use for managed Python downloads.
+    pub fn mirrors(&self) -> PythonDownloadMirrors<'_> {
+        PythonDownloadMirrors {
+            cpython: self.python_install_mirror.as_deref(),
+            pypy: self.pypy_install_mirror.as_deref(),
+            graalpy: self.graalpy_install_mirror.as_deref(),
+        }
+    }
+
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
         Self {
             python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
             pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            graalpy_install_mirror: self.graalpy_install_mirror.or(other.graalpy_install_mirror),
             python_downloads_json_url: self
                 .python_downloads_json_url
                 .or(other.python_downloads_json_url),
@@ -2613,6 +2642,7 @@ struct OptionsWire {
     // install_mirror: PythonInstallMirrors,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    graalpy_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
 
     // #[serde(flatten)]
@@ -2638,6 +2668,7 @@ struct OptionsWire {
     build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
+    minimum_libc_version: Option<MinimumLibcVersion>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2673,6 +2704,7 @@ impl TryFrom<OptionsWire> for Options {
             python_downloads,
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
             python_downloads_json_url,
             concurrent_downloads,
             concurrent_builds,
@@ -2721,6 +2753,7 @@ impl TryFrom<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
+            minimum_libc_version,
             conflicts,
             publish_url,
             trusted_publishing,
@@ -2803,9 +2836,11 @@ impl TryFrom<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
+            minimum_libc_version,
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
+                graalpy_install_mirror,
                 python_downloads_json_url,
             },
             conflicts,

@@ -11,6 +11,35 @@ use uv_test::packse::PackseServer;
 use uv_test::uv_snapshot;
 
 #[test]
+fn audit_offline() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.audit().arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    uv_snapshot!(context.filters(), context.audit().env(EnvVars::UV_OFFLINE, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {"
+        offline = true
+    "})?;
+
+    uv_snapshot!(context.filters(), context.audit(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Auditing requires network access and cannot be performed in offline mode
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn audit_invalid_service_url() {
     let context = uv_test::test_context!("3.12");
 
@@ -57,11 +86,11 @@ fn audit_reuses_settings_workspace_discovery() -> Result<()> {
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/member
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and no adverse project statuses in 0 packages
     ");
@@ -797,7 +826,7 @@ async fn audit_extras() {
     ");
 }
 
-/// Non-default dependency groups are included when explicitly requested.
+/// Dependency group filters limit the groups included in an audit.
 #[tokio::test]
 async fn audit_dependency_groups() {
     let context = uv_test::test_context!("3.12");
@@ -879,6 +908,69 @@ async fn audit_dependency_groups() {
         .arg("audit")
         .arg("--only-group")
         .arg("lint")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+}
+
+/// `--no-default-groups` disables all implicit dependency groups in an audit.
+#[tokio::test]
+async fn audit_no_default_groups() {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [dependency-groups]
+        dev = ["typing-extensions==4.10.0"]
+        lint = ["sniffio==1.3.1"]
+
+        [tool.uv]
+        default-groups = ["dev"]
+    "#})
+        .unwrap();
+
+    context.lock().assert().success();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+
+    // All groups are audited by default, including lint, which is not in default-groups.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Found no known vulnerabilities and no adverse project statuses in 3 packages
+    ");
+
+    // Disabling implicit groups leaves only the project's dependencies.
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--no-default-groups")
         .arg("--service-url")
         .arg(server.uri()), @"
     exit_code: 0 (success)

@@ -24,8 +24,8 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
-    PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
@@ -41,9 +41,10 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
-    LinkErrorReporting, WorkspacePython, centralized_environment_root,
-    centralized_environments_enabled, is_centralized_environment_reference,
-    lock_project_environment, update_project_environment_link, validate_project_requires_python,
+    LinkErrorReporting, ProjectEnvironmentTarget, ProjectPythonRequest,
+    centralized_environment_root, centralized_environments_enabled,
+    is_centralized_environment_reference, lock_project_environment,
+    update_project_environment_link,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -67,6 +68,7 @@ pub(crate) async fn venv(
     python_request: Option<PythonRequest>,
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
@@ -147,11 +149,7 @@ pub(crate) async fn venv(
         None => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
-    let WorkspacePython {
-        source,
-        python_request,
-        requires_python,
-    } = WorkspacePython::from_request(
+    let project_python = ProjectPythonRequest::from_request(
         python_request,
         project.as_ref().map(VirtualProject::workspace),
         &groups,
@@ -163,15 +161,15 @@ pub(crate) async fn venv(
     // Locate the Python interpreter to use in the environment
     let interpreter = {
         let python = PythonInstallation::find_or_download(
-            python_request.as_ref(),
+            project_python.python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
             python_preference,
+            python_arch,
             python_downloads,
             client_builder,
             cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
@@ -179,13 +177,19 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
-    let upgradeable = python_request
+    let upgradeable = project_python
+        .python_request
         .as_ref()
         .is_none_or(|request| !request.includes_patch());
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {
-        centralized_environment_root(workspace, &interpreter, upgradeable, cache)
+        centralized_environment_root(
+            ProjectEnvironmentTarget::from(workspace),
+            &interpreter,
+            upgradeable,
+            cache,
+        )
     } else {
         path.or_else(|| {
             project_environment.as_ref().map(|(_, selection)| {
@@ -198,19 +202,8 @@ pub(crate) async fn venv(
     };
 
     // Check if the discovered Python version is incompatible with the current workspace
-    if let Some(requires_python) = requires_python {
-        match validate_project_requires_python(
-            &interpreter,
-            project.as_ref().map(VirtualProject::workspace),
-            &groups,
-            &requires_python,
-            &source,
-        ) {
-            Ok(()) => {}
-            Err(err) => {
-                warn_user!("{err}");
-            }
-        }
+    if let Err(err) = project_python.check(&interpreter) {
+        warn_user!("{err}");
     }
 
     let with_seed = match seed {
@@ -236,7 +229,7 @@ pub(crate) async fn venv(
 
     // Lock the project environment to avoid synchronization issues.
     let _lock = if let Some((workspace, _)) = project_environment.as_ref() {
-        lock_project_environment(workspace)
+        lock_project_environment(ProjectEnvironmentTarget::from(*workspace))
             .await
             .inspect_err(|err| {
                 warn!("Failed to acquire project environment lock: {err}");
@@ -378,7 +371,11 @@ pub(crate) async fn venv(
 
     // Determine the appropriate environment path.
     let scripts = if let Some(workspace) = centralized_workspace
-        && update_project_environment_link(&venv, workspace, LinkErrorReporting::User)
+        && update_project_environment_link(
+            &venv,
+            ProjectEnvironmentTarget::from(workspace),
+            LinkErrorReporting::User,
+        )
         && let Ok(suffix) = venv.scripts().strip_prefix(&path)
     {
         workspace.install_path().join(".venv").join(suffix)

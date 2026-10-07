@@ -6,7 +6,7 @@
 #
 # CI that:
 #
-# * checks for a Git Tag that looks like a release
+# * reads the release version from project metadata
 # * builds artifacts with dist (archives, installers, hashes)
 # * uploads those artifacts to temporary workflow zip
 # * on success, uploads the artifacts to a GitHub Release
@@ -17,35 +17,16 @@
 name: Release
 permissions: {}
 
-# This task will run whenever you workflow_dispatch with a tag that looks like a version
-# like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
-# Various formats will be parsed into a VERSION and an optional PACKAGE_NAME, where
-# PACKAGE_NAME must be the name of a Cargo package in your workspace, and VERSION
-# must be a Cargo-style SemVer Version (must have at least major.minor.patch).
-#
-# If PACKAGE_NAME is specified, then the announcement will be for that
-# package (erroring out if it doesn't have the given version or isn't dist-able).
-#
-# If PACKAGE_NAME isn't specified, then the announcement will be for all
-# (dist-able) packages in the workspace with that version (this mode is
-# intended for workspaces with only one dist-able package, or with all dist-able
-# packages versioned/released in lockstep).
-#
-# If you push multiple tags at once, separate instances of this workflow will
-# spin up, creating an independent announcement for each one. However, GitHub
-# will hard limit this to 3 tags per commit, as it will assume more tags is a
-# mistake.
-#
-# If there's a prerelease-style suffix to the version, then the release(s)
-# will be marked as a prerelease.
+# Run after merging the release version bump. The shared project version must
+# be a Cargo-style SemVer version; cargo-dist uses it to identify prereleases.
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: Release Tag
+      dry-run:
+        description: Build release artifacts without publishing
         required: true
-        default: dry-run
-        type: string
+        default: false
+        type: boolean
 
 env:
   # Release actions must not consume shared GitHub Actions caches.
@@ -72,12 +53,14 @@ jobs:
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
     runs-on: "depot-ubuntu-latest-4"
+    permissions:
+      contents: read
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
       artifact: ${{ steps.upload.outputs.artifact-id }}
-      tag: ${{ (inputs.tag != 'dry-run' && inputs.tag) || '' }}
-      tag-flag: ${{ inputs.tag && inputs.tag != 'dry-run' && format('--tag={0}', inputs.tag) || '' }}
-      publishing: ${{ inputs.tag && inputs.tag != 'dry-run' }}
+      tag: ${{ steps.release-tag.outputs.tag }}
+      tag-flag: ${{ !inputs.dry-run && format('--tag={0}', steps.release-tag.outputs.tag) || '' }}
+      publishing: ${{ !inputs.dry-run }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -86,27 +69,44 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.14"
           checksum: "18ef5c3888ae59828cb13f38d57e9389b8173ecc719eff163bfafc74b38f5936"
-      # sure would be cool if github gave us proper conditionals...
-      # so here's a doubly-nested ternary-via-truthiness to try to provide the best possible
-      # functionality based on whether this is a pull_request, and whether it's from a fork.
-      # (PRs run on the *source* but secrets are usually on the *target* -- that's *good*
-      # but also really annoying to build CI around when it needs secrets to work right.)
+      - name: Resolve release tag
+        if: ${{ !inputs.dry-run }}
+        id: release-tag
+        run: |
+          tag="$(uv version --short --color never)"
+          # A dispatch before the version bump merges must not republish the previous release.
+          release_exists="$(gh api graphql \
+            -f owner="$GITHUB_REPOSITORY_OWNER" \
+            -f name="${GITHUB_REPOSITORY#*/}" \
+            -f tag="$tag" \
+            -f query="query(\$owner: String!, \$name: String!, \$tag: String!) { repository(owner: \$owner, name: \$name) { release(tagName: \$tag) { id } } }" \
+            --jq '.data.repository | if . == null then error("Repository not found") else .release != null end')"
+          if [[ "$release_exists" != "false" ]]; then
+            echo "::error::Release $tag already exists"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - id: plan
         run: |
-          uv run --only-dev dist ${DIST_CMD} --output-format=json > plan-dist-manifest.json
+          dist_args=(plan)
+          if [[ "$PUBLISHING" == "true" ]]; then
+            dist_args=(host --steps=create "--tag=$RELEASE_TAG")
+          fi
+          uv run --only-dev dist "${dist_args[@]}" --output-format=json > plan-dist-manifest.json
           echo "dist ran successfully"
           cat plan-dist-manifest.json
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
         env:
-          DIST_CMD: ${{ (inputs.tag && inputs.tag != 'dry-run' && format('host --steps=create --tag={0}', inputs.tag)) || 'plan' }}
+          PUBLISHING: ${{ !inputs.dry-run }}
+          RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
       - name: "Upload dist-manifest.json"
         id: upload
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-manifest-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: plan-dist-manifest.json
@@ -114,7 +114,6 @@ jobs:
   build-release-artifacts:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     uses: $/.github/workflows/build-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -125,7 +124,6 @@ jobs:
   build-docker:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     uses: $/.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -153,7 +151,6 @@ jobs:
       - plan
       - build-release-artifacts
       - assemble-release-artifacts
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     runs-on: "depot-ubuntu-latest-4"
     outputs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
@@ -163,7 +160,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.14"
@@ -189,7 +186,7 @@ jobs:
           mv "$temp_manifest" target/distrib/local-dist-manifest.json
       - name: Upload synthesized local dist manifest
         id: upload
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-manifest-local-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/distrib/local-dist-manifest.json
@@ -214,7 +211,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.14"
@@ -252,13 +249,13 @@ jobs:
             done
       - name: "Upload artifacts"
         id: artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-github-global-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.cargo-dist.outputs.paths }}
       - name: "Upload global dist manifest"
         id: manifest
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-manifest-global-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.BUILD_MANIFEST_NAME }}
@@ -285,7 +282,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.14"
@@ -309,7 +306,7 @@ jobs:
           DIST_TAG_FLAG: ${{ needs.plan.outputs.tag-flag }}
       - name: "Upload dist-manifest.json"
         id: manifest
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-github-manifest-${{ github.run_id }}-${{ github.run_attempt }}
           path: dist-manifest.json
@@ -442,6 +439,9 @@ jobs:
     # Use `always() && ...` so this job gates only on whether `publish-github`
     # completed successfully.
     if: ${{ always() && needs.publish-github.result == 'success' }}
+    permissions:
+      contents: read
+      id-token: write
     uses: $/.github/workflows/publish-docs.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -452,6 +452,9 @@ jobs:
       - plan
       - publish-github
     if: ${{ always() && needs.publish-github.result == 'success' }}
+    permissions:
+      contents: read
+      id-token: write # for the credential broker
     uses: $/.github/workflows/publish-versions.yml
     with:
       plan: ${{ needs.plan.outputs.val }}

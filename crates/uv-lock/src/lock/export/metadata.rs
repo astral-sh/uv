@@ -8,9 +8,8 @@ use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, StringVersion};
-use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, ModuleName};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, HashDigest, ModuleName};
 use uv_python::{Interpreter, LenientImplementationName, PythonEnvironment};
-use uv_workspace::Workspace;
 
 use crate::lock::{
     Dependency, DirectSource, Package, PackageId, RegistrySource, Source, SourceDist,
@@ -533,49 +532,43 @@ fn root_dependencies<'lock>(
 /// Dependency markers in the lock are simplified under the conditions required to reach their
 /// parent. Metadata consumers evaluate each edge marker independently, so restore those conditions
 /// by propagating markers from the metadata graph's entry points.
-fn metadata_reachability(
+fn metadata_reachability<'lock>(
     workspace_root: &PortablePathBuf,
-    workspace: Option<&Workspace>,
-    lock: &Lock,
+    members: impl Iterator<Item = &'lock Package>,
+    lock: &'lock Lock,
 ) -> BTreeMap<MetadataNodeIdFlat, MarkerTree> {
     let mut reachability = BTreeMap::new();
     let mut queue = VecDeque::new();
     let always = MarkerTree::TRUE;
 
-    if let Some(workspace) = workspace {
-        for package in lock
-            .packages()
-            .iter()
-            .filter(|package| workspace.packages().contains_key(package.name()))
-        {
+    for package in members {
+        add_metadata_reachability(
+            workspace_root,
+            &mut reachability,
+            &mut queue,
+            package,
+            MetadataNodeKind::Package,
+            always,
+        );
+        for extra in package.optional_dependencies.keys() {
             add_metadata_reachability(
                 workspace_root,
                 &mut reachability,
                 &mut queue,
                 package,
-                MetadataNodeKind::Package,
+                MetadataNodeKind::Extra(extra.clone()),
                 always,
             );
-            for extra in package.optional_dependencies.keys() {
-                add_metadata_reachability(
-                    workspace_root,
-                    &mut reachability,
-                    &mut queue,
-                    package,
-                    MetadataNodeKind::Extra(extra.clone()),
-                    always,
-                );
-            }
-            for group in package.dependency_groups.keys() {
-                add_metadata_reachability(
-                    workspace_root,
-                    &mut reachability,
-                    &mut queue,
-                    package,
-                    MetadataNodeKind::Group(group.clone()),
-                    always,
-                );
-            }
+        }
+        for group in package.dependency_groups.keys() {
+            add_metadata_reachability(
+                workspace_root,
+                &mut reachability,
+                &mut queue,
+                package,
+                MetadataNodeKind::Group(group.clone()),
+                always,
+            );
         }
     }
 
@@ -974,9 +967,12 @@ impl MetadataSource {
 
 fn normalize_workspace_relative_path(
     workspace_root: &PortablePathBuf,
-    maybe_rel: &std::path::Path,
+    maybe_rel: &Path,
 ) -> PortablePathBuf {
-    if maybe_rel.is_absolute() {
+    if maybe_rel.as_os_str().is_empty() || maybe_rel == Path::new(".") {
+        // Reuse the root path without appending a trailing separator or `.`.
+        workspace_root.clone()
+    } else if maybe_rel.is_absolute() {
         PortablePathBuf::from(maybe_rel)
     } else {
         PortablePathBuf::from(workspace_root.as_ref().join(maybe_rel).as_path())
@@ -1054,8 +1050,8 @@ type Hash = String;
 ///
 /// We prefer matching PEP 691 (JSON-based Simple API for Python) here for future-proofing
 /// and convenience of consumption.
-fn hashes_map(hash: &crate::lock::Hash) -> BTreeMap<HashAlgorithm, Hash> {
-    Some((hash.0.algorithm().to_string(), hash.0.digest().to_string()))
+fn hashes_map(hash: &HashDigest) -> BTreeMap<HashAlgorithm, Hash> {
+    Some((hash.algorithm().to_string(), hash.digest().to_string()))
         .into_iter()
         .collect()
 }
@@ -1256,38 +1252,49 @@ impl MetadataConflictKind {
     }
 }
 
+/// The source of the metadata graph's workspace or script entry points.
+#[derive(Clone, Copy)]
+enum MetadataTarget<'a> {
+    Workspace(&'a Path),
+    Script(&'a Path),
+}
+
+impl<'a> MetadataTarget<'a> {
+    fn workspace_root(self) -> &'a Path {
+        match self {
+            Self::Workspace(root) => root,
+            Self::Script(path) => path.parent().unwrap_or_else(|| Path::new("")),
+        }
+    }
+}
+
 impl Metadata {
     /// Construct [`Metadata`] for a workspace from a uv lockfile.
-    pub fn from_lock(workspace: &Workspace, lock: &Lock) -> Result<Self, MetadataError> {
-        Ok(Self::from_lock_target(
-            workspace.install_path(),
-            Some(workspace),
-            None,
-            lock,
-        ))
+    ///
+    /// Relative package paths are resolved against `workspace_root`. Script lockfiles are treated
+    /// as workspaces because they do not identify the original script.
+    pub fn from_lockfile(workspace_root: &Path, lock: &Lock) -> Self {
+        Self::from_lock_target(MetadataTarget::Workspace(workspace_root), lock)
     }
 
     /// Construct [`Metadata`] for a script from a uv lockfile.
-    pub fn from_script(script_path: &Path, lock: &Lock) -> Result<Self, MetadataError> {
-        let workspace_root = script_path.parent().unwrap_or_else(|| Path::new(""));
-        Ok(Self::from_lock_target(
-            workspace_root,
-            None,
-            Some(script_path),
-            lock,
-        ))
+    pub fn from_script(script_path: &Path, lock: &Lock) -> Self {
+        Self::from_lock_target(MetadataTarget::Script(script_path), lock)
     }
 
-    fn from_lock_target(
-        workspace_root: &Path,
-        workspace: Option<&Workspace>,
-        script_path: Option<&Path>,
-        lock: &Lock,
-    ) -> Self {
+    fn from_lock_target(target: MetadataTarget<'_>, lock: &Lock) -> Self {
         let mut resolve = BTreeMap::new();
-        let mut members = Vec::new();
-        let workspace_root = PortablePathBuf::from(workspace_root);
-        let reachability = metadata_reachability(&workspace_root, workspace, lock);
+        let workspace_root = PortablePathBuf::from(target.workspace_root());
+        let workspace_packages = lock.packages().iter().filter(|package| match target {
+            MetadataTarget::Workspace(_) => lock.is_workspace_member(package),
+            MetadataTarget::Script(_) => false,
+        });
+        let reachability = metadata_reachability(&workspace_root, workspace_packages.clone(), lock);
+        let members = workspace_packages
+            .filter_map(|package| {
+                MetadataWorkspaceMember::from_locked_package(&workspace_root, &package.id)
+            })
+            .collect::<Vec<_>>();
 
         for lock_package in lock.packages() {
             let mut meta_package = MetadataNode::from_package_id(
@@ -1357,21 +1364,6 @@ impl Metadata {
                 resolve.insert(meta_group.id.to_flat(), meta_group);
             }
 
-            // Register this package if it appears to be a workspace member
-            if let Some(workspace_package) =
-                workspace.and_then(|workspace| workspace.packages().get(lock_package.name()))
-            {
-                let member = MetadataWorkspaceMember {
-                    name: lock_package.name().clone(),
-                    path: normalize_workspace_relative_path(
-                        &workspace_root,
-                        workspace_package.root().as_path(),
-                    ),
-                    id: meta_package.id.to_flat(),
-                };
-                members.push(member);
-            }
-
             // Record sdist/wheel information
             if let Some(sdist) = &lock_package.sdist {
                 meta_package.sdist = Some(MetadataSourceDist::from_sdist(&workspace_root, sdist));
@@ -1382,7 +1374,7 @@ impl Metadata {
             resolve.insert(meta_package.id.to_flat(), meta_package);
         }
 
-        let script = script_path.map(|path| {
+        let script = if let MetadataTarget::Script(path) = target {
             let path = PortablePathBuf::from(path);
             let node = MetadataNode::from_script(
                 path.clone(),
@@ -1390,30 +1382,35 @@ impl Metadata {
             );
             let id = node.id.to_flat();
             resolve.insert(id.clone(), node);
-            MetadataScript::new(path, id)
-        });
+            Some(MetadataScript::new(path, id))
+        } else {
+            None
+        };
 
-        let workspace_metadata = workspace.map(|_| {
-            let mut dependency_groups = Vec::new();
-            for (group, requirements) in lock.dependency_groups() {
-                let node = MetadataNode::from_workspace_group(
-                    workspace_root.clone(),
-                    group.clone(),
-                    root_dependencies(&workspace_root, lock, requirements),
-                );
+        let workspace_metadata = match target {
+            MetadataTarget::Script(_) => None,
+            MetadataTarget::Workspace(_) => {
+                let mut dependency_groups = Vec::new();
+                for (group, requirements) in lock.dependency_groups() {
+                    let node = MetadataNode::from_workspace_group(
+                        workspace_root.clone(),
+                        group.clone(),
+                        root_dependencies(&workspace_root, lock, requirements),
+                    );
+                    let id = node.id.to_flat();
+                    resolve.insert(id.clone(), node);
+                    dependency_groups.push(MetadataGroup {
+                        name: group.clone(),
+                        id,
+                    });
+                }
+
+                let node = MetadataNode::from_workspace(workspace_root.clone(), dependency_groups);
                 let id = node.id.to_flat();
                 resolve.insert(id.clone(), node);
-                dependency_groups.push(MetadataGroup {
-                    name: group.clone(),
-                    id,
-                });
+                Some(MetadataWorkspace::new(workspace_root.clone(), id))
             }
-
-            let node = MetadataNode::from_workspace(workspace_root.clone(), dependency_groups);
-            let id = node.id.to_flat();
-            resolve.insert(id.clone(), node);
-            MetadataWorkspace::new(workspace_root.clone(), id)
-        });
+        };
         let conflicts = MetadataConflicts::from_conflicts(&members, &resolve, &lock.conflicts);
 
         Self {

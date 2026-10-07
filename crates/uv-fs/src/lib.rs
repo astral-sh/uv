@@ -170,25 +170,34 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 ///
 /// This should generally only be used when one specifically wants to support reading UTF-16
 /// transparently.
-///
-/// If the file path is `-`, then contents are read from stdin instead.
 #[cfg(feature = "tokio")]
 pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
     let path = path.as_ref();
-    let raw = if path == Path::new("-") {
-        let mut buf = Vec::with_capacity(1024);
-        std::io::stdin().read_to_end(&mut buf)?;
-        buf
-    } else {
-        fs_err::tokio::read(path).await?
-    };
+    let raw = fs_err::tokio::read(path).await?;
+    transcode_to_string(&raw, &format!("file `{}`", path.display()))
+}
+
+/// Reads data from stdin and requires that it be valid UTF-8 or UTF-16.
+///
+/// This uses BOM sniffing to determine if the data should be transcoded from UTF-16 to Rust's
+/// `String` type (which uses UTF-8).
+#[cfg(feature = "tokio")]
+pub fn read_stdin_to_string_transcode() -> std::io::Result<String> {
+    let mut raw = Vec::with_capacity(1024);
+    std::io::stdin().read_to_end(&mut raw)?;
+    transcode_to_string(&raw, "stdin")
+}
+
+#[cfg(feature = "tokio")]
+fn transcode_to_string(raw: &[u8], source: &str) -> std::io::Result<String> {
+    // The decoder needs three bytes to detect a BOM, so handle empty UTF-16 files explicitly.
+    if raw == [0xff, 0xfe] || raw == [0xfe, 0xff] {
+        return Ok(String::new());
+    }
     let mut buf = String::with_capacity(1024);
-    DecodeReaderBytes::new(&*raw)
+    DecodeReaderBytes::new(raw)
         .read_to_string(&mut buf)
-        .map_err(|err| {
-            let path = path.display();
-            std::io::Error::other(format!("failed to decode file {path}: {err}"))
-        })?;
+        .map_err(|err| std::io::Error::other(format!("failed to decode {source}: {err}")))?;
     Ok(buf)
 }
 
@@ -269,7 +278,7 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "Cannot create a directory link for {}: is not a directory",
+                "Cannot create a directory link for `{}`: is not a directory",
                 src.display()
             ),
         ));
@@ -353,7 +362,7 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "Cannot create a directory link for {}: is not a directory",
+                "Cannot create a directory link for `{}`: is not a directory",
                 src.display()
             ),
         ));
@@ -542,7 +551,7 @@ pub async fn rename_with_retry(
             .when(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
-                    "Retrying rename from {} to {} due to transient error: {}",
+                    "Retrying rename from `{}` to `{}` due to transient error: {}",
                     from.display(),
                     to.display(),
                     err
@@ -583,7 +592,7 @@ pub fn with_retry_sync(
             .when(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
-                    "Retrying {} from {} to {} due to transient error: {}",
+                    "Retrying {} from `{}` to `{}` due to transient error: {}",
                     operation_name,
                     from.display(),
                     to.display(),
@@ -593,7 +602,7 @@ pub fn with_retry_sync(
             .call()
             .map_err(|err| {
                 std::io::Error::other(format!(
-                    "Failed {} {} to {}: {}",
+                    "Failed {} `{}` to `{}`: {}",
                     operation_name,
                     from.display(),
                     to.display(),
@@ -686,7 +695,7 @@ async fn persist_with_retry(
             .notify(|err, _dur| {
                 if let PersistRetryError::Persist(error_message) = err {
                     warn!(
-                        "Retrying to persist temporary file to {}: {}",
+                        "Retrying to persist temporary file to `{}`: {}",
                         to.display(),
                         error_message,
                     );
@@ -697,12 +706,12 @@ async fn persist_with_retry(
         match persisted {
             Ok(_) => Ok(()),
             Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
-                "Failed to persist temporary file to {}: {}",
+                "Failed to persist temporary file to `{}`: {}",
                 to.display(),
                 error_message,
             ))),
             Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
-                "Failed to retrieve temporary file while trying to persist to {}",
+                "Failed to retrieve temporary file while trying to persist to `{}`",
                 to.display()
             ))),
         }
@@ -757,7 +766,7 @@ pub fn persist_with_retry_sync(
             .notify(|err, _dur| {
                 if let PersistRetryError::Persist(error_message) = err {
                     warn!(
-                        "Retrying to persist temporary file to {}: {}",
+                        "Retrying to persist temporary file to `{}`: {}",
                         to.display(),
                         error_message,
                     );
@@ -768,12 +777,12 @@ pub fn persist_with_retry_sync(
         match persisted {
             Ok(_) => Ok(()),
             Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
-                "Failed to persist temporary file to {}: {}",
+                "Failed to persist temporary file to `{}`: {}",
                 to.display(),
                 error_message,
             ))),
             Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
-                "Failed to retrieve temporary file while trying to persist to {}",
+                "Failed to retrieve temporary file while trying to persist to `{}`",
                 to.display()
             ))),
         }
@@ -1028,6 +1037,37 @@ mod tests {
     use std::assert_matches;
 
     use super::*;
+
+    #[cfg(feature = "tokio")]
+    #[test]
+    fn transcodes_bom_marked_input() -> io::Result<()> {
+        // Include a surrogate pair and an interior BOM that must remain part of the text.
+        let contents = "# café 🐍\u{feff} end\r\npackage==1.0\n";
+        let utf8 = contents.as_bytes().to_vec();
+        let utf8_bom = [b"\xef\xbb\xbf".as_slice(), contents.as_bytes()].concat();
+        let utf16_le = [0xff, 0xfe]
+            .into_iter()
+            .chain(contents.encode_utf16().flat_map(u16::to_le_bytes))
+            .collect::<Vec<_>>();
+        let utf16_be = [0xfe, 0xff]
+            .into_iter()
+            .chain(contents.encode_utf16().flat_map(u16::to_be_bytes))
+            .collect::<Vec<_>>();
+
+        for (source, encoded, expected) in [
+            ("utf8", utf8, contents),
+            ("utf8-bom", utf8_bom, contents),
+            ("utf16-le", utf16_le, contents),
+            ("utf16-be", utf16_be, contents),
+            ("empty", vec![], ""),
+            ("utf8-bom-only", b"\xef\xbb\xbf".to_vec(), ""),
+            ("utf16-le-bom-only", b"\xff\xfe".to_vec(), ""),
+            ("utf16-be-bom-only", b"\xfe\xff".to_vec(), ""),
+        ] {
+            assert_eq!(transcode_to_string(&encoded, source)?, expected, "{source}");
+        }
+        Ok(())
+    }
 
     #[test]
     fn remove_symlink_removes_directory_link_without_removing_target() -> io::Result<()> {

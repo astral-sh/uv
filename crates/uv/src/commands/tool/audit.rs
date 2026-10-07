@@ -40,6 +40,10 @@ pub(crate) async fn audit(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if client_builder.is_offline() {
+        bail!("Auditing requires network access and cannot be performed in offline mode");
+    }
+
     let mut missing_features = Vec::new();
     if !preview.is_enabled(PreviewFeature::AuditCommand) {
         missing_features.push("audit");
@@ -202,7 +206,8 @@ pub(crate) async fn audit(
             &root,
             &extras,
             &groups,
-            &settings.resolver,
+            &settings.resolver.index_locations,
+            settings.resolver.keyring_provider,
             client_builder.clone(),
             concurrency.clone(),
             cache,

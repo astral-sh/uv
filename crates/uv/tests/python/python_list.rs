@@ -2,14 +2,58 @@
 use std::os::unix::fs::PermissionsExt;
 
 use uv_platform::{Arch, Os};
+use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
 
 use anyhow::Result;
+use assert_fs::prelude::*;
+use indoc::indoc;
 use uv_test::uv_snapshot;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
 };
+
+#[test]
+fn python_list_default_arch() {
+    let context = uv_test::test_context_with_versions!(&[]).with_collapsed_whitespace();
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.14.0-windows-any-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-windows-x86_64-none <download available>
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.14.0-windows-aarch64-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-windows-aarch64-none <download available>
+    ");
+
+    // Windows PyPy has only an x86-64 build, so the output order is host-independent.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("pypy-3.11.15-windows-any-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "aarch64"), @"
+    exit_code: 0 (success)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("pypy-3.11.15-windows-any-none")
+        .arg("--only-downloads")
+        .arg("--all-arches")
+        .env(EnvVars::UV_PYTHON_ARCH, "aarch64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    pypy-3.11.15-windows-x86_64-none <download available>
+    ");
+}
 
 #[test]
 fn python_list() {
@@ -97,6 +141,29 @@ fn python_list() {
     ----- stdout -----
     cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
     ");
+}
+
+#[test]
+fn python_list_unknown_managed_implementation() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let installation = context
+        .temp_dir
+        .join("managed")
+        .join(format!("unknown-3.12.0-{}", platform_key_from_env()?));
+    fs_err::create_dir_all(&installation)?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--only-installed"), @"
+    exit_code: 0 (success)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    There are no installed versions to upgrade
+    ");
+
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -425,6 +492,7 @@ fn python_list_downloads() {
     exit_code: 0 (success)
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM]    <download available>
+    cpython-3.10.21-[PLATFORM]    <download available>
     cpython-3.10.20-[PLATFORM]    <download available>
     cpython-3.10.19-[PLATFORM]    <download available>
     cpython-3.10.18-[PLATFORM]    <download available>
@@ -561,6 +629,31 @@ fn python_list_managed_symlinks() {
 }
 
 #[tokio::test]
+async fn python_list_only_installed_skips_download_metadata() {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw("{", "application/json"))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--only-installed")
+        .arg("--python-downloads-json-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    ");
+}
+
+#[tokio::test]
 async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let server = MockServer::start().await;
@@ -649,8 +742,8 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/404", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/404'
-      cause: Failed to fetch: `http://[LOCALHOST]/404`
+    error: Error while fetching remote python downloads json from `http://[LOCALHOST]/404`
+      cause: Failed to fetch: http://[LOCALHOST]/404
       cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
     ");
 
@@ -661,7 +754,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/invalid", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid
+    error: Unable to parse the JSON Python download list at `http://[LOCALHOST]/invalid`
       cause: EOF while parsing an object at line 1 column 1
     ");
 
@@ -672,7 +765,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/invalid-hash", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid-hash
+    error: Unable to parse the JSON Python download list at `http://[LOCALHOST]/invalid-hash`
       cause: Invalid hash digest length (expected 64 hexadecimal characters, found 5) at line 16 column 29
     ");
 
@@ -680,7 +773,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
 }
 
 #[test]
-fn python_list_with_mirrors() {
+fn python_list_with_mirrors() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_collapsed_whitespace()
@@ -696,6 +789,10 @@ fn python_list_with_mirrors() {
         ))
         .with_filter((
             r"(https://pypy-mirror\.example\.com/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://graalpy-mirror\.example\.com/).*".to_string(),
             "$1[FILE-PATH]".to_string(),
         ))
         .with_filter((
@@ -739,18 +836,30 @@ fn python_list_with_mirrors() {
     pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
     ");
 
-    // Test with both mirror environment variables set
+    // Test with UV_GRAALPY_INSTALL_MIRROR environment variable.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("graalpy@3.10")
+        .arg("--show-urls")
+        .env(EnvVars::UV_GRAALPY_INSTALL_MIRROR, "https://graalpy-mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    graalpy-3.10.0-[PLATFORM] https://graalpy-mirror.example.com/[FILE-PATH]
+    ");
+
+    // Test with all mirror environment variables set.
     uv_snapshot!(context.filters(), context.python_list()
         .arg("3.10")
         .arg("--show-urls")
         .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "https://python-mirror.example.com")
         .env(EnvVars::UV_PYPY_INSTALL_MIRROR, "https://pypy-mirror.example.com")
+        .env(EnvVars::UV_GRAALPY_INSTALL_MIRROR, "https://graalpy-mirror.example.com")
         .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     exit_code: 0 (success)
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
     pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
-    graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
+    graalpy-3.10.0-[PLATFORM] https://graalpy-mirror.example.com/[FILE-PATH]
     ");
 
     // Test without mirrors - verify the default Astral mirror URL is used for CPython
@@ -764,4 +873,36 @@ fn python_list_with_mirrors() {
     pypy-3.10.16-[PLATFORM] https://downloads.python.org/pypy/[FILE-PATH]
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
     ");
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        python-install-mirror = "https://python-mirror.example.com"
+        pypy-install-mirror = "https://pypy-mirror.example.com"
+        graalpy-install-mirror = "https://graalpy-mirror.example.com"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--show-urls")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
+    pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
+    graalpy-3.10.0-[PLATFORM] https://graalpy-mirror.example.com/[FILE-PATH]
+    ");
+
+    // Each environment variable overrides only its corresponding configured mirror.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--show-urls")
+        .env(EnvVars::UV_PYPY_INSTALL_MIRROR, "https://mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.10.[LATEST]-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
+    pypy-3.10.16-[PLATFORM] https://mirror.example.com/[FILE-PATH]
+    graalpy-3.10.0-[PLATFORM] https://graalpy-mirror.example.com/[FILE-PATH]
+    ");
+
+    Ok(())
 }

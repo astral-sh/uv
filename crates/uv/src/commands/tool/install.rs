@@ -1,5 +1,7 @@
 use std::fmt::Write;
 use std::str::FromStr;
+use uv_dispatch::PlatformState;
+use uv_distribution_types::RequirementScope;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
@@ -9,22 +11,22 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyMode, DryRun, Excludes, GitLfsSetting, HashCheckingMode,
-    Overrides, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyMode, DependencyModifiers, DryRun, Excludes, GitLfsSetting,
+    HashCheckingMode, Overrides, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
-use uv_installer::{InstallationStrategy, Planner, SatisfiesResult, SitePackages};
+use uv_installer::{BuildSettings, InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -41,8 +43,8 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
-    EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
-    resolve_environment, resolve_names, sync_environment, update_environment,
+    EnvironmentResolution, EnvironmentSpecification, ProjectError, resolve_environment,
+    resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
@@ -73,6 +75,7 @@ pub(crate) async fn install(
     settings: ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -139,12 +142,12 @@ pub(crate) async fn install(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_arch,
         python_downloads,
         &client_builder,
         &cache,
         Some(&reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.mirrors(),
         install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
@@ -191,7 +194,7 @@ pub(crate) async fn install(
             let requirement = resolve_names(
                 requirements,
                 &interpreter,
-                &settings,
+                &settings.resolver,
                 &build_constraints,
                 &client_builder,
                 &state,
@@ -240,6 +243,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             }
         }
@@ -262,6 +266,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             }
         }
@@ -328,6 +333,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         } else {
@@ -381,7 +387,7 @@ pub(crate) async fn install(
             resolve_names(
                 spec.requirements.clone(),
                 &interpreter,
-                &settings,
+                &settings.resolver,
                 &build_constraints,
                 &client_builder,
                 &state,
@@ -438,7 +444,7 @@ pub(crate) async fn install(
     let receipt_overrides = resolve_names(
         spec.overrides,
         &interpreter,
-        &settings,
+        &settings.resolver,
         &build_constraints,
         &client_builder,
         &state,
@@ -584,6 +590,7 @@ pub(crate) async fn install(
                         ResolverSettings {
                             config_setting,
                             config_settings_package,
+                            dependency_metadata,
                             extra_build_dependencies,
                             extra_build_variables,
                             ..
@@ -619,16 +626,21 @@ pub(crate) async fn install(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
                         receipt_constraints.iter().chain(latest.iter()),
-                        &Overrides::from_requirements(receipt_overrides.clone()),
-                        &Excludes::from_entries(receipt_excludes.iter().cloned()),
+                        &DependencyModifiers::new(
+                            Overrides::from_requirements(receipt_overrides.clone()),
+                            Excludes::from_entries(receipt_excludes.iter().cloned()),
+                        ),
+                        dependency_metadata,
                         DependencyMode::Transitive,
                         InstallationStrategy::Permissive,
                         &markers,
                         &tags,
-                        config_setting,
-                        config_settings_package,
-                        &extra_build_requires,
-                        extra_build_variables,
+                        Some(BuildSettings {
+                            config_settings: config_setting,
+                            config_settings_package,
+                            extra_build_requires: &extra_build_requires,
+                            extra_build_variables,
+                        }),
                     ),
                     Ok(SatisfiesResult::Fresh { .. })
                 );
@@ -943,6 +955,7 @@ pub(crate) async fn install(
                             &reporter,
                             &install_mirrors,
                             python_preference,
+                            python_arch,
                             python_downloads,
                             &cache,
                         )

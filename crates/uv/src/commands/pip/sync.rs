@@ -1,11 +1,13 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
+use uv_cli::PipInstallFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
@@ -26,8 +28,8 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, Target,
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -41,8 +43,9 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::install_report::write_install_report;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
@@ -91,10 +94,12 @@ pub(crate) async fn pip_sync(
     prefix: Option<Prefix>,
     sources: NoSources,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     concurrency: Concurrency,
     cache: Cache,
     workspace_cache: WorkspaceCache,
     dry_run: DryRun,
+    output_format: PipInstallFormat,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -117,6 +122,7 @@ pub(crate) async fn pip_sync(
         override_dependencies,
         excludes,
         pylock,
+        pylock_groups,
         source_trees,
         groups,
         index_url,
@@ -163,6 +169,7 @@ pub(crate) async fn pip_sync(
                 printer.stderr(),
                 "No requirements found (hint: use `--allow-empty-requirements` to clear the environment)"
             )?;
+            write_install_report(&Changelog::default(), dry_run, output_format, printer)?;
             return Ok(ExitStatus::Success);
         }
     }
@@ -176,12 +183,12 @@ pub(crate) async fn pip_sync(
             python_request.as_ref(),
             EnvironmentPreference::from_system_flag(system, false),
             python_preference.with_system_flag(system),
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
@@ -195,6 +202,7 @@ pub(crate) async fn pip_sync(
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
             PythonPreference::default().with_system_flag(system),
+            python_arch,
             &cache,
         )?;
         report_target_environment(&environment, &cache, printer)?;
@@ -204,13 +212,13 @@ pub(crate) async fn pip_sync(
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
         debug!(
-            "Using `--target` directory at {}",
+            "Using `--target` directory at `{}`",
             target.root().user_display()
         );
         environment.with_target(target)?
     } else if let Some(prefix) = prefix {
         debug!(
-            "Using `--prefix` directory at {}",
+            "Using `--prefix` directory at `{}`",
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
@@ -225,13 +233,13 @@ pub(crate) async fn pip_sync(
         } else {
             return if let Some(error) = externally_managed.into_error() {
                 Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
+                    "The interpreter at `{}` is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
                 ))
             } else {
                 Err(anyhow::anyhow!(
-                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
+                    "The interpreter at `{}` is externally managed. Instead, create a virtual environment with `uv venv`.",
                     environment.root().user_display().cyan()
                 ))
             };
@@ -397,13 +405,17 @@ pub(crate) async fn pip_sync(
             .cloned()
             .collect::<Vec<_>>();
 
-        let groups = groups
-            .get(&pylock)
-            .cloned()
-            .unwrap_or_default()
-            .with_defaults(DefaultGroups::List(lock.default_groups.clone()));
+        let groups =
+            pylock_groups.with_defaults(DefaultGroups::from_groups(lock.default_groups.clone()));
         let groups = groups
             .group_names(lock.dependency_groups.iter())
+            // PEP 751 allows synthetic default groups that aren't publicly selectable.
+            .chain(
+                lock.default_groups
+                    .iter()
+                    .filter(|group| groups.contains_because_default(group)),
+            )
+            .unique()
             .cloned()
             .collect::<Vec<_>>();
 
@@ -440,11 +452,11 @@ pub(crate) async fn pip_sync(
             excludes,
             source_trees,
             project,
-            BTreeSet::default(),
+            BTreeMap::default(),
             extras,
             &groups,
             preferences,
-            site_packages.clone(),
+            Some(site_packages.clone()),
             &hasher,
             &reinstall,
             &upgrade,
@@ -459,6 +471,7 @@ pub(crate) async fn pip_sync(
             &build_dispatch,
             &concurrency,
             options,
+            None,
             Box::new(DefaultResolveLogger),
             printer,
         )
@@ -504,7 +517,7 @@ pub(crate) async fn pip_sync(
     );
 
     // Sync the environment.
-    match operations::install(
+    let changelog = match operations::install(
         &resolution,
         site_packages,
         InstallationStrategy::Permissive,
@@ -529,11 +542,15 @@ pub(crate) async fn pip_sync(
     )
     .await
     {
-        Ok(_) => {}
+        Ok(changelog) => changelog,
+        Err(operations::Error::OutdatedEnvironment(changelog)) => {
+            write_install_report(&changelog, dry_run, output_format, printer)?;
+            return Ok(ExitStatus::Failure);
+        }
         Err(err) => {
             return Err(UvError::from(err).into());
         }
-    }
+    };
 
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
@@ -550,5 +567,6 @@ pub(crate) async fn pip_sync(
         )?;
     }
 
+    write_install_report(&changelog, dry_run, output_format, printer)?;
     Ok(ExitStatus::Success)
 }

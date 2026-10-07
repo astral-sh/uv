@@ -18,15 +18,30 @@ env:
 
 jobs:
   plan:
+    # CI on main is redundant in the security repository.
+    if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
     uses: $/.github/workflows/plan.yml
 
   check-fmt:
+    needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
   review:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
-    uses: $/.github/workflows/pull-request-security-review.yml
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@45c506043c254690f2612686e5d5a72c81c251a4
+    with:
+      runner: depot-ubuntu-24.04-16
+      helper-runner: github-ubuntu-24.04-x86_64-4
+      # renovate: datasource=github-release-attachments depName=astral-sh/uv
+      uv-version: "0.12.13"
+      uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+      # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
+      # Keep the environment outside the checkout when switching to the PR head.
+      setup-command: |
+        export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-review-tools"
+        uv sync --locked --only-dev
+        echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
     secrets: inherit
     permissions:
       contents: read
@@ -64,6 +79,15 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-release.yml
+
+  check-crates-policies:
+    needs: plan
+    if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
+    uses: $/.github/workflows/check-crates-policies.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
 
   check-lock:
     needs: plan
@@ -280,7 +304,7 @@ jobs:
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
         run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
         env:
-          RUST_LOG: uv=debug,uv_publish=trace
+          UV_TEST_PUBLISH_RUST_LOG: uv=debug,uv_publish=trace
           UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
           UV_TEST_PUBLISH_PASSWORD: ${{ secrets.UV_TEST_PUBLISH_PASSWORD }}
           UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
@@ -292,11 +316,13 @@ jobs:
 
   required-checks-passed:
     name: "all required jobs passed"
-    if: always()
+    if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
+      - plan
       - check-fmt
       - check-lint
       - check-docs
+      - check-crates-policies
       - check-generated-files
       - test
       - test-system

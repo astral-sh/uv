@@ -17,7 +17,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.14
+  HAWK_VERSION: 0.1.15
   RUSTUP_MAX_RETRIES: 10
   UV_LOCKED: 1
 
@@ -30,7 +30,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
@@ -45,7 +45,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
@@ -89,7 +89,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
@@ -124,7 +124,9 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
       - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        env:
+          CARGO_BUILD_WARNINGS: deny
+        run: cargo clippy --workspace --all-targets --all-features --locked
 
   clippy-windows:
     name: "clippy on windows"
@@ -154,7 +156,9 @@ jobs:
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        env:
+          CARGO_BUILD_WARNINGS: deny
+        run: cargo clippy --workspace --all-targets --all-features --locked
 
   cargo-deny:
     name: "cargo deny"
@@ -165,7 +169,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
@@ -174,8 +178,8 @@ jobs:
         run: uv run --only-dev cargo deny --all-features check licenses
       - name: "Check sources"
         run: uv run --only-dev cargo deny --all-features check sources
-      - name: "Check workspace dependency features"
-        run: uv run --no-project scripts/check-cargo-default-features.py
+      - name: "Check workspace dependency features and build-script allowlist"
+        run: uv run --no-project scripts/check-cargo-bans.py
       - name: "Check bans"
         run: uv run --only-dev cargo deny --all-features check bans
       - name: "Check uv_build dependencies"
@@ -196,13 +200,13 @@ jobs:
           cache-workspace-crates: "false"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Install Rust toolchain"
-        run: rustup toolchain install 1.98.1
+        run: rustup toolchain install 1.99.0
       - name: "Install Hawk"
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
       - name: "Hawk"
-        run: cargo +1.98.1 hawk check --target-dir target/hawk -D warnings
+        run: cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
 
   shear:
     name: "cargo shear"
@@ -214,7 +218,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
@@ -229,7 +233,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"

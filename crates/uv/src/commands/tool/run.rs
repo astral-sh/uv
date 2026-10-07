@@ -1,8 +1,11 @@
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use uv_dispatch::PlatformState;
+use uv_distribution_types::RequirementScope;
 
 use anyhow::{Context, bail};
 use console::Term;
@@ -13,9 +16,11 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, DependencyMode, GitLfsSetting, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraints, DependencyMode, DependencyModifiers, Excludes, GitLfsSetting,
+    Overrides, TargetTriple,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -23,14 +28,14 @@ use uv_distribution_types::{
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_errors::HintOrdering;
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{BuildSettings, InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -49,9 +54,7 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
-use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
-};
+use crate::commands::project::{EnvironmentSpecification, ProjectError, resolve_names};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
@@ -142,7 +145,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
-    command: Option<ExternalCommand>,
+    command: Option<Vec<OsString>>,
     from: Option<String>,
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -159,6 +162,7 @@ pub(crate) async fn run(
     invocation_source: ToolRunCommand,
     isolated: bool,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -201,7 +205,7 @@ pub(crate) async fn run(
     let env_file_environment = if no_env_file {
         Vec::new()
     } else {
-        read_env_files(env_file.iter())?
+        read_env_files(env_file.as_slice())?
     };
 
     let Some(command) = command else {
@@ -211,8 +215,7 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Error);
     };
 
-    let (target, args) = command.split();
-    let Some(target) = target else {
+    let Some((target, args)) = command.split_first() else {
         return Err(anyhow::anyhow!("No tool command provided"));
     };
 
@@ -318,6 +321,7 @@ pub(crate) async fn run(
         isolated,
         lfs,
         python_preference,
+        python_arch,
         python_downloads,
         installer_metadata,
         &concurrency,
@@ -456,7 +460,7 @@ pub(crate) async fn run(
         }
         Err(err) => Err(err),
     }
-    .with_context(|| format!("Failed to spawn: `{executable}`"))?;
+    .with_context(|| format!("Failed to spawn: {executable}"))?;
 
     run_to_completion(handle).await
 }
@@ -750,6 +754,7 @@ async fn get_or_create_environment(
     isolated: bool,
     lfs: GitLfsSetting,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
@@ -816,12 +821,12 @@ async fn get_or_create_environment(
         python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_arch,
         python_downloads,
         client_builder,
         cache,
         Some(&reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.mirrors(),
         install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
@@ -869,7 +874,7 @@ async fn get_or_create_environment(
                     let requirement = resolve_names(
                         vec![spec],
                         &interpreter,
-                        settings,
+                        &settings.resolver,
                         &build_constraints,
                         client_builder,
                         &state,
@@ -912,6 +917,7 @@ async fn get_or_create_environment(
                             index: None,
                             conflict: None,
                         },
+                        scope: RequirementScope::Global,
                         origin: None,
                     };
 
@@ -932,6 +938,7 @@ async fn get_or_create_environment(
                             index: None,
                             conflict: None,
                         },
+                        scope: RequirementScope::Global,
                         origin: None,
                     };
 
@@ -999,6 +1006,7 @@ async fn get_or_create_environment(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         } else {
@@ -1018,7 +1026,7 @@ async fn get_or_create_environment(
         client_builder,
     )
     .await?;
-    let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
+    let exclusions = Excludes::from_entries(spec.excludes.iter().cloned());
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -1031,7 +1039,7 @@ async fn get_or_create_environment(
             resolve_names(
                 spec.requirements.clone(),
                 &interpreter,
-                settings,
+                &settings.resolver,
                 &build_constraints,
                 client_builder,
                 &state,
@@ -1059,7 +1067,7 @@ async fn get_or_create_environment(
     let overrides = resolve_names(
         spec.overrides.clone(),
         &interpreter,
-        settings,
+        &settings.resolver,
         &build_constraints,
         client_builder,
         &state,
@@ -1081,9 +1089,11 @@ async fn get_or_create_environment(
             let existing_environment = installed_tools
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
-                    python_request.as_ref().is_none_or(|python_request| {
-                        python_request.satisfied(environment.environment().interpreter(), cache)
-                    })
+                    python_request
+                        .as_ref()
+                        .unwrap_or(&PythonRequest::Any)
+                        .with_default_arch(python_arch.map(PythonArchitecture::into_inner))
+                        .satisfied(environment.environment().interpreter(), cache)
                 });
 
             // Check if the installed packages meet the requirements.
@@ -1099,6 +1109,7 @@ async fn get_or_create_environment(
                             ResolverSettings {
                                 config_setting,
                                 config_settings_package,
+                                dependency_metadata,
                                 extra_build_dependencies,
                                 extra_build_variables,
                                 ..
@@ -1123,16 +1134,21 @@ async fn get_or_create_environment(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
-                            &uv_configuration::Overrides::from_requirements(overrides.clone()),
-                            &exclusions,
+                            &DependencyModifiers::new(
+                                Overrides::from_requirements(overrides.clone()),
+                                exclusions,
+                            ),
+                            dependency_metadata,
                             DependencyMode::Transitive,
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,
-                            config_setting,
-                            config_settings_package,
-                            &extra_build_requires,
-                            extra_build_variables,
+                            Some(BuildSettings {
+                                config_settings: config_setting,
+                                config_settings_package,
+                                extra_build_requires: &extra_build_requires,
+                                extra_build_variables,
+                            }),
                         ),
                         Ok(SatisfiesResult::Fresh { .. })
                     ) {
@@ -1210,6 +1226,7 @@ async fn get_or_create_environment(
                     &reporter,
                     &install_mirrors,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     cache,
                 )

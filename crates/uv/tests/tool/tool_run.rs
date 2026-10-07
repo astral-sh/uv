@@ -1192,7 +1192,7 @@ fn tool_run_requirements_txt_arguments() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2881,7 +2881,7 @@ fn tool_run_with_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2893,7 +2893,7 @@ fn tool_run_with_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
@@ -2913,7 +2913,7 @@ fn tool_run_with_from_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2927,7 +2927,7 @@ fn tool_run_with_from_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }

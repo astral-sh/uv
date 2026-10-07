@@ -34,6 +34,7 @@ use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 use uv_static::EnvVars;
+use uv_threads::min_stack_size;
 use uv_version::version;
 use uv_warnings::warn_user_once_with_chain;
 
@@ -155,7 +156,7 @@ impl CacheReadRuntime {
         self.runtime.get_or_init(|| {
             tokio::runtime::Builder::new_current_thread()
                 .thread_name("uv-cache-read")
-                .thread_stack_size(uv_configuration::min_stack_size())
+                .thread_stack_size(min_stack_size())
                 .max_blocking_threads(self.workers)
                 .build()
                 .expect("Failed building the cache-read Runtime")
@@ -236,7 +237,7 @@ impl Default for BaseClientBuilder<'_> {
             custom_client: None,
             subcommand: None,
             client_name: None,
-            no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
+            no_retry_delay: env::var_os(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY).is_some(),
             cache_read_runtime: Arc::new(CacheReadRuntime::new(Concurrency::DEFAULT_CACHE_READS)),
         }
     }
@@ -660,13 +661,15 @@ impl<'a> BaseClientBuilder<'a> {
 
         if let Some(http_proxy) = &self.http_proxy {
             let proxy = http_proxy
-                .as_proxy(ProxyUrlKind::Http)
+                .as_proxy(ProxyUrlKind::Http)?
                 .no_proxy(no_proxy.clone());
             client_builder = client_builder.proxy(proxy);
         }
 
         if let Some(https_proxy) = &self.https_proxy {
-            let proxy = https_proxy.as_proxy(ProxyUrlKind::Https).no_proxy(no_proxy);
+            let proxy = https_proxy
+                .as_proxy(ProxyUrlKind::Https)?
+                .no_proxy(no_proxy);
             client_builder = client_builder.proxy(proxy);
         }
 
@@ -1072,7 +1075,7 @@ fn request_into_redirect(
     std::mem::swap(req.headers_mut(), &mut headers);
     *req.url_mut() = Url::from(redirect_url);
     debug!(
-        "Received HTTP {status}. Redirecting to {}",
+        "Received HTTP {status}. Redirecting to `{}`",
         DisplaySafeUrl::ref_cast(req.url())
     );
     Ok(Some(req))
@@ -1206,7 +1209,7 @@ where
                 Err(err) => {
                     if !is_last && err.should_try_next_url() {
                         warn!(
-                            "Failed to fetch {subject} from {url} ({err}); falling back to {}",
+                            "Failed to fetch {subject} from `{url}` ({err}); falling back to `{}`",
                             urls[i + 1]
                         );
                         continue;

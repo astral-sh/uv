@@ -42,6 +42,12 @@ impl SanitizedArchivePath {
                 Component::CurDir => (),
             }
         }
+
+        // Rebuilding can turn a normal component like `C:module.py` into a Windows prefix.
+        if let Some(Component::Prefix(_) | Component::RootDir) = path.components().next() {
+            return Ok(None);
+        }
+
         Ok(Some(Self(path)))
     }
 
@@ -106,6 +112,34 @@ mod tests {
             SanitizedArchivePath::from_archive_member("/module.py")?,
             None
         );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn archive_member_path_rejects_windows_prefixes() -> Result<(), Error> {
+        for file_name in [
+            "C:module.py",
+            "C:/module.py",
+            r"\module.py",
+            r"\\server\share\module.py",
+            r"\\?\C:\module.py",
+            "package/../C:module.py",
+            "package/../c:module.py",
+            "package/../C:subdir/module.py",
+            "package/../C:../module.py",
+            "./C:module.py",
+            "package/./C:module.py",
+            "package//C:module.py",
+            "package/C:module.py/.",
+            r"package\..\C:module.py",
+        ] {
+            assert_eq!(
+                SanitizedArchivePath::from_archive_member(file_name)?,
+                None,
+                "archive member: {file_name:?}"
+            );
+        }
         Ok(())
     }
 

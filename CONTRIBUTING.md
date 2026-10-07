@@ -70,6 +70,13 @@ To run a specific test by name:
 cargo nextest run -E 'test(test_name)'
 ```
 
+The test suite ignores `RUST_LOG` to avoid snapshot pollution. To enable logging in test
+subprocesses, use `UV_INTERNAL__TEST_RUST_LOG`, for example:
+
+```shell
+UV_INTERNAL__TEST_RUST_LOG=uv=debug cargo nextest run -E 'test(test_name)'
+```
+
 To run all tests and accept snapshot changes:
 
 ```shell
@@ -139,6 +146,16 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
+Development builds omit Git metadata from the version string so commits do not trigger
+recompilation. To include the commit hash and date, set `UV_INTERNAL__BUILD_GIT_INFO=1` when
+building:
+
+```shell
+UV_INTERNAL__BUILD_GIT_INFO=1 cargo run -- --version
+```
+
+Release builds, including profiles that inherit from `release`, include Git metadata by default.
+
 ## Formatting
 
 ```shell
@@ -156,13 +173,14 @@ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
 
 ## Linting
 
-Linting requires [shellcheck](https://github.com/koalaman/shellcheck) to be installed separately.
-Validating `pyproject.toml` against the checked-in uv schema also requires
-[jq](https://jqlang.org/).
+Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
+[hawk](https://github.com/astral-sh/hawk/) to be installed separately. Validating `pyproject.toml`
+against the checked-in uv schema also requires [jq](https://jqlang.org/).
 
 ```shell
 # Rust
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --all-targets --all-features --locked
+cargo +1.99.0 hawk check --target-dir target/hawk -D warnings
 
 # Python
 uv run --only-group=check ruff check .
@@ -188,18 +206,16 @@ uv run --only-group=check cargo-shear
 
 ### Compiling for Windows from Unix
 
-To run clippy for a Windows target from Linux or macOS, you can use
-[cargo-xwin](https://github.com/rust-cross/cargo-xwin):
+To run clippy for a Windows target from Linux or macOS, you can use `cargo-xwin`. We provide a build
+of `cargo-xwin` as part of our development toolchain, but you'll need to install one or more Windows
+targets:
 
 ```shell
-# Install cargo-xwin
-cargo install --locked cargo-xwin@0.21.4
-
 # Add the Windows target
 rustup target add x86_64-pc-windows-msvc
 
 # Run clippy for Windows
-cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+CARGO_BUILD_WARNINGS=deny uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked
 ```
 
 ## Crate structure
@@ -359,6 +375,7 @@ Then, open a pull request, e.g., `Bump version to ...`.
 Binary builds will automatically be tested for the release.
 
 After merging the pull request, run the
-[release workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml) with the version
-tag. **Do not include a leading `v`**. The release will automatically be created on GitHub after
-everything else publishes.
+[release workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml). The workflow
+reads the version from project metadata and rejects versions that already have a GitHub release.
+Enable `dry-run` to build artifacts without publishing. Otherwise, the release will automatically be
+created on GitHub after everything else publishes.
