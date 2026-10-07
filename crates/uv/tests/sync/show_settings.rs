@@ -4970,6 +4970,29 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     "
     );
 
+    assert_eq!(
+        baseline,
+        capture_uv_snapshot!(
+            context.filters(),
+            add_shared_args(context.version())
+                .arg("--show-settings")
+                .env(EnvVars::UV_SYSTEM_CERTS, "0")
+        )
+    );
+
+    diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
+        .arg("--show-settings")
+        .env(EnvVars::UV_NATIVE_TLS, "0"), @"
+    ...
+             malware_check_url: None,
+         },
+     }
+    +
+    +----- stderr -----
+    +warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+    ...
+    ");
+
     config.write_str(indoc::indoc! {r"
         system-certs = false
         native-tls = true
