@@ -400,6 +400,7 @@ class Poetry(Suite):
                 f"rm -rf {poetry_lock}"
             ),
             command=[
+                "env",
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
                 f"POETRY_DATA_DIR={data_dir}",
@@ -422,6 +423,7 @@ class Poetry(Suite):
             name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
             prepare=f"rm -f {poetry_lock}",
             command=[
+                "env",
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
                 f"POETRY_DATA_DIR={data_dir}",
@@ -478,6 +480,7 @@ class Poetry(Suite):
             name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
             prepare=f"rm {poetry_lock} && cp {baseline} {poetry_lock}",
             command=[
+                "env",
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
                 f"POETRY_DATA_DIR={data_dir}",
@@ -514,6 +517,7 @@ class Poetry(Suite):
             name=f"{self.name} ({Benchmark.RESOLVE_NOOP.value})",
             prepare=None,
             command=[
+                "env",
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
                 f"POETRY_DATA_DIR={data_dir}",
@@ -556,6 +560,7 @@ class Poetry(Suite):
                 f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"
             ),
             command=[
+                "env",
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
                 f"POETRY_DATA_DIR={data_dir}",
@@ -595,6 +600,7 @@ class Poetry(Suite):
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=f"virtualenv --clear -p {self.python} {venv_dir}",
             command=[
+                "env",
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
                 f"POETRY_DATA_DIR={data_dir}",
@@ -790,6 +796,7 @@ class Pdm(Suite):
                 f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"
             ),
             command=[
+                "env",
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "sync",
@@ -824,6 +831,7 @@ class Pdm(Suite):
                 f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"
             ),
             command=[
+                "env",
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "sync",
@@ -965,6 +973,7 @@ class UvPip(Suite):
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
             prepare=f"rm -rf {cache_dir} && virtualenv --clear -p {self.python} {venv_dir}",
             command=[
+                "env",
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "pip",
@@ -983,6 +992,7 @@ class UvPip(Suite):
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=f"virtualenv --clear -p {self.python} {venv_dir}",
             command=[
+                "env",
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "pip",
@@ -1200,6 +1210,7 @@ class UvProject(Suite):
                 f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"
             ),
             command=[
+                "env",
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "sync",
@@ -1235,6 +1246,7 @@ class UvProject(Suite):
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=(f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"),
             command=[
+                "env",
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "sync",

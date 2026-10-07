@@ -4,6 +4,7 @@ version = "0.0.1"
 description = "Benchmark package resolution tools"
 requires-python = ">=3.11"
 dependencies = [
+  "astral-dev-toolchain-hyperfine==2.0.0a2",
   "pdm",
   "pip-tools",
   "poetry",
@@ -29,6 +30,9 @@ build-constraint-dependencies = [
     "uv-build==0.12.3",
 ]
 exclude-newer = "P7D"
+
+[tool.uv.exclude-newer-package]
+astral-dev-toolchain-hyperfine = "2026-10-07T11:05:00Z"
 
 [tool.uv.build-backend]
 source-include = [".python-version", "README.md", "uv.lock"]
