@@ -21,6 +21,7 @@ use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_python_context::find_requires_python;
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
@@ -28,12 +29,11 @@ use uv_workspace::dependency_groups::{
 use uv_workspace::pyproject::{BuildConstraintDependency, OverrideDependency};
 use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
-use crate::commands::project::{LockError, MissingLockfileSource};
-use uv_python_context::find_requires_python;
+use crate::{LockError, MissingLockfileSource};
 
 /// A target that can be resolved into a lockfile.
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum LockTarget<'lock> {
+pub enum LockTarget<'lock> {
     Workspace(&'lock Workspace),
     Script(&'lock Pep723Script),
 }
@@ -240,7 +240,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of supported environments for the [`LockTarget`].
-    pub(crate) fn environments(self) -> Option<&'lock SupportedEnvironments> {
+    pub fn environments(self) -> Option<&'lock SupportedEnvironments> {
         match self {
             Self::Workspace(workspace) => workspace.environments(),
             Self::Script(_) => {
@@ -306,7 +306,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Return the `Requires-Python` bound for the [`LockTarget`].
-    pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, LockError> {
+    pub fn requires_python(self) -> Result<Option<RequiresPython>, LockError> {
         match self {
             Self::Workspace(workspace) => {
                 // When locking, don't try to enforce requires-python bounds that appear on groups
@@ -322,7 +322,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Return the path to the lock root.
-    pub(crate) fn install_path(self) -> &'lock Path {
+    pub fn install_path(self) -> &'lock Path {
         match self {
             Self::Workspace(workspace) => workspace.install_path(),
             Self::Script(script) => script.path.parent().unwrap(),
@@ -335,7 +335,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Return the path to the lockfile.
-    pub(crate) fn lock_path(self) -> PathBuf {
+    pub fn lock_path(self) -> PathBuf {
         match self {
             // `uv.lock`
             Self::Workspace(workspace) => workspace.install_path().join("uv.lock"),
@@ -354,7 +354,7 @@ impl<'lock> LockTarget<'lock> {
     /// Read the lockfile from the workspace.
     ///
     /// Returns `Ok(None)` if the lockfile does not exist.
-    pub(crate) async fn read(self) -> Result<Option<Lock>, LockError> {
+    pub async fn read(self) -> Result<Option<Lock>, LockError> {
         Ok(self
             .read_with_contents()
             .await?
@@ -362,10 +362,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Read an existing lockfile and validate that it contains the discovered workspace members.
-    pub(crate) async fn read_frozen(
-        self,
-        source: MissingLockfileSource,
-    ) -> Result<Lock, LockError> {
+    pub async fn read_frozen(self, source: MissingLockfileSource) -> Result<Lock, LockError> {
         let lock_filename = self.lock_filename();
         let existing = self
             .read()
@@ -410,7 +407,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Lower build constraints without losing hashes when a source expands into multiple requirements.
-    pub(crate) async fn lower_build_constraints(
+    pub async fn lower_build_constraints(
         self,
         locations: &IndexLocations,
         sources: &NoSources,

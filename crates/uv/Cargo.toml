@@ -42,6 +42,7 @@ uv-install-wheel = { workspace = true, default-features = false }
 uv-install-operations = { workspace = true }
 uv-installer = { workspace = true }
 uv-lock = { workspace = true }
+uv-lock-operations = { workspace = true }
 uv-logging = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
@@ -105,7 +106,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
-toml_parser = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }

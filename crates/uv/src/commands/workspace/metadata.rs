@@ -1,12 +1,12 @@
 use std::io::{BufWriter, Write};
 use std::path::Path;
+use uv_lock_operations::LockError;
 
 use anyhow::{Context, Result};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, Stdout, UvError};
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
-use uv_dispatch::UniversalState;
 use uv_lock::{Lock, Metadata, Package};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
@@ -17,16 +17,17 @@ use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
-use crate::commands::project::discovery::DiscoveredProject;
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::lock::{LockMode, LockOperation};
-use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
-    LinkErrorReporting, LockError, ProjectEnvironment, ProjectEnvironmentPolicy,
-    ProjectEnvironmentTarget, ProjectInterpreter, ScriptEnvironment,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectInterpreter, ScriptEnvironment,
 };
 use uv_configuration::Modifications;
+use uv_dispatch::UniversalState;
+use uv_lock_operations::DiscoveredProject;
+use uv_lock_operations::FrozenWorkspace;
+use uv_lock_operations::LockTarget;
+use uv_lock_operations::{LockMode, LockOperation};
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_settings::{FrozenSource, LockCheck, ResolverSettings};

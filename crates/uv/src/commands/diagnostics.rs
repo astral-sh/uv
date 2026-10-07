@@ -5,7 +5,7 @@ use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
-use crate::commands::project::{EnvironmentError, LockError, ProjectError};
+use crate::commands::project::{EnvironmentError, ProjectError};
 use crate::commands::python::install::InvalidUpgradeRequestError;
 use crate::commands::tool::common::NoExecutablesError;
 use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
@@ -35,7 +35,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
         collect_hint::<uv_lock::LockError>(cause, &mut hints);
-        collect_hint::<LockError>(cause, &mut hints);
+        collect_hint::<uv_lock_operations::LockError>(cause, &mut hints);
         collect_hint::<uv_resolve_operations::Error>(cause, &mut hints);
         collect_hint::<uv_install_operations::Error>(cause, &mut hints);
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
@@ -83,10 +83,11 @@ fn collect_hint<T: Hinted + std::error::Error + 'static>(
 mod tests {
     use insta::assert_debug_snapshot;
 
+    use uv_lock_operations::LockError;
     use uv_settings::{LockedFlag, LockedSource};
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
-    use crate::commands::project::{LockError, ProjectError};
+    use crate::commands::project::ProjectError;
 
     use super::hints_for_error;
 

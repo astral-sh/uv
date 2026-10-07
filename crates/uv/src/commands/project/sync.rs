@@ -16,7 +16,6 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode,
     ExtrasSpecification, InstallOptions, TargetTriple,
 };
-use uv_dispatch::{PlatformState, UniversalState};
 use uv_distribution_types::NameRequirementSpecification;
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_lock::{Installable, Lock, PythonReport};
@@ -26,7 +25,6 @@ use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
 };
-use uv_requirements::{script_extra_build_requires, script_specification};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::SourceTreeEditablePolicy;
@@ -35,20 +33,23 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace,
 
 use crate::commands::operations::malware::MalwareCheckContext;
 use crate::commands::operations::sync::sync_from_lock;
-use crate::commands::project::discovery::DiscoveredProject;
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
-use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
-    EnvironmentError, EnvironmentUpdate, LinkErrorReporting, LockError, MissingLockfileSource,
-    ProjectEnvironment, ProjectEnvironmentTarget, ScriptEnvironment, detect_conflicts,
-    update_environment,
+    EnvironmentError, EnvironmentUpdate, LinkErrorReporting, ProjectEnvironment,
+    ProjectEnvironmentTarget, ScriptEnvironment, detect_conflicts, update_environment,
 };
 use uv_configuration::Modifications;
+use uv_dispatch::{PlatformState, UniversalState};
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_install_operations::report::{PackageChangesReport, SchemaReport};
+use uv_lock_operations::DiscoveredProject;
+use uv_lock_operations::FrozenWorkspace;
+use uv_lock_operations::LockError;
+use uv_lock_operations::LockTarget;
+use uv_lock_operations::MissingLockfileSource;
+use uv_lock_operations::{LockMode, LockOperation, LockResult};
+use uv_requirements::{script_extra_build_requires, script_specification};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_settings::{FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings};
 

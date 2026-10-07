@@ -1,17 +1,18 @@
 use std::path::Path;
 
 use anyhow::Result;
+
 use uv_cache::Cache;
 use uv_normalize::PackageName;
 use uv_preview::Preview;
+use uv_settings::FrozenSource;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::project::lockfile::FrozenWorkspace;
-use uv_settings::FrozenSource;
+use crate::FrozenWorkspace;
 
 /// A project discovered from its manifests or a frozen workspace lockfile.
 #[derive(Debug)]
-pub(crate) enum DiscoveredProject {
+pub enum DiscoveredProject {
     Manifest(VirtualProject),
     Lockfile(Box<FrozenWorkspace>),
 }
@@ -21,7 +22,7 @@ impl DiscoveredProject {
     ///
     /// The package selection and discovery options apply to manifest discovery. Lockfile discovery
     /// retains the recorded workspace so callers can select packages without their manifests.
-    pub(crate) async fn discover(
+    pub async fn discover(
         project_dir: &Path,
         options: &DiscoveryOptions,
         package: Option<&PackageName>,

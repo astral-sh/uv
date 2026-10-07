@@ -67,7 +67,7 @@ impl From<ToolError> for UvError {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ToolLockError {
     #[error(transparent)]
-    Validation(#[from] crate::commands::project::LockValidationError),
+    Validation(#[from] uv_lock_operations::LockValidationError),
     #[error(transparent)]
     ClientBuild(#[from] uv_client::ClientBuildError),
     #[error(transparent)]

@@ -26,7 +26,6 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
-use uv_dispatch::UniversalState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
 use uv_fs::which::is_executable;
@@ -41,10 +40,7 @@ use uv_python::{
     PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_requirements::{
-    RequirementsSource, RequirementsSpecification, script_extra_build_requires,
-    script_specification,
-};
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -69,16 +65,19 @@ use crate::commands::operations::sync::sync_from_lock;
 use crate::commands::project;
 use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::lock::LockMode;
-use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
     ProjectEnvironmentTarget, ScriptEnvironment, update_environment,
 };
 use uv_configuration::Modifications;
+use uv_dispatch::UniversalState;
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
+use uv_lock_operations::LockOperation;
+use uv_lock_operations::LockTarget;
+use uv_lock_operations::{LockError, LockMode};
 use uv_python_context::PythonDownloadReporter;
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_requirements::{script_extra_build_requires, script_specification};
 use uv_resolve_operations::loggers::{DefaultResolveLogger, SummaryResolveLogger};
 use uv_settings::{
     FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings, ResolverSettings,
@@ -246,7 +245,7 @@ pub(crate) async fn run(
 
             // Generate a lockfile.
             let lock = match Box::pin(
-                project::lock::LockOperation::new(
+                LockOperation::new(
                     mode,
                     &settings.resolver,
                     &client_builder,
@@ -267,7 +266,7 @@ pub(crate) async fn run(
             .await
             {
                 Ok(result) => result.into_lock(),
-                Err(project::LockError::Resolve(err)) => {
+                Err(LockError::Resolve(err)) => {
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
@@ -761,7 +760,7 @@ pub(crate) async fn run(
                 };
 
                 let result = match Box::pin(
-                    project::lock::LockOperation::new(
+                    LockOperation::new(
                         mode,
                         &settings.resolver,
                         &client_builder,

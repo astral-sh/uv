@@ -12,7 +12,6 @@ use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
 };
-use uv_dispatch::UniversalState;
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
 use uv_lock::implicit_constraints_marker;
@@ -34,11 +33,13 @@ use uv_workspace::{
 };
 
 use crate::commands::project::edit::ProjectEdit;
-use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
-use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::lock::LockEvent;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
+use uv_dispatch::UniversalState;
+use uv_lock_operations::LockTarget;
+use uv_lock_operations::{LockMode, LockOperation, LockResult};
 use uv_python_context::ProjectPythonRequest;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_settings::ResolverSettings;

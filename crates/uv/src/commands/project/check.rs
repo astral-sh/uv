@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use uv_lock_operations::LockOperation;
 
 use anyhow::Result;
 use tracing::debug;
@@ -12,7 +13,6 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun,
     ExtrasSpecification, InstallOptions,
 };
-use uv_dispatch::UniversalState;
 use uv_fs::normalize_path;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
@@ -30,14 +30,15 @@ use crate::commands::operations::sync::{store_credentials_from_target, sync_from
 use crate::commands::project;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
-use crate::commands::project::lock::LockMode;
-use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
     ProjectInterpreter, ScriptEnvironment,
 };
 use uv_configuration::Modifications;
+use uv_dispatch::UniversalState;
 use uv_install_operations::loggers::SummaryInstallLogger;
+use uv_lock_operations::LockMode;
+use uv_lock_operations::LockTarget;
 use uv_python_context::PythonDownloadReporter;
 use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
 use uv_resolve_operations::loggers::SummaryResolveLogger;
@@ -403,7 +404,7 @@ pub(crate) async fn check(
             LockMode::Write(venv.interpreter())
         };
         let result = match Box::pin(
-            project::lock::LockOperation::new(
+            LockOperation::new(
                 mode,
                 &settings.resolver,
                 &client_builder,
@@ -581,7 +582,7 @@ pub(crate) async fn check(
 
         let selection = PackageSelection::from_args(all_packages, &package, project.project_name());
         let result = match Box::pin(
-            project::lock::LockOperation::new(
+            LockOperation::new(
                 mode,
                 &settings.resolver,
                 &client_builder,

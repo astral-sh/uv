@@ -23,7 +23,7 @@ pub(crate) enum ProjectError {
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]
-    Lock(#[from] crate::commands::project::LockError),
+    Lock(#[from] uv_lock_operations::LockError),
 
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
