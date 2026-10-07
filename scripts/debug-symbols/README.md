@@ -305,6 +305,13 @@ and trained independent PGO profiles. Completed comparisons used the same runner
 platform. Windows measurements below used the 32 GB Namespace profile; the full-debug experiment on
 the 64 GB profile has not produced measurements.
 
+The [64 GB Windows job](https://github.com/astral-sh/uv/actions/runs/37667974816/job/112952026195)
+requested `namespace-profile-windows-2022-x86-64-32x64` at commit
+`21fc3463b7e1bf1fdae9c27dfc39ecc68c91e400`. It was manually canceled after 57m 13s without a runner
+assignment or any executed steps. This is a scheduling outcome, not a compiler or verification
+failure; physical runner capacity and full-debug memory requirements remain unverified. GitHub
+reported no scheduling error explaining the lack of assignment.
+
 Combined instrumented build, training, and final build wall times are paired with the no-debug
 baseline from the same run. Both Windows limited observations are shown:
 
