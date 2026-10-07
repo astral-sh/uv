@@ -128,27 +128,7 @@ pub(crate) struct InternerGuard<'a> {
 
 impl InternerGuard<'_> {
     /// Creates a decision node with the given variable and children.
-    fn create_node(&mut self, var: Variable, mut children: Edges) -> NodeId {
-        if let Variable::VersionString(comparison) = &var
-            && let Edges::Boolean { high, low } = children
-        {
-            // Carry both comparison domains through each branch. Pairwise implications alone
-            // cannot detect contradictions whose numeric and lexical bounds differ.
-            let high = self.restrict_version_string(high, comparison, true);
-            let low = self.restrict_version_string(low, comparison, false);
-            children = Edges::Boolean { high, low };
-            // Remove a comparison when the other child agrees throughout a constant branch.
-            if matches!(high, NodeId::TRUE | NodeId::FALSE)
-                && self.restrict_version_string(low, comparison, true) == high
-            {
-                return low;
-            }
-            if matches!(low, NodeId::TRUE | NodeId::FALSE)
-                && self.restrict_version_string(high, comparison, false) == low
-            {
-                return high;
-            }
-        }
+    fn create_node(&mut self, var: Variable, children: Edges) -> NodeId {
         let mut node = Node { var, children };
         let mut first = node.children.nodes().next().unwrap();
 
@@ -454,8 +434,14 @@ impl InternerGuard<'_> {
             }
         };
 
-        // Create the output node.
-        let node = self.create_node(func, children);
+        // Combining trees can introduce new relationships between comparison variables.
+        let node = if let Variable::VersionString(comparison) = &func
+            && let Edges::Boolean { high, low } = children
+        {
+            self.reduce_version_string(comparison, high, low)
+        } else {
+            self.create_node(func, children)
+        };
 
         // If the node includes known incompatibilities, map it to `false`.
         let node = if conflicts {
@@ -476,6 +462,34 @@ impl InternerGuard<'_> {
         self.state.cache.insert((xi, yi), node);
 
         node
+    }
+
+    /// Reduces a comparison after an operation combines or replaces its descendant predicates.
+    fn reduce_version_string(
+        &mut self,
+        comparison: &VersionString,
+        high: NodeId,
+        low: NodeId,
+    ) -> NodeId {
+        // Carry both domains through each branch. Pairwise implications alone cannot detect
+        // contradictions whose numeric and lexical bounds differ.
+        let high = self.restrict_version_string(high, comparison, true);
+        let low = self.restrict_version_string(low, comparison, false);
+        // Remove a comparison when the other child agrees throughout a constant branch.
+        if matches!(high, NodeId::TRUE | NodeId::FALSE)
+            && self.restrict_version_string(low, comparison, true) == high
+        {
+            return low;
+        }
+        if matches!(low, NodeId::TRUE | NodeId::FALSE)
+            && self.restrict_version_string(high, comparison, false) == low
+        {
+            return high;
+        }
+        self.create_node(
+            Variable::VersionString(Box::new(comparison.clone())),
+            Edges::Boolean { high, low },
+        )
     }
 
     /// Restricts the comparison prefix using a known comparison result.
@@ -540,7 +554,7 @@ impl InternerGuard<'_> {
         if high == original_high.negate(id) && low == original_low.negate(id) {
             return id;
         }
-        self.create_node(node.var.clone(), Edges::Boolean { high, low })
+        self.reduce_version_string(comparison, high, low)
     }
 
     /// Overapproximates a tree using only comparisons of the given version-string key.
@@ -696,13 +710,10 @@ impl InternerGuard<'_> {
 
         let value_node = self.shared.node(value);
         let assumption_node = self.shared.node(assumption);
-        let result = match value_node.var.cmp(&assumption_node.var) {
-            Ordering::Less => {
-                let children = value_node.children.map(value, |value| {
-                    self.restrict_cached(value, assumption, cache)
-                });
-                self.create_node(value_node.var.clone(), children)
-            }
+        let children = match value_node.var.cmp(&assumption_node.var) {
+            Ordering::Less => value_node.children.map(value, |value| {
+                self.restrict_cached(value, assumption, cache)
+            }),
             Ordering::Greater => {
                 // The value does not depend on this variable. Existentially quantify it out of the
                 // assumption, and continue with the remaining variables.
@@ -711,7 +722,9 @@ impl InternerGuard<'_> {
                     quantified_assumption =
                         self.or(quantified_assumption, child.negate(assumption));
                 }
-                self.restrict_cached(value, quantified_assumption, cache)
+                let result = self.restrict_cached(value, quantified_assumption, cache);
+                cache.insert((value, assumption), result);
+                return result;
             }
             Ordering::Equal => {
                 if let Variable::VersionString(comparison) = &value_node.var
@@ -763,7 +776,7 @@ impl InternerGuard<'_> {
                 let Some(fallback) = fallback else {
                     return NodeId::FALSE;
                 };
-                let children = value_node.children.apply(
+                value_node.children.apply(
                     value,
                     &assumption_node.children,
                     assumption,
@@ -774,9 +787,15 @@ impl InternerGuard<'_> {
                             self.restrict_cached(value, assumption, cache)
                         }
                     },
-                );
-                self.create_node(value_node.var.clone(), children)
+                )
             }
+        };
+        let result = if let Variable::VersionString(comparison) = &value_node.var
+            && let Edges::Boolean { high, low } = children
+        {
+            self.reduce_version_string(comparison, high, low)
+        } else {
+            self.create_node(value_node.var.clone(), children)
         };
 
         cache.insert((value, assumption), result);
