@@ -13,9 +13,7 @@ use crate::commands::human_readable_bytes;
 use crate::printer::Printer;
 use uv_cache::Removal;
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{
-    BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
-};
+use uv_distribution_types::{BuildableSource, CachedDist, VersionOrUrlRef};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonInstallationKey;
@@ -24,8 +22,8 @@ use uv_static::EnvVars;
 
 /// Since downloads, fetches and builds run in parallel, their message output order is
 /// non-deterministic, so can't capture them in test output.
-static HAS_UV_TEST_NO_CLI_PROGRESS: LazyLock<bool> =
-    LazyLock::new(|| env::var(EnvVars::UV_TEST_NO_CLI_PROGRESS).is_ok());
+static HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS: LazyLock<bool> =
+    LazyLock::new(|| env::var(EnvVars::UV_INTERNAL__TEST_NO_CLI_PROGRESS).is_ok());
 
 #[derive(Debug)]
 struct ProgressReporter {
@@ -153,7 +151,8 @@ impl ProgressReporter {
         }
     }
 
-    fn on_build_start(&self, source: &BuildableSource) -> usize {
+    /// Start reporting a build using the caller's source display.
+    fn on_build_start(&self, source: &dyn fmt::Display) -> usize {
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -171,12 +170,8 @@ impl ProgressReporter {
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        let message = format!(
-            "   {} {}",
-            "Building".bold().cyan(),
-            source.to_color_string()
-        );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        let message = format!("   {} {}", "Building".bold().cyan(), source);
+        if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.set_message(message);
@@ -186,7 +181,8 @@ impl ProgressReporter {
         id
     }
 
-    fn on_build_complete(&self, source: &BuildableSource, id: usize) {
+    /// Finish reporting a build using the caller's source display.
+    fn on_build_complete(&self, source: &dyn fmt::Display, id: usize) {
         let ProgressMode::Multi {
             state,
             multi_progress,
@@ -201,12 +197,8 @@ impl ProgressReporter {
             state.bars.remove(&id).unwrap()
         };
 
-        let message = format!(
-            "      {} {}",
-            "Built".bold().green(),
-            source.to_color_string()
-        );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        let message = format!("      {} {}", "Built".bold().green(), source);
+        if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.finish_with_message(message);
@@ -263,7 +255,10 @@ impl ProgressReporter {
             );
             // If the file is larger than 1MB, show a message to indicate that this may take
             // a while keeping the log concise.
-            if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS && size > 1024 * 1024 {
+            if multi_progress.is_hidden()
+                && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS
+                && size > 1024 * 1024
+            {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {} {}",
@@ -275,7 +270,7 @@ impl ProgressReporter {
             progress.set_message(name);
         } else {
             progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} ....").unwrap());
-            if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+            if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {}",
@@ -320,7 +315,7 @@ impl ProgressReporter {
         let mut state = state.lock().unwrap();
         if let ProgressBarKind::Numeric { progress, size } = state.bars.remove(&id).unwrap() {
             if multi_progress.is_hidden()
-                && !*HAS_UV_TEST_NO_CLI_PROGRESS
+                && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS
                 && size.is_none_or(|size| size > 1024 * 1024)
             {
                 let _ = writeln!(
@@ -398,7 +393,7 @@ impl ProgressReporter {
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         let message = format!("   {} {} ({})", "Updating".bold().cyan(), url, rev.dimmed());
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.set_message(message);
@@ -430,7 +425,7 @@ impl ProgressReporter {
             url,
             rev.dimmed()
         );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.finish_with_message(message);
@@ -480,11 +475,11 @@ impl uv_installer::PrepareReporter for PrepareReporter {
     }
 
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_build_start(source)
+        self.reporter.on_build_start(&source.color_display())
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter.on_build_complete(source, id);
+        self.reporter.on_build_complete(&source.color_display(), id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
@@ -556,11 +551,11 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_build_start(source)
+        self.reporter.on_build_start(&source.color_display())
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter.on_build_complete(source, id);
+        self.reporter.on_build_complete(&source.color_display(), id);
     }
 
     fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
@@ -586,11 +581,11 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
 
 impl uv_distribution::Reporter for ResolverReporter {
     fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.reporter.on_build_start(source)
+        self.reporter.on_build_start(&source.color_display())
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        self.reporter.on_build_complete(source, id);
+        self.reporter.on_build_complete(&source.color_display(), id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
@@ -891,28 +886,6 @@ impl CleaningPackageReporter {
 
     pub(crate) fn on_complete(&self) {
         self.bar.finish_and_clear();
-    }
-}
-
-/// Like [`std::fmt::Display`], but with colors.
-trait ColorDisplay {
-    fn to_color_string(&self) -> String;
-}
-
-impl ColorDisplay for SourceDist {
-    fn to_color_string(&self) -> String {
-        let name = self.name();
-        let version_or_url = self.version_or_url();
-        format!("{}{}", name, version_or_url.to_string().dimmed())
-    }
-}
-
-impl ColorDisplay for BuildableSource<'_> {
-    fn to_color_string(&self) -> String {
-        match self {
-            Self::Dist(dist) => dist.to_color_string(),
-            Self::Url(url) => url.to_string(),
-        }
     }
 }
 

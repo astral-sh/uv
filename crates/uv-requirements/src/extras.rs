@@ -81,6 +81,8 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
             return Ok(requirement);
         };
 
+        database.record_metadata(&dist);
+
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.distribution_id();
@@ -101,7 +103,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = database
-                    .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                    .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
                     .await
                     .map_err(|err| Error::from_dist(dist, err))?;
 

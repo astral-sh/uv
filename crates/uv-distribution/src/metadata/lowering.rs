@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
-    RequirementSource,
+    RequirementScope, RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -309,6 +309,7 @@ impl LoweredRequirement {
                         groups: Box::new([]),
                         marker,
                         source,
+                        scope: RequirementScope::Global,
                         origin: requirement.origin.clone(),
                     }))
                 }
@@ -489,6 +490,7 @@ impl LoweredRequirement {
                         groups: Box::new([]),
                         marker,
                         source,
+                        scope: RequirementScope::Global,
                         origin: requirement.origin.clone(),
                     }))
                 }
@@ -539,6 +541,7 @@ impl LoweredRequirement {
             } else {
                 git_directory_source_from_path(&install_path, git_member)?
             },
+            scope: RequirementScope::Global,
             origin: requirement.origin,
         }))
     }
@@ -587,7 +590,7 @@ pub enum LoweringError {
     IndexCredentials(#[from] IndexCredentialsError),
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
-    #[error("Fragments are not allowed in URLs: `{0}`")]
+    #[error("Fragments are not allowed in URLs: {0}")]
     ForbiddenFragment(DisplaySafeUrl),
     #[error(
         "`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)"
@@ -601,25 +604,25 @@ pub enum LoweringError {
         "Workspace source path `{}` must point to a workspace root (found workspace at `{}`)", path.simplified_display(), root.simplified_display()
     )]
     WorkspaceSourceNotRoot { path: PathBuf, root: PathBuf },
-    #[error("Source with `editable = true` must refer to a local directory, not a file: `{0}`")]
+    #[error("Source with `editable = true` must refer to a local directory, not a file: {0}")]
     EditableFile(String),
-    #[error("Source with `package = true` must refer to a local directory, not a file: `{0}`")]
+    #[error("Source with `package = true` must refer to a local directory, not a file: {0}")]
     PackagedFile(String),
     #[error(
-        "Git repository references local file source, but only directories are supported as transitive Git dependencies: `{0}`"
+        "Git repository references local file source, but only directories are supported as transitive Git dependencies: {0}"
     )]
     GitFile(String),
-    #[error("Git repository references local directory outside the repository: `{0}`")]
+    #[error("Git repository references local directory outside the repository: {0}")]
     GitDirectory(String),
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
-    #[error("Path must be UTF-8: `{0}`")]
+    #[error("Path must be UTF-8: {0}")]
     NonUtf8Path(PathBuf),
     #[error(transparent)] // Function attaches the context
     RelativeTo(io::Error),
 }
 
-impl uv_errors::Hint for LoweringError {
+impl uv_errors::Hinted for LoweringError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::MissingIndex {

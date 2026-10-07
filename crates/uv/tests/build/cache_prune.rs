@@ -25,7 +25,7 @@ fn prune_no_op() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -121,7 +121,7 @@ fn prune_stale_directory() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
@@ -189,7 +189,7 @@ fn prune_cached_env() {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing cached environment: [CACHE_DIR]/environments-v2/[ENTRY]
@@ -232,7 +232,7 @@ fn prune_stale_symlink() -> Result<()> {
     uv_snapshot!(filters, context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
@@ -260,7 +260,7 @@ async fn prune_force() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
@@ -277,7 +277,7 @@ async fn prune_force() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
@@ -361,8 +361,8 @@ fn prune_unzipped() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of iniconfig need to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because all versions of iniconfig need to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
@@ -435,10 +435,10 @@ fn prune_stale_revision() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
     DEBUG Skipping `pyproject.toml` in `[TEMP_DIR]/` (no `[tool]` section)
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
@@ -537,10 +537,10 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
     DEBUG Skipping `pyproject.toml` in `[TEMP_DIR]/` (no `[tool]` section)
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
@@ -568,6 +568,37 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
+
+    Ok(())
+}
+
+/// `cache prune` should remove any temporary build environments left in the cache.
+#[test]
+fn prune_temporary_build_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_sizes_and_units()
+        .with_filter((
+            r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
+            "[CACHE_DIR]/$2/[ENTRY]",
+        ));
+
+    // Populate the cache with a temporary build environment.
+    let builds = context.cache_dir.child("builds-v0").child(".tmp123456");
+    builds.create_dir_all()?;
+    builds.child("pyvenv.cfg").write_str("home = /usr/bin")?;
+
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing temporary build environment: [CACHE_DIR]/builds-v0/[ENTRY]
+    Removed [N] files ([SIZE])
+    ");
+
+    assert!(!builds.exists());
 
     Ok(())
 }

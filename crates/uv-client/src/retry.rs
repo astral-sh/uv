@@ -15,7 +15,7 @@ use url::Url;
 
 use uv_redacted::DisplaySafeUrl;
 
-use crate::WrappedReqwestError;
+use crate::{RequestBuilder, WrappedReqwestError};
 
 /// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
 /// adds additional retry cases.
@@ -47,7 +47,7 @@ impl RetryableStrategy for UvRetryableStrategy {
                         .join("\n");
                     let error = redact(&err.to_string());
                     debug!(
-                        "Transient request failure for {}, retrying: {error}\n{context}",
+                        "Transient request failure for `{}`, retrying: {error}\n{context}",
                         url.map_or_else(|| "unknown URL".to_owned(), ToString::to_string)
                     );
                 }
@@ -78,7 +78,7 @@ impl RetryState {
 
     /// The number of retries across all requests.
     ///
-    /// After a failed retryable request, this equals the maximum number of retries.
+    /// Includes retries reported by the HTTP middleware.
     pub(crate) fn total_retries(&self) -> u32 {
         self.total_retries
     }
@@ -86,6 +86,49 @@ impl RetryState {
     /// The total duration from the first request to the (failure) of the last request.
     pub(crate) fn duration(&self) -> Result<Duration, SystemTimeError> {
         self.start_time.elapsed()
+    }
+
+    /// Send a request and count any retries performed by the middleware.
+    pub async fn send(
+        &mut self,
+        request: RequestBuilder<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        let result = request.send().await;
+        self.record_request_retries(result.as_ref());
+        result
+    }
+
+    /// Count middleware retries before invoking the callback with the updated [`RetryState`].
+    pub(crate) async fn handle_response<Payload, CallbackError, Callback>(
+        &mut self,
+        response: Response,
+        callback: Callback,
+    ) -> Result<Payload, CallbackError>
+    where
+        Callback: AsyncFnOnce(Response, &mut Self) -> Result<Payload, CallbackError>,
+    {
+        self.record_request_retries(Ok(&response));
+        callback(response, self).await
+    }
+
+    /// Account for retries performed by the middleware before handling a response or error.
+    ///
+    /// Call once per request, including successful requests whose bodies may later fail.
+    fn record_request_retries(&mut self, result: Result<&Response, &reqwest_middleware::Error>) {
+        let retries = match result {
+            Ok(response) => response
+                .extensions()
+                .get::<reqwest_retry::RetryCount>()
+                .map_or(0, |retries| retries.value()),
+            Err(reqwest_middleware::Error::Middleware(err)) => {
+                match err.downcast_ref::<reqwest_retry::RetryError>() {
+                    Some(reqwest_retry::RetryError::WithRetries { retries, .. }) => *retries,
+                    Some(reqwest_retry::RetryError::Error(_)) | None => 0,
+                }
+            }
+            Err(reqwest_middleware::Error::Reqwest(_)) => 0,
+        };
+        self.total_retries += retries;
     }
 
     /// Determines whether request should be retried.
@@ -129,7 +172,7 @@ impl RetryState {
     /// Wait before retrying the request.
     pub async fn sleep_backoff(&self, duration: Duration) {
         debug!(
-            "Transient failure while handling response from {}; retrying after {:.1}s...",
+            "Transient failure while handling response from `{}`; retrying after {:.1}s...",
             self.url,
             duration.as_secs_f32(),
         );
@@ -153,7 +196,7 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
         .map(|request_err| (request_err.status(), request_err.url()))
     {
         trace!(
-            "Considering retry of response HTTP {status} for {url}",
+            "Considering retry of response HTTP {status} for `{url}`",
             url = DisplaySafeUrl::from_url(url.clone())
         );
     } else if let Some(url) = request_error_url(err) {

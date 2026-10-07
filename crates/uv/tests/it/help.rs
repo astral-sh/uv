@@ -610,6 +610,15 @@ fn help_subsubcommand() {
 
               Distributions can be read from a local directory by using the `file://` URL scheme.
 
+          --graalpy-mirror <GRAALPY_MIRROR>
+              Set the URL to use as the source for downloading GraalPy installations.
+
+              The provided URL will replace `https://github.com/oracle/graalpython/releases/download`
+              in, e.g.,
+              `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+
+              Distributions can be read from a local directory by using the `file://` URL scheme.
+
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
               URL pointing to JSON of custom Python installations
 
@@ -900,6 +909,8 @@ fn help_flag_subsubcommand() {
               Set the URL to use as the source for downloading Python installations
           --pypy-mirror <PYPY_MIRROR>
               Set the URL to use as the source for downloading PyPy installations
+          --graalpy-mirror <GRAALPY_MIRROR>
+              Set the URL to use as the source for downloading GraalPy installations
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
               URL pointing to JSON of custom Python installations
       -r, --reinstall

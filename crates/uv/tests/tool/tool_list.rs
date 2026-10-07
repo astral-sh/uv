@@ -220,7 +220,10 @@ fn tool_list_outdated_recomputes_relative_exclude_newer() {
         .arg("--exclude-newer")
         .arg("3 weeks")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-03-22T00:00:00Z")
+        .env(
+            EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP,
+            "2024-03-22T00:00:00Z",
+        )
         .assert()
         .success();
 
@@ -228,7 +231,7 @@ fn tool_list_outdated_recomputes_relative_exclude_newer() {
     uv_snapshot!(context.filters(), context.tool_list()
     .arg("--outdated")
     .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-    .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z"), @"
+    .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z"), @"
     exit_code: 0 (success)
     ----- stdout -----
     black v24.2.0 [latest: 24.3.0]

@@ -10,7 +10,7 @@ use regex::regex;
 use thiserror::Error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -22,7 +22,7 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error(transparent)]
     Lowering(#[from] uv_distribution::MetadataError),
-    #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
+    #[error("`{}` does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
@@ -58,6 +58,27 @@ pub enum Error {
 }
 
 impl IsBuildBackendError for Error {
+    fn is_user_failure(&self) -> bool {
+        match self {
+            Self::InvalidSourceDist(_)
+            | Self::InvalidPyprojectTomlSyntax(_)
+            | Self::InvalidPyprojectTomlSchema(_)
+            | Self::InvalidBackendPath(_)
+            | Self::BackendPathOutsideSourceTree(_)
+            | Self::CommandFailed(..)
+            | Self::BuildBackend(_)
+            | Self::MissingHeader(_)
+            | Self::BuildScriptPath(_)
+            | Self::CyclicBuildDependency(_)
+            | Self::UnmatchedRuntime(..)
+            | Self::Lowering(_) => true,
+            Self::RequirementsResolve(_, error) | Self::RequirementsInstall(_, error) => {
+                error.is_user_failure()
+            }
+            Self::Io(_) | Self::Virtualenv(_) => false,
+        }
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Io(_)
@@ -80,7 +101,7 @@ impl IsBuildBackendError for Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         match self {
             Self::BuildBackend(_) => Hints::from(
@@ -172,21 +193,21 @@ impl Display for MissingHeaderCause {
                 {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{}\" for `{}`",
+                        "This error likely indicates that you need to install a library that provides `{}` for `{}`",
                         header.cyan(),
                         format!("{package_name}@{package_version}").cyan(),
                     )
                 } else if let Some(version_id) = &self.version_id {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{}\" for `{}`",
+                        "This error likely indicates that you need to install a library that provides `{}` for `{}`",
                         header.cyan(),
                         version_id.cyan(),
                     )
                 } else {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{}\"",
+                        "This error likely indicates that you need to install a library that provides `{}`",
                         header.cyan(),
                     )
                 }
@@ -450,7 +471,7 @@ mod test {
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
-    use uv_errors::{ErrorWithHints, Hint};
+    use uv_errors::{ErrorWithHints, Hinted};
     use uv_normalize::PackageName;
     use uv_pep440::Version;
 
@@ -522,7 +543,7 @@ mod test {
         compilation terminated.
         error: command '/usr/bin/gcc' failed with exit code 1
 
-        hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz-1.11`
+        hint: This error likely indicates that you need to install a library that provides `graphviz/cgraph.h` for `pygraphviz-1.11`
         "#);
     }
 

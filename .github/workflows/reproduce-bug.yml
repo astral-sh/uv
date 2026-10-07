@@ -15,7 +15,7 @@ on:
         type: string
       runner:
         description: "The runner to use for reproduction"
-        default: ubuntu-latest
+        default: github-ubuntu-24.04-x86_64-4
         required: false
         type: string
     outputs:
@@ -48,11 +48,11 @@ on:
         type: string
       runner:
         description: "The runner to use for reproduction"
-        default: ubuntu-latest
+        default: github-ubuntu-24.04-x86_64-4
         required: true
         type: choice
         options:
-          - ubuntu-latest
+          - github-ubuntu-24.04-x86_64-4
           - macos-latest
 
 permissions: {}
@@ -78,9 +78,29 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: "Check uv runner support"
+        if: ${{ !((runner.os == 'Linux' && runner.arch == 'X64') || (runner.os == 'macOS' && runner.arch == 'ARM64')) }}
+        shell: bash
+        run: |
+          echo "Unsupported uv runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+          exit 1
+
+      - name: "Install uv on Linux x64"
+        if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          enable-cache: false
+
+      - name: "Install uv on macOS ARM64"
+        if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
           enable-cache: false
 
       - name: "Collect issue context"
@@ -113,14 +133,14 @@ jobs:
 
       - name: "Reproduce issue behavior"
         id: reproduce
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
           UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.153.4"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "reproduce-bug"
@@ -150,7 +170,7 @@ jobs:
   report:
     needs: reproduce
     if: needs.reproduce.outputs.result != ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 10
     concurrency:
@@ -237,9 +257,29 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: "Check uv runner support"
+        if: ${{ !((runner.os == 'Linux' && runner.arch == 'X64') || (runner.os == 'macOS' && runner.arch == 'ARM64')) }}
+        shell: bash
+        run: |
+          echo "Unsupported uv runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+          exit 1
+
+      - name: "Install uv on Linux x64"
+        if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          enable-cache: false
+
+      - name: "Install uv on macOS ARM64"
+        if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
           enable-cache: false
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -263,7 +303,7 @@ jobs:
 
       - name: "Create integration test"
         id: create-test
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INSTA_UPDATE: "no"
@@ -271,7 +311,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.153.4"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "create-bug-test"
@@ -340,7 +380,7 @@ jobs:
   publish-integration-test:
     needs: [reproduce, create-integration-test]
     if: needs.create-integration-test.outputs.created == 'true'
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     environment: automations
     timeout-minutes: 10
     permissions:
@@ -428,7 +468,7 @@ jobs:
       - name: "Open draft pull request"
         id: open-pr
         run: |
-          branch="zb/reproduce-bug/$ISSUE_NUMBER"
+          branch="automations/reproduce-bug/$ISSUE_NUMBER"
           git -c core.hooksPath=/dev/null push \
             "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
             "$REGRESSION_HEAD_SHA:refs/heads/$branch"

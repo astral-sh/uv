@@ -746,7 +746,21 @@ impl Cache {
             Err(err) => return Err(err),
         }
 
-        // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
+        // Third, remove all temporary build environments.
+        match fs_err::read_dir(self.bucket(CacheBucket::Builds)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path();
+                    debug!("Removing temporary build environment: {}", path.display());
+                    summary += self.remove_path(path)?;
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
+        }
+
+        // Fourth, if enabled, remove all unzipped wheels, leaving only the wheel archives.
         if ci {
             // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
             match fs_err::read_dir(self.bucket(CacheBucket::Wheels)) {
@@ -806,7 +820,7 @@ impl Cache {
             }
         }
 
-        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
+        // Fifth, remove any unused archives (by searching for archives that are not symlinked).
         let references = self.find_archive_references()?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
@@ -1300,15 +1314,17 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
+            // TODO(ww): Remove `uv_pypi_types::HashDigestWire` on the next cache bump
+            // or breaking release.
             Self::SourceDistributions => "sdists-v9",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/lock/lock.rs`.
-            Self::FlatIndex => "flat-index-v4",
-            Self::Git => "git-v0",
+            Self::FlatIndex => "flat-index-v5",
+            Self::Git => "git-v1",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
-            Self::Simple => "simple-v24",
+            Self::Simple => "simple-v25",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
             Self::Wheels => "wheels-v6",

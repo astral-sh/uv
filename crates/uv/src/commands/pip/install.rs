@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use itertools::Itertools;
@@ -6,10 +6,11 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{Level, debug, enabled, warn};
 
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_cli::PipInstallFormat;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
     ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
@@ -30,8 +31,8 @@ use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, Target,
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -46,13 +47,14 @@ use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::editable::apply_editable_mode;
+use crate::commands::install_report::write_install_report;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 
 /// The interpreter is externally managed and cannot be modified.
@@ -64,7 +66,7 @@ pub(crate) struct ExternallyManagedError {
     system: bool,
 }
 
-impl Hint for ExternallyManagedError {
+impl Hinted for ExternallyManagedError {
     fn hints(&self) -> Hints<'_> {
         if self.system {
             Hints::from("Virtual environments were not considered due to the `--system` flag")
@@ -85,7 +87,7 @@ pub(crate) async fn pip_install(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
-    build_constraints_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
@@ -126,10 +128,12 @@ pub(crate) async fn pip_install(
     target: Option<Target>,
     prefix: Option<Prefix>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     concurrency: Concurrency,
     cache: Cache,
     workspace_cache: WorkspaceCache,
     dry_run: DryRun,
+    output_format: PipInstallFormat,
     printer: Printer,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
@@ -146,6 +150,7 @@ pub(crate) async fn pip_install(
         mut override_dependencies,
         excludes,
         pylock,
+        pylock_groups,
         source_trees,
         groups,
         index_url,
@@ -196,17 +201,12 @@ pub(crate) async fn pip_install(
         .collect();
 
     // Read build constraints.
-    let build_constraints: Vec<NameRequirementSpecification> =
+    let build_constraints = Constraints::from_specifications(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
-            .chain(
-                build_constraints_from_workspace
-                    .iter()
-                    .cloned()
-                    .map(NameRequirementSpecification::from),
-            )
-            .collect();
+            .chain(build_constraints_from_workspace.iter().cloned()),
+    );
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {
@@ -217,12 +217,12 @@ pub(crate) async fn pip_install(
             python_request.as_ref(),
             EnvironmentPreference::from_system_flag(system, false),
             python_preference.with_system_flag(system),
+            python_arch,
             python_downloads,
             &client_builder,
             &cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.mirrors(),
             install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
@@ -236,6 +236,7 @@ pub(crate) async fn pip_install(
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
             PythonPreference::default().with_system_flag(system),
+            python_arch,
             &cache,
         )?;
         report_target_environment(&environment, &cache, printer)?;
@@ -250,13 +251,13 @@ pub(crate) async fn pip_install(
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
         debug!(
-            "Using `--target` directory at {}",
+            "Using `--target` directory at `{}`",
             target.root().user_display()
         );
         environment.with_target(target)?
     } else if let Some(prefix) = prefix {
         debug!(
-            "Using `--prefix` directory at {}",
+            "Using `--prefix` directory at `{}`",
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
@@ -271,12 +272,12 @@ pub(crate) async fn pip_install(
         } else {
             let managed_message = match externally_managed.into_error() {
                 Some(error) => format!(
-                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n",
+                    "The interpreter at `{}` is externally managed, and indicates the following:\n\n{}\n",
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
                 ),
                 None => format!(
-                    "The interpreter at {} is externally managed and cannot be modified.",
+                    "The interpreter at `{}` is externally managed and cannot be modified.",
                     environment.root().user_display().cyan()
                 ),
             };
@@ -342,6 +343,7 @@ pub(crate) async fn pip_install(
             &overrides,
             &override_dependencies,
             &excludes,
+            &dependency_metadata,
             dependency_mode,
             InstallationStrategy::Permissive,
             &marker_env,
@@ -379,6 +381,7 @@ pub(crate) async fn pip_install(
                     )?;
                 }
 
+                write_install_report(&Changelog::default(), dry_run, output_format, printer)?;
                 return Ok(ExitStatus::Success);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
@@ -456,13 +459,7 @@ pub(crate) async fn pip_install(
     let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = FlatIndex::load(&client, &cache, &index_locations).await?;
 
     // Determine whether to enable build isolation.
     let types_build_isolation = match build_isolation {
@@ -473,26 +470,16 @@ pub(crate) async fn pip_install(
         }
     };
 
-    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
-    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
+    // Verify supplied build hashes unless hash verification was explicitly disabled.
     let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_requirements(
-            std::iter::empty(),
-            build_constraints
-                .iter()
-                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+        HashStrategy::from_constraints(
+            &build_constraints,
             Some(&marker_env),
             HashCheckingMode::Verify,
         )?
     } else {
         HashStrategy::default()
     };
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
-    );
-
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -533,13 +520,17 @@ pub(crate) async fn pip_install(
             .cloned()
             .collect::<Vec<_>>();
 
-        let groups = groups
-            .get(&pylock)
-            .cloned()
-            .unwrap_or_default()
-            .with_defaults(DefaultGroups::List(lock.default_groups.clone()));
+        let groups =
+            pylock_groups.with_defaults(DefaultGroups::from_groups(lock.default_groups.clone()));
         let groups = groups
             .group_names(lock.dependency_groups.iter())
+            // PEP 751 allows synthetic default groups that aren't publicly selectable.
+            .chain(
+                lock.default_groups
+                    .iter()
+                    .filter(|group| groups.contains_because_default(group)),
+            )
+            .unique()
             .cloned()
             .collect::<Vec<_>>();
 
@@ -577,7 +568,7 @@ pub(crate) async fn pip_install(
             excludes,
             source_trees,
             project,
-            BTreeSet::default(),
+            BTreeMap::default(),
             extras,
             &groups,
             preferences,
@@ -596,6 +587,7 @@ pub(crate) async fn pip_install(
             &build_dispatch,
             &concurrency,
             options,
+            None,
             Box::new(DefaultResolveLogger),
             printer,
         )
@@ -603,9 +595,7 @@ pub(crate) async fn pip_install(
         {
             Ok((graph, hasher)) => (Resolution::from(graph), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err).into());
             }
         };
 
@@ -655,7 +645,7 @@ pub(crate) async fn pip_install(
     );
 
     // Sync the environment.
-    match operations::install(
+    let changelog = match operations::install(
         &resolution,
         site_packages,
         InstallationStrategy::Permissive,
@@ -680,13 +670,15 @@ pub(crate) async fn pip_install(
     )
     .await
     {
-        Ok(..) => {}
-        Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        Ok(changelog) => changelog,
+        Err(operations::Error::OutdatedEnvironment(changelog)) => {
+            write_install_report(&changelog, dry_run, output_format, printer)?;
+            return Ok(ExitStatus::Failure);
         }
-    }
+        Err(err) => {
+            return Err(UvError::from(err).into());
+        }
+    };
 
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
@@ -703,5 +695,6 @@ pub(crate) async fn pip_install(
         )?;
     }
 
+    write_install_report(&changelog, dry_run, output_format, printer)?;
     Ok(ExitStatus::Success)
 }

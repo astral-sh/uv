@@ -25,7 +25,7 @@ env:
 jobs:
   labels:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 15
     permissions:
@@ -68,12 +68,12 @@ jobs:
 
       - name: "Determine pull request labels"
         id: labels
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.153.4"
           working-directory: "${{ github.workspace }}/pull-request"
           codex-home: "${{ github.workspace }}/agents/codex"
           permission-profile: "pull-request-labels"
@@ -85,7 +85,7 @@ jobs:
   report:
     needs: labels
     if: needs.labels.outputs.result != ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     permissions: {}
     steps:
       - name: "Write label recommendations"
@@ -98,7 +98,7 @@ jobs:
     if: >-
       github.repository == 'astral-sh/uv-dev' &&
       needs.labels.outputs.result != ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     permissions: {}
     outputs:
       labels: ${{ steps.validate.outputs.labels }}
@@ -136,7 +136,7 @@ jobs:
     if: >-
       needs.validate.outputs.labels != '' &&
       fromJSON(needs.validate.outputs.labels)[0] != null
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     environment: automations
     timeout-minutes: 5
     permissions:

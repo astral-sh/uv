@@ -6,6 +6,7 @@ pub use base_client::{
 };
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::{Error, ErrorKind, ProblemDetails, WrappedReqwestError};
+pub use file_hash::FileHashError;
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError};
 pub use registry_client::{
     Connectivity, MetadataFormat, MetadataRangeRequest, RegistryClient, RegistryClientBuilder,
@@ -19,6 +20,7 @@ pub use tls::{CertificateFileError, Certificates};
 mod base_client;
 mod cached_client;
 mod error;
+mod file_hash;
 mod flat_index;
 mod html;
 mod httpcache;

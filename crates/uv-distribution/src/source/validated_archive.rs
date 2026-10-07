@@ -7,7 +7,7 @@ use tracing::warn;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_types::{BuildableSource, HashPolicy};
+use uv_distribution_types::{ArchiveHashPolicy, BuildableSource, SourceDist};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::rename_with_retry;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -19,7 +19,7 @@ pub(super) struct ArchiveValidation<'a> {
     /// Additional hashes to generate beyond those required for validation.
     pub(super) extra_algorithms: &'a [HashAlgorithm],
     /// The caller's trusted hash policy.
-    pub(super) hash_policy: HashPolicy<'a>,
+    pub(super) hash_policy: ArchiveHashPolicy<'a>,
     /// Every digest from a cache revision being repaired must remain unchanged.
     pub(super) existing_hashes: &'a [HashDigest],
     pub(super) expected_size: Option<u64>,
@@ -53,8 +53,17 @@ impl ValidatedSourceArchive {
         let staging_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))
             .map_err(Error::CacheWrite)?;
 
-        // Include every algorithm needed to validate the caller's policy or repair an old revision.
+        let hash_policy = if let BuildableSource::Dist(SourceDist::Registry(dist)) = source {
+            validation
+                .hash_policy
+                .with_index_hashes(dist.file.hashes.as_slice())
+        } else {
+            validation.hash_policy
+        };
+
+        // Include the caller's algorithms alongside any index algorithms selected for validation.
         let mut algorithms = validation.hash_policy.algorithms();
+        algorithms.extend(hash_policy.algorithms());
         algorithms.extend_from_slice(validation.extra_algorithms);
         algorithms.extend(validation.existing_hashes.iter().map(HashDigest::algorithm));
         algorithms.sort();
@@ -88,11 +97,10 @@ impl ValidatedSourceArchive {
             .into_iter()
             .map(HashDigest::from)
             .collect::<Vec<_>>();
-        if validation.hash_policy.requires_validation() && !validation.hash_policy.matches(&hashes)
-        {
+        if hash_policy.requires_validation() && !hash_policy.matches(&hashes) {
             return Err(Error::hash_mismatch(
                 source.to_string(),
-                validation.hash_policy.digests(),
+                hash_policy.digests(),
                 &hashes,
             ));
         }
@@ -152,14 +160,14 @@ mod tests {
     use futures::TryStreamExt;
     use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-    use uv_distribution_types::{DirectSourceUrl, HashGeneration, SourceUrl};
+    use uv_distribution_types::{DirectSourceUrl, SourceUrl};
     use uv_redacted::DisplaySafeUrl;
 
     use super::*;
 
     const NO_VALIDATION: ArchiveValidation<'static> = ArchiveValidation {
         extra_algorithms: &[],
-        hash_policy: HashPolicy::None,
+        hash_policy: ArchiveHashPolicy::None,
         existing_hashes: &[],
         expected_size: None,
     };
@@ -221,7 +229,7 @@ mod tests {
                 ..NO_VALIDATION
             },
             ArchiveValidation {
-                hash_policy: HashPolicy::Generate(HashGeneration::All),
+                hash_policy: ArchiveHashPolicy::Generate,
                 ..NO_VALIDATION
             },
             ArchiveValidation {
@@ -277,7 +285,7 @@ mod tests {
             &cache,
             &bytes[..],
             ArchiveValidation {
-                hash_policy: HashPolicy::All(&[wrong_hash]),
+                hash_policy: ArchiveHashPolicy::All(&[wrong_hash]),
                 ..NO_VALIDATION
             },
         )
@@ -289,10 +297,10 @@ mod tests {
                 .is_none()
         );
 
-        let existing_hash = HashDigest {
-            algorithm: HashAlgorithm::Sha512,
-            digest: "f754f5955ce76c8fbdccdacd6e0e34977354b04d062d7f993fa84f3301309257fd225c85ebc99571b8b8ad711b37c407af65c5eae73599802ea3b4d3082d2f32".into(),
-        };
+        let existing_hash = HashDigest::new(
+            HashAlgorithm::Sha512,
+            "f754f5955ce76c8fbdccdacd6e0e34977354b04d062d7f993fa84f3301309257fd225c85ebc99571b8b8ad711b37c407af65c5eae73599802ea3b4d3082d2f32",
+        )?;
         let archive = extract(
             &cache,
             &bytes[..],

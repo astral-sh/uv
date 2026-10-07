@@ -10,17 +10,17 @@ use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
+use uv_dispatch::PlatformState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
-use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::{CWD, Simplified};
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
-    PythonRequest,
+    EnvironmentPreference, Interpreter, PythonArchitecture, PythonDownloads, PythonInstallation,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -33,7 +33,7 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::{operations::Modifications, resolution_tags};
 use crate::commands::project::{
-    EnvironmentResolution, EnvironmentUpdate, PlatformState, resolve_environment, sync_environment,
+    EnvironmentResolution, EnvironmentUpdate, resolve_environment, sync_environment,
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
@@ -52,6 +52,7 @@ pub(crate) async fn upgrade(
     filesystem: ResolverInstallerOptions,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -59,6 +60,7 @@ pub(crate) async fn upgrade(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    render_error: fn(&anyhow::Error, Printer) -> std::fmt::Result,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
@@ -104,12 +106,12 @@ pub(crate) async fn upgrade(
                 python_request.as_ref(),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &client_builder,
                 cache,
                 Some(&reporter),
-                install_mirrors.python_install_mirror.as_deref(),
-                install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.mirrors(),
                 install_mirrors.python_downloads_json_url.as_deref(),
             )
             .await?
@@ -179,11 +181,9 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            write_error_chain_with_options(
-                err.context(format!("Failed to upgrade {}", name.green()))
-                    .as_ref(),
-                Hints::none(),
-                ErrorOptions::default().with_stream(printer.stderr()),
+            render_error(
+                &err.context(format!("Failed to upgrade {}", name.green())),
+                printer,
             )?;
         }
         return Ok(ExitStatus::Failure);
@@ -349,9 +349,7 @@ async fn upgrade_tool(
     let options = args.clone().combine(receipt.combine(filesystem.clone()));
     let settings = ResolverInstallerSettings::from(options.clone());
 
-    let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
-    let build_constraints =
-        Constraints::from_requirements(build_constraint_requirements.iter().cloned());
+    let build_constraints = existing_tool_receipt.build_constraints().to_vec();
     let manifest_constraints = existing_tool_receipt
         .constraints()
         .iter()
@@ -365,9 +363,10 @@ async fn upgrade_tool(
         &manifest_constraints,
         &manifest_overrides,
         &manifest_excludes,
-        &build_constraint_requirements,
+        &build_constraints,
         &settings.resolver.dependency_metadata,
     );
+    let build_constraints = Constraints::from_specifications(build_constraints);
 
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(

@@ -865,7 +865,7 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BrokenLink(err) => err.hints(),
@@ -902,7 +902,7 @@ impl Display for BrokenLink {
     }
 }
 
-impl uv_errors::Hint for BrokenLink {
+impl uv_errors::Hinted for BrokenLink {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if self.venv {
             uv_errors::Hints::from(format!(
@@ -1229,7 +1229,7 @@ impl InterpreterInfo {
                     }
                     Err(err) => {
                         warn!(
-                            "Broken interpreter cache entry at {}, removing: {err}",
+                            "Broken interpreter cache entry at `{}`, removing: {err}",
                             cache_entry.path().user_display()
                         );
                         let _ = fs_err::remove_file(cache_entry.path());
@@ -1240,7 +1240,7 @@ impl InterpreterInfo {
 
         // Otherwise, run the Python script.
         trace!(
-            "Querying interpreter executable at {}",
+            "Querying interpreter executable at `{}`",
             executable.display()
         );
         let info = Self::query(executable, cache)?;

@@ -369,14 +369,8 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
         &work_dir,
     )?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"Using Python 3.12.\[X\] interpreter at: .*",
-        "Using Python 3.12.[X] interpreter at: [PYTHON]",
-    ));
-
     // Run from the `bird-feeder` member.
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("bird-feeder")
@@ -474,13 +468,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"Using Python 3.12.\[X\] interpreter at: .*",
-        "Using Python 3.12.[X] interpreter at: [PYTHON]",
-    ));
-
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("bird-feeder")
@@ -535,12 +523,6 @@ fn test_uv_run_isolate() -> Result<()> {
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"Using Python 3.12.\[X\] interpreter at: .*",
-        "Using Python 3.12.[X] interpreter at: [PYTHON]",
-    ));
-
     // Install the root package.
     uv_snapshot!(context.filters(), context
         .run()
@@ -570,7 +552,7 @@ fn test_uv_run_isolate() -> Result<()> {
     // Run in `bird-feeder`. We shouldn't be able to import `albatross`, but we _can_ due to our
     // virtual environment semantics. Specifically, we only make the changes necessary to run a
     // given command, so we don't remove `albatross` from the environment.
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("bird-feeder")
@@ -591,7 +573,7 @@ fn test_uv_run_isolate() -> Result<()> {
     // available.
     // TODO(charlie): This should show the resolution output, but `--isolated` is coupled to
     // `--no-project` right now.
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--isolated")
         .arg("--package")
@@ -1318,9 +1300,9 @@ fn workspace_inherit_sources() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
-          And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
+             And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
@@ -1400,7 +1382,7 @@ fn workspace_inherit_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -1526,9 +1508,9 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only httpx<=0.27.0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
-          And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because only httpx<=0.27.0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
+             And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1591,9 +1573,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because bar depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
-          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because bar depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
+             And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1671,9 +1653,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because bird depends on anyio==4.3.0 and knot depends on anyio==4.2.0, we can conclude that bird and knot are incompatible.
-          And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because bird depends on anyio==4.3.0 and knot depends on anyio==4.2.0, we can conclude that bird and knot are incompatible.
+             And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1738,9 +1720,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because bar[some-extra] depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar[some-extra] are incompatible.
-          And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because bar[some-extra] depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar[some-extra] are incompatible.
+             And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1806,9 +1788,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `packages/bar/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
-          And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
+             And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1874,9 +1856,9 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
-      ├─▶ Failed to parse entry: `anyio`
-      ╰─▶ `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
+    error: Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
+      cause: Failed to parse entry: `anyio`
+      cause: `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
     "
     );
 
@@ -2155,7 +2137,7 @@ fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]

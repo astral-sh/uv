@@ -10,12 +10,15 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
+use uv_auth::CredentialsCache;
 use uv_build_backend::check_direct_build;
+use uv_build_frontend::SourceBuild;
 use uv_cache::{Cache, CacheBucket};
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
+    DependencyGroupsWithDefaults, DependencyMode, DependencyModifiers, HashCheckingMode,
+    IndexStrategy, KeyringProviderType, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -23,18 +26,20 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, Requirement, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations,
+    NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
+use uv_errors::{ErrorOptions, Hinted, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
@@ -77,6 +82,10 @@ pub(crate) enum Error {
     BuildDispatch(AnyErrorBuild),
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
+    #[error("Failed to check build requirements")]
+    RequirementsCheck(#[source] anyhow::Error),
+    #[error("Build requirement is not satisfied: `{0}`")]
+    UnsatisfiedBuildRequirement(Box<Requirement>),
     #[error(transparent)]
     Project(#[from] Box<ProjectError>),
     #[error("Failed to write message")]
@@ -108,7 +117,7 @@ impl From<ProjectError> for Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         match self {
             Self::BuildBackend(err) => err.hints(),
@@ -190,6 +199,7 @@ impl Hint for Error {
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build_frontend(
     project_dir: &Path,
+    skip_dependency_check: bool,
     src: Option<PathBuf>,
     package: Option<PackageName>,
     all_packages: bool,
@@ -202,7 +212,7 @@ pub(crate) async fn build_frontend(
     force_pep517: bool,
     clear: bool,
     build_constraints: Vec<RequirementsSource>,
-    build_constraints_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -210,6 +220,7 @@ pub(crate) async fn build_frontend(
     client_builder: &BaseClientBuilder<'_>,
     config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     cache: &Cache,
@@ -219,6 +230,7 @@ pub(crate) async fn build_frontend(
 ) -> Result<ExitStatus> {
     let build_result = build_impl(
         project_dir,
+        skip_dependency_check,
         src.as_deref(),
         package.as_ref(),
         all_packages,
@@ -239,6 +251,7 @@ pub(crate) async fn build_frontend(
         client_builder,
         config_discovery,
         python_preference,
+        python_arch,
         python_downloads,
         &concurrency,
         cache,
@@ -268,6 +281,7 @@ enum BuildResult {
 #[expect(clippy::fn_params_excessive_bools)]
 async fn build_impl(
     project_dir: &Path,
+    skip_dependency_check: bool,
     src: Option<&Path>,
     package: Option<&PackageName>,
     all_packages: bool,
@@ -280,7 +294,7 @@ async fn build_impl(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[Requirement],
+    build_constraints_from_workspace: &[NameRequirementSpecification],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -288,6 +302,7 @@ async fn build_impl(
     client_builder: &BaseClientBuilder<'_>,
     config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: &Concurrency,
     cache: &Cache,
@@ -464,12 +479,14 @@ async fn build_impl(
     let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|source| {
         let future = build_package(
             source.clone(),
+            skip_dependency_check,
             output_dir,
             python_request,
             install_mirrors.clone(),
             config_discovery,
             workspace.as_deref(),
             python_preference,
+            python_arch,
             python_downloads,
             cache,
             workspace_cache,
@@ -521,7 +538,7 @@ async fn build_impl(
                 let hints = crate::commands::diagnostics::hints_for_error(&err);
                 write_error_chain_with_options(
                     err.as_ref(),
-                    hints,
+                    &hints,
                     ErrorOptions::default().with_stream(printer.stderr_important()),
                 )?;
 
@@ -540,12 +557,14 @@ async fn build_impl(
 #[expect(clippy::fn_params_excessive_bools)]
 async fn build_package(
     source: AnnotatedSource<'_>,
+    skip_dependency_check: bool,
     output_dir: Option<&Path>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     config_discovery: ConfigDiscovery,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
@@ -558,7 +577,7 @@ async fn build_package(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[Requirement],
+    build_constraints_from_workspace: &[NameRequirementSpecification],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -623,41 +642,46 @@ async fn build_package(
         interpreter_request.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
+        python_arch,
         python_downloads,
         &client_builder,
         cache,
         Some(&PythonDownloadReporter::single(printer)),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.mirrors(),
         install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();
 
     // Read build constraints.
-    let build_constraints =
+    let command_line_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints = Constraints::from_specifications(
+        command_line_constraints
+            .iter()
+            .cloned()
+            .chain(build_constraints_from_workspace.iter().cloned()),
+    );
 
-    // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
-        HashStrategy::from_requirements(
-            std::iter::empty(),
-            build_constraints
-                .iter()
-                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+        // Under `--require-hashes`, include all command-line constraints, but only workspace
+        // constraints with supplied hashes. Other workspace constraints still restrict builds.
+        let hash_constraints = Constraints::from_specifications(
+            command_line_constraints.iter().cloned().chain(
+                build_constraints_from_workspace
+                    .iter()
+                    .filter(|entry| !hash_checking.is_require() || !entry.hashes.is_empty())
+                    .cloned(),
+            ),
+        );
+        HashStrategy::from_constraints(
+            &hash_constraints,
             Some(&interpreter.to_resolver_marker_environment()),
             hash_checking,
         )?
     } else {
         HashStrategy::default()
     };
-
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .into_iter()
-            .map(|constraint| constraint.requirement)
-            .chain(build_constraints_from_workspace.iter().cloned()),
-    );
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -683,13 +707,7 @@ async fn build_package(
     };
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -724,6 +742,17 @@ async fn build_package(
         concurrency.clone(),
         preview,
     );
+    let dependency_check = match types_build_isolation {
+        uv_types::BuildIsolation::Isolated => None,
+        uv_types::BuildIsolation::Shared(_) | uv_types::BuildIsolation::SharedPackage(..) => {
+            (preview.is_enabled(PreviewFeature::BuildDependencyCheck) && !skip_dependency_check)
+                .then_some(BuildDependencyCheck {
+                    build_dispatch: &build_dispatch,
+                    constraints: &build_constraints,
+                    credentials_cache: client.credentials_cache(),
+                })
+        }
+    };
 
     prepare_output_directory(&output_dir, gitignore).await?;
 
@@ -737,7 +766,12 @@ async fn build_package(
             return Err(Error::ListForcePep517);
         }
 
-        if let Err(reason) = check_direct_build(source.path(), uv_version::version()) {
+        if let Err(reason) = check_direct_build(
+            source.path(),
+            uv_version::version(),
+            &interpreter.to_resolver_marker_environment(),
+            build_constraints.requirements().cloned().map(Into::into),
+        ) {
             return Err(Error::ListNonUv {
                 name: source.path().user_display().to_string(),
                 reason: reason.to_string(),
@@ -748,7 +782,12 @@ async fn build_package(
     } else if force_pep517 {
         BuildAction::Pep517
     } else {
-        match check_direct_build(source.path(), uv_version::version()) {
+        match check_direct_build(
+            source.path(),
+            uv_version::version(),
+            &interpreter.to_resolver_marker_environment(),
+            build_constraints.requirements().cloned().map(Into::into),
+        ) {
             Ok(()) => BuildAction::DirectBuild,
             Err(reason) => {
                 debug!(
@@ -798,6 +837,7 @@ async fn build_package(
                     printer,
                     "source distribution",
                     &build_dispatch,
+                    dependency_check.as_ref(),
                     &sources,
                     dist,
                     subdirectory,
@@ -815,6 +855,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 &sources,
                 dist,
                 subdirectory,
@@ -847,6 +888,7 @@ async fn build_package(
                 printer,
                 "wheel from source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 sources,
                 dist,
                 subdirectory,
@@ -866,6 +908,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 &sources,
                 dist,
                 subdirectory,
@@ -884,6 +927,7 @@ async fn build_package(
                 printer,
                 "wheel",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 sources,
                 dist,
                 subdirectory,
@@ -903,6 +947,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 &sources,
                 dist,
                 subdirectory,
@@ -919,6 +964,7 @@ async fn build_package(
                 printer,
                 "wheel",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 sources,
                 dist,
                 subdirectory,
@@ -962,6 +1008,7 @@ async fn build_package(
                 printer,
                 "wheel from source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 sources,
                 dist,
                 subdirectory,
@@ -975,6 +1022,74 @@ async fn build_package(
     }
 
     Ok(build_results)
+}
+
+/// Validate dependencies in the caller-provided environment for `uv build`.
+struct BuildDependencyCheck<'a> {
+    build_dispatch: &'a BuildDispatch<'a>,
+    constraints: &'a Constraints,
+    credentials_cache: &'a CredentialsCache,
+}
+
+impl BuildDependencyCheck<'_> {
+    /// Check declared requirements before importing the backend, then check its additional requirements.
+    async fn check(
+        &self,
+        builder: &SourceBuild,
+        install_path: &Path,
+        sources: NoSources,
+    ) -> Result<(), Error> {
+        let Some(environment) = builder.shared_environment() else {
+            // Package-specific isolation can still select an isolated environment for this build.
+            return Ok(());
+        };
+        let site_packages =
+            SitePackages::from_environment(environment).map_err(Error::RequirementsCheck)?;
+        self.check_requirements(builder.build_requirements(), &site_packages, environment)?;
+        let requirements = builder
+            .get_requires_for_build(
+                self.build_dispatch,
+                install_path,
+                sources,
+                self.credentials_cache,
+            )
+            .await?;
+        self.check_requirements(requirements.iter(), &site_packages, environment)
+    }
+
+    /// Validate borrowed requirements against the packages installed in the build environment.
+    fn check_requirements<'a>(
+        &self,
+        requirements: impl Iterator<Item = &'a Requirement>,
+        site_packages: &SitePackages,
+        environment: &PythonEnvironment,
+    ) -> Result<(), Error> {
+        let tags = environment
+            .interpreter()
+            .tags()
+            .map_err(|err| Error::RequirementsCheck(err.into()))?;
+        let markers = environment.interpreter().to_resolver_marker_environment();
+        match site_packages
+            .satisfies_requirements(
+                requirements,
+                self.constraints.requirements(),
+                &DependencyModifiers::default(),
+                self.build_dispatch.dependency_metadata(),
+                DependencyMode::Transitive,
+                InstallationStrategy::Permissive,
+                &markers,
+                tags,
+                // Build settings configure this project, not its preinstalled dependencies.
+                None,
+            )
+            .map_err(Error::RequirementsCheck)?
+        {
+            SatisfiesResult::Fresh { .. } => Ok(()),
+            SatisfiesResult::Unsatisfied(requirement) => {
+                Err(Error::UnsatisfiedBuildRequirement(Box::new(requirement)))
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -1010,6 +1125,7 @@ async fn build_sdist(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
+    dependency_check: Option<&BuildDependencyCheck<'_>>,
     sources: &NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
@@ -1096,6 +1212,11 @@ async fn build_sdist(
                 )
                 .await
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
+            if let Some(dependency_check) = dependency_check {
+                dependency_check
+                    .check(&builder, source.path(), sources.clone())
+                    .await?;
+            }
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 normalized_filename: DistFilename::SourceDistFilename(
@@ -1121,6 +1242,7 @@ async fn build_wheel(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
+    dependency_check: Option<&BuildDependencyCheck<'_>>,
     sources: NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
@@ -1203,6 +1325,11 @@ async fn build_wheel(
                 )
                 .await
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
+            if let Some(dependency_check) = dependency_check {
+                dependency_check
+                    .check(&builder, source.path(), sources.clone())
+                    .await?;
+            }
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 normalized_filename: DistFilename::WheelFilename(

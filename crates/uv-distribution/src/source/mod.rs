@@ -26,14 +26,15 @@ use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_client::{
     BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
-    RegistryClient,
+    RegistryClient, RetryState,
 };
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
-    ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, HashPolicy, Hashed, IndexUrl,
-    PathSourceUrl, RemoteSource, RequirementSource, RequiresPython, SourceDist, SourceUrl,
+    ArchiveHashPolicy, BuildInfo, BuildVariables, BuildableSource, ConfigSettings,
+    DirectorySourceUrl, ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, Hashed,
+    IndexUrl, PathSourceUrl, RemoteSource, RequirementSource, RequiresPython, SourceDist,
+    SourceUrl,
 };
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
 use uv_git::{Fetch, GIT_LFS, GitError, GitHttpSettings, GitResolver};
@@ -53,7 +54,7 @@ use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
 use crate::source::validated_archive::{ArchiveValidation, ValidatedSourceArchive};
-use crate::{Reporter, RequiresDist};
+use crate::{FirstPartyPackages, Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
@@ -211,6 +212,7 @@ pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
+    metadata_first_party_packages: Option<&'a FirstPartyPackages>,
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
@@ -235,7 +237,29 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             build_context,
             build_stack: None,
             reporter: None,
+            metadata_first_party_packages: None,
         }
+    }
+
+    /// Set the first-party policy for a metadata build.
+    pub(crate) fn for_metadata<'metadata>(
+        &'metadata self,
+        first_party_packages: Option<&'metadata FirstPartyPackages>,
+    ) -> SourceDistributionBuilder<'metadata, T> {
+        SourceDistributionBuilder {
+            build_context: self.build_context,
+            build_stack: self.build_stack,
+            reporter: self.reporter.clone(),
+            metadata_first_party_packages: first_party_packages,
+        }
+    }
+
+    /// Return whether the source is eligible for first-party builds.
+    fn is_first_party(&self, source: &BuildableSource<'_>) -> bool {
+        source.is_first_party()
+            || self
+                .metadata_first_party_packages
+                .is_some_and(|packages| packages.contains_source(source))
     }
 
     /// Set the [`BuildStack`] to use for the [`SourceDistributionBuilder`].
@@ -261,7 +285,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
@@ -425,7 +449,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     pub(crate) async fn download_and_build_metadata(
         &self,
         source: &BuildableSource<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
@@ -631,7 +655,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -764,7 +788,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -948,7 +972,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(HTTP_REVISION);
@@ -973,7 +997,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let download = |response| {
+        let download = |response, _: &mut RetryState| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
                 // new revision, to collect the source and built artifacts.
@@ -1057,7 +1081,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
@@ -1165,7 +1189,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
@@ -1320,7 +1344,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalRevisionPointer, Error> {
         // Verify that the archive exists.
         if !resource.path.is_file() {
@@ -1380,7 +1404,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.requires_validation() {
@@ -1486,7 +1510,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
@@ -1798,7 +1822,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitPathSourceUrl<'_>,
         fetch: &Fetch,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<RevisionHashes, Error> {
         // Validate that LFS artifacts were fully initialized.
         if resource.git.lfs().enabled() && !fetch.lfs_ready() {
@@ -1858,7 +1882,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitPathSourceUrl<'_>,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Fetch the Git repository.
@@ -1968,7 +1992,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &GitPathSourceUrl<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Fetch the Git repository.
@@ -2131,7 +2155,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitDirectorySourceUrl<'_>,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
@@ -2239,7 +2263,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &GitDirectorySourceUrl<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
@@ -2307,7 +2331,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 }
                                 Err(err) => {
                                     debug!(
-                                        "Ignoring `pyproject.toml` from GitHub for {source}: {err}"
+                                        "Ignoring `pyproject.toml` from GitHub for `{source}`: {err}"
                                     );
                                 }
                             }
@@ -2715,7 +2739,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-extracting missing source distribution: {source}");
 
@@ -2741,7 +2765,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-downloading missing source distribution: {source}");
@@ -2767,7 +2791,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let download = |response| {
+        let download = |response, _: &mut RetryState| {
             async {
                 let (hashes, size) = self
                     .download_archive(
@@ -2813,7 +2837,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: HashPolicy<'_>,
+        hash_policy: ArchiveHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
         let reader = response
@@ -2853,7 +2877,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         path: &Path,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: HashPolicy<'_>,
+        hash_policy: ArchiveHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<Vec<HashDigest>, Error> {
         debug!("Unpacking for build: {}", path.display());
@@ -2913,7 +2937,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .build_options()
             .no_build_requirement(source.name())
         {
-            if source.is_editable() || source.is_first_party() {
+            if source.is_editable() || self.is_first_party(source) {
                 debug!("Allowing build for first-party or editable source distribution: {source}");
             } else {
                 return Err(Error::NoBuild);
@@ -3073,9 +3097,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .build_context
             .build_options()
             .no_build_requirement(source_name)
-            // Editable requirements without a known name need metadata to apply
-            // package-specific build settings; named editables must respect `--no-build`.
+            // Unnamed editables need metadata to apply package-specific build settings.
             && !(source_name.is_none() && source.is_editable())
+            && !self.is_first_party(source)
         {
             return if let Some(name) = source_name {
                 Err(Error::NoBuildPackage(name.clone()))
@@ -3326,7 +3350,7 @@ impl StaticMetadata {
                             return Ok(Self::Some(metadata));
                         }
                         Err(err) => {
-                            debug!("Ignoring `pyproject.toml` for {source}: {err}");
+                            debug!("Ignoring `pyproject.toml` for `{source}`: {err}");
                         }
                     }
                 }
@@ -3368,7 +3392,7 @@ impl StaticMetadata {
                         return Ok(Self::Some(metadata));
                     }
                     Err(err) => {
-                        debug!("Ignoring `PKG-INFO` for {source}: {err}");
+                        debug!("Ignoring `PKG-INFO` for `{source}`: {err}");
                     }
                 }
             }

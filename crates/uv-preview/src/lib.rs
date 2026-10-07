@@ -325,7 +325,9 @@ pub enum PreviewFeature {
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck,
-    /// Omit `package.metadata` from `uv.lock`.
+    /// Combines equivalent dependency declarations when writing lockfiles.
+    LockfileNormalization,
+    /// Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
     LockWithoutMetadata,
     /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
     TarCodec,
@@ -338,6 +340,20 @@ pub enum PreviewFeature {
     /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
     /// project's resolved dependencies.
     MissingExcludeNewerPackageLock,
+    /// Omits redundant runtime constraints and records consultations to omit unused overrides, exclusions,
+    /// dependency metadata, and package-specific upload cutoffs from the lockfile.
+    ResolutionInputs,
+    /// Allows using `uv export --batch`.
+    BatchExport,
+    /// Allows using frozen project commands without a workspace manifest.
+    FrozenLockfile,
+    /// Allows setting minimum libc versions for universal resolutions.
+    MinimumLibcVersion,
+    /// Checks build dependencies before nonisolated builds with `uv build`.
+    BuildDependencyCheck,
+    /// Enables lazy imports in build backend invocations on CPython 3.15 and later.
+    /// This can affect import-time side effects in third-party build backends.
+    BuildLazyImports,
 }
 
 impl Display for PreviewFeature {

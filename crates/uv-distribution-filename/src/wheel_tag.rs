@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::BuildTag;
-use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
+use uv_platform_tags::{AbiTag, CompressedTags, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_small_str::SmallString;
 
 /// A [`SmallVec`] type for storing tags.
@@ -46,11 +46,16 @@ impl WheelTag {
                 &small.abi_tag,
                 &small.platform_tag,
             ),
-            Self::Large { large } => compatible_tags.compatibility(
-                large.python_tag.iter(),
-                large.abi_tag.iter(),
-                large.platform_tag.iter(),
-            ),
+            Self::Large { .. } => compatible_tags.compatibility(self.compressed_tags()),
+        }
+    }
+
+    /// Return the components of this tag as one compressed tag group.
+    pub(crate) fn compressed_tags(&self) -> CompressedTags<'_> {
+        CompressedTags {
+            python_tags: self.python_tags(),
+            abi_tags: self.abi_tags(),
+            platform_tags: self.platform_tags(),
         }
     }
 

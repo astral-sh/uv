@@ -83,6 +83,7 @@ pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
 pub use crate::known_platform::*;
+pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
@@ -90,6 +91,7 @@ pub use crate::requested::*;
 pub use crate::requirement::*;
 pub use crate::requires_python::*;
 pub use crate::resolution::*;
+pub use crate::resolution_recorder::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
 pub use crate::status_code_strategy::*;
@@ -116,6 +118,7 @@ mod index_url;
 mod installed;
 mod installed_modules;
 mod known_platform;
+mod minimum_libc_version;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
@@ -123,6 +126,7 @@ mod requested;
 mod requirement;
 mod requires_python;
 mod resolution;
+mod resolution_recorder;
 mod resolved;
 mod specified_requirement;
 mod status_code_strategy;
@@ -1220,9 +1224,9 @@ impl RemoteSource for File {
 impl RemoteSource for Url {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
-        let mut path_segments = self
-            .path_segments()
-            .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
+        let mut path_segments = self.path_segments().ok_or_else(|| {
+            Error::MissingPathSegments(DisplaySafeUrl::ref_cast(self).to_string())
+        })?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
         let last = path_segments
@@ -1806,6 +1810,9 @@ mod test {
             "https://example.com/foo-0.1.0.tar.gz#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query",
             "https://example.com/foo-0.1.0.tar.gz?query#fragment",
+            "https://example.com/foo-0.1.0.tar.gz#fragment?query",
+            "https://example.com/foo-0.1.0.tar.gz#fragment/3?query",
+            "https://example.com/foo%2D0.1.0.tar.gz#fragment/3?query",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
             "https://example.com/foo%2D0.1.0.tar.gz?query=1/2#fragment/3",
@@ -1815,5 +1822,53 @@ mod test {
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
         }
+    }
+
+    #[test]
+    fn remote_source_redacts_missing_path_segments() {
+        for (input, expected) in [
+            (
+                "mailto:ferris@example.com?X-Amz-Signature=sentinel",
+                "mailto:ferris@example.com?X-Amz-Signature=****",
+            ),
+            (
+                "ssh://user:secret@example.com?sig=sentinel",
+                "ssh://user:****@example.com?sig=****",
+            ),
+            (
+                "mailto:ferris@example.com?sig=one&X-Amz-Credential=two&X-Amz-Security-Token=three&X-Amz-Signature=four&token=kept#fragment",
+                "mailto:ferris@example.com?sig=****&X-Amz-Credential=****&X-Amz-Security-Token=****&X-Amz-Signature=****&token=kept#fragment",
+            ),
+            (
+                "mailto:ferris@example.com?x-amz%2dsignature=sentinel&safe=value",
+                "mailto:ferris@example.com?x-amz-signature=****&safe=value",
+            ),
+            (
+                "mailto:ferris@example.com?token=kept#fragment",
+                "mailto:ferris@example.com?token=kept#fragment",
+            ),
+        ] {
+            let url = url::Url::parse(input).unwrap();
+            let error = RemoteSource::filename(&url).unwrap_err();
+            let crate::Error::MissingPathSegments(payload) = &error else {
+                panic!("expected missing path segments");
+            };
+            assert_eq!(payload, expected);
+            assert_eq!(
+                error.to_string(),
+                format!("Could not extract path segments from URL: {expected}")
+            );
+            assert_eq!(
+                format!("{error:?}"),
+                format!("MissingPathSegments({expected:?})")
+            );
+            assert!(std::error::Error::source(&error).is_none());
+            assert_eq!(url.as_str(), input);
+        }
+
+        let input = "https://example.org/demo%20name.whl?sig=sentinel";
+        let url = url::Url::parse(input).unwrap();
+        assert_eq!(RemoteSource::filename(&url).unwrap(), "demo name.whl");
+        assert_eq!(url.as_str(), input);
     }
 }

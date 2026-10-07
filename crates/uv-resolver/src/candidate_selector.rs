@@ -7,7 +7,9 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl};
+use uv_distribution_types::{
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, ResolutionRecorder,
+};
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -22,8 +24,8 @@ use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
-#[expect(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
+    recorder: Option<ResolutionRecorder>,
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
@@ -37,6 +39,7 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
     ) -> Self {
         Self {
+            recorder: manifest.recorder.clone(),
             resolution_strategy: ResolutionStrategy::from_mode(
                 options.resolution_mode,
                 manifest,
@@ -88,6 +91,9 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
+        if let Some(recorder) = &self.recorder {
+            recorder.candidate_policy(package_name);
+        }
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
         let prerelease_selection = self.prerelease_strategy.selection(package_name, env);
@@ -273,7 +279,7 @@ impl CandidateSelector {
                     [dist] => {
                         if dist.version() == version {
                             debug!(
-                                "Found installed version of {dist} that satisfies preference in {range}"
+                                "Found installed version of `{dist}` that satisfies preference in {range}"
                             );
 
                             // Verify that the installed distribution is compatible with the environment.
@@ -283,7 +289,7 @@ impl CandidateSelector {
                                 };
                                 !wheel_tags.is_compatible(tags)
                             }) {
-                                debug!("Platform tags mismatch for installed {dist}");
+                                debug!("Platform tags mismatch for installed `{dist}`");
                                 continue;
                             }
 
@@ -395,7 +401,7 @@ impl CandidateSelector {
                     };
                     !wheel_tags.is_compatible(tags)
                 }) {
-                    debug!("Platform tags mismatch for installed {dist}");
+                    debug!("Platform tags mismatch for installed `{dist}`");
                     return None;
                 }
 
@@ -774,17 +780,16 @@ where
                     return !is_after(version, end);
                 }
             }
-        } else {
-            loop {
-                let (start, end) = self.current;
-                if is_after(version, end) {
-                    let Some(current) = self.segments.next() else {
-                        return false;
-                    };
-                    self.current = current;
-                } else {
-                    return !is_before(version, start);
-                }
+        }
+        loop {
+            let (start, end) = self.current;
+            if is_after(version, end) {
+                let Some(current) = self.segments.next() else {
+                    return false;
+                };
+                self.current = current;
+            } else {
+                return !is_before(version, start);
             }
         }
     }

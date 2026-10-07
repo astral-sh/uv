@@ -9,15 +9,14 @@ use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
-use wiremock::{
-    Mock, MockServer, ResponseTemplate,
-    matchers::{method, path},
-};
+use sha2::{Digest, Sha256};
 
 use uv_cache::CacheBucket;
 use uv_fs::PortablePath;
 #[cfg(unix)]
 use uv_fs::create_symlink;
+use uv_test::archive::generate_source_archive;
+use uv_test::package_server::PackageServer;
 use uv_test::{TestContext, get_bin, uv_snapshot};
 
 /// A custom cache directory must configure commands and snapshot filters together.
@@ -353,30 +352,91 @@ fn cache_init_failure() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `cache_parent/cache`
-      Caused by: failed to create directory `[CACHE_DIR]/`: Permission denied (os error 13)
+      cause: failed to create directory `[CACHE_DIR]/`: Permission denied (os error 13)
     ");
 
     Ok(())
 }
 
+/// Index hashes must be checked before building an sdist or reading its metadata.
+#[tokio::test]
+async fn index_source_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let name = "ok".parse()?;
+    let server = PackageServer::new(&name).await;
+    let index_url = server.index_url();
+    let filename = "ok-1.0.0.tar.gz";
+    let marker = context.temp_dir.child("backend-marker");
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("ok==1.0.0")?;
+
+    let archive = generate_source_archive(&name, &"1.0.0".parse()?, "", Some(marker.path()))?;
+    let source_hash = hex::encode(Sha256::digest(&archive));
+    let wrong_hash = "0".repeat(64);
+    let context = context
+        .with_filter((source_hash.clone(), "[SOURCE_HASH]"))
+        .with_filter((wrong_hash.clone(), "[WRONG_HASH]"));
+    server.serve(filename, &archive, Some(&wrong_hash)).await;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--index-url").arg(&index_url), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
+
+             Expected:
+               sha256:[WRONG_HASH]
+
+             Computed:
+               sha256:[SOURCE_HASH]
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--no-header").arg("--generate-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
+
+             Expected:
+               sha256:[WRONG_HASH]
+
+             Computed:
+               sha256:[SOURCE_HASH]
+    ");
+    marker.assert(predicate::path::missing());
+
+    // The same source is usable once the index supplies its actual hash.
+    server.serve(filename, &archive, Some(&source_hash)).await;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--refresh"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    marker.assert(predicate::path::is_file());
+    context.assert_installed("ok", "1.0.0");
+    Ok(())
+}
+
 #[tokio::test]
 async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"binary-payload".parse()?).await;
+    let filename = "binary_payload-0.1.0-py3-none-any.whl";
     for streaming in [false, true] {
         let context = uv_test::test_context!("3.12")
             .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
         if streaming {
-            Mock::given(method("GET"))
-                .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
-                .mount(&server)
-                .await;
-            command.arg(format!(
-                "{}/binary_payload-0.1.0-py3-none-any.whl",
-                server.uri()
-            ));
+            server.serve(filename, &fs_err::read(&wheel)?, None).await;
+            command.arg(server.file_url(filename));
         } else {
             command.arg(&wheel);
         }
@@ -409,7 +469,8 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
 
 #[tokio::test]
 async fn all_files_except_record_use_archive_file_store() -> Result<()> {
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"binary-payload".parse()?).await;
+    let filename = "binary_payload-0.1.0-py3-none-any.whl";
     for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
         let context = uv_test::test_context!("3.12")
             .with_concurrent_installs(concurrent_installs)
@@ -418,15 +479,8 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
         let mut command = context.pip_install();
         command.args(["--preview-features", "content-addressed-cache"]);
         if streaming {
-            Mock::given(method("GET"))
-                .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
-                .mount(&server)
-                .await;
-            command.arg(format!(
-                "{}/binary_payload-0.1.0-py3-none-any.whl",
-                server.uri()
-            ));
+            server.serve(filename, &fs_err::read(&wheel)?, None).await;
+            command.arg(server.file_url(filename));
         } else {
             command.arg(&wheel);
         }

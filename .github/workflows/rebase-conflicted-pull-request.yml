@@ -57,10 +57,19 @@ jobs:
       - name: Prepare Rust dependencies
         run: cargo fetch --locked
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          tool: cargo-nextest
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+
+      - name: "Install cargo nextest"
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/cargo-tools
+        run: |
+          uv sync --only-dev
+          echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
 
       - name: Prepare pull request branch
         id: prepare
@@ -106,14 +115,14 @@ jobs:
           fi
 
       - name: Rebase pull request
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
         env:
           BASE_REF: ${{ inputs.base-ref }}
           BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.153.4"
           model: gpt-5.6-sol
           effort: high
           codex-home: "${{ runner.temp }}/codex-home"
@@ -151,7 +160,7 @@ jobs:
   push:
     name: "Push rebased pull request #${{ inputs.number }}"
     needs: rebase
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     environment: automations
     timeout-minutes: 10
     permissions:

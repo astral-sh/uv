@@ -238,7 +238,7 @@ async fn ensure_cached_artifact(artifact: &VendorArtifact, path: &Path) -> Resul
     })?;
     temp.write_all(&bytes)
         .with_context(|| format!("failed to write `{}`", artifact.filename))?;
-    temp.as_file_mut()
+    temp.as_file()
         .sync_all()
         .with_context(|| format!("failed to sync `{}`", artifact.filename))?;
 

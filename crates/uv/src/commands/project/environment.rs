@@ -5,8 +5,8 @@ use tracing::debug;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
-    resolve_environment, sync_environment,
+    EnvironmentResolution, EnvironmentSpecification, ProjectError, resolve_environment,
+    sync_environment,
 };
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -16,6 +16,7 @@ use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple};
+use uv_dispatch::PlatformState;
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
@@ -389,14 +390,14 @@ impl CachedEnvironment {
         };
         if base_python == interpreter.sys_executable() {
             debug!(
-                "Caching via base interpreter: `{}`",
+                "Caching via base interpreter: {}",
                 interpreter.sys_executable().display()
             );
             Ok(interpreter.clone())
         } else {
             let base_interpreter = Interpreter::query(base_python, cache)?;
             debug!(
-                "Caching via base interpreter: `{}`",
+                "Caching via base interpreter: {}",
                 base_interpreter.sys_executable().display()
             );
             Ok(base_interpreter)

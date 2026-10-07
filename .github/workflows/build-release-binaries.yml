@@ -1,6 +1,7 @@
 # Build uv on all platforms.
 #
 # Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
+# Creates `build-wheels-*`, `build-sdist-*`, and `build-github-archives-*` artifacts.
 #
 # Called from:
 # - .github/workflows/ci.yml (when release-relevant files change)
@@ -55,7 +56,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           command: sdist
           args: --out dist
       - name: "Test sdist"
@@ -76,7 +77,7 @@ jobs:
       - name: "Upload sdist"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-sdist
+          name: build-sdist-uv
           path: dist
 
       # uv-build
@@ -84,7 +85,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Fix Cargo.lock in sdist uv-build"
@@ -104,7 +105,7 @@ jobs:
       - name: "Upload sdist uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-sdist
+          name: build-sdist-uv_build
           path: crates/uv-build/dist
 
   macos-x86_64:
@@ -131,7 +132,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: x86_64
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
@@ -142,7 +143,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-x86_64-apple-darwin
+          name: build-wheels-uv-x86_64-apple-darwin
           path: dist
       - name: "Archive binary"
         run: |
@@ -158,7 +159,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-x86_64-apple-darwin
+          name: build-github-archives-x86_64-apple-darwin
           path: |
             *.tar.gz
             *.sha256
@@ -168,7 +169,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: x86_64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
@@ -179,7 +180,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-x86_64-apple-darwin
+          name: build-wheels-uv_build-x86_64-apple-darwin
           path: crates/uv-build/dist
 
   macos-aarch64:
@@ -211,6 +212,8 @@ jobs:
             --train-only
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Match maturin's deployment target for the release build.
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
 
       # uv
@@ -218,7 +221,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: aarch64
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
@@ -238,7 +241,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-aarch64-apple-darwin
+          name: build-wheels-uv-aarch64-apple-darwin
           path: dist
       - name: "Archive binary"
         run: |
@@ -254,7 +257,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-aarch64-apple-darwin
+          name: build-github-archives-aarch64-apple-darwin
           path: |
             *.tar.gz
             *.sha256
@@ -264,7 +267,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: aarch64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
@@ -280,7 +283,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-aarch64-apple-darwin
+          name: build-wheels-uv_build-aarch64-apple-darwin
           path: crates/uv-build/dist
 
   windows:
@@ -350,7 +353,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
@@ -387,7 +390,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -402,7 +405,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.zip
             *.sha256
@@ -412,7 +415,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
@@ -428,7 +431,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   test-windows-aarch64:
@@ -443,7 +446,7 @@ jobs:
           architecture: arm64
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels_*-aarch64-pc-windows-msvc
+          pattern: build-wheels-*-aarch64-pc-windows-msvc
           path: dist
           merge-multiple: true
       - name: "Test wheel"
@@ -487,7 +490,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
           # 32-bit compiler runs out of memory (4GB memory limit for 32-bit), so we cross compile
@@ -541,7 +544,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.target }}
+          name: build-wheels-uv-${{ matrix.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -559,7 +562,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.target }}
+          name: build-github-archives-${{ matrix.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -569,7 +572,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
@@ -587,7 +590,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.target }}
+          name: build-wheels-uv_build-${{ matrix.target }}
           path: crates/uv-build/dist
 
   linux-arm:
@@ -602,7 +605,9 @@ jobs:
             arch: aarch64
             test_image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
             test_platform: linux/arm64
-            runner: depot-ubuntu-24.04-arm-8
+            # The instrumented PGO build can exceed 32 GB of RAM and be reaped
+            # so we use a 64 GB runner for headroom
+            runner: depot-ubuntu-24.04-arm-16
             pgo: true
             # see https://github.com/astral-sh/ruff/issues/3791
             # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
@@ -643,7 +648,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -685,7 +690,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -703,7 +708,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -713,7 +718,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -739,7 +744,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   # Like `linux-arm`.
@@ -770,7 +775,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -802,7 +807,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -820,7 +825,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -830,7 +835,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -856,7 +861,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
@@ -891,7 +896,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -925,7 +930,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -943,7 +948,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -953,7 +958,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -972,7 +977,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   # Like `linux-arm`.
@@ -1003,7 +1008,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -1030,7 +1035,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -1048,7 +1053,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -1058,7 +1063,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
@@ -1084,7 +1089,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   musllinux:
@@ -1113,7 +1118,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
@@ -1140,7 +1145,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.target }}
+          name: build-wheels-uv-${{ matrix.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -1158,7 +1163,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.target }}
+          name: build-github-archives-${{ matrix.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -1168,7 +1173,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
@@ -1194,7 +1199,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.target }}
+          name: build-wheels-uv_build-${{ matrix.target }}
           path: crates/uv-build/dist
 
   musllinux-cross:
@@ -1237,7 +1242,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
@@ -1281,7 +1286,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -1300,7 +1305,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -1310,7 +1315,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.14.1
+          maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
@@ -1351,12 +1356,12 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   check-wheels:
     name: "check wheel contents"
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     needs:
       - macos-x86_64
       - macos-aarch64
@@ -1373,13 +1378,17 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: "Download built wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels_*-*
+          pattern: build-wheels-*-*
           path: wheels
           merge-multiple: true
       - name: "check wheel contents"
-        run: uv run --no-project scripts/check_uv_wheel_contents.py wheels/*
+        run: uv run scripts/check_uv_wheel_contents.py wheels/*

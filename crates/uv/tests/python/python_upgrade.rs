@@ -10,7 +10,6 @@ use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
 #[test]
 fn python_upgrade() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -74,7 +73,6 @@ fn python_upgrade() {
 #[test]
 fn python_upgrade_without_version() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -126,7 +124,6 @@ fn python_upgrade_without_version() {
 #[test]
 fn python_upgrade_transparent_from_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -201,62 +198,9 @@ fn python_upgrade_transparent_from_venv() {
     );
 }
 
-// Installing Python should not prevent virtual environments from transparently
-// upgrading.
-#[test]
-fn python_upgrade_transparent_from_venv_preview() {
-    let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
-        .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
-        .with_managed_python_dirs()
-        .with_filtered_latest_python_versions();
-
-    // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM] (python3.10)
-    ");
-
-    // Create a virtual environment
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Using CPython 3.10.17
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    ");
-
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    Python 3.10.17
-    "
-    );
-
-    // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed Python 3.10.[LATEST] in [TIME]
-     + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
-    ");
-
-    // Virtual environment should reflect upgraded patch
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    Python 3.10.[LATEST]
-    "
-    );
-}
-
 #[test]
 fn python_upgrade_ignored_with_python_pin() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -308,7 +252,6 @@ fn python_upgrade_ignored_with_python_pin() {
 #[test]
 fn python_no_transparent_upgrade_with_venv_patch_specification() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -360,7 +303,6 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 #[test]
 fn python_transparent_upgrade_venv_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_virtualenv_bin()
@@ -437,7 +379,6 @@ fn python_transparent_upgrade_venv_venv() {
 #[test]
 fn python_upgrade_transparent_from_venv_module() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -490,7 +431,6 @@ fn python_upgrade_transparent_from_venv_module() {
 #[test]
 fn python_upgrade_transparent_from_venv_module_in_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -560,7 +500,6 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
 #[test]
 fn python_upgrade_force_install() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_empty_python_install_mirror()
@@ -595,7 +534,6 @@ fn python_upgrade_force_install() -> Result<()> {
 #[test]
 fn python_upgrade_implementation() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_empty_python_install_mirror()
@@ -615,7 +553,6 @@ fn python_upgrade_implementation() {
 #[test]
 fn python_upgrade_build_version() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -687,7 +624,6 @@ fn python_upgrade_build_version() {
 #[test]
 fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -753,7 +689,6 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
 #[test]
 fn python_sync_honors_pinned_patch_version() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()

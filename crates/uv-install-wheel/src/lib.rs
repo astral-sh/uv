@@ -52,7 +52,7 @@ pub enum Error {
     WalkDir(#[from] walkdir::Error),
     // This shouldn't be possible anymore, we keep it for better error reporting.
     #[error(
-        "RECORD file doesn't match wheel contents, could not find entry for: {} ({})",
+        "`RECORD` file doesn't match wheel contents, could not find entry for `{}` (`{}`)",
         relative.simplified_display(),
         absolute.simplified_display()
     )]
@@ -60,7 +60,7 @@ pub enum Error {
         relative: PathBuf,
         absolute: PathBuf,
     },
-    #[error("RECORD file is invalid")]
+    #[error("`RECORD` file is invalid")]
     RecordCsv(#[from] csv::Error),
     #[error("Non-UTF8 path in {0}: {1:?}")]
     NonUtf8WheelPath(String, PathBuf),
@@ -92,4 +92,31 @@ pub enum Error {
     ReservedScriptName { reserved: String, declared: String },
     #[error(transparent)]
     Copy(#[from] uv_fs::link::LinkError),
+}
+
+impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::InvalidWheel(_)
+            | Self::RecordFile { .. }
+            | Self::RecordCsv(_)
+            | Self::NonUtf8WheelPath(..)
+            | Self::UnsupportedWindowsArch(_)
+            | Self::DirectUrlJson(_)
+            | Self::MissingRecord(_)
+            | Self::MissingTopLevel(_)
+            | Self::InvalidVersion(_)
+            | Self::MismatchedName(..)
+            | Self::MismatchedVersion(..)
+            | Self::InvalidEggLink(_)
+            | Self::ReservedScriptName { .. } => true,
+            Self::Io(_)
+            | Self::WalkDir(_)
+            | Self::BrokenVenv(_)
+            | Self::NotWindows
+            | Self::LauncherError(_)
+            | Self::Copy(_) => false,
+        }
+    }
 }

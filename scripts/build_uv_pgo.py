@@ -80,6 +80,7 @@ CORPUS_PROJECTS = (
         python_version="3.13",
         additional_environments=("sys_platform == 'win32'",),
         exclude_dependencies=(
+            "backports-zstd",
             "confluent-kafka",
             "emmett-core",
             "granian",

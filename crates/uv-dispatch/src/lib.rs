@@ -18,9 +18,9 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Overrides, Reinstall,
+    BuildKind, BuildOptions, Constraints, DependencyModifiers, IndexStrategy, NoSources, Reinstall,
 };
-use uv_configuration::{BuildOutput, Concurrency, Excludes};
+use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -68,7 +68,7 @@ pub enum BuildDispatchError {
     Lookahead(#[from] uv_requirements::Error),
 }
 
-impl uv_errors::Hint for BuildDispatchError {
+impl uv_errors::Hinted for BuildDispatchError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BuildFrontend(err) => err.hints(),
@@ -92,6 +92,20 @@ impl uv_errors::Hint for BuildDispatchError {
 }
 
 impl IsBuildBackendError for BuildDispatchError {
+    fn is_user_failure(&self) -> bool {
+        match self {
+            Self::BuildFrontend(error) => error.is_user_failure(),
+            Self::Resolve(error) => error.is_user_failure(),
+            Self::Prepare(error) => error.is_user_failure(),
+            Self::Lookahead(error) => error.is_user_failure(),
+            Self::Anyhow(error) => error
+                .chain()
+                .find_map(|cause| cause.downcast_ref::<uv_resolver::ResolveError>())
+                .is_some_and(uv_resolver::ResolveError::is_user_failure),
+            Self::Tags(_) | Self::Join(_) => false,
+        }
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Tags(_)
@@ -314,14 +328,11 @@ impl BuildContext for BuildDispatch<'_> {
             .clone()
             .augment_with_requirements(requirements.iter())
             .map_err(uv_requirements::Error::from)?;
-        let overrides = Overrides::default();
-        let excludes = Excludes::default();
+        let modifiers = DependencyModifiers::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
             self.constraints,
-            &overrides,
-            &excludes,
-            self.dependency_metadata,
+            &modifiers,
             &hasher,
             &self.shared_state.index,
             DistributionDatabase::new(
@@ -393,11 +404,11 @@ impl BuildContext for BuildDispatch<'_> {
         let hasher = requirements.hasher();
 
         debug!(
-            "Installing in {} in {}",
+            "Installing `{}` in `{}`",
             resolution
                 .distributions()
                 .map(ToString::to_string)
-                .join(", "),
+                .join("`, `"),
             venv.root().display(),
         );
 
@@ -605,7 +616,12 @@ impl BuildContext for BuildDispatch<'_> {
         // Only perform the direct build if the backend is uv in a compatible version.
         let source_tree_str = source_tree.display().to_string();
         let identifier = version_id.unwrap_or_else(|| &source_tree_str);
-        if let Err(reason) = check_direct_build(&source_tree, uv_version::version()) {
+        if let Err(reason) = check_direct_build(
+            &source_tree,
+            uv_version::version(),
+            &self.interpreter.to_resolver_marker_environment(),
+            self.constraints.requirements().cloned().map(Into::into),
+        ) {
             trace!("Requirements for direct build not matched because {reason}");
             return Ok(None);
         }
@@ -676,7 +692,7 @@ impl SharedState {
     /// State that is universally applicable (like the Git resolver and index capabilities)
     /// are retained.
     #[must_use]
-    pub fn fork(&self) -> Self {
+    fn fork(&self) -> Self {
         Self {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
@@ -695,8 +711,62 @@ impl SharedState {
         &self.index
     }
 
+    /// Return mutable access to the index owner. Removing cached entries additionally requires
+    /// exclusive access to the index's shared storage.
+    fn index_mut(&mut self) -> &mut InMemoryIndex {
+        &mut self.index
+    }
+
     /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
+    }
+}
+
+/// A [`SharedState`] instance to use for universal resolution.
+#[derive(Default, Clone)]
+pub struct UniversalState(SharedState);
+
+impl std::ops::Deref for UniversalState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl UniversalState {
+    /// Return mutable access to the index owner between lock operations.
+    pub fn index_mut(&mut self) -> &mut InMemoryIndex {
+        self.0.index_mut()
+    }
+
+    /// Fork the [`UniversalState`] to create a [`PlatformState`].
+    pub fn fork(&self) -> PlatformState {
+        PlatformState(self.0.fork())
+    }
+}
+
+/// A [`SharedState`] instance to use for platform-specific resolution.
+#[derive(Default, Clone)]
+pub struct PlatformState(SharedState);
+
+impl std::ops::Deref for PlatformState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PlatformState {
+    /// Fork the [`PlatformState`] to create a [`UniversalState`].
+    pub fn fork(&self) -> UniversalState {
+        UniversalState(self.0.fork())
+    }
+
+    /// Create a [`SharedState`] from the [`PlatformState`].
+    pub fn into_inner(self) -> SharedState {
+        self.0
     }
 }
