@@ -6,7 +6,7 @@ use std::ffi::{OsStr, OsString};
 use std::future::{self, Future};
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
@@ -80,6 +80,9 @@ pub enum BuildDispatchError {
     #[error("Failed to uninstall build dependencies")]
     UninstallBuildDependencies(#[source] uv_installer::UninstallError),
 
+    #[error("Failed to install build dependencies")]
+    InstallBuildDependencies(#[source] uv_installer::InstallError),
+
     #[error(transparent)]
     Plan(#[from] uv_installer::PlanError),
 
@@ -99,6 +102,7 @@ impl uv_errors::Hinted for BuildDispatchError {
             | Self::Anyhow(_)
             | Self::Prepare(_)
             | Self::UninstallBuildDependencies(_)
+            | Self::InstallBuildDependencies(_)
             | Self::Lookahead(_) => uv_errors::Hints::none(),
         }
     }
@@ -118,6 +122,7 @@ impl IsBuildBackendError for BuildDispatchError {
             | Self::Join(_)
             | Self::Anyhow(_)
             | Self::UninstallBuildDependencies(_)
+            | Self::InstallBuildDependencies(_)
             | Self::Plan(_) => false,
         }
     }
@@ -132,6 +137,7 @@ impl IsBuildBackendError for BuildDispatchError {
             | Self::Anyhow(_)
             | Self::Prepare(_)
             | Self::UninstallBuildDependencies(_)
+            | Self::InstallBuildDependencies(_)
             | Self::Plan(_)
             | Self::Lookahead(_) => false,
             Self::BuildFrontend(err) => err.is_build_backend_error(),
@@ -531,7 +537,7 @@ impl BuildContext for BuildDispatch<'_> {
                 .with_cache(self.cache)
                 .install(wheels)
                 .await
-                .context("Failed to install build dependencies")?;
+                .map_err(BuildDispatchError::InstallBuildDependencies)?;
         }
 
         Ok(wheels)

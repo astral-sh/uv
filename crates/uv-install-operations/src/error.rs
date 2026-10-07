@@ -16,6 +16,8 @@ pub enum Error {
     #[error(transparent)]
     Prepare(#[from] uv_installer::PrepareError),
     #[error(transparent)]
+    Install(#[from] uv_installer::InstallError),
+    #[error(transparent)]
     Uninstall(#[from] uv_installer::UninstallError),
     #[error("Failed to bytecode-compile Python file in: {}", path.user_display())]
     CompileTree {
@@ -44,6 +46,7 @@ impl Error {
             Self::OutdatedEnvironment(changelog) => Some(changelog),
             Self::Plan(_)
             | Self::Prepare(_)
+            | Self::Install(_)
             | Self::Uninstall(_)
             | Self::CompileTree { .. }
             | Self::CompileFiles(_)
@@ -60,6 +63,7 @@ impl Error {
             Self::Prepare(error) => error.is_user_failure(),
             Self::Hash(_) | Self::OutdatedEnvironment(_) => true,
             Self::Plan(_)
+            | Self::Install(_)
             | Self::Uninstall(_)
             | Self::CompileTree { .. }
             | Self::CompileFiles(_)
@@ -88,6 +92,7 @@ impl uv_errors::Hinted for Error {
             }
             Self::Plan(_)
             | Self::Prepare(_)
+            | Self::Install(_)
             | Self::Uninstall(_)
             | Self::CompileTree { .. }
             | Self::CompileFiles(_)
