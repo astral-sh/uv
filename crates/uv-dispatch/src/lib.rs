@@ -55,9 +55,12 @@ pub enum BuildDispatchError {
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
 
-    #[error("No solution found when resolving: {requirements}")]
+    #[error(
+        "No solution found when resolving: {}",
+        requirements.iter().format_with(", ", |requirement, f| f(&format_args!("`{requirement}`")))
+    )]
     ResolveRequirements {
-        requirements: String,
+        requirements: Vec<Requirement>,
         #[source]
         source: uv_resolver::ResolveError,
     },
@@ -374,10 +377,7 @@ impl BuildContext for BuildDispatch<'_> {
         )?;
         let resolution = Resolution::from(resolver.resolve().await.map_err(|source| {
             BuildDispatchError::ResolveRequirements {
-                requirements: requirements
-                    .iter()
-                    .map(|requirement| format!("`{requirement}`"))
-                    .join(", "),
+                requirements: requirements.to_vec(),
                 source,
             }
         })?);
