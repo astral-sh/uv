@@ -6,12 +6,11 @@ use std::str::FromStr;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use crate::commands::project::EnvironmentError;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions, InstallTarget as InstallOptionTarget,
 };
-use uv_distribution_types::{Index, Resolution};
+use uv_distribution_types::{Index, RequiresPython, Resolution};
 use uv_lock::{Installable, InstallableRootKind, Lock, LockError, Package};
 use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
@@ -21,7 +20,10 @@ use uv_pypi_types::{
 };
 use uv_scripts::Pep723Script;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
-use uv_workspace::{VirtualProject, Workspace};
+use uv_workspace::{RequiresPythonDeclaration, RequiresPythonSources, VirtualProject, Workspace};
+
+use crate::commands::project::EnvironmentError;
+use crate::commands::project::python::{ProjectPythonRequirement, PythonRequirementSource};
 
 /// A target that can be installed from a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -283,6 +285,65 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
 }
 
 impl<'lock> InstallTarget<'lock> {
+    /// Intersect the lockfile's Python requirement with the selected groups' requirements.
+    pub(super) fn python_requirement(
+        &self,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> Result<ProjectPythonRequirement, EnvironmentError> {
+        let lock = self.lock();
+        let mut group_requirements = RequiresPythonSources::new();
+
+        if let Some(members) = lock.member_group_metadata() {
+            let group_root = self.group_root(groups);
+
+            for (member, member_groups) in members {
+                // The group root can contribute groups without being an install root.
+                let is_install_root = self.roots().any(|root| root == member);
+                if !is_install_root && group_root != Some(member) {
+                    continue;
+                }
+
+                for (group, metadata) in member_groups {
+                    if self.includes_group(Some(member), group, groups)
+                        && let Some(requires_python) = &metadata.requires_python
+                    {
+                        group_requirements.insert(
+                            RequiresPythonDeclaration::Member(member.clone(), Some(group.clone())),
+                            requires_python.clone(),
+                        );
+                    }
+                }
+            }
+        }
+
+        for (group, metadata) in lock.workspace_group_metadata() {
+            if self.includes_group(None, group, groups)
+                && let Some(requires_python) = &metadata.requires_python
+            {
+                group_requirements.insert(
+                    RequiresPythonDeclaration::Workspace(group.clone()),
+                    requires_python.clone(),
+                );
+            }
+        }
+
+        let Some(requires_python) = RequiresPython::intersection(
+            std::iter::once(lock.requires_python().specifiers()).chain(group_requirements.values()),
+        ) else {
+            return Err(EnvironmentError::DisjointLockedRequiresPython {
+                locked: lock.requires_python().clone(),
+                groups: group_requirements,
+            });
+        };
+        Ok(ProjectPythonRequirement {
+            requires_python,
+            source: PythonRequirementSource::Lockfile {
+                locked: lock.requires_python().clone(),
+                groups: group_requirements,
+            },
+        })
+    }
+
     /// Select installation roots from a project and its workspace.
     pub(crate) fn from_project(
         project: &'lock VirtualProject,

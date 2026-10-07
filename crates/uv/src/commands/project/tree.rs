@@ -34,8 +34,8 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::lockfile::FrozenWorkspace;
 use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
-    ScriptInterpreter,
+    EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
+    ProjectPythonRequest, ScriptInterpreter,
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
@@ -184,19 +184,23 @@ pub(crate) async fn tree(
                 } else {
                     root
                 };
-                let project_python = ProjectPythonRequest::from_lockfile(
+
+                let target = InstallTarget::Lockfile {
+                    root,
+                    project_name: lock.root().map(uv_lock::Package::name),
+                    selection: PackageSelection::Workspace,
+                    lock,
+                };
+
+                let project_python = ProjectPythonRequest::from_requirements(
                     python.as_deref().map(PythonRequest::parse),
-                    InstallTarget::Lockfile {
-                        root,
-                        project_name: lock.root().map(uv_lock::Package::name),
-                        selection: PackageSelection::Workspace,
-                        lock,
-                    },
-                    &groups,
+                    Some(root),
+                    Some(target.python_requirement(&groups)?),
                     discovery_dir,
                     config_discovery,
                 )
-                .await?;
+                .await
+                .map_err(EnvironmentError::from)?;
                 ProjectInterpreter::discover(
                     ProjectEnvironmentTarget::Lockfile { root, lock },
                     project_python,
