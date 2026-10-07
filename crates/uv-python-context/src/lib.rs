@@ -12,7 +12,4 @@ pub use project::{
     format_requires_python_sources,
 };
 pub use reporter::{PythonDownloadReporter, report_interpreter};
-pub use script::{
-    EnvironmentIncompatibilityError, EnvironmentKind, ScriptInterpreter,
-    check_environment_compatibility, init_script_python_requirement,
-};
+pub use script::{ScriptPythonRequest, init_script_python_requirement};

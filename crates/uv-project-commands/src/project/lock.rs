@@ -10,6 +10,7 @@ use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_dispatch::UniversalState;
+use uv_environment_operations::ScriptInterpreter;
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
@@ -25,7 +26,7 @@ use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
 use uv_python_context::{
-    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter, init_script_python_requirement,
+    ProjectPythonRequest, PythonDownloadReporter, init_script_python_requirement,
 };
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;

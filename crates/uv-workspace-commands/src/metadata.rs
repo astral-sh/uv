@@ -10,6 +10,7 @@ use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Modifications,
 };
 use uv_dispatch::UniversalState;
+use uv_environment_operations::ScriptInterpreter;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
@@ -23,7 +24,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_python_context::ProjectPythonRequest;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{

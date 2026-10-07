@@ -18,7 +18,8 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_environment_operations::ScriptInterpreter;
+use uv_python_context::ProjectPythonRequest;
 
 /// Find a Python interpreter.
 #[expect(clippy::fn_params_excessive_bools)]

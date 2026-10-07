@@ -14,6 +14,7 @@ use uv_configuration::{
 };
 use uv_dispatch::UniversalState;
 use uv_distribution_types::IndexCapabilities;
+use uv_environment_operations::ScriptInterpreter;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
     EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
@@ -26,7 +27,7 @@ use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
     PythonVersion,
 };
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_python_context::ProjectPythonRequest;
 use uv_resolve_operations::latest::LatestClient;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::resolution_markers;

@@ -25,6 +25,7 @@ use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
 };
+use uv_environment_operations::ScriptInterpreter;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::malware::MalwareCheckContext;
 use uv_environment_operations::{
@@ -44,7 +45,7 @@ use uv_python::{
     PythonRequest,
 };
 use uv_python_context::{
-    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter, init_script_python_requirement,
+    ProjectPythonRequest, PythonDownloadReporter, init_script_python_requirement,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};

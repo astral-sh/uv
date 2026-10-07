@@ -49,20 +49,23 @@ use crate::install_target::{InstallTarget, PackageSelection};
 use uv_command_support::{Printer, conjunction};
 use uv_install_operations::Changelog;
 use uv_install_operations::loggers::InstallLogger;
-use uv_python_context::{
-    CompatibleProjectPython, EnvironmentIncompatibilityError, EnvironmentKind,
-    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter,
-    check_environment_compatibility,
-};
+use uv_python_context::{CompatibleProjectPython, ProjectPythonRequest, PythonDownloadReporter};
 use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_requirements};
 use uv_resolve_operations::loggers::ResolveLogger;
 use uv_settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
+
+mod compatibility;
+use compatibility::{
+    EnvironmentIncompatibilityError, EnvironmentKind, check_environment_compatibility,
+};
 
 pub mod environment;
 mod error;
 pub use error::EnvironmentError;
 pub mod install_target;
 pub mod malware;
+mod script;
+pub use script::ScriptInterpreter;
 mod sync;
 pub use sync::{store_credentials_from_target, sync_from_lock};
 

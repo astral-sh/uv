@@ -29,6 +29,7 @@ use uv_configuration::{
 use uv_dispatch::UniversalState;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
+use uv_environment_operations::ScriptInterpreter;
 use uv_environment_operations::environment::CachedEnvironment;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::malware::MalwareCheckContext;
@@ -50,7 +51,7 @@ use uv_python::{
     PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionFileDiscoveryOptions,
 };
-use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter};
+use uv_python_context::{ProjectPythonRequest, PythonDownloadReporter};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{
     RequirementsSource, RequirementsSpecification, script_extra_build_requires,

@@ -47,6 +47,7 @@ uv-resolve-operations = { workspace = true }
 uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true }
+uv-static = { workspace = true }
 uv-torch = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }

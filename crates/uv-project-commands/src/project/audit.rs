@@ -12,6 +12,7 @@ use uv_configuration::{
     TargetTriple,
 };
 use uv_dispatch::UniversalState;
+use uv_environment_operations::ScriptInterpreter;
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
 };
@@ -21,7 +22,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion,
 };
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_python_context::ProjectPythonRequest;
 use uv_redacted::DisplaySafeUrl;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolve_operations::resolution_markers;
