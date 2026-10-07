@@ -44,11 +44,6 @@ path = "benches/uv_python.rs"
 harness = false
 
 [[bench]]
-name = "uv_startup"
-path = "benches/uv_startup.rs"
-harness = false
-
-[[bench]]
 name = "macos_python_install"
 path = "benches/macos_python_install.rs"
 harness = false
@@ -79,7 +74,6 @@ uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }
-uv-settings = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
