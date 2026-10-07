@@ -5327,8 +5327,9 @@ impl PublishSettings {
                 .publish_url
                 .combine(publish_url)
                 .unwrap_or_else(|| DisplaySafeUrl::parse(PYPI_PUBLISH_URL).unwrap()),
-            trusted_publishing: trusted_publishing
-                .combine(args.trusted_publishing)
+            trusted_publishing: args
+                .trusted_publishing
+                .combine(trusted_publishing)
                 .unwrap_or_default(),
             keyring_provider: args
                 .keyring_provider

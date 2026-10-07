@@ -381,7 +381,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         url = "https://index-user:index-secret@test.pypi.org/simple/"
     "#})?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.publish())
+    let configured = capture_uv_snapshot!(context.filters(), add_shared_args(context.publish())
         .arg("--show-settings")
         .env(EnvVars::UV_PUBLISH_TOKEN, "publish-secret-token"), @r#"
     exit_code: 0 (success)
@@ -538,6 +538,23 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         },
     }
     "#);
+
+    diff_uv_snapshot!(context.filters(), &configured, add_shared_args(context.publish())
+        .arg("--show-settings")
+        .arg("--trusted-publishing")
+        .arg("always")
+        .env(EnvVars::UV_PUBLISH_TOKEN, "publish-secret-token"), @"
+    ...
+             query: None,
+             fragment: None,
+         },
+    -    trusted_publishing: Never,
+    +    trusted_publishing: Always,
+         keyring_provider: Subprocess,
+         check_url: Some(
+             Url(
+    ...
+    ");
 
     Ok(())
 }
