@@ -15,9 +15,9 @@ use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::RequirementsInput;
 use uv_configuration::{
-    AnnotationStyle, AuditOutputFormat, AuthorFrom, ColorChoice, ExcludeNewerPackageEntry,
-    ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType, ListFormat,
-    PackageNameSpecifier, PipCompileFormat, PipInstallFormat, PrereleaseMode,
+    AddBoundsKind, AnnotationStyle, AuditOutputFormat, AuthorFrom, ColorChoice,
+    ExcludeNewerPackageEntry, ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType,
+    ListFormat, PackageNameSpecifier, PipCompileFormat, PipInstallFormat, PrereleaseMode,
     PrereleasePackageEntry, ProjectBuildBackend, PythonListFormat, ResolutionMode, SyncFormat,
     TargetTriple, TreeFormat, TrustedHost, TrustedPublishing, VersionBump, VersionBumpSpec,
     VersionControlSystem, VersionFormat,
@@ -36,7 +36,6 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject_mut::AddBoundsKind;
 
 pub mod comma;
 pub mod compat;

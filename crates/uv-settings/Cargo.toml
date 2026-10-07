@@ -38,7 +38,7 @@ uv-static = { workspace = true }
 uv-torch = { workspace = true, features = ["clap"] }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
-uv-workspace = { workspace = true, features = ["clap"] }
+uv-workspace = { workspace = true }
 
 clap = { workspace = true }
 fs-err = { workspace = true }

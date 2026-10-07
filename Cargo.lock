@@ -7395,6 +7395,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-preview",
+ "uv-project-edit",
  "uv-pypi-types",
  "uv-python",
  "uv-python-context",
@@ -7412,6 +7413,26 @@ dependencies = [
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",
+ "uv-workspace",
+]
+
+[[package]]
+name = "uv-project-edit"
+version = "0.0.90"
+dependencies = [
+ "anyhow",
+ "insta",
+ "itertools 0.14.0",
+ "thiserror",
+ "toml",
+ "toml_edit",
+ "uv-cache-key",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-pep508",
  "uv-workspace",
 ]
 
@@ -8229,7 +8250,6 @@ version = "0.0.90"
 dependencies = [
  "anyhow",
  "assert_fs",
- "clap",
  "fs-err",
  "glob",
  "ignore",
@@ -8243,11 +8263,9 @@ dependencies = [
  "thiserror",
  "tokio",
  "toml",
- "toml_edit",
  "tracing",
  "uv-build-backend",
  "uv-cache",
- "uv-cache-key",
  "uv-configuration",
  "uv-distribution-types",
  "uv-errors",
