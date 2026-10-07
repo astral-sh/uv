@@ -96,6 +96,7 @@ jobs:
           model: gpt-6-astra
           effort: xhigh
           permission-profile: "pull-request-review"
+          codex-args: '["--enable", "network_proxy"]'
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
           prompt-file: "${{ env.REVIEW_CONFIG }}/prompt.md"
