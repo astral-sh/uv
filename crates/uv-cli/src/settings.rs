@@ -446,13 +446,19 @@ pub struct CacheSettings {
 }
 
 impl CacheSettings {
-    /// Resolve the [`CacheSettings`] from the CLI and filesystem configuration.
-    pub fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
+    /// Resolve the [`CacheSettings`] from the CLI, environment, and filesystem configuration.
+    pub fn resolve(
+        args: CacheArgs,
+        workspace: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
         Self {
-            no_cache: args.no_cache
-                || workspace
-                    .and_then(|workspace| workspace.globals.no_cache)
-                    .unwrap_or(false),
+            no_cache: args
+                .no_cache
+                .then_some(true)
+                .combine(environment.no_cache.value)
+                .combine(workspace.and_then(|workspace| workspace.globals.no_cache))
+                .unwrap_or(false),
             cache_dir: args
                 .cache_dir
                 .or_else(|| workspace.and_then(|workspace| workspace.globals.cache_dir.clone())),

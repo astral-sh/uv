@@ -5480,3 +5480,58 @@ fn build_isolation_override() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn no_cache_env_override() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("requirements.in").write_str("")?;
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str("no-cache = true")?;
+
+    let configured = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.pip_compile())
+            .arg("--show-settings")
+            .arg("requirements.in")
+            .env_remove(EnvVars::UV_NO_CACHE)
+    );
+
+    diff_uv_snapshot!(context.filters(), &configured, add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .env(EnvVars::UV_NO_CACHE, "false"), @"
+    ...
+         installer_metadata: true,
+     }
+     CacheSettings {
+    -    no_cache: true,
+    +    no_cache: false,
+         cache_dir: Some(
+             \"[CACHE_DIR]/\",
+         ),
+    ...
+    ");
+
+    diff_uv_snapshot!(context.filters(), &configured, add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .arg("--no-cache")
+        .env(EnvVars::UV_NO_CACHE, "false"), @"");
+
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str("no-cache = false")?;
+    diff_uv_snapshot!(context.filters(), &configured, add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .env(EnvVars::UV_NO_CACHE, "true"), @"");
+
+    Ok(())
+}
