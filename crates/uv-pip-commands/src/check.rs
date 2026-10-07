@@ -5,7 +5,6 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_command_support::{ExitStatus, Printer, elapsed};
 use uv_configuration::TargetTriple;
 use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDist};
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
@@ -14,11 +13,13 @@ use uv_python::{
     PythonVersion,
 };
 
-use crate::commands::pip::reporters::report_target_environment;
+use crate::reporters::report_target_environment;
+use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, elapsed};
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 
 /// Check for incompatibilities in installed packages.
-pub(crate) fn pip_check(
+pub fn pip_check(
     python_arch: Option<PythonArchitecture>,
     python: Option<&str>,
     system: bool,

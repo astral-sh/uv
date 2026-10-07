@@ -50,6 +50,7 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-performance-memory-allocator = { workspace = true, optional = true }
+uv-pip-commands = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-publish = { workspace = true }
@@ -97,7 +98,6 @@ indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
-petgraph = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -112,7 +112,6 @@ tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 tracing-tree = { workspace = true }
-unicode-width = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }

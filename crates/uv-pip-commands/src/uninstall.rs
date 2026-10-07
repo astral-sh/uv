@@ -7,7 +7,6 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::{ExitStatus, Printer, elapsed};
 use uv_configuration::{DryRun, KeyringProviderType};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
@@ -19,10 +18,12 @@ use uv_python::{EnvironmentPreference, PythonArchitecture, PythonPreference};
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
-use crate::commands::pip::reporters::report_target_environment;
+use crate::reporters::report_target_environment;
+use uv_command_support::Printer;
+use uv_command_support::{ExitStatus, elapsed};
 
 /// Uninstall packages from the current environment.
-pub(crate) async fn pip_uninstall(
+pub async fn pip_uninstall(
     python_arch: Option<PythonArchitecture>,
     sources: &[RequirementsSource],
     python: Option<String>,

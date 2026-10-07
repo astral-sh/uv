@@ -13,7 +13,6 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_command_support::{ExitStatus, Printer};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_types::{
     DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython,
@@ -28,13 +27,15 @@ use uv_python::{
 };
 use uv_resolver::{ExcludeNewer, Prerelease};
 
-use crate::commands::pip::reporters::report_target_environment;
+use crate::reporters::report_target_environment;
+use uv_command_support::ExitStatus;
+use uv_command_support::Printer;
 use uv_resolve_operations::latest::LatestClient;
 use uv_resolve_operations::reporters::LatestVersionReporter;
 
 /// Display the installed packages in the current environment as a dependency tree.
 #[expect(clippy::fn_params_excessive_bools)]
-pub(crate) async fn pip_tree(
+pub async fn pip_tree(
     python_arch: Option<PythonArchitecture>,
     show_version_specifiers: bool,
     depth: u8,
@@ -197,7 +198,7 @@ pub(crate) async fn pip_tree(
 }
 
 #[derive(Debug)]
-pub(crate) struct DisplayDependencyGraph<'env> {
+struct DisplayDependencyGraph<'env> {
     /// The constructed dependency graph.
     graph: petgraph::graph::Graph<
         &'env ResolutionMetadata,

@@ -70,11 +70,9 @@ mod cache_prune;
 mod cache_size;
 pub(crate) mod diagnostics;
 mod help;
-mod install_report;
-pub(crate) mod pip;
+pub(crate) use uv_pip_commands as pip;
 mod project;
 mod publish;
-mod pylock;
 pub(crate) use uv_python_commands as python;
 pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
