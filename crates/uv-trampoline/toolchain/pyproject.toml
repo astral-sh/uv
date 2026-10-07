@@ -1,0 +1,8 @@
+[project]
+name = "uv-trampoline-toolchain"
+version = "0.0.0"
+requires-python = ">=3.8"
+dependencies = ["astral-dev-toolchain-cargo-xwin==0.23.1"]
+
+[tool.uv]
+no-build = true

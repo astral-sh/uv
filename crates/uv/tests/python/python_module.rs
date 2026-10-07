@@ -1,11 +1,14 @@
+use std::path::PathBuf;
+
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir};
+use fs_err as fs;
 use indoc::{formatdoc, indoc};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use uv_test::{site_packages_path, uv_snapshot};
+use uv_test::{TestContext, copy_dir_ignore, site_packages_path, uv_snapshot};
 
 /// Filter the user scheme, which differs between Windows and Unix.
 fn user_scheme_bin_filter() -> (String, String) {
@@ -30,48 +33,25 @@ sys.base_prefix = '/dev/null'
 print(uv.find_uv_bin())
 ";
 
-#[test]
-fn find_uv_bin_venv() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_python_names()
-        .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix()
-        .with_filter(user_scheme_bin_filter())
-        // Target installs always use "bin" on all platforms. On Windows,
-        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
-        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
-
-    // Install in a virtual environment
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
-    "
-    );
-
-    // We should find the binary in the virtual environment
-    uv_snapshot!(context.filters(), context.python_command()
-        .arg("-c")
-        .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    [VENV]/[BIN]/uv
-
-    ----- stderr -----
-    "
-    );
+/// Copy the current Python sources into a fixture independent of Git's symlink support.
+fn fake_uv(context: &TestContext) -> anyhow::Result<PathBuf> {
+    let package = context.workspace_root.join("test/packages/fake-uv");
+    let destination = context.temp_dir.join("fake-uv");
+    fs::create_dir(&destination)?;
+    fs::copy(
+        package.join("pyproject.toml"),
+        destination.join("pyproject.toml"),
+    )?;
+    copy_dir_ignore(package.join("scripts"), destination.join("scripts"))?;
+    copy_dir_ignore(
+        context.workspace_root.join("python"),
+        destination.join("src"),
+    )?;
+    Ok(destination)
 }
 
 #[test]
-fn find_uv_bin_target() {
+fn find_uv_bin_target() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -83,19 +63,16 @@ fn find_uv_bin_target() {
 
     // Install in a target directory
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv"))
+        .arg(fake_uv(&context)?)
         .arg("--target")
         .arg("target"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -104,18 +81,17 @@ fn find_uv_bin_target() {
         .arg("-c")
         .arg(TEST_SCRIPT)
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/target/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_prefix() {
+fn find_uv_bin_prefix() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -129,19 +105,16 @@ fn find_uv_bin_prefix() {
     let prefix = context.temp_dir.child("prefix");
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv"))
+        .arg(fake_uv(&context)?)
         .arg("--prefix")
         .arg(prefix.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -153,18 +126,17 @@ fn find_uv_bin_prefix() {
             EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
         ), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/prefix/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_base_prefix() {
+fn find_uv_bin_base_prefix() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -183,17 +155,14 @@ fn find_uv_bin_base_prefix() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python")
         .arg(base_venv.path())
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Using Python 3.12.[X] environment at: base-venv
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -204,14 +173,13 @@ fn find_uv_bin_base_prefix() {
         .arg("-c")
         .arg(format!(r#"import sys, uv; sys.base_prefix = "{}"; print(uv.find_uv_bin())"#, base_venv.path().portable_display()))
         .env(EnvVars::PYTHONPATH, site_packages_path(base_venv.path(), "python3.12")), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/base-venv/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
@@ -239,12 +207,11 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
     // We should find the binary in an ephemeral `--with` environment
     uv_snapshot!(context.filters(), context.run()
         .arg("--with")
-        .arg(context.workspace_root.join("test/packages/fake-uv"))
+        .arg(fake_uv(&context)?)
         .arg("python")
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [CACHE_DIR]/archive-v0/[HASH]/[BIN]/uv
 
@@ -254,7 +221,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -284,7 +251,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         [tool.uv.sources]
         uv = {{ path = "{}" }}
         "#,
-        context.workspace_root.join("test/packages/fake-uv").portable_display()
+        fake_uv(&context)?.portable_display()
     })?;
 
     // When running in an ephemeral environment, we should find the binary in the project
@@ -296,8 +263,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         .arg("-c")
         .arg(TEST_SCRIPT),
      @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
 
@@ -305,7 +271,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -319,7 +285,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
 }
 
 #[test]
-fn find_uv_bin_user_bin() {
+fn find_uv_bin_user_bin() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -346,16 +312,13 @@ fn find_uv_bin_user_bin() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -363,17 +326,14 @@ fn find_uv_bin_user_bin() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
 
     // Remove the virtual environment one for some reason
-    fs_err::remove_file(if cfg!(unix) {
+    fs::remove_file(if cfg!(unix) {
         context.venv.child("bin").child("uv")
     } else {
         context.venv.child("Scripts").child("uv.exe")
@@ -384,18 +344,17 @@ fn find_uv_bin_user_bin() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [USER_SCHEME]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_error_message() {
+fn find_uv_bin_error_message() -> anyhow::Result<()> {
     let mut context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -430,21 +389,18 @@ fn find_uv_bin_error_message() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
     // Remove the virtual environment executable for some reason
-    fs_err::remove_file(if cfg!(unix) {
+    fs::remove_file(if cfg!(unix) {
         context.venv.child("bin").child("uv")
     } else {
         context.venv.child("Scripts").child("uv.exe")
@@ -454,10 +410,7 @@ fn find_uv_bin_error_message() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 6, in <module>
@@ -470,11 +423,13 @@ fn find_uv_bin_error_message() {
      - [USER_SCHEME]/[BIN]
     "#
     );
+
+    Ok(())
 }
 
 #[cfg(feature = "test-python-eol")]
 #[test]
-fn find_uv_bin_py38() {
+fn find_uv_bin_py38() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.8")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -486,16 +441,13 @@ fn find_uv_bin_py38() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -503,18 +455,17 @@ fn find_uv_bin_py38() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_py39() {
+fn find_uv_bin_py39() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.9")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -526,16 +477,13 @@ fn find_uv_bin_py39() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -543,18 +491,17 @@ fn find_uv_bin_py39() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_py310() {
+fn find_uv_bin_py310() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.10")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -566,16 +513,13 @@ fn find_uv_bin_py310() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -583,18 +527,17 @@ fn find_uv_bin_py310() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_py311() {
+fn find_uv_bin_py311() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.11")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -606,16 +549,13 @@ fn find_uv_bin_py311() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -623,18 +563,17 @@ fn find_uv_bin_py311() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_py312() {
+fn find_uv_bin_py312() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -646,16 +585,13 @@ fn find_uv_bin_py312() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -663,18 +599,17 @@ fn find_uv_bin_py312() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_py313() {
+fn find_uv_bin_py313() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.13")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -686,16 +621,13 @@ fn find_uv_bin_py313() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -703,18 +635,17 @@ fn find_uv_bin_py313() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }
 
 #[test]
-fn find_uv_bin_py314() {
+fn find_uv_bin_py314() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.14")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -726,16 +657,13 @@ fn find_uv_bin_py314() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(fake_uv(&context)?), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[WORKSPACE]/test/packages/fake-uv)
+     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
     "
     );
 
@@ -743,12 +671,11 @@ fn find_uv_bin_py314() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/uv
-
-    ----- stderr -----
     "
     );
+
+    Ok(())
 }

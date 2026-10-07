@@ -7,50 +7,55 @@ use anyhow::Context;
 use tracing::info_span;
 
 use uv_client::BaseClientBuilder;
-use uv_configuration::{BuildOptions, HashCheckingMode, TargetTriple};
+use uv_configuration::{BuildOptions, HashCheckingMode, RequirementsInput, TargetTriple};
 use uv_distribution_types::Resolution;
-use uv_fs::Simplified;
+use uv_lock::PylockToml;
 use uv_normalize::{ExtraName, GroupName};
 use uv_python::{Interpreter, PythonVersion};
-use uv_resolver::PylockToml;
 use uv_types::HashStrategy;
 
 use crate::commands::pip::{resolution_markers, resolution_tags};
 
-/// Read a `pylock.toml` from a local path or HTTP(S) URL and parse it.
+/// Read a `pylock.toml` from a local path or remote URL and parse it.
 ///
 /// Returns the `install_path` (used to resolve relative package sources in the lock) alongside
-/// the parsed [`PylockToml`]. For HTTP(S) sources, the current working directory is used as the
+/// the parsed [`PylockToml`]. For remote sources, the current working directory is used as the
 /// install path.
 pub(crate) async fn read_pylock_toml(
-    pylock: &Path,
+    pylock: &RequirementsInput,
     client_builder: &BaseClientBuilder<'_>,
 ) -> anyhow::Result<(PathBuf, PylockToml)> {
-    let (install_path, content) = if pylock.starts_with("http://") || pylock.starts_with("https://")
-    {
-        let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
-        let client = client_builder.build()?;
-        let response = client
-            .for_host(&url)
-            .get(url::Url::from(url.clone()))
-            .send()
-            .await?;
-        response.error_for_status_ref()?;
-        let content = response.text().await?;
-        (std::env::current_dir()?, content)
-    } else {
-        let absolute = std::path::absolute(pylock)?;
-        let install_path = absolute
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(PathBuf::new);
-        let content = fs_err::tokio::read_to_string(pylock).await?;
-        (install_path, content)
+    let (install_path, content) = match pylock {
+        RequirementsInput::Stdin => (
+            std::env::current_dir()?,
+            uv_fs::read_stdin_to_string_transcode()?,
+        ),
+        RequirementsInput::Remote(url) => {
+            let client = client_builder.build()?;
+            let response = client
+                .for_host(url)
+                .get(url::Url::from(url.clone()))
+                .send()
+                .await?;
+            response.error_for_status_ref()?;
+            let content = response.text().await?;
+            (std::env::current_dir()?, content)
+        }
+        RequirementsInput::Local(path) => {
+            let absolute = std::path::absolute(path)?;
+            let install_path = absolute
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(PathBuf::new);
+            let content = fs_err::tokio::read_to_string(path).await?;
+            (install_path, content)
+        }
     };
 
-    let lock = info_span!("toml::from_str pylock.toml", path = %pylock.display())
+    let pylock = pylock.user_display();
+    let lock = info_span!("toml::from_str pylock.toml", path = %pylock)
         .in_scope(|| toml::from_str::<PylockToml>(&content))
-        .with_context(|| format!("Not a valid `pylock.toml` file: {}", pylock.user_display()))?;
+        .with_context(|| format!("Not a valid `pylock.toml` file: {pylock}"))?;
 
     Ok((install_path, lock))
 }
@@ -92,7 +97,7 @@ pub(crate) fn resolve_pylock_toml(
     let hasher = if let Some(hash_checking) = hash_checking {
         HashStrategy::from_resolution(&resolution, hash_checking)?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     Ok((resolution, hasher))

@@ -48,20 +48,20 @@ pub enum InstalledDistError {
     #[error(transparent)]
     ExpandedTagParse(#[from] uv_distribution_filename::ExpandedTagError),
 
-    #[error("Invalid .egg-link path: `{}`", _0.user_display())]
+    #[error("Invalid `.egg-link` path: {}", _0.user_display())]
     InvalidEggLinkPath(PathBuf),
 
-    #[error("Invalid .egg-link target: `{}`", _0.user_display())]
+    #[error("Invalid `.egg-link` target: {}", _0.user_display())]
     InvalidEggLinkTarget(PathBuf),
 
-    #[error("Failed to parse METADATA file: `{}`", path.user_display())]
+    #[error("Failed to parse `METADATA` file: {}", path.user_display())]
     MetadataParse {
         path: PathBuf,
         #[source]
         err: Box<MetadataError>,
     },
 
-    #[error("Failed to parse `PKG-INFO` file: `{}`", path.user_display())]
+    #[error("Failed to parse `PKG-INFO` file: {}", path.user_display())]
     PkgInfoParse {
         path: PathBuf,
         #[source]
@@ -102,7 +102,7 @@ impl PartialEq for InstalledDist {
 
 impl Eq for InstalledDist {}
 
-/// A built distribution (wheel) that is installed in a virtual environment.
+/// A distribution installed in a Python environment.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum InstalledDistKind {
     /// The distribution was derived from a registry, like `PyPI`.

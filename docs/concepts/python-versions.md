@@ -47,6 +47,11 @@ Additionally, a specific system Python interpreter can be requested with:
 - `<executable-name>` (e.g., `mypython3`)
 - `<install-dir>` (e.g., `/some/environment/`)
 
+Use [`UV_PYTHON_ARCH`](../reference/environment.md#uv_python_arch) to select an architecture
+independently of the Python version. For example, setting `UV_PYTHON_ARCH=x86_64` makes `uv sync`
+use an `x86_64` interpreter while honoring the project's Python version request. A request that
+includes an architecture or names an interpreter executable takes precedence.
+
 By default, uv will automatically download Python versions if they cannot be found on the system.
 This behavior can be
 [disabled with the `python-downloads` option](#disabling-automatic-python-downloads).
@@ -59,10 +64,10 @@ check the user-level configuration directory. Any of the request formats describ
 used, though use of a version number is recommended for interoperability with other tools.
 
 A `.python-version` file can be created in the current directory with the
-[`uv python pin`](../reference/cli.md/#uv-python-pin) command.
+[`uv python pin`](../reference/cli.md#uv-python-pin) command.
 
 A global `.python-version` file can be created in the user configuration directory with the
-[`uv python pin --global`](../reference/cli.md/#uv-python-pin) command.
+[`uv python pin --global`](../reference/cli.md#uv-python-pin) command.
 
 Discovery of `.python-version` files can be disabled with `--no-config`.
 

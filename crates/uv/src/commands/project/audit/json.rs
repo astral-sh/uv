@@ -1,10 +1,19 @@
 //! JSON layout models for `uv audit`.
 
 use serde::Serialize;
+use uv_normalize::PackageName;
+
+use super::AuditResults;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Report {
     schema: Schema,
+    #[serde(flatten)]
+    body: ReportBody,
+}
+
+#[derive(Debug, Serialize)]
+struct ReportBody {
     summary: Summary,
     vulnerabilities: Vec<Vulnerability>,
     adverse_statuses: Vec<AdverseStatus>,
@@ -44,15 +53,53 @@ impl Report {
 
         Self {
             schema: Schema::default(),
-            summary: Summary {
-                audited_packages: n_packages,
-                vulnerabilities: vulnerabilities.len(),
-                adverse_statuses: adverse_statuses.len(),
+            body: ReportBody {
+                summary: Summary {
+                    audited_packages: n_packages,
+                    vulnerabilities: vulnerabilities.len(),
+                    adverse_statuses: adverse_statuses.len(),
+                },
+                vulnerabilities,
+                adverse_statuses,
             },
-            vulnerabilities,
-            adverse_statuses,
         }
     }
+}
+
+/// JSON report containing separate findings for each audited tool.
+#[derive(Debug, Serialize)]
+pub(crate) struct ToolReports {
+    schema: Schema,
+    tools: Vec<ToolReport>,
+}
+
+impl ToolReports {
+    pub(crate) fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
+        let tools = audits
+            .iter()
+            .map(|(name, results)| {
+                let (vulnerabilities, statuses) = results.split_findings();
+                let report = Report::from_findings(results.n_packages, &vulnerabilities, &statuses);
+
+                ToolReport {
+                    name: name.to_string(),
+                    body: report.body,
+                }
+            })
+            .collect();
+
+        Self {
+            schema: Schema::default(),
+            tools,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ToolReport {
+    name: String,
+    #[serde(flatten)]
+    body: ReportBody,
 }
 
 #[derive(Debug, Serialize, Default)]

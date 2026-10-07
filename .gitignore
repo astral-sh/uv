@@ -43,6 +43,7 @@ profile.json.gz
 # Generated reference docs (use `cargo dev generate-all` to regenerate)
 /docs/reference/cli.md
 /docs/reference/environment.md
+/docs/reference/.preview-features.md
 /docs/reference/settings.md
 
 # macOS
@@ -53,5 +54,11 @@ profile.json.gz
 .vscode
 
 # Codex
+/agents/codex/*
+!/agents/codex/config.toml
 .codex/*
 !.codex/hooks.json
+!.codex/skills/
+.codex/skills/*
+!.codex/skills/load-github-action-thread/
+!.codex/skills/load-github-action-thread/**

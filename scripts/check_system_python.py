@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Install `pylint` and `numpy` into the system Python.
+"""Install `pylint` and packages with native extensions into the system Python.
 
 To run locally, create a venv with seed packages.
 """
@@ -12,31 +12,65 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
+from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
-def install_package(*, uv: str, package: str, version: str = None):
+def install_package(
+    *,
+    uv: str,
+    package: str,
+    version: Optional[str] = None,
+    path: Optional[Path] = None,
+    import_check: Optional[str] = None,
+):
     """Install a package into the system Python."""
 
-    requirement = f"{package}=={version}" if version is not None else package
+    if path is not None:
+        requirement = str(path)
+    elif version is not None:
+        requirement = f"{package}=={version}"
+    else:
+        requirement = package
 
-    logging.info(f"Installing the package `{requirement}`.")
+    logger.info(f"Installing the package `{requirement}`.")
     subprocess.run(
         [uv, "pip", "install", requirement, "--system"] + allow_externally_managed,
         cwd=temp_dir,
         check=True,
     )
 
-    logging.info(f"Checking that `{package}` can be imported with `{sys.executable}`.")
+    logger.info(f"Checking that `{package}` can be imported with `{sys.executable}`.")
     code = subprocess.run(
-        [sys.executable, "-c", f"import {package}"],
+        [sys.executable, "-c", import_check or f"import {package}"],
         cwd=temp_dir,
+        check=False,
     )
     if code.returncode != 0:
-        raise Exception(f"Could not import {package}.")
+        raise RuntimeError(f"Could not import {package}.")
 
-    code = subprocess.run([uv, "pip", "show", package, "--system"])
+    code = subprocess.run([uv, "pip", "show", package, "--system"], check=False)
     if code.returncode != 0:
-        raise Exception(f"Could not show {package}.")
+        raise RuntimeError(f"Could not show {package}.")
+
+
+def install_native_extension(*, uv: str):
+    """Build, install, and run a small native extension with the system Python."""
+
+    fixture = Path(__file__).resolve().parents[1] / "test/packages/native_extension"
+    path = Path(temp_dir) / "native_extension"
+    shutil.copytree(fixture, path)
+    install_package(
+        uv=uv,
+        package="uv_test_native_extension",
+        path=path,
+        import_check=(
+            "import uv_test_native_extension as extension; "
+            "assert extension.answer() == 42"
+        ),
+    )
 
 
 if __name__ == "__main__":
@@ -76,15 +110,12 @@ if __name__ == "__main__":
     # Pin packages to the last versions that support older Python interpreters.
     if sys.version_info < (3, 7):
         pylint_version = "2.12.2"
-        numpy_version = "1.19.5"
         pydantic_core_version = None
     elif sys.version_info < (3, 8):
         pylint_version = "2.17.7"
-        numpy_version = "1.21.6"
         pydantic_core_version = "2.14.6"
     else:
         pylint_version = None
-        numpy_version = None
         pydantic_core_version = None
 
     pylint_requirement = (
@@ -96,7 +127,7 @@ if __name__ == "__main__":
         if args.check_python_version != version and not version.startswith(
             args.check_python_version + "."
         ):
-            raise Exception(
+            raise RuntimeError(
                 f"Expected to be running {args.check_python_version} but we are on {version}."
             )
 
@@ -116,7 +147,7 @@ if __name__ == "__main__":
         our_python_path = os.path.normcase(os.path.normpath(sys.executable))
 
         if our_python_path != system_python_path:
-            raise Exception(
+            raise RuntimeError(
                 f"Script was ran with {our_python_path} but `python` resolves to {system_python_path}"
             )
 
@@ -125,7 +156,7 @@ if __name__ == "__main__":
     try:
         import pip  # noqa: F401
     except ModuleNotFoundError:
-        logging.info("pip not found, running ensurepip...")
+        logger.info("pip not found, running ensurepip...")
         subprocess.run(
             [sys.executable, "-m", "ensurepip"],
             check=True,
@@ -134,16 +165,17 @@ if __name__ == "__main__":
     # Create a temporary directory.
     with tempfile.TemporaryDirectory() as temp_dir:
         # Ensure that the package (`pylint`) isn't installed.
-        logging.info("Checking that `pylint` isn't installed.")
+        logger.info("Checking that `pylint` isn't installed.")
         code = subprocess.run(
             [sys.executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
+            check=False,
         )
         if code.returncode == 0:
-            raise Exception("The package `pylint` is installed (but shouldn't be).")
+            raise RuntimeError("The package `pylint` is installed (but shouldn't be).")
 
         # Install the package (`pylint`).
-        logging.info("Installing the package `pylint`.")
+        logger.info("Installing the package `pylint`.")
         subprocess.run(
             [uv, "pip", "install", pylint_requirement, "--system", "--verbose"]
             + allow_externally_managed
@@ -153,22 +185,23 @@ if __name__ == "__main__":
         )
 
         # Ensure that the package (`pylint`) is installed.
-        logging.info(
+        logger.info(
             f"Checking that `pylint` is installed with `{sys.executable} -m pip`."
         )
         code = subprocess.run(
             [sys.executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
+            check=False,
         )
         if code.returncode != 0:
-            raise Exception("The package `pylint` isn't installed (but should be).")
+            raise RuntimeError("The package `pylint` isn't installed (but should be).")
 
-        logging.info("Checking that `pylint` is in the path.")
+        logger.info("Checking that `pylint` is in the path.")
         if shutil.which("pylint") is None:
-            raise Exception("The package `pylint` isn't in the path.")
+            raise RuntimeError("The package `pylint` isn't in the path.")
 
         # Uninstall the package (`pylint`).
-        logging.info("Uninstalling the package `pylint`.")
+        logger.info("Uninstalling the package `pylint`.")
         subprocess.run(
             [uv, "pip", "uninstall", "pylint", "--system"]
             + allow_externally_managed
@@ -178,16 +211,17 @@ if __name__ == "__main__":
         )
 
         # Ensure that the package (`pylint`) isn't installed.
-        logging.info("Checking that `pylint` isn't installed.")
+        logger.info("Checking that `pylint` isn't installed.")
         code = subprocess.run(
             [sys.executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
+            check=False,
         )
         if code.returncode == 0:
-            raise Exception("The package `pylint` is installed (but shouldn't be).")
+            raise RuntimeError("The package `pylint` is installed (but shouldn't be).")
 
         # Create a virtual environment with `uv`.
-        logging.info("Creating virtual environment with `uv`...")
+        logger.info("Creating virtual environment with `uv`...")
         subprocess.run(
             [uv, "venv", ".venv", "--seed", "--python", sys.executable],
             cwd=temp_dir,
@@ -199,14 +233,14 @@ if __name__ == "__main__":
         else:
             executable = os.path.join(temp_dir, ".venv", "bin", "python")
 
-        logging.info("Querying virtual environment...")
+        logger.info("Querying virtual environment...")
         subprocess.run(
             [executable, "--version"],
             cwd=temp_dir,
             check=True,
         )
 
-        logging.info("Installing into `uv` virtual environment...")
+        logger.info("Installing into `uv` virtual environment...")
 
         # Disable the `CONDA_PREFIX` and `VIRTUAL_ENV` environment variables, so that
         # we only rely on virtual environment discovery via the `.venv` directory.
@@ -222,29 +256,31 @@ if __name__ == "__main__":
         )
 
         # Ensure that the package (`pylint`) isn't installed globally.
-        logging.info("Checking that `pylint` isn't installed.")
+        logger.info("Checking that `pylint` isn't installed.")
         code = subprocess.run(
             [sys.executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
+            check=False,
         )
         if code.returncode == 0:
-            raise Exception(
+            raise RuntimeError(
                 "The package `pylint` is installed globally (but shouldn't be)."
             )
 
         # Ensure that the package (`pylint`) is installed in the virtual environment.
-        logging.info("Checking that `pylint` is installed.")
+        logger.info("Checking that `pylint` is installed.")
         code = subprocess.run(
             [executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
+            check=False,
         )
         if code.returncode != 0:
-            raise Exception(
+            raise RuntimeError(
                 "The package `pylint` isn't installed in the virtual environment."
             )
 
         # Uninstall the package (`pylint`).
-        logging.info("Uninstalling the package `pylint`.")
+        logger.info("Uninstalling the package `pylint`.")
         subprocess.run(
             [uv, "pip", "uninstall", "pylint", "--verbose"],
             cwd=temp_dir,
@@ -253,22 +289,20 @@ if __name__ == "__main__":
         )
 
         # Ensure that the package (`pylint`) isn't installed in the virtual environment.
-        logging.info("Checking that `pylint` isn't installed.")
+        logger.info("Checking that `pylint` isn't installed.")
         code = subprocess.run(
             [executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
+            check=False,
         )
         if code.returncode == 0:
-            raise Exception(
+            raise RuntimeError(
                 "The package `pylint` is installed in the virtual environment (but shouldn't be)."
             )
 
-        # Attempt to install NumPy.
-        # This ensures that we can successfully install a package with native libraries.
-        #
-        # NumPy doesn't distribute wheels for Python 3.13 or GraalPy (at time of writing).
+        # Build and import a native extension on interpreters with build tools in CI.
         if sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
-            install_package(uv=uv, package="numpy", version=numpy_version)
+            install_native_extension(uv=uv)
 
         # Attempt to install `pydantic_core`.
         # This ensures that we can successfully install and recognize a package that may
@@ -288,7 +322,7 @@ if __name__ == "__main__":
         # Next, create a virtual environment with `venv`, to ensure that `uv` can
         # interoperate with `venv` virtual environments.
         shutil.rmtree(os.path.join(temp_dir, ".venv"))
-        logging.info("Creating virtual environment with `venv`...")
+        logger.info("Creating virtual environment with `venv`...")
         subprocess.run(
             [sys.executable, "-m", "venv", ".venv"],
             cwd=temp_dir,
@@ -296,7 +330,7 @@ if __name__ == "__main__":
         )
 
         # Install the package (`pylint`) into the virtual environment.
-        logging.info("Installing into `venv` virtual environment...")
+        logger.info("Installing into `venv` virtual environment...")
         subprocess.run(
             [uv, "pip", "install", pylint_requirement, "--verbose"],
             cwd=temp_dir,
@@ -305,7 +339,7 @@ if __name__ == "__main__":
         )
 
         # Uninstall the package (`pylint`).
-        logging.info("Uninstalling the package `pylint`.")
+        logger.info("Uninstalling the package `pylint`.")
         subprocess.run(
             [uv, "pip", "uninstall", "pylint", "--verbose"],
             cwd=temp_dir,

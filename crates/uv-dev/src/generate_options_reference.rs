@@ -57,16 +57,16 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
                     bail!(
-                        "{filename} changed, please run `cargo dev generate-options-reference`:\n{comparison}"
+                        "`{filename}` changed, please run `cargo dev generate-options-reference`:\n{comparison}"
                     );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!("{filename} not found, please run `cargo dev generate-options-reference`");
+                bail!("`{filename}` not found, please run `cargo dev generate-options-reference`");
             }
             Err(err) => {
                 bail!(
-                    "{filename} changed, please run `cargo dev generate-options-reference`:\n{err}"
+                    "`{filename}` changed, please run `cargo dev generate-options-reference`:\n{err}"
                 );
             }
         },
@@ -85,7 +85,7 @@ pub(crate) fn main(args: &Args) -> Result<()> {
             }
             Err(err) => {
                 bail!(
-                    "{filename} changed, please run `cargo dev generate-options-reference`:\n{err}"
+                    "`{filename}` changed, please run `cargo dev generate-options-reference`:\n{err}"
                 );
             }
         },

@@ -52,7 +52,7 @@ We will revisit this topic in the [project environments section](#project-enviro
 When sharing projects with others, it's useful to declare all the packages you require upfront.
 `pip` supports installing requirements from a file, e.g.:
 
-```python title="requirements.txt"
+```requirements title="requirements.txt"
 fastapi
 ```
 
@@ -69,7 +69,7 @@ dependencies to a specific version — the file extension is used to differentia
 For example, if you require `fastapi` and `pydantic`, you'd specify these in a `requirements.in`
 file:
 
-```python title="requirements.in"
+```requirements title="requirements.in"
 fastapi
 pydantic>2
 ```
@@ -84,7 +84,7 @@ These dependencies can be compiled into a `requirements.txt` file:
 $ pip-compile requirements.in -o requirements.txt
 ```
 
-```python title="requirements.txt"
+```requirements title="requirements.txt"
 annotated-types==0.7.0
     # via pydantic
 anyio==4.8.0
@@ -122,7 +122,7 @@ $ pip install -r requirements.in
 $ pip freeze > requirements.txt
 ```
 
-```python title="requirements.txt"
+```requirements title="requirements.txt"
 annotated-types==0.7.0
 anyio==4.8.0
 fastapi==0.115.11
@@ -151,7 +151,7 @@ The requirements file format can only describe a single set of dependencies at o
 you have additional _groups_ of dependencies, such as development dependencies, they need separate
 files. For example, we'll create a `-dev` dependency file:
 
-```python title="requirements-dev.in"
+```requirements title="requirements-dev.in"
 -r requirements.in
 -c requirements.txt
 
@@ -173,7 +173,7 @@ package version to ensure that the `requirements-dev.txt` uses the same versions
 
 The compiled development dependencies look like:
 
-```python title="requirements-dev.txt"
+```requirements title="requirements-dev.txt"
 annotated-types==0.7.0
     # via
     #   -c requirements.txt
@@ -238,20 +238,20 @@ multiple platforms, such as Windows and macOS.
 
 For example, take a simple dependency:
 
-```python title="requirements.in"
+```requirements title="requirements.in"
 tqdm
 ```
 
 On Linux, this compiles to:
 
-```python title="requirements-linux.txt"
+```requirements title="requirements-linux.txt"
 tqdm==4.67.1
     # via -r requirements.in
 ```
 
 While on Windows, this compiles to:
 
-```python title="requirements-win.txt"
+```requirements title="requirements-win.txt"
 colorama==0.4.6
     # via tqdm
 tqdm==4.67.1
@@ -272,7 +272,7 @@ supported platform.
     $ uv pip compile --universal requirements.in
     ```
 
-    ```python title="requirements.txt"
+    ```requirements title="requirements.txt"
     colorama==0.4.6 ; sys_platform == 'win32'
         # via tqdm
     tqdm==4.67.1
@@ -376,7 +376,7 @@ describing the environment and will consequently conflict.
 To add the necessary markers, use `uv pip compile` to convert your existing files. For example,
 given the following:
 
-```python title="requirements-win.txt"
+```requirements title="requirements-win.txt"
 colorama==0.4.6
     # via tqdm
 tqdm==4.67.1
@@ -391,7 +391,7 @@ $ uv pip compile requirements.in -o requirements-win.txt --python-platform windo
 
 Notice the resulting output includes a Windows marker on `colorama`:
 
-```python title="requirements-win.txt"
+```requirements title="requirements-win.txt"
 colorama==0.4.6 ; sys_platform == 'win32'
     # via tqdm
 tqdm==4.67.1
@@ -441,7 +441,7 @@ $ uv add -r requirements-docs.in -c requirements-docs.txt --group docs
 
 When importing requirements on local paths or Git repositories, for example:
 
-```python title="requirements.in"
+```requirements title="requirements.in"
 ./path-dep
 -e ./editable-path-dep
 git-dep @ git+https://github.com/astral-sh/git-dep

@@ -1,6 +1,9 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = []
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 """Post-edit hook to auto-format files after agent edits."""
@@ -19,6 +22,7 @@ def format_rust(file_path: str, cwd: str) -> None:
             ["cargo", "fmt", "--", file_path],
             cwd=cwd,
             capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass
@@ -28,9 +32,10 @@ def format_python(file_path: str, cwd: str) -> None:
     """Format Python files with ruff."""
     try:
         subprocess.run(
-            ["uvx", "ruff", "format", file_path],
+            ["uv", "run", "--only-group=check", "ruff", "format", file_path],
             cwd=cwd,
             capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass
@@ -40,7 +45,10 @@ def format_prettier(file_path: str, cwd: str) -> None:
     """Format files with prettier."""
     try:
         subprocess.run(
-            ["npx", "prettier", "--write", file_path], cwd=cwd, capture_output=True
+            ["npx", "prettier@3.9.0", "--write", file_path],
+            cwd=cwd,
+            capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass

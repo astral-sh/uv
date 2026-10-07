@@ -12,8 +12,8 @@ use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDistKind, N
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_python::PythonPreference;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
+use uv_python::{PythonArchitecture, PythonPreference};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -21,6 +21,7 @@ use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
+    python_arch: Option<PythonArchitecture>,
     exclude_editable: bool,
     exclude: &FxHashSet<PackageName>,
     strict: bool,
@@ -38,19 +39,20 @@ pub(crate) fn pip_freeze(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
+        python_arch,
         cache,
     )?;
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
         debug!(
-            "Using `--target` directory at {}",
+            "Using `--target` directory at `{}`",
             target.root().user_display()
         );
         environment.with_target(target)?
     } else if let Some(prefix) = prefix {
         debug!(
-            "Using `--prefix` directory at {}",
+            "Using `--prefix` directory at `{}`",
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
