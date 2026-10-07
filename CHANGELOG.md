@@ -40,6 +40,19 @@ Unreleased.
 
   This stabilizes the `no-distutils-patch` preview feature.
 
+- **Treat requirement-file option values as single paths**
+  ([#22290](https://github.com/astral-sh/uv/pull/22290))
+
+  Previously, uv split values passed to `--constraint`, `--override`, `--exclude`, and
+  `--build-constraint` on spaces, even when quoted. Now, each value is treated as a single path,
+  allowing file paths containing spaces.
+
+  Repeat the option to provide multiple files. For example, replace `-c "a.txt b.txt"` with
+  `-c a.txt -c b.txt`.
+
+  Space-separated lists in `UV_CONSTRAINT`, `UV_OVERRIDE`, `UV_EXCLUDE`, and `UV_BUILD_CONSTRAINT`
+  remain supported.
+
 - **Use `tar-codec` for tar archives by default** ([#22094](https://github.com/astral-sh/uv/pull/22094))
 
   Previously, uv used `astral-tokio-tar` to extract tar archives, build source distributions with `uv_build`, and read their metadata for `uv publish`. Now, uv uses `tar-codec`, which applies stricter validation when reading archives. This can cause uv to reject archives containing hard links or unsupported tar extensions that previous versions accepted. Source distributions created by `uv_build` can also have different archive bytes and hashes.

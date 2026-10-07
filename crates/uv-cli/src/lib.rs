@@ -1305,7 +1305,7 @@ fn parse_file_path(input: &str) -> Result<PathBuf, String> {
 #[derive(Args)]
 #[group(skip)]
 pub struct DependencyConstraintsArgs {
-    /// Constrain versions using the given requirements files.
+    /// Constrain versions using the given requirements files [env: `UV_CONSTRAINT`=]
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -1316,13 +1316,11 @@ pub struct DependencyConstraintsArgs {
         long,
         short,
         alias = "constraint",
-        env = EnvVars::UV_CONSTRAINT,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     constraints: Vec<Maybe<RequirementsInput>>,
 
-    /// Override versions using the given requirements files.
+    /// Override versions using the given requirements files [env: `UV_OVERRIDE`=]
     ///
     /// Overrides files are `requirements.txt`-like files that force a specific version of a
     /// requirement to be installed, regardless of the requirements declared by any constituent
@@ -1334,13 +1332,11 @@ pub struct DependencyConstraintsArgs {
     #[arg(
         long,
         alias = "override",
-        env = EnvVars::UV_OVERRIDE,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     overrides: Vec<Maybe<RequirementsInput>>,
 
-    /// Exclude packages from resolution using the given requirements files.
+    /// Exclude packages from resolution using the given requirements files [env: `UV_EXCLUDE`=]
     ///
     /// Excludes files are `requirements.txt`-like files that specify packages to exclude
     /// from the resolution. When a package is excluded, it will be omitted from the
@@ -1350,14 +1346,12 @@ pub struct DependencyConstraintsArgs {
     #[arg(
         long,
         alias = "exclude",
-        env = EnvVars::UV_EXCLUDE,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     excludes: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
-    /// distributions.
+    /// distributions [env: `UV_BUILD_CONSTRAINT`=]
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -1366,8 +1360,6 @@ pub struct DependencyConstraintsArgs {
         long,
         short,
         alias = "build-constraint",
-        env = EnvVars::UV_BUILD_CONSTRAINT,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     build_constraints: Vec<Maybe<RequirementsInput>>,
@@ -1730,7 +1722,7 @@ pub struct PipSyncArgs {
     #[arg(required(true), value_hint = ValueHint::FilePath)]
     pub src_file: Vec<RequirementsInput>,
 
-    /// Constrain versions using the given requirements files.
+    /// Constrain versions using the given requirements files [env: `UV_CONSTRAINT`=]
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -1741,14 +1733,12 @@ pub struct PipSyncArgs {
         long,
         short,
         alias = "constraint",
-        env = EnvVars::UV_CONSTRAINT,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
-    /// distributions.
+    /// distributions [env: `UV_BUILD_CONSTRAINT`=]
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -1757,8 +1747,6 @@ pub struct PipSyncArgs {
         long,
         short,
         alias = "build-constraint",
-        env = EnvVars::UV_BUILD_CONSTRAINT,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
@@ -2853,7 +2841,8 @@ pub struct BuildArgs {
     #[arg(long, overrides_with("create_gitignore"))]
     no_create_gitignore: bool,
 
-    /// Constrain build dependencies using the given requirements files when building distributions.
+    /// Constrain build dependencies using the given requirements files when building
+    /// distributions [env: `UV_BUILD_CONSTRAINT`=]
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// build dependency that's installed. However, including a package in a constraints file will
@@ -2862,8 +2851,6 @@ pub struct BuildArgs {
         long,
         short,
         alias = "build-constraint",
-        env = EnvVars::UV_BUILD_CONSTRAINT,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     build_constraints: Vec<Maybe<RequirementsInput>>,
@@ -3961,7 +3948,7 @@ pub struct AddArgs {
     )]
     pub requirements: Vec<RequirementsInput>,
 
-    /// Constrain versions using the given requirements files.
+    /// Constrain versions using the given requirements files [env: `UV_CONSTRAINT`=]
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. The constraints will _not_ be added to the project's
@@ -3972,8 +3959,6 @@ pub struct AddArgs {
         long,
         short,
         alias = "constraint",
-        env = EnvVars::UV_CONSTRAINT,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
@@ -5340,7 +5325,7 @@ pub struct ToolRunArgs {
     )]
     pub with_requirements: Vec<Maybe<RequirementsInput>>,
 
-    /// Constrain versions using the given requirements files.
+    /// Constrain versions using the given requirements files [env: `UV_CONSTRAINT`=]
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -5351,14 +5336,12 @@ pub struct ToolRunArgs {
         long,
         short,
         alias = "constraint",
-        env = EnvVars::UV_CONSTRAINT,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
-    /// distributions.
+    /// distributions [env: `UV_BUILD_CONSTRAINT`=]
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -5367,13 +5350,11 @@ pub struct ToolRunArgs {
         long,
         short,
         alias = "build-constraint",
-        env = EnvVars::UV_BUILD_CONSTRAINT,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
 
-    /// Override versions using the given requirements files.
+    /// Override versions using the given requirements files [env: `UV_OVERRIDE`=]
     ///
     /// Overrides files are `requirements.txt`-like files that force a specific version of a
     /// requirement to be installed, regardless of the requirements declared by any constituent
@@ -5385,8 +5366,6 @@ pub struct ToolRunArgs {
     #[arg(
         long,
         alias = "override",
-        env = EnvVars::UV_OVERRIDE,
-        value_delimiter = ' ',
         value_hint = ValueHint::FilePath,
     )]
     pub overrides: Vec<Maybe<RequirementsInput>>,
