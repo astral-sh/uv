@@ -205,10 +205,15 @@ class CPythonFinder(Finder):
         "shared-noopt",
         "static-noopt",
     ]
-    # Normalized mappings to match the Rust types
+    # Normalized mappings to match the Rust types.
+    # ppc64le_powerX triples must map to the powerpc64le family so that
+    # _normalize_arch can extract the variant correctly.
     ARCH_MAP: ClassVar[dict[str, str]] = {
         "ppc64": "powerpc64",
         "ppc64le": "powerpc64le",
+        "ppc64le_power9": "powerpc64le_power9",
+        "ppc64le_power10": "powerpc64le_power10",
+        "ppc64le_power11": "powerpc64le_power11",
     }
     # Terminal flavor keywords used as the last component of an NDJSON variant string.
     # All preceding "+" components are treated as build options.
@@ -370,6 +375,23 @@ class CPythonFinder(Finder):
     def _normalize_arch(self, arch: str) -> Arch:
         arch = self.ARCH_MAP.get(arch, arch)
         pieces = arch.split("_")
+        # powerpc64le splits into ['powerpc64le'] (1 piece), so family is pieces[0].
+        # x86_64 splits into ['x86', '64'] (2 pieces), so family is pieces[:2] joined.
+        # powerpc64le_power9 splits into ['powerpc64le', 'power9'] — family is
+        # pieces[0] and variant is pieces[1].
+        # x86_64_v3 splits into ['x86', '64', 'v3'] — family is pieces[:2] and variant pieces[2].
+        if len(pieces) == 1:
+            return Arch(pieces[0], None)
+        if len(pieces) == 2:
+            # Could be "powerpc64le_power9" → family=powerpc64le, variant=power9
+            # or a bare two-segment name with no variant.
+            # Treat as family+variant only when the second piece looks like a
+            # known Power variant or x86 microarch variant.
+            second = pieces[1]
+            if second in ("power9", "power10", "power11", "v2", "v3", "v4"):
+                return Arch(pieces[0], second)
+            return Arch("_".join(pieces), None)
+        # 3+ pieces: classic x86_64_v3 style — family = first two, variant = third
         family = "_".join(pieces[:2])
         variant = pieces[2] if len(pieces) > 2 else None
         return Arch(family, variant)

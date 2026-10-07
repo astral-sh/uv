@@ -5,6 +5,9 @@ use std::io::Error;
 #[cfg(target_os = "linux")]
 use procfs::{CpuInfo, Current};
 
+#[cfg(target_os = "linux")]
+use crate::ArchVariant;
+
 /// Detects whether the hardware supports floating-point operations using ARM's Vector Floating Point (VFP) hardware.
 ///
 /// This function is relevant specifically for ARM architectures, where the presence of the `vfp` flag in `/proc/cpuinfo`
@@ -49,10 +52,57 @@ pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
     Ok(false) // Non-Linux or non-ARM systems: hardware floating-point detection is not applicable
 }
 
+/// Detects the POWER ISA generation of the current CPU by reading `/proc/cpuinfo`.
+///
+/// On IBM POWER machines the `cpu` field looks like:
+/// - `POWER9 (architected), altivec supported`
+/// - `POWER10 (architected), altivec supported`
+/// - `Power11 (architected), altivec supported`
+///
+/// Returns the matching [`ArchVariant`] (Power9/Power10/Power11), or `None` if the
+/// generation cannot be determined (e.g., older POWER, unknown string, or read error).
+#[cfg(target_os = "linux")]
+pub(crate) fn detect_power_cpu_generation() -> Option<ArchVariant> {
+    let cpu_info = CpuInfo::current().ok()?;
+    // get_info() returns Option<HashMap<&str,&str>>; fields is HashMap<String,String>.
+    // Collect the cpu field value as an owned String to avoid lifetime issues.
+    let cpu_str: String = cpu_info
+        .get_info(0)
+        .and_then(|info| info.get("cpu").map(|s| (*s).to_owned()))
+        .or_else(|| cpu_info.fields.get("cpu").cloned())?;
+
+    parse_power_generation(&cpu_str)
+}
+
+/// Parse a POWER generation out of a `/proc/cpuinfo` `cpu` field value.
+///
+/// Case-insensitive; matches `POWER9`, `POWER10`, `POWER11` (and mixed-case variants).
+#[cfg(target_os = "linux")]
+fn parse_power_generation(cpu: &str) -> Option<ArchVariant> {
+    let lower = cpu.to_ascii_lowercase();
+    if lower.contains("power11") {
+        Some(ArchVariant::Power11)
+    } else if lower.contains("power10") {
+        Some(ArchVariant::Power10)
+    } else if lower.contains("power9") {
+        Some(ArchVariant::Power9)
+    } else {
+        None
+    }
+}
+
+/// On non-Linux systems, Power generation detection is not applicable.
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn detect_power_cpu_generation() -> Option<ArchVariant> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "linux")]
-    use super::has_hardware_float_features;
+    use super::{has_hardware_float_features, parse_power_generation};
+    #[cfg(target_os = "linux")]
+    use crate::ArchVariant;
 
     /// Native arm32 (e.g., Raspberry Pi with 32-bit kernel) — `vfp` flag present.
     #[test]
@@ -87,6 +137,51 @@ mod tests {
         // "fphp" contains "fp" as a prefix but should not match on its own
         let features = "asimd fphp asimdhp";
         assert!(!has_hardware_float_features(features));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn power9_detected() {
+        assert_eq!(
+            parse_power_generation("POWER9 (architected), altivec supported"),
+            Some(ArchVariant::Power9)
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn power10_detected() {
+        assert_eq!(
+            parse_power_generation("POWER10 (architected), altivec supported"),
+            Some(ArchVariant::Power10)
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn power11_detected() {
+        // PBS convention uses "Power11" (mixed case)
+        assert_eq!(
+            parse_power_generation("Power11 (architected), altivec supported"),
+            Some(ArchVariant::Power11)
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn power11_not_matched_as_power1() {
+        // "power11" contains "power1" — make sure ordering is correct (check 11 before 9/10)
+        assert_eq!(
+            parse_power_generation("power11 foo"),
+            Some(ArchVariant::Power11)
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn unknown_power_returns_none() {
+        assert_eq!(parse_power_generation("POWER8 SMT8 POWER8"), None);
+        assert_eq!(parse_power_generation("unknown cpu"), None);
     }
 }
 
