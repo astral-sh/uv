@@ -2283,14 +2283,10 @@ impl PythonRequest {
                 }
                 false
             }
-            Self::Implementation(implementation) => interpreter
-                .implementation_name()
-                .eq_ignore_ascii_case(implementation.long_name()),
+            Self::Implementation(implementation) => implementation.matches_interpreter(interpreter),
             Self::ImplementationVersion(implementation, version) => {
                 version.matches_interpreter(interpreter)
-                    && interpreter
-                        .implementation_name()
-                        .eq_ignore_ascii_case(implementation.long_name())
+                    && implementation.matches_interpreter(interpreter)
             }
             Self::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
