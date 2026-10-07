@@ -20,22 +20,6 @@ jobs:
     outputs:
       result: ${{ steps.review.outputs.final-message }}
     steps:
-      - name: "Checkout review helpers"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: astral-sh/github-actions
-          ref: 45c506043c254690f2612686e5d5a72c81c251a4
-          sparse-checkout: security-pr-review
-          persist-credentials: false
-
-      - name: "Save review schema"
-        run: |
-          review_config="$RUNNER_TEMP/pull-request-code-quality-review"
-          mkdir -p "$review_config/codex" "$RUNNER_TEMP/codex-code-quality-review"
-          jq 'del(.properties.reviewed_paths) | .required -= ["reviewed_paths"]' \
-            security-pr-review/schema.json > "$review_config/schema.json"
-          printf 'REVIEW_CONFIG=%s\n' "$review_config" >> "$GITHUB_ENV"
-
       - name: "Checkout caller repository"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,8 +36,12 @@ jobs:
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          export REVIEW_CONFIG="$RUNNER_TEMP/pull-request-code-quality-review"
+          mkdir -p "$REVIEW_CONFIG/codex" "$RUNNER_TEMP/codex-code-quality-review"
+          printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
           cp agents/codex/config.toml "$REVIEW_CONFIG/codex/"
           cp agents/prompts/pull-request-code-quality-review.md "$REVIEW_CONFIG/prompt.md"
+          cp agents/schemas/pull-request-code-quality-review.json "$REVIEW_CONFIG/schema.json"
           cp agents/scripts/collect-pull-request-review-context.sh "$REVIEW_CONFIG/"
           cp AGENTS.md CONTRIBUTING.md STYLE.md "$REVIEW_CONFIG/"
           git rev-parse HEAD > "$REVIEW_CONFIG/configuration-revision.txt"
@@ -136,8 +124,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: astral-sh/github-actions
-          ref: 45c506043c254690f2612686e5d5a72c81c251a4
-          sparse-checkout: security-pr-review
+          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          sparse-checkout: pull-request-review
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -148,7 +136,7 @@ jobs:
 
       - name: "Prepare review findings"
         id: comments
-        run: bash security-pr-review/scripts/prepare.sh
+        run: bash pull-request-review/scripts/prepare.sh
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REVIEW_RESULT: ${{ needs.review.outputs.result }}
@@ -160,8 +148,17 @@ jobs:
     environment: automations
     timeout-minutes: 5
     permissions:
+      contents: read
       id-token: write # for the credential broker
     steps:
+      - name: "Checkout review helpers"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: astral-sh/github-actions
+          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          sparse-checkout: pull-request-review
+          persist-credentials: false
+
       - name: "Get repository token"
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
@@ -173,29 +170,7 @@ jobs:
             pull_requests: write
 
       - name: "Publish review findings"
-        run: |
-          set -euo pipefail
-          printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
-          current_head_sha="$(
-            gh pr view "$PULL_REQUEST_NUMBER" \
-              --repo "$GITHUB_REPOSITORY" \
-              --json headRefOid \
-              --jq '.headRefOid'
-          )"
-          if [ "$current_head_sha" != "$HEAD_SHA" ]; then
-            echo "The pull request head changed; skipping stale review findings."
-            exit 0
-          fi
-
-          jq --compact-output '.comments[]' "$RUNNER_TEMP/review.json" |
-          while IFS= read -r comment; do
-            printf '%s\n' "$comment" |
-              gh api \
-                --method POST \
-                "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments" \
-                --input - \
-                --silent
-          done
+        run: bash pull-request-review/scripts/publish.sh
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
