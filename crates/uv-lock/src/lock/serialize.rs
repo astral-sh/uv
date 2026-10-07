@@ -34,7 +34,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     // environments.
     debug_assert!(lock.check_marker_coverage().is_ok());
 
-    writer.key_value("version", lock.version)?;
+    writer.key_value("version", lock.version.max(lock.marker_format_version()))?;
     if lock.revision > 0 {
         writer.key_value("revision", lock.revision)?;
     }
@@ -60,7 +60,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .iter()
             .copied()
             .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
-            .filter_map(SimplifiedMarkerTree::try_to_string);
+            .filter_map(|marker| marker.as_simplified_marker_tree().to_extended_string());
         writer.key_multiline_array("supported-markers", markers, |writer, marker| {
             writer.value(&marker)
         })?;
@@ -72,7 +72,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .iter()
             .copied()
             .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
-            .filter_map(SimplifiedMarkerTree::try_to_string);
+            .filter_map(|marker| marker.as_simplified_marker_tree().to_extended_string());
         writer.key_multiline_array("required-markers", markers, |writer, marker| {
             writer.value(&marker)
         })?;
@@ -592,7 +592,7 @@ fn write_dependency_inline(
         .simplified_marker
         .as_simplified_marker_tree()
         .restrict(simplified_environment)
-        .try_to_string()
+        .to_extended_string()
     {
         writer.inline_value(&mut first, "marker", &marker)?;
     }

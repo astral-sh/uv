@@ -4,10 +4,7 @@ use std::path::Path;
 
 use itertools::Itertools;
 
-use uv_distribution_types::{
-    DistributionMetadata, Name, RequiresPython, ResolvedDist, SimplifiedMarkerTree, Verbatim,
-    VersionOrUrlRef,
-};
+use uv_distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, Scheme, split_scheme};
@@ -32,11 +29,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
     /// This typically results in a PEP 508 representation of the requirement, but will write an
     /// unnamed requirement for relative paths, which can't be represented with PEP 508 (but are
     /// supported in `requirements.txt`).
-    pub(crate) fn to_requirements_txt(
-        &self,
-        requires_python: &RequiresPython,
-        include_markers: bool,
-    ) -> Cow<'_, str> {
+    pub(crate) fn to_requirements_txt(&self, markers: Option<&str>) -> Cow<'_, str> {
         // If the URL is editable, write it as an editable requirement.
         if self.dist.is_editable() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
@@ -93,11 +86,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
                     }
                 };
                 if let Some(given) = given {
-                    return if let Some(markers) =
-                        SimplifiedMarkerTree::new(requires_python, self.markers)
-                            .try_to_string()
-                            .filter(|_| include_markers)
-                    {
+                    return if let Some(markers) = markers {
                         Cow::Owned(format!("{given} ; {markers}"))
                     } else {
                         given
@@ -107,10 +96,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
         }
 
         if self.extras.is_empty() {
-            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers)
-                .try_to_string()
-                .filter(|_| include_markers)
-            {
+            if let Some(markers) = markers {
                 Cow::Owned(format!("{} ; {}", self.dist.verbatim(), markers))
             } else {
                 self.dist.verbatim()
@@ -119,10 +105,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
             let mut extras = self.extras.clone();
             extras.sort_unstable();
             extras.dedup();
-            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers)
-                .try_to_string()
-                .filter(|_| include_markers)
-            {
+            if let Some(markers) = markers {
                 Cow::Owned(format!(
                     "{}[{}]{} ; {}",
                     self.name(),

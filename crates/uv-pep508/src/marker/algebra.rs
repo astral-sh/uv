@@ -162,6 +162,22 @@ impl InternerGuard<'_> {
         if flipped { id.not() } else { id }
     }
 
+    /// Creates a string-valued version node from its numeric and opaque ranges.
+    pub(crate) fn version_string_ranges(
+        &mut self,
+        key: CanonicalMarkerValueString,
+        versions: &Ranges<Version>,
+        strings: &Ranges<ArcStr>,
+    ) -> NodeId {
+        self.create_node(
+            Variable::VersionString(key),
+            Edges::VersionString {
+                versions: Edges::from_range(versions).into_boxed_slice(),
+                strings: Edges::from_range(strings).into_boxed_slice(),
+            },
+        )
+    }
+
     /// Returns a decision node for a single marker expression.
     pub(crate) fn expression(&mut self, expr: MarkerExpression) -> NodeId {
         let (var, children) = match expr {
@@ -213,6 +229,22 @@ impl InternerGuard<'_> {
                     }
                 }
             },
+            MarkerExpression::VersionStringDomain { key, valid } => {
+                // Use the displayed predicate so the domain also has the correct meaning on
+                // platforms where this key uses string comparisons.
+                let lower = self.expression(MarkerExpression::String {
+                    key,
+                    operator: MarkerOperator::LessThan,
+                    value: arcstr::literal!("0"),
+                });
+                let upper = self.expression(MarkerExpression::String {
+                    key,
+                    operator: MarkerOperator::GreaterEqual,
+                    value: arcstr::literal!("0"),
+                });
+                let domain = self.or(lower, upper);
+                return if valid { domain } else { domain.not() };
+            }
             // The `in` and `contains` operators are a bit different than other operators.
             // In particular, they do not represent a particular value for the corresponding
             // variable, and can overlap. For example, `'nux' in os_name` and `os_name == 'Linux'`
@@ -321,17 +353,16 @@ impl InternerGuard<'_> {
                     Variable::String(key),
                     Edges::from_string(key, operator, value.clone()),
                 );
-                // Darwin kernel releases are dotted versions. Other platforms can include
-                // arbitrary text in `platform_release`, so retain string comparisons there.
-                if key == CanonicalMarkerValueString::PlatformRelease
-                    && let Some(operator) = operator.to_pep440_operator()
-                    && let Ok(pattern) = value.parse::<VersionPattern>()
-                    && let Ok(specifier) = VersionSpecifier::from_pattern(operator, pattern)
-                {
-                    let version = self.create_node(
-                        Variable::VersionString(key),
-                        Edges::from_specifier(specifier),
-                    );
+                // Darwin releases use version comparisons when both operands support them.
+                // Keep opaque releases in the same node so simplification preserves fallback
+                // string comparisons. Other platforms retain their string interpretation.
+                if key == CanonicalMarkerValueString::PlatformRelease {
+                    let Some(edges) = Edges::from_version_string(operator, &value) else {
+                        // Invalid operator/version combinations such as `>= 24+local` retain
+                        // their string representation rather than normalizing the raw value.
+                        return string;
+                    };
+                    let version = self.create_node(Variable::VersionString(key), edges);
                     let darwin = self.expression(MarkerExpression::String {
                         key: MarkerValueString::SysPlatform,
                         operator: MarkerOperator::Equal,
@@ -1356,6 +1387,13 @@ pub(crate) enum Edges {
     Version {
         edges: SmallVec<(Ranges<Version>, NodeId)>,
     },
+    // The disjoint numeric and opaque domains of a string-valued version marker.
+    // Each map covers its domain with simple ranges. The string map is evaluated only
+    // for values that cannot be parsed as versions. Box the maps to keep other nodes small.
+    VersionString {
+        versions: Box<[(Ranges<Version>, NodeId)]>,
+        strings: Box<[(Ranges<ArcStr>, NodeId)]>,
+    },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
     //
@@ -1447,6 +1485,45 @@ impl Edges {
         Self::Version {
             edges: Self::from_range(&specifier),
         }
+    }
+
+    /// Returns edges for version comparisons with an opaque-string fallback.
+    fn from_version_string(operator: MarkerOperator, value: &ArcStr) -> Option<Self> {
+        // An opaque environment value cannot equal a literal that is itself a version.
+        let valid_version = value.parse::<Version>().is_ok();
+        let equality = if valid_version {
+            Ranges::empty()
+        } else {
+            Ranges::singleton(value.clone())
+        };
+        let (strings, numeric_fallback) = match operator {
+            MarkerOperator::Equal | MarkerOperator::LessEqual | MarkerOperator::GreaterEqual => {
+                (equality, Ranges::empty())
+            }
+            MarkerOperator::NotEqual => (equality.complement(), Ranges::full()),
+            MarkerOperator::LessThan | MarkerOperator::GreaterThan => {
+                (Ranges::empty(), Ranges::empty())
+            }
+            MarkerOperator::TildeEqual
+            | MarkerOperator::In
+            | MarkerOperator::NotIn
+            | MarkerOperator::Contains
+            | MarkerOperator::NotContains => return None,
+        };
+        let specifier = operator
+            .to_pep440_operator()
+            .zip(value.parse::<VersionPattern>().ok())
+            .and_then(|(operator, pattern)| VersionSpecifier::from_pattern(operator, pattern).ok());
+        if specifier.is_none() && valid_version {
+            return None;
+        }
+        let versions = specifier.map_or(numeric_fallback, |specifier| {
+            release_specifier_to_range(specifier.only_release(), true)
+        });
+        Some(Self::VersionString {
+            versions: Self::from_range(&versions).into_boxed_slice(),
+            strings: Self::from_range(&strings).into_boxed_slice(),
+        })
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
@@ -1544,6 +1621,24 @@ impl Edges {
             (Self::Version { edges }, Self::Version { edges: right_edges }) => Self::Version {
                 edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
+            (
+                Self::VersionString { versions, strings },
+                Self::VersionString {
+                    versions: right_versions,
+                    strings: right_strings,
+                },
+            ) => Self::VersionString {
+                versions: Self::apply_ranges(
+                    versions,
+                    parent,
+                    right_versions,
+                    right_parent,
+                    &mut apply,
+                )
+                .into_boxed_slice(),
+                strings: Self::apply_ranges(strings, parent, right_strings, right_parent, apply)
+                    .into_boxed_slice(),
+            },
             (Self::String { edges }, Self::String { edges: right_edges }) => Self::String {
                 edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
@@ -1586,9 +1681,9 @@ impl Edges {
     /// In that case, we drop any ranges that do not exist in the domain of both edges. Note that
     /// this should not occur in practice because `requires-python` bounds are global.
     fn apply_ranges<T>(
-        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        left_edges: &[(Ranges<T>, NodeId)],
         left_parent: NodeId,
-        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        right_edges: &[(Ranges<T>, NodeId)],
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
     ) -> SmallVec<(Ranges<T>, NodeId)>
@@ -1643,6 +1738,22 @@ impl Edges {
             (Self::Version { edges }, Self::Version { edges: right_edges }) => {
                 Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
             }
+            (
+                Self::VersionString { versions, strings },
+                Self::VersionString {
+                    versions: right_versions,
+                    strings: right_strings,
+                },
+            ) => {
+                Self::is_disjoint_ranges(versions, parent, right_versions, right_parent, interner)
+                    && Self::is_disjoint_ranges(
+                        strings,
+                        parent,
+                        right_strings,
+                        right_parent,
+                        interner,
+                    )
+            }
             (Self::String { edges }, Self::String { edges: right_edges }) => {
                 Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
             }
@@ -1663,9 +1774,9 @@ impl Edges {
 
     // Returns `true` if all intersecting ranges in two range maps are disjoint.
     fn is_disjoint_ranges<T>(
-        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        left_edges: &[(Ranges<T>, NodeId)],
         left_parent: NodeId,
-        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
+        right_edges: &[(Ranges<T>, NodeId)],
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
     ) -> bool
@@ -1703,6 +1814,18 @@ impl Edges {
                     .map(|(range, node)| (range, f(node.negate(parent))))
                     .collect(),
             },
+            Self::VersionString { versions, strings } => Self::VersionString {
+                versions: versions
+                    .iter()
+                    .cloned()
+                    .map(|(range, node)| (range, f(node.negate(parent))))
+                    .collect(),
+                strings: strings
+                    .iter()
+                    .cloned()
+                    .map(|(range, node)| (range, f(node.negate(parent))))
+                    .collect(),
+            },
             Self::String { edges: map } => Self::String {
                 edges: map
                     .iter()
@@ -1720,13 +1843,19 @@ impl Edges {
     // Returns an iterator over all direct children of this node.
     fn nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
         match self {
-            Self::Version { edges: map } => {
-                Either::Left(Either::Left(map.iter().map(|(_, node)| *node)))
-            }
-            Self::String { edges: map } => {
-                Either::Left(Either::Right(map.iter().map(|(_, node)| *node)))
-            }
-            Self::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
+            Self::Version { edges: map } => Either::Left(Either::Left(Either::Left(
+                map.iter().map(|(_, node)| *node),
+            ))),
+            Self::VersionString { versions, strings } => Either::Right(
+                versions
+                    .iter()
+                    .map(|(_, node)| *node)
+                    .chain(strings.iter().map(|(_, node)| *node)),
+            ),
+            Self::String { edges: map } => Either::Left(Either::Left(Either::Right(
+                map.iter().map(|(_, node)| *node),
+            ))),
+            Self::Boolean { high, low } => Either::Left(Either::Right([*high, *low].into_iter())),
         }
     }
 
@@ -1735,6 +1864,18 @@ impl Edges {
         match self {
             Self::Version { edges: map } => Self::Version {
                 edges: map
+                    .into_iter()
+                    .map(|(range, node)| (range, node.not()))
+                    .collect(),
+            },
+            Self::VersionString { versions, strings } => Self::VersionString {
+                versions: versions
+                    .into_vec()
+                    .into_iter()
+                    .map(|(range, node)| (range, node.not()))
+                    .collect(),
+                strings: strings
+                    .into_vec()
                     .into_iter()
                     .map(|(range, node)| (range, node.not()))
                     .collect(),

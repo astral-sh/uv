@@ -307,7 +307,7 @@ fn tool_audit_unsupported_lockfile_version() -> Result<()> {
     let contents = fs_err::read_to_string(&lock_path)?;
     fs_err::write(
         &lock_path,
-        contents.replacen("version = 1\n", "version = 2\n", 1),
+        contents.replacen("version = 1\n", "version = 3\n", 1),
     )?;
 
     uv_snapshot!(context.filters(), context.tool_audit()
@@ -316,7 +316,7 @@ fn tool_audit_unsupported_lockfile_version() -> Result<()> {
         , @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Skipping tool `simple-launcher` because its lockfile at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v2, but only v1 is supported)
+    warning: Skipping tool `simple-launcher` because its lockfile at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v3, but the latest supported version is v2)
     No auditable tools installed
     ");
 
@@ -326,7 +326,7 @@ fn tool_audit_unsupported_lockfile_version() -> Result<()> {
         , @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The lockfile for tool `simple-launcher` at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v2, but only v1 is supported)
+    error: The lockfile for tool `simple-launcher` at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v3, but the latest supported version is v2)
     ");
 
     Ok(())
@@ -340,7 +340,7 @@ fn tool_audit_unparsable_unsupported_lockfile_version() -> Result<()> {
 
     let lock_path = tool_dir.join("simple-launcher").join("uv.lock");
     let contents = fs_err::read_to_string(&lock_path)?
-        .replacen("version = 1\n", "version = 2\n", 1)
+        .replacen("version = 1\n", "version = 3\n", 1)
         .replacen("version = \"0.1.0\"\n", "version = false\n", 1);
     fs_err::write(&lock_path, contents)?;
 
@@ -350,7 +350,7 @@ fn tool_audit_unparsable_unsupported_lockfile_version() -> Result<()> {
         , @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The lockfile for tool `simple-launcher` at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v2, but only v1 is supported)
+    error: The lockfile for tool `simple-launcher` at `tools/simple-launcher/uv.lock` uses an unsupported schema version (v3, but the latest supported version is v2)
     ");
 
     Ok(())

@@ -35,7 +35,7 @@ pub(crate) fn requires_python(tree: MarkerTree) -> Option<RequiresPythonRange> {
                 }
             },
             MarkerTreeKind::VersionString(marker) => {
-                for (_, tree) in marker.edges() {
+                for tree in marker.children() {
                     collect_python_markers(tree, markers, range);
                 }
             }

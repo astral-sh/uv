@@ -7,10 +7,13 @@ use itertools::Itertools;
 use rustc_hash::FxBuildHasher;
 use version_ranges::Ranges;
 
-use uv_pep440::{Version, VersionSpecifier};
+use uv_pep440::{Version, VersionSpecifier, release_specifier_to_range};
 
 use crate::marker::tree::ContainerOperator;
-use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
+use crate::{
+    ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind, MarkerValueString,
+    VersionStringMarkerTree,
+};
 
 /// Returns a simplified DNF expression for a given marker tree.
 ///
@@ -23,6 +26,13 @@ use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerT
 pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let mut dnf = Vec::new();
     collect_dnf(tree, &mut dnf, &mut Vec::new());
+    if dnf
+        .iter()
+        .flatten()
+        .any(|expression| matches!(expression, MarkerExpression::VersionStringDomain { .. }))
+    {
+        simplify_domains(tree, &mut dnf);
+    }
     simplify(&mut dnf);
     sort(&mut dnf);
     dnf
@@ -92,37 +102,38 @@ fn collect_dnf(
             }
         }
         MarkerTreeKind::VersionString(marker) => {
-            for (tree, range) in collect_edges(marker.edges()) {
-                // Exact version exclusions also match opaque releases. Keep them as
-                // inequalities instead of rewriting them as ordered comparisons.
-                if let Some(excluded) = range_inequality(&range) {
-                    let current = path.len();
-                    for version in excluded {
-                        path.push(MarkerExpression::String {
-                            key: marker.key().into(),
-                            operator: MarkerOperator::NotEqual,
-                            value: ArcStr::from(version.to_string()),
-                        });
-                    }
-
-                    collect_dnf(tree, dnf, path);
-                    path.truncate(current);
+            let mut edges: IndexMap<_, (Ranges<Version>, Ranges<ArcStr>), FxBuildHasher> =
+                IndexMap::default();
+            for (tree, versions) in collect_edges(marker.edges()) {
+                edges
+                    .entry(tree)
+                    .or_insert_with(|| (Ranges::empty(), Ranges::empty()))
+                    .0 = versions;
+            }
+            for (tree, strings) in collect_edges(marker.string_edges()) {
+                edges
+                    .entry(tree)
+                    .or_insert_with(|| (Ranges::empty(), Ranges::empty()))
+                    .1 = strings;
+            }
+            for (&tree, (versions, strings)) in &edges {
+                if tree.is_false() {
                     continue;
                 }
-
-                for (lower, upper) in range.iter() {
-                    let current = path.len();
-                    let lower = lower.map(|version| ArcStr::from(version.to_string()));
-                    let upper = upper.map(|version| ArcStr::from(version.to_string()));
-                    for (operator, value) in
-                        MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
-                    {
-                        path.push(MarkerExpression::String {
-                            key: marker.key().into(),
-                            operator,
-                            value,
-                        });
+                // A branch may also cover values whose child is implied by this child.
+                // This avoids introducing an opaque-only complement for expressions such
+                // as `A or B`, where the B branch can cover A's values too.
+                let mut versions = versions.clone();
+                let mut strings = strings.clone();
+                for (&other, (other_versions, other_strings)) in &edges {
+                    if other != tree && tree.is_disjoint(other.negate()) {
+                        versions = versions.union(other_versions);
+                        strings = strings.union(other_strings);
                     }
+                }
+                for expressions in version_string_clauses(&marker, &versions, &strings) {
+                    let current = path.len();
+                    path.extend(expressions);
                     collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
@@ -233,6 +244,286 @@ fn collect_dnf(
                 path.pop();
             }
         }
+    }
+}
+
+/// Expresses an edge over version and opaque-string values without changing either domain.
+///
+/// Prefer standard comparisons when they reproduce both maps. Otherwise, guard each domain
+/// explicitly: the opaque-domain guard requires the lockfile's extended marker syntax.
+fn version_string_clauses(
+    marker: &VersionStringMarkerTree<'_>,
+    versions: &Ranges<Version>,
+    strings: &Ranges<ArcStr>,
+) -> Vec<Vec<MarkerExpression>> {
+    let key = marker.key().into();
+    let numeric_bounds: Vec<_> = versions
+        .iter()
+        .map(|(lower, upper)| {
+            let lower = lower.map(|version| ArcStr::from(version.to_string()));
+            let upper = upper.map(|version| ArcStr::from(version.to_string()));
+            MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
+                .map(|(operator, value)| MarkerExpression::String {
+                    key,
+                    operator,
+                    value,
+                })
+                .collect()
+        })
+        .collect();
+    // A union of excluded points and version prefixes can be printed as inequalities.
+    // Recover raw wildcard spellings from the string map before inferring numeric bounds.
+    let numeric_exclusions = (|| {
+        let mut missing = versions.complement();
+        let mut excluded = Vec::new();
+        for value in range_inequality(strings).into_iter().flatten() {
+            let Some(prefix) = value.strip_suffix(".*") else {
+                continue;
+            };
+            let Ok(version) = prefix.parse::<Version>() else {
+                continue;
+            };
+            if version.release().last().copied() == Some(u64::MAX) {
+                continue;
+            }
+            let range =
+                release_specifier_to_range(VersionSpecifier::equals_star_version(version), true);
+            if !range.is_disjoint(&missing) {
+                missing = missing.intersection(&range.complement());
+                excluded.push(value.clone());
+            }
+        }
+        let mut inferred_prefixes = 0u64;
+        for (lower, upper) in missing.iter() {
+            let (Bound::Included(lower) | Bound::Excluded(lower)) = lower else {
+                return None;
+            };
+            let (Bound::Included(upper) | Bound::Excluded(upper)) = upper else {
+                return None;
+            };
+            if lower != upper {
+                let mut release = lower.release().to_vec();
+                release.resize(upper.release().len().max(release.len()), 0);
+                let version = Version::new(release);
+                if version.release().last().copied() == Some(u64::MAX) {
+                    return None;
+                }
+                let range = release_specifier_to_range(
+                    VersionSpecifier::equals_star_version(version.clone()),
+                    true,
+                );
+                if range == Ranges::from_range_bounds(lower.clone()..upper.clone()) {
+                    excluded.push(ArcStr::from(format!("{version}.*")));
+                } else {
+                    // Adjacent prefixes can merge into one numeric gap. Cover it with major
+                    // prefixes, then restore any desired numeric values below. Bound the
+                    // serialization expansion when distant endpoints imply a large cover.
+                    let first = lower.release()[0];
+                    let mut last = upper.release()[0];
+                    if !missing.contains(upper) && *upper == Version::new([last]) {
+                        last = last.checked_sub(1)?;
+                    }
+                    inferred_prefixes =
+                        inferred_prefixes.checked_add(last.checked_sub(first)?.checked_add(1)?)?;
+                    if inferred_prefixes > 64 || last == u64::MAX {
+                        return None;
+                    }
+                    excluded.extend((first..=last).map(|major| ArcStr::from(format!("{major}.*"))));
+                }
+            }
+            if missing.contains(upper) {
+                excluded.push(ArcStr::from(upper.to_string()));
+            }
+        }
+        Some(excluded)
+    })();
+    let numeric_clauses = numeric_exclusions.as_ref().map_or_else(
+        || numeric_bounds.clone(),
+        |excluded| {
+            vec![
+                excluded
+                    .iter()
+                    .map(|value| MarkerExpression::String {
+                        key,
+                        operator: MarkerOperator::NotEqual,
+                        value: value.clone(),
+                    })
+                    .collect(),
+            ]
+        },
+    );
+    let string_clauses: Vec<Vec<_>> = if let Some(excluded) = range_inequality(strings) {
+        vec![
+            excluded
+                .into_iter()
+                .map(|value| MarkerExpression::String {
+                    key,
+                    operator: MarkerOperator::NotEqual,
+                    value: value.clone(),
+                })
+                .collect(),
+        ]
+    } else {
+        strings
+            .iter()
+            .map(|bounds| {
+                MarkerOperator::from_bounds(bounds)
+                    .map(|(operator, value)| MarkerExpression::String {
+                        key,
+                        operator,
+                        value,
+                    })
+                    .collect()
+            })
+            .collect()
+    };
+
+    // String comparisons receive version semantics on Darwin. Compare candidates within that
+    // platform, which is also the scope of every version-string node produced by the parser.
+    let darwin = MarkerTree::expression(MarkerExpression::String {
+        key: MarkerValueString::SysPlatform,
+        operator: MarkerOperator::Equal,
+        value: ArcStr::from("darwin"),
+    });
+    let expected = marker.condition(versions, strings).and(darwin);
+    let matches = |clauses: &[Vec<MarkerExpression>]| {
+        clauses
+            .iter()
+            .fold(MarkerTree::FALSE, |tree, clause| {
+                tree.or(clause.iter().fold(MarkerTree::TRUE, |tree, expression| {
+                    tree.and(MarkerTree::expression(expression.clone()))
+                }))
+            })
+            .and(darwin)
+            == expected
+    };
+    for candidate in [&string_clauses, &numeric_clauses, &numeric_bounds] {
+        if matches(candidate) {
+            return candidate.clone();
+        }
+    }
+    // Equality with a wildcard has version-prefix semantics, while inclusive ordering with
+    // that same invalid version specifier falls back to exact string equality.
+    let inclusive_strings: Vec<Vec<_>> = string_clauses
+        .iter()
+        .map(|clause| {
+            clause
+                .iter()
+                .map(|expression| match expression {
+                    MarkerExpression::String {
+                        key,
+                        operator: MarkerOperator::Equal,
+                        value,
+                    } => MarkerExpression::String {
+                        key: *key,
+                        operator: MarkerOperator::GreaterEqual,
+                        value: value.clone(),
+                    },
+                    expression => expression.clone(),
+                })
+                .collect()
+        })
+        .collect();
+    if matches(&inclusive_strings) {
+        return inclusive_strings;
+    }
+    let inclusive_union: Vec<_> = numeric_clauses
+        .iter()
+        .chain(&inclusive_strings)
+        .cloned()
+        .collect();
+    if matches(&inclusive_union) {
+        return inclusive_union;
+    }
+    let union: Vec<_> = numeric_clauses
+        .iter()
+        .chain(&string_clauses)
+        .cloned()
+        .collect();
+    if matches(&union) {
+        return union;
+    }
+    let intersection: Vec<_> = numeric_clauses
+        .iter()
+        .cartesian_product(&string_clauses)
+        .map(|(numeric, strings)| numeric.iter().chain(strings).cloned().collect())
+        .collect();
+    if matches(&intersection) {
+        return intersection;
+    }
+
+    // Numeric prefix exclusions also exclude their raw wildcard strings. Add those strings
+    // back when the opaque map includes them; inclusive ordering has no numeric matches here.
+    let mut restored = intersection;
+    for value in numeric_exclusions.into_iter().flatten() {
+        if value.ends_with(".*") && strings.contains(&value) {
+            restored.push(vec![MarkerExpression::String {
+                key,
+                operator: MarkerOperator::GreaterEqual,
+                value,
+            }]);
+        }
+    }
+    if matches(&restored) {
+        return restored;
+    }
+
+    let mut clauses = Vec::new();
+    for mut clause in numeric_bounds {
+        clause.insert(
+            0,
+            MarkerExpression::VersionStringDomain { key, valid: true },
+        );
+        clauses.push(clause);
+    }
+    // A wildcard inequality may also exclude desired boundary versions. Restore those
+    // numeric values without changing the opaque branch.
+    let restored_numeric: Vec<_> = clauses.iter().chain(&restored).cloned().collect();
+    if matches(&restored_numeric) {
+        return restored_numeric;
+    }
+    let finite_strings: Vec<_> = clauses.iter().chain(&inclusive_strings).cloned().collect();
+    if matches(&finite_strings) {
+        return finite_strings;
+    }
+    for mut clause in string_clauses {
+        clause.insert(
+            0,
+            MarkerExpression::VersionStringDomain { key, valid: false },
+        );
+        clauses.push(clause);
+    }
+    clauses
+}
+
+/// Removes domain guards introduced by decision-diagram paths when the complete expression
+/// does not need them. For example, `A or B` must not require serializing `not A and B`.
+fn simplify_domains(tree: MarkerTree, dnf: &mut [Vec<MarkerExpression>]) {
+    for clause in dnf {
+        // Prefer removing domain guards, since an opaque guard needs extended syntax.
+        let mut indices: Vec<_> = (0..clause.len()).collect();
+        indices.sort_by_key(|&index| {
+            !matches!(clause[index], MarkerExpression::VersionStringDomain { .. })
+        });
+        let mut removed = vec![false; clause.len()];
+        for skipped in indices {
+            let candidate = clause
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != skipped && !removed[*index])
+                .fold(MarkerTree::TRUE, |tree, (_, expression)| {
+                    tree.and(MarkerTree::expression(expression.clone()))
+                });
+            if candidate.is_disjoint(tree.negate()) {
+                removed[skipped] = true;
+            }
+        }
+        let mut index = 0;
+        clause.retain(|_| {
+            let retain = !removed[index];
+            index += 1;
+            retain
+        });
     }
 }
 
@@ -469,19 +760,30 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
             value,
         } => {
             let MarkerExpression::String {
-                key: key2,
-                operator: operator2,
-                value: value2,
+                key: other_key,
+                operator: other_operator,
+                value: other_value,
             } = right
             else {
                 return false;
             };
-
-            key == key2
-                && value == value2
+            key == other_key
+                && value == other_value
                 && operator
                     .negate()
-                    .is_some_and(|negated| negated == *operator2)
+                    .is_some_and(|negated| negated == *other_operator)
+                && MarkerTree::expression(left.clone()).negate()
+                    == MarkerTree::expression(right.clone())
+        }
+        MarkerExpression::VersionStringDomain { key, valid } => {
+            let MarkerExpression::VersionStringDomain {
+                key: other_key,
+                valid: other_valid,
+            } = right
+            else {
+                return false;
+            };
+            key == other_key && valid != other_valid
         }
         MarkerExpression::Extra { operator, name } => {
             let MarkerExpression::Extra {

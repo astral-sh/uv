@@ -67,6 +67,151 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
+/// Resolver-generated complements retain opaque releases in lockfiles and reject lossy exports.
+#[cfg(feature = "test-universal")]
+#[test]
+fn export_opaque_platform_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    for (version, tags) in [("1", "py3-none-any"), ("2", "py3-none-macosx_26_0_arm64")] {
+        let (filename, wheel) = generate_wheel(
+            &"a".parse()?,
+            &version.parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            tags,
+            &[],
+        );
+        context
+            .temp_dir
+            .child("wheels")
+            .child(filename)
+            .write_binary(&wheel)?;
+    }
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["a"]
+
+            [tool.uv]
+            no-index = true
+            find-links = ["wheels"]
+            environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+            required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release == '24'"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 2
+        revision = 5
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
+            "(platform_machine == 'arm64' and not (platform_release < '0' or platform_release >= '0')) or (platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin')",
+        ]
+        supported-markers = [
+            "platform_machine == 'arm64' and sys_platform == 'darwin'",
+        ]
+        required-markers = [
+            "platform_machine == 'arm64' and platform_release == '24' and sys_platform == 'darwin'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1"
+        source = { registry = "wheels" }
+        resolution-markers = [
+            "(platform_machine == 'arm64' and not (platform_release < '0' or platform_release >= '0')) or (platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin')",
+        ]
+        wheels = [
+            { path = "a-1-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2"
+        source = { registry = "wheels" }
+        resolution-markers = [
+            "platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
+        ]
+        wheels = [
+            { path = "a-2-py3-none-macosx_26_0_arm64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1", source = { registry = "wheels" }, marker = "platform_release < '25' or not (platform_release < '0' or platform_release >= '0')" },
+            { name = "a", version = "2", source = { registry = "wheels" }, marker = "platform_release >= '25'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // Reading the extended markers must retain the same resolution and lockfile.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // An explicit target has an empty release, so it selects the complement of `>= '25'`.
+    uv_snapshot!(context.filters(), context.sync()
+        .args(["--frozen", "--python-platform", "macos", "--dry-run"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + a==1
+    ");
+
+    let existing = "Existing exported content\n";
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(existing)?;
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--output-file", "requirements.txt"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot export markers for `a` as PEP 508
+      cause: cannot serialize this marker in standard dependency marker syntax while preserving opaque `platform_release` values
+    ");
+    assert_eq!(context.read("requirements.txt"), existing);
+
+    context.temp_dir.child("pylock.toml").write_str(existing)?;
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--output-file", "pylock.toml"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot export markers for `a` as PEP 508: cannot serialize this marker in standard dependency marker syntax while preserving opaque `platform_release` values
+    ");
+
+    assert_eq!(context.read("pylock.toml"), existing);
+
+    Ok(())
+}
+
 /// Filter the current project when exporting every workspace member.
 #[test]
 fn export_no_emit_project_all_packages() -> Result<()> {

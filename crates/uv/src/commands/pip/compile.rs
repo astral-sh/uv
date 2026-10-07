@@ -614,6 +614,50 @@ pub(crate) async fn pip_compile(
         resolution.retain_allowed_distribution_hashes(&build_options);
     }
 
+    // Validate the markers before writing any output.
+    let (display, pylock) = match format {
+        PipCompileFormat::RequirementsTxt => (
+            Some(DisplayResolutionGraph::new(
+                &resolution,
+                &resolver_env,
+                &no_emit_packages,
+                generate_hashes,
+                include_extras,
+                include_markers || universal,
+                include_annotations,
+                include_index_annotation,
+                annotation_style,
+            )?),
+            None,
+        ),
+        PipCompileFormat::PylockToml => {
+            // Determine the directory relative to which the output file should be written.
+            let output_file = output_file.map(std::path::absolute).transpose()?;
+            let install_path = if let Some(output_file) = output_file.as_deref() {
+                output_file.parent().unwrap()
+            } else {
+                &*CWD
+            };
+
+            // Convert the resolution to a `pylock.toml` file.
+            let mut export = PylockToml::from_resolution(
+                &resolution,
+                &no_emit_packages,
+                install_path,
+                tags.as_deref(),
+                &build_options,
+            )?;
+
+            // Registries don't always provide hashes, but `packages.*.hashes` is a required
+            // key in PEP 751, so we have to download and hash files with missing hashes.
+            export
+                .generate_missing_hashes(&client, concurrency.downloads, install_path)
+                .await?;
+
+            (None, Some(export.to_toml()?))
+        }
+    };
+
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 
@@ -715,21 +759,9 @@ pub(crate) async fn pip_compile(
                 writeln!(writer)?;
             }
 
-            write!(
-                writer,
-                "{}",
-                DisplayResolutionGraph::new(
-                    &resolution,
-                    &resolver_env,
-                    &no_emit_packages,
-                    generate_hashes,
-                    include_extras,
-                    include_markers || universal,
-                    include_annotations,
-                    include_index_annotation,
-                    annotation_style,
-                )
-            )?;
+            if let Some(display) = display {
+                write!(writer, "{display}")?;
+            }
         }
         PipCompileFormat::PylockToml => {
             if include_marker_expression {
@@ -758,30 +790,9 @@ pub(crate) async fn pip_compile(
                 );
             }
 
-            // Determine the directory relative to which the output file should be written.
-            let output_file = output_file.map(std::path::absolute).transpose()?;
-            let install_path = if let Some(output_file) = output_file.as_deref() {
-                output_file.parent().unwrap()
-            } else {
-                &*CWD
-            };
-
-            // Convert the resolution to a `pylock.toml` file.
-            let mut export = PylockToml::from_resolution(
-                &resolution,
-                &no_emit_packages,
-                install_path,
-                tags.as_deref(),
-                &build_options,
-            )?;
-
-            // Registries don't always provide hashes, but `packages.*.hashes` is a required
-            // key in PEP 751, so we have to download and hash files with missing hashes.
-            export
-                .generate_missing_hashes(&client, concurrency.downloads, install_path)
-                .await?;
-
-            write!(writer, "{}", export.to_toml()?)?;
+            if let Some(pylock) = pylock {
+                write!(writer, "{pylock}")?;
+            }
         }
     }
 

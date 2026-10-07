@@ -14375,6 +14375,8 @@ fn python_platform_empty_release() -> Result<()> {
     requirements_in.write_str(indoc! {r"
         included==1 ; platform_release != '24'
         excluded ; platform_release == '24'
+        excluded-less ; sys_platform == 'darwin' and platform_release < '24'
+        excluded-greater-equal ; sys_platform == 'darwin' and platform_release >= '24'
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()

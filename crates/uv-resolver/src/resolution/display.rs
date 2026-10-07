@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
+use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -8,7 +9,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use uv_configuration::AnnotationStyle;
 use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use uv_normalize::PackageName;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerSerializationError, MarkerTree};
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolverEnvironment, ResolverOutput};
@@ -24,10 +25,10 @@ pub struct DisplayResolutionGraph<'a> {
     no_emit_packages: &'a [PackageName],
     /// Whether to include hashes in the output.
     show_hashes: bool,
-    /// Whether to include extras in the output (e.g., `black[colorama]`).
-    include_extras: bool,
-    /// Whether to include environment markers in the output (e.g., `black ; sys_platform == "win32"`).
-    include_markers: bool,
+    /// The package graph after combining or removing extras.
+    graph: RequirementsTxtGraph<'a>,
+    /// Requirements validated for PEP 508 serialization before rendering starts.
+    requirements: FxHashMap<NodeIndex, String>,
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
@@ -51,6 +52,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     /// output contain non-empty conflicting groups. That is, when using `uv
     /// pip compile`, specifying conflicts is not supported because their
     /// conditional logic cannot be encoded into a `requirements.txt`.
+    /// Returns an error if an emitted marker cannot be expressed in standard PEP 508 syntax.
     #[expect(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolverOutput,
@@ -62,7 +64,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
-    ) -> Self {
+    ) -> Result<Self, MarkerSerializationError> {
         for fork_marker in &underlying.fork_markers {
             assert!(
                 fork_marker.conflict().is_true(),
@@ -70,17 +72,63 @@ impl<'a> DisplayResolutionGraph<'a> {
                  cannot display resolver output with conflicts in requirements.txt format",
             );
         }
-        Self {
+        // Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
+        // [`DisplayResolutionGraphNode`]. In other words: converts from [`AnnotatedDist`] to
+        // [`RequirementsTxtDist`].
+        //
+        // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
+        // that for each package tells us if it should be installed on the current platform, without
+        // looking at which packages depend on it.
+        let graph = underlying.graph.map(
+            |_index, node| match node {
+                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
+                ResolutionGraphNode::Dist(dist) => {
+                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
+                    DisplayResolutionGraphNode::Dist(dist)
+                }
+            },
+            // We can drop the edge markers, while retaining their existence and direction for the
+            // annotations.
+            |_index, _edge| (),
+        );
+
+        // Reduce the graph, removing or combining extras for a given package.
+        let graph = if include_extras {
+            combine_extras(&graph)
+        } else {
+            strip_extras(&graph)
+        };
+
+        let mut requirements = FxHashMap::default();
+        for index in graph.node_indices() {
+            let node = &graph[index];
+            if no_emit_packages.contains(node.name()) {
+                continue;
+            }
+            let marker = if include_markers {
+                underlying
+                    .requires_python
+                    .simplify_markers(node.markers)
+                    .try_to_pep508()?
+            } else {
+                None
+            };
+            requirements.insert(
+                index,
+                node.to_requirements_txt(marker.as_deref()).into_owned(),
+            );
+        }
+        Ok(Self {
             resolution: underlying,
             env,
             no_emit_packages,
             show_hashes,
-            include_extras,
-            include_markers,
+            graph,
+            requirements,
             include_annotations,
             include_index_annotation,
             annotation_style,
-        }
+        })
     }
 }
 
@@ -164,32 +212,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             SourceAnnotations::default()
         };
 
-        // Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
-        // [`DisplayResolutionGraphNode`]. In other words: converts from [`AnnotatedDist`] to
-        // [`RequirementsTxtDist`].
-        //
-        // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
-        // that for each package tells us if it should be installed on the current platform, without
-        // looking at which packages depend on it.
-        let graph = self.resolution.graph.map(
-            |_index, node| match node {
-                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
-                ResolutionGraphNode::Dist(dist) => {
-                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
-                    DisplayResolutionGraphNode::Dist(dist)
-                }
-            },
-            // We can drop the edge markers, while retaining their existence and direction for the
-            // annotations.
-            |_index, _edge| (),
-        );
-
-        // Reduce the graph, removing or combining extras for a given package.
-        let graph = if self.include_extras {
-            combine_extras(&graph)
-        } else {
-            strip_extras(&graph)
-        };
+        let graph = &self.graph;
 
         // Collect all packages.
         let mut nodes = graph
@@ -211,9 +234,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // Print out the dependency graph.
         for (index, node) in nodes {
             // Display the node itself.
-            let mut line = node
-                .to_requirements_txt(&self.resolution.requires_python, self.include_markers)
-                .to_string();
+            let mut line = self.requirements[&index].clone();
 
             // Display the distribution hashes, if any.
             let mut has_hashes = false;

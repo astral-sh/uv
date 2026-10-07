@@ -530,6 +530,12 @@ pub enum MarkerExpression {
         operator: MarkerOperator,
         value: ArcStr,
     },
+    /// The domain covered by a mixed field's version comparisons.
+    ///
+    /// For Darwin releases, this distinguishes valid versions from opaque strings. On platforms
+    /// that use string ordering, the positive expression covers every value. Its negative form
+    /// requires the extended lockfile marker syntax.
+    VersionStringDomain { key: MarkerValueString, valid: bool },
     /// `'...' in <key>`, a PEP 751 expression.
     List {
         pair: CanonicalMarkerListPair,
@@ -663,7 +669,9 @@ impl MarkerExpression {
         match self {
             Self::Version { key, .. } => MarkerExpressionKind::Version(*key),
             Self::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
-            Self::String { key, .. } => MarkerExpressionKind::String(*key),
+            Self::String { key, .. } | Self::VersionStringDomain { key, .. } => {
+                MarkerExpressionKind::String(*key)
+            }
             Self::List { pair, .. } => MarkerExpressionKind::List(pair.key()),
             Self::Extra { .. } => MarkerExpressionKind::Extra,
         }
@@ -673,6 +681,12 @@ impl MarkerExpression {
 impl Display for MarkerExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::VersionStringDomain { key, valid } => {
+                if !valid {
+                    f.write_str("not ")?;
+                }
+                write!(f, "({key} < '0' or {key} >= '0')")
+            }
             Self::Version { key, specifier } => {
                 let (op, version) = (specifier.operator(), specifier.version());
                 if op == &uv_pep440::Operator::EqualStar || op == &uv_pep440::Operator::NotEqualStar
@@ -901,8 +915,40 @@ impl MarkerTree {
     ///
     /// If the marker is `true`, this method will return `None`.
     /// If the marker is `false`, the marker is represented as the normalized expression, `python_version < '0'`.
+    ///
+    /// This diagnostic representation can include the lockfile's extended `not (...)` syntax.
+    /// Use [`Self::try_to_pep508`] when writing standard dependency metadata.
     pub fn try_to_string(self) -> Option<String> {
         self.contents().map(|contents| contents.to_string())
+    }
+
+    /// Returns a standard marker string, rejecting predicates without a supported standard
+    /// representation. Logical negation and excessive version-prefix expansion require the
+    /// extended lockfile syntax instead.
+    pub fn try_to_pep508(self) -> Result<Option<String>, MarkerSerializationError> {
+        if self.is_true() {
+            return Ok(None);
+        }
+        if self.is_false() {
+            return Ok(Some("python_version < '0'".to_string()));
+        }
+        let dnf = self.to_dnf();
+        for expression in dnf.iter().flatten() {
+            if let MarkerExpression::VersionStringDomain { key, valid: false } = expression {
+                return Err(MarkerSerializationError { key: *key });
+            }
+        }
+        Ok(Some(fmt::from_fn(|f| fmt_dnf(&dnf, f)).to_string()))
+    }
+
+    /// Returns a marker string supporting the lockfile's explicit logical negation syntax.
+    pub fn to_extended_string(self) -> Option<String> {
+        self.try_to_string()
+    }
+
+    /// Parses a lockfile marker, including explicit `not (...)` expressions.
+    pub fn parse_extended(s: &str) -> Result<Self, Pep508Error> {
+        parse::parse_markers_extended(s, &mut TracingReporter)
     }
 
     /// Returns the underlying [`MarkerTreeKind`] of the root node.
@@ -938,13 +984,18 @@ impl MarkerTree {
                 })
             }
             Variable::VersionString(key) => {
-                let Edges::Version { edges: ref map } = node.children else {
+                let Edges::VersionString {
+                    ref versions,
+                    ref strings,
+                } = node.children
+                else {
                     unreachable!()
                 };
-                MarkerTreeKind::VersionString(VersionMarkerTree {
+                MarkerTreeKind::VersionString(VersionStringMarkerTree {
                     id: self.0,
                     key: *key,
-                    map,
+                    versions,
+                    strings,
                 })
             }
             Variable::In { key, value } => {
@@ -1092,24 +1143,18 @@ impl MarkerTree {
                 }
             }
             MarkerTreeKind::VersionString(marker) => {
-                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
-                    // An opaque release cannot equal any exact version. If this node only
-                    // distinguishes exact versions, follow the common non-matching branch.
-                    // Other ranges require ordering semantics and have no such fallback.
-                    let mut fallback = marker
-                        .edges()
-                        .filter(|(range, _)| range.as_singleton().is_none())
-                        .map(|(_, tree)| tree);
-                    if let Some(tree) = fallback.next()
-                        && fallback.all(|other| other == tree)
-                    {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                let value = env.get_string(marker.key());
+                if let Ok(version) = value.parse::<Version>() {
+                    for (range, tree) in marker.edges() {
+                        if range.contains(&version) {
+                            return tree.evaluate_reporter_impl(env, extras, reporter);
+                        }
                     }
-                    return false;
-                };
-                for (range, tree) in marker.edges() {
-                    if range.contains(&version) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                } else {
+                    for (range, tree) in marker.string_edges() {
+                        if range.contains(value) {
+                            return tree.evaluate_reporter_impl(env, extras, reporter);
+                        }
                     }
                 }
             }
@@ -1158,7 +1203,7 @@ impl MarkerTree {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
             MarkerTreeKind::VersionString(marker) => {
-                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
+                marker.children().any(|tree| tree.evaluate_extras(extras))
             }
             MarkerTreeKind::String(marker) => marker
                 .children()
@@ -1187,8 +1232,8 @@ impl MarkerTree {
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::VersionString(marker) => marker
-                .edges()
-                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+                .children()
+                .all(|tree| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
                 .children()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
@@ -1428,7 +1473,7 @@ impl MarkerTree {
                     }
                 }
                 MarkerTreeKind::VersionString(kind) => {
-                    for (tree, _) in simplify::collect_edges(kind.edges()) {
+                    for tree in kind.children().unique() {
                         imp(tree, f);
                     }
                 }
@@ -1520,7 +1565,7 @@ pub enum MarkerTreeKind<'a> {
     /// A version expression.
     Version(VersionMarkerTree<'a>),
     /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString>),
+    VersionString(VersionStringMarkerTree<'a>),
     /// A string expression.
     String(StringMarkerTree<'a>),
     /// A string expression with the `in` operator.
@@ -1566,6 +1611,71 @@ impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
         self.key()
             .cmp(&other.key())
             .then_with(|| self.edges().cmp(other.edges()))
+    }
+}
+
+/// A marker with separate branches for versions and opaque strings.
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct VersionStringMarkerTree<'a> {
+    id: NodeId,
+    key: CanonicalMarkerValueString,
+    versions: &'a [(Ranges<Version>, NodeId)],
+    strings: &'a [(Ranges<ArcStr>, NodeId)],
+}
+
+impl VersionStringMarkerTree<'_> {
+    /// The key for this node.
+    pub fn key(&self) -> CanonicalMarkerValueString {
+        self.key
+    }
+
+    /// The edges followed when the environment value is a valid version.
+    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Ranges<Version>, MarkerTree)> {
+        self.versions
+            .iter()
+            .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
+    }
+
+    /// The edges followed when the environment value cannot be parsed as a version.
+    pub fn string_edges(&self) -> impl ExactSizeIterator<Item = (&Ranges<ArcStr>, MarkerTree)> {
+        self.strings
+            .iter()
+            .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
+    }
+
+    /// Constructs a predicate selecting the given numeric and opaque string regions.
+    pub(crate) fn condition(
+        &self,
+        versions: &Ranges<Version>,
+        strings: &Ranges<ArcStr>,
+    ) -> MarkerTree {
+        MarkerTree(
+            INTERNER
+                .lock()
+                .version_string_ranges(self.key, versions, strings),
+        )
+    }
+
+    /// All children, including the opaque string branches.
+    pub fn children(&self) -> impl Iterator<Item = MarkerTree> {
+        self.edges()
+            .map(|(_, tree)| tree)
+            .chain(self.string_edges().map(|(_, tree)| tree))
+    }
+}
+
+impl PartialOrd for VersionStringMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VersionStringMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key
+            .cmp(&other.key)
+            .then_with(|| self.edges().cmp(other.edges()))
+            .then_with(|| self.string_edges().cmp(other.string_edges()))
     }
 }
 
@@ -1801,6 +1911,15 @@ impl Ord for ExtraMarkerTree<'_> {
     }
 }
 
+/// A marker predicate without a supported standard dependency marker representation.
+#[derive(Clone, Debug, thiserror::Error)]
+#[error(
+    "cannot serialize this marker in standard dependency marker syntax while preserving opaque `{key}` values"
+)]
+pub struct MarkerSerializationError {
+    key: MarkerValueString,
+}
+
 /// A marker tree that contains at least one expression.
 ///
 /// See [`MarkerTree::contents`] for details.
@@ -1830,7 +1949,8 @@ impl Serialize for MarkerTreeContents {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        let marker = self.0.try_to_pep508().map_err(serde::ser::Error::custom)?;
+        serializer.serialize_str(marker.as_deref().unwrap_or("python_version >= '0'"))
     }
 }
 
@@ -1843,22 +1963,26 @@ impl Display for MarkerTreeContents {
 
         // Write the output in DNF form.
         let dnf = self.0.to_dnf();
-        let [conjunction] = &dnf[..] else {
-            for (index, conjunction) in dnf.iter().enumerate() {
-                if index > 0 {
-                    f.write_str(" or ")?;
-                }
-                if conjunction.len() == 1 {
-                    write!(f, "{}", conjunction.iter().format(" and "))?;
-                } else {
-                    write!(f, "({})", conjunction.iter().format(" and "))?;
-                }
-            }
-            return Ok(());
-        };
-
-        write!(f, "{}", conjunction.iter().format(" and "))
+        fmt_dnf(&dnf, f)
     }
+}
+
+/// Formats a nonconstant marker from its disjunctive normal form.
+fn fmt_dnf(dnf: &[Vec<MarkerExpression>], f: &mut Formatter<'_>) -> fmt::Result {
+    let [conjunction] = dnf else {
+        for (index, conjunction) in dnf.iter().enumerate() {
+            if index > 0 {
+                f.write_str(" or ")?;
+            }
+            if conjunction.len() == 1 {
+                write!(f, "{}", conjunction.iter().format(" and "))?;
+            } else {
+                write!(f, "({})", conjunction.iter().format(" and "))?;
+            }
+        }
+        return Ok(());
+    };
+    write!(f, "{}", conjunction.iter().format(" and "))
 }
 
 #[cfg(feature = "schemars")]
@@ -1915,7 +2039,7 @@ mod test {
         assert_eq!(marker, m(&marker.try_to_string().unwrap()));
         assert_eq!(
             marker.negate(),
-            m(&marker.negate().try_to_string().unwrap())
+            MarkerTree::parse_extended(&marker.negate().to_extended_string().unwrap()).unwrap()
         );
     }
 

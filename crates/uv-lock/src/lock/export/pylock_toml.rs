@@ -1455,7 +1455,12 @@ impl PylockTomlPackage {
         if let Some(ref version) = self.version {
             table.insert("version", value(version.to_string()));
         }
-        if let Some(marker) = self.marker.try_to_string() {
+        if let Some(marker) = self.marker.try_to_pep508().map_err(|error| {
+            toml_edit::ser::Error::Custom(format!(
+                "Cannot export markers for `{}` as PEP 508: {error}",
+                self.name
+            ))
+        })? {
             table.insert("marker", value(marker));
         }
         if let Some(ref requires_python) = self.requires_python {

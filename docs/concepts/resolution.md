@@ -949,9 +949,13 @@ Any given version of uv can read and write lockfiles with the same schema versio
 lockfiles with a greater schema version. For example, if your uv version supports schema v1,
 `uv lock` will error if it encounters an existing lockfile with schema v2.
 
-uv versions that support schema v2 _may_ be able to read lockfiles with schema v1 if the schema
-update was backwards-compatible. However, this is not guaranteed, and uv may exit with an error if
-it encounters a lockfile with an outdated schema version.
+uv reads both schema v1 and v2. It writes schema v1 unless a generated marker needs explicit logical
+negation, in which case it writes schema v2. For example, a dependency selected when a Darwin kernel
+release is not a valid version may need a `not (...)` expression. Schema v2 supports these
+expressions in generated lockfile markers; dependency metadata still uses standard marker syntax.
+
+Standard export formats, including `requirements.txt` and `pylock.toml`, cannot represent every such
+condition. uv reports an error if an exported dependency needs an unrepresentable marker.
 
 The schema version is considered part of the public API, and so is only bumped in minor releases, as
 a breaking change (see [Versioning](../reference/policies/versioning.md)). As such, all uv patch

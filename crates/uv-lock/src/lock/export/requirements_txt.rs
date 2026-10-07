@@ -16,13 +16,13 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
-use crate::lock::{Package, PackageId, Source};
+use crate::lock::{LockErrorKind, Package, PackageId, Source};
 use crate::{Installable, LockError};
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
 pub struct RequirementsTxtExport<'lock> {
-    nodes: Vec<ExportableRequirement<'lock>>,
+    nodes: Vec<(ExportableRequirement<'lock>, Option<String>)>,
     hashes: bool,
     editable: Option<EditableMode>,
 }
@@ -53,6 +53,23 @@ impl<'lock> RequirementsTxtExport<'lock> {
             RequirementComparator::from(a.package).cmp(&RequirementComparator::from(b.package))
         });
 
+        let nodes = nodes
+            .into_iter()
+            .map(|node| {
+                let marker = if matches!(node.package.id.source, Source::Virtual(_)) {
+                    None
+                } else {
+                    node.marker.try_to_pep508().map_err(|source| {
+                        LockErrorKind::MarkerSerialization {
+                            package: node.package.id.name.clone(),
+                            source,
+                        }
+                    })?
+                };
+                Ok((node, marker))
+            })
+            .collect::<Result<_, LockError>>()?;
+
         Ok(Self {
             nodes,
             hashes,
@@ -64,11 +81,14 @@ impl<'lock> RequirementsTxtExport<'lock> {
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write out each package.
-        for ExportableRequirement {
-            package,
+        for (
+            ExportableRequirement {
+                package,
+                marker: _,
+                dependents,
+            },
             marker,
-            dependents,
-        } in &self.nodes
+        ) in &self.nodes
         {
             match &package.id.source {
                 Source::Registry(_) => {
@@ -164,7 +184,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 }
             }
 
-            if let Some(contents) = marker.contents() {
+            if let Some(contents) = marker {
                 write!(f, " ; {contents}")?;
             }
 

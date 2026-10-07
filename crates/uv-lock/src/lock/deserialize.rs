@@ -899,7 +899,7 @@ mod tests {
 
     use serde::Deserialize;
 
-    use super::super::{LockParseError, VERSION};
+    use super::super::{EXTENDED_MARKERS_VERSION, LockParseError};
     use super::{Cursor, Error, Lock, ValueDeserializer, from_str};
 
     const CANONICAL_LOCK: &str = r#"version = 1
@@ -926,6 +926,55 @@ dependencies = [
         let actual = from_str(CANONICAL_LOCK).expect("valid canonical lock");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn extended_markers_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        let input = CANONICAL_LOCK
+            .replacen("version = 1", "version = 2", 1)
+            .replace(
+                "{ name = \"dependency\" }",
+                "{ name = \"dependency\", marker = \"sys_platform == 'darwin' and not (platform_release >= '24')\" }",
+            );
+        let lock = Lock::from_toml(&input)?;
+        let general: Lock = toml::from_str(&input)?;
+        assert_eq!(lock, general);
+        assert_eq!(lock.marker_format_version(), EXTENDED_MARKERS_VERSION);
+
+        let serialized = lock.to_toml()?;
+        assert_eq!(Lock::from_canonical_toml(&serialized)?, lock);
+        assert_eq!(Lock::from_toml(&serialized)?, lock);
+
+        let version_one = input.replacen("version = 2", "version = 1", 1);
+        assert!(Lock::from_toml(&version_one).is_err());
+        let version_one = CANONICAL_LOCK.replace(
+            "{ name = \"dependency\" }",
+            "{ name = \"dependency\", marker = \"not (sys_platform == 'darwin')\" }",
+        );
+        assert!(Lock::from_toml(&version_one).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn extended_marker_vectors_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        let markers = r#"["sys_platform != 'darwin' or platform_release >= '24'", "sys_platform == 'darwin' and not (platform_release >= '24')"]"#;
+        for key in [
+            "resolution-markers",
+            "supported-markers",
+            "required-markers",
+        ] {
+            let input = CANONICAL_LOCK
+                .replacen("version = 1", "version = 2", 1)
+                .replacen(
+                    "\n\n[[package]]",
+                    &format!("\n{key} = {markers}\n\n[[package]]"),
+                    1,
+                );
+            let lock = Lock::from_toml(&input)?;
+            let serialized = lock.to_toml()?;
+            assert_eq!(Lock::from_toml(&serialized)?, lock);
+        }
+        Ok(())
     }
 
     #[test]
@@ -1086,14 +1135,14 @@ version = "1.0.0"
 
     #[test]
     fn unsupported_lock_version_is_rejected() {
-        let version = VERSION + 1;
+        let version = EXTENDED_MARKERS_VERSION + 1;
         let input = CANONICAL_LOCK.replacen("version = 1", &format!("version = {version}"), 1);
         let error = Lock::from_toml(&input).expect_err("unsupported lock versions are rejected");
 
         assert_matches!(
             error,
             LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: EXTENDED_MARKERS_VERSION,
                 version: actual,
             } if actual == version
         );
@@ -1101,7 +1150,7 @@ version = "1.0.0"
 
     #[test]
     fn unparsable_unsupported_lock_version_is_identified() {
-        let version = VERSION + 1;
+        let version = EXTENDED_MARKERS_VERSION + 1;
         let input = CANONICAL_LOCK
             .replacen("version = 1", &format!("version = {version}"), 1)
             .replacen("name = \"dependency\"", "name = false", 1);
@@ -1111,7 +1160,7 @@ version = "1.0.0"
         assert_matches!(
             error,
             LockParseError::UnparsableVersion {
-                supported: VERSION,
+                supported: EXTENDED_MARKERS_VERSION,
                 version: actual,
                 ..
             } if actual == version
