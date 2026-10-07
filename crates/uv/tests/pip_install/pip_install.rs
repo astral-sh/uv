@@ -16568,7 +16568,9 @@ fn config_settings_package() -> Result<()> {
 
 #[test]
 fn reject_invalid_archive_member_names() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-10-07T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-10-07T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheeldiff2==0.0.1"), @"
@@ -16584,7 +16586,9 @@ fn reject_invalid_archive_member_names() {
 
 #[test]
 fn reject_invalid_streaming_zip() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-07-10T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelstreamtest==0.0.1"), @"
@@ -16613,7 +16617,9 @@ fn reject_invalid_streaming_zip() {
 
 #[test]
 fn reject_invalid_double_zip() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-07-10T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelziptest==0.0.2"), @"
@@ -16629,7 +16635,7 @@ fn reject_invalid_double_zip() {
 
 #[test]
 fn reject_invalid_central_directory_offset() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16646,7 +16652,7 @@ fn reject_invalid_central_directory_offset() {
 
 #[test]
 fn reject_invalid_crc32_mismatch() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16662,7 +16668,7 @@ fn reject_invalid_crc32_mismatch() {
 
 #[test]
 fn reject_invalid_crc32_non_data_descriptor() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16678,7 +16684,7 @@ fn reject_invalid_crc32_non_data_descriptor() {
 
 #[test]
 fn reject_invalid_duplicate_extra_field() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16693,7 +16699,7 @@ fn reject_invalid_duplicate_extra_field() {
 
 #[test]
 fn reject_invalid_short_usize() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16709,7 +16715,7 @@ fn reject_invalid_short_usize() {
 
 #[test]
 fn reject_invalid_chained_extra_field() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16724,7 +16730,7 @@ fn reject_invalid_chained_extra_field() {
 
 #[test]
 fn reject_invalid_short_usize_zip64() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @"
