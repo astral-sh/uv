@@ -60,7 +60,7 @@ impl PythonInstallation {
     #[must_use]
     pub(crate) fn maybe_with_test_source(self) -> Self {
         if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok()
-            && self.interpreter.is_managed()
+            && self.is_managed()
         {
             self.with_source(PythonSource::Managed)
         } else {
@@ -404,7 +404,29 @@ impl PythonInstallation {
     ///
     /// Uses the source as a fast path, then falls back to checking the interpreter's base prefix.
     pub(crate) fn is_managed(&self) -> bool {
-        self.source.is_managed() || self.interpreter.is_managed()
+        if self.source.is_managed() {
+            return true;
+        }
+
+        if let Ok(test_managed) =
+            std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
+        {
+            // During testing, we collect interpreters into an artificial search path and need to
+            // be able to mock whether an interpreter is managed or not.
+            return test_managed.split_ascii_whitespace().any(|item| {
+                let version = <PythonVersion as std::str::FromStr>::from_str(item).expect(
+                    "`UV_INTERNAL__TEST_PYTHON_MANAGED` items should be valid Python versions",
+                );
+                if version.patch().is_some() {
+                    version.version() == self.interpreter.python_version()
+                } else {
+                    (version.major(), version.minor()) == self.interpreter.python_tuple()
+                }
+            });
+        }
+
+        ManagedPythonInstallations::from_settings(None)
+            .is_ok_and(|installations| installations.contains(&self.interpreter))
     }
 
     /// Whether this is a CPython installation.
@@ -454,7 +476,7 @@ impl PythonInstallation {
             return false;
         }
 
-        if !interpreter.is_managed() {
+        if !self.is_managed() {
             return false;
         }
 
@@ -559,7 +581,7 @@ impl PythonInstallation {
 
         match preference {
             PythonPreference::OnlyManaged => {
-                if interpreter.satisfies_preference(*preference) {
+                if self.is_managed() {
                     true
                 } else if source.is_explicit() {
                     debug!(
@@ -578,7 +600,7 @@ impl PythonInstallation {
             // If not "only" a kind, any interpreter is okay
             PythonPreference::Managed | PythonPreference::System => true,
             PythonPreference::OnlySystem => {
-                if interpreter.satisfies_preference(*preference) {
+                if !self.is_managed() {
                     true
                 } else if source.is_explicit() {
                     debug!(

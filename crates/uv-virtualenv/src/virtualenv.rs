@@ -77,10 +77,15 @@ pub(crate) fn create(
     //
     // For consistency with the standard library, rely on `sys._base_executable`, _unless_ we're
     // using a uv-managed Python (in which case, we can do better for symlinked executables).
-    let base_python = if cfg!(unix) && interpreter.is_standalone() {
-        interpreter.find_base_python()?
-    } else {
-        interpreter.to_base_python()?
+    let base_python = cfg_select! {
+        unix => {
+            if interpreter.is_standalone() {
+                interpreter.find_base_python()?
+            } else {
+                interpreter.to_base_python()?
+            }
+        }
+        _ => { interpreter.to_base_python()? }
     };
 
     debug!(
