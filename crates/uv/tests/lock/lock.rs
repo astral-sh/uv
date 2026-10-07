@@ -32,7 +32,9 @@ use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
 use uv_test::package_server::PackageServer;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::{PackseServer, generate_wheel_with_files, scenario::Scenario};
+use uv_test::packse::{
+    PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
+};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -172,6 +174,113 @@ fn lock_preserves_noncanonical_lock() -> Result<()> {
         .success();
     assert_eq!(context.read("uv.lock"), noncanonical_lock);
 
+    Ok(())
+}
+
+/// Serializing a marker must not make unchanged dependency inputs invalidate their lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_equivalent_platform_release_markers() -> Result<()> {
+    let marker = "(platform_release < '10' or platform_release > '24') and (platform_release <= '1' or platform_release > '24')";
+    for (dependencies, settings) in [
+        (format!(r#"["foo>=1; {marker}", "bar"]"#), String::new()),
+        (
+            r#"["foo", "bar"]"#.to_string(),
+            format!(r#"build-constraint-dependencies = ["foo>=1; {marker}"]"#),
+        ),
+        (
+            r#"["foo", "bar"]"#.to_string(),
+            formatdoc! {r#"
+                [[tool.uv.dependency-metadata]]
+                name = "foo"
+                version = "1"
+                requires-dist = ["bar>=1; {marker}"]
+            "#},
+        ),
+    ] {
+        let context = uv_test::test_context!("3.12");
+        for name in ["foo", "bar"] {
+            let (filename, wheel) = generate_wheel(
+                &name.parse()?,
+                &"1".parse()?,
+                &[],
+                &BTreeMap::new(),
+                None,
+                "py3-none-any",
+                &[],
+            );
+            context
+                .temp_dir
+                .child("wheels")
+                .child(filename)
+                .write_binary(&wheel)?;
+        }
+        let pyproject = formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = {dependencies}
+
+            [tool.uv]
+            no-index = true
+            find-links = ["wheels"]
+            {settings}
+        "#};
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&pyproject)?;
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock().arg("--no-preview"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+        }
+        let locked = context.read("uv.lock");
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock().arg("--no-preview").arg("--locked"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+        }
+        assert_eq!(context.read("uv.lock"), locked);
+
+        let formatted = format!(
+            "# Retain this comment.\n{}",
+            locked.replace("version = 1\n", "version=1\n")
+        );
+        for contents in [&locked, &formatted] {
+            context.temp_dir.child("uv.lock").write_str(contents)?;
+            insta::allow_duplicates! {
+                uv_snapshot!(context.filters(), context.lock().arg("--no-preview").arg("--locked").arg("--refresh"), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 3 packages in [TIME]
+                ");
+            }
+            assert_eq!(context.read("uv.lock"), *contents);
+        }
+
+        // A different marker still invalidates the lock, even if the selected versions stay equal.
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&pyproject.replace("platform_release > '24'", "platform_release > '25'"))?;
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), context.lock().arg("--no-preview").arg("--locked"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+            hint: To update the lockfile, run `uv lock`.
+            ");
+        }
+        assert_eq!(context.read("uv.lock"), formatted);
+    }
     Ok(())
 }
 
@@ -44178,8 +44287,8 @@ fn lock_required_environment_macos_release() -> Result<()> {
         revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
-            "platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
-            "platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
+            "platform_machine == 'arm64' and platform_release >= '25.0.0' and sys_platform == 'darwin'",
+            "platform_machine == 'arm64' and platform_release < '25.0.0' and sys_platform == 'darwin'",
         ]
         supported-markers = [
             "platform_machine == 'arm64' and sys_platform == 'darwin'",
@@ -44196,7 +44305,7 @@ fn lock_required_environment_macos_release() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         resolution-markers = [
-            "platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
+            "platform_machine == 'arm64' and platform_release < '25.0.0' and sys_platform == 'darwin'",
         ]
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
@@ -44208,7 +44317,7 @@ fn lock_required_environment_macos_release() -> Result<()> {
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         resolution-markers = [
-            "platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
+            "platform_machine == 'arm64' and platform_release >= '25.0.0' and sys_platform == 'darwin'",
         ]
         wheels = [
             { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-macosx_26_0_arm64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-macosx_26_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
@@ -44219,8 +44328,8 @@ fn lock_required_environment_macos_release() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release < '25'" },
-            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release >= '25'" },
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release < '25.0.0'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release >= '25.0.0'" },
         ]
 
         [package.metadata]
@@ -44256,7 +44365,7 @@ fn lock_required_environment_macos_release() -> Result<()> {
     uv_snapshot!(filters, context.lock().arg("--index-url").arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin')
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'arm64' and platform_release < '25.0.0' and sys_platform == 'darwin')
       cause: Because only a==2.0.0 is available and a==2.0.0 has no `platform_machine == 'arm64' and sys_platform == 'darwin'`-compatible wheels, we can conclude that all versions of a cannot be used.
              And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
     ");
@@ -44319,8 +44428,8 @@ fn lock_required_environment_macos_release_python_fork() -> Result<()> {
         revision = 5
         requires-python = ">=3.12, <3.14"
         resolution-markers = [
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release >= '25.0.0' and sys_platform == 'darwin'",
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release < '25.0.0' and sys_platform == 'darwin'",
             "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
         ]
         supported-markers = [
@@ -44339,7 +44448,7 @@ fn lock_required_environment_macos_release_python_fork() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         resolution-markers = [
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release < '25.0.0' and sys_platform == 'darwin'",
         ]
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.0.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-cp312-cp312-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
@@ -44351,7 +44460,7 @@ fn lock_required_environment_macos_release_python_fork() -> Result<()> {
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         resolution-markers = [
-            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release >= '25.0.0' and sys_platform == 'darwin'",
             "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
         ]
         wheels = [
@@ -44364,8 +44473,8 @@ fn lock_required_environment_macos_release_python_fork() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and platform_release < '25'" },
-            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or platform_release >= '25'" },
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and platform_release < '25.0.0'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or platform_release >= '25.0.0'" },
         ]
 
         [package.metadata]

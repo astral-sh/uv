@@ -324,9 +324,8 @@ impl UniversalMarker {
 
     /// Returns true if this universal marker contains a conflict marker.
     ///
-    /// Conflict items are encoded as `extra` expressions in `marker`, while `pep508` is the same
-    /// canonical marker with all `extra` expressions removed. Since [`MarkerTree`] equality is
-    /// semantic, the trees differ exactly when the marker depends on a conflict item.
+    /// Conflict items are encoded as `extra` expressions in `marker`, while `pep508` is its
+    /// projection onto environment markers. An unchanged projection has no conflict decisions.
     pub fn has_conflict_marker(self) -> bool {
         self.marker != self.pep508
     }

@@ -53,15 +53,46 @@ impl From<Vec<Requirement>> for NormalizedRequirements {
 }
 
 /// Compare registry constraints by accepted versions, prerelease opt-in, and yanked-version
-/// eligibility. All other requirement fields use [`Requirement`]'s equality.
+/// eligibility, and compare markers by the environments they select. All other requirement fields
+/// use [`Requirement`]'s equality.
 impl PartialEq for NormalizedRequirements {
     fn eq(&self, other: &Self) -> bool {
-        self.0.len() == other.0.len()
-            && self
-                .0
-                .iter()
-                .zip(&other.0)
-                .all(|(left, right)| SemanticRequirement(left) == SemanticRequirement(right))
+        let equal = |left: &[Requirement], right: &[Requirement]| {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|(left, right)| SemanticRequirement(left) == SemanticRequirement(right))
+        };
+        if equal(&self.0, &other.0) {
+            return true;
+        }
+
+        // Equivalent markers can have different comparison variables. Use shared representatives
+        // before normalizing again, since marker identity also affects grouping and ordering.
+        let mut markers = IndexMap::<MarkerTree, MarkerTree>::new();
+        for requirement in self.0.iter().chain(&other.0) {
+            if !markers.contains_key(&requirement.marker) {
+                let representative = markers
+                    .values()
+                    .copied()
+                    .find(|marker| marker.is_equivalent(requirement.marker))
+                    .unwrap_or(requirement.marker);
+                markers.insert(requirement.marker, representative);
+            }
+        }
+        let normalize = |requirements: &[Requirement]| {
+            normalize(
+                requirements
+                    .iter()
+                    .map(|requirement| Requirement {
+                        marker: markers[&requirement.marker],
+                        ..requirement.clone()
+                    })
+                    .collect(),
+            )
+        };
+        equal(&normalize(&self.0), &normalize(&other.0))
     }
 }
 
@@ -691,6 +722,43 @@ mod tests {
         ])?);
         assert_eq!(normalized.len(), 1);
         assert_eq!(normalized[0].marker, MarkerTree::TRUE);
+        Ok(())
+    }
+
+    /// Equivalent markers can change declaration ordering and optional-dependency grouping.
+    #[test]
+    fn equivalent_platform_release_markers() -> Result<()> {
+        let original = NormalizedRequirements::from(requirements(&[
+            "foo[a]>=1; extra == 'x' and sys_platform == 'darwin' and platform_release == '24'",
+            "foo[b]<3; extra == 'x' and sys_platform == 'darwin' and platform_release >= '24' and platform_release <= '24'",
+            "foo>=3; sys_platform == 'darwin' and platform_release != '24'",
+        ])?);
+        let combined = NormalizedRequirements::from(requirements(&[
+            "foo>=3; sys_platform == 'darwin' and platform_release != '24'",
+            "foo[a,b]>=1,<3; extra == 'x' and sys_platform == 'darwin' and platform_release == '24'",
+        ])?);
+        assert_eq!(original, combined);
+        assert_eq!(combined, original);
+
+        for (left, right) in [
+            ("foo==1", "foo>=1,<=1"),
+            ("foo==1.*", "foo==1.0.*"),
+            ("foo[a]>=1", "foo[b]>=1"),
+            (
+                "foo @ https://example.org/foo.whl#sha256=1111",
+                "foo @ https://example.org/foo.whl#sha256=2222",
+            ),
+        ] {
+            let left = format!("{left}; sys_platform == 'darwin' and platform_release == '24'");
+            let right = format!(
+                "{right}; sys_platform == 'darwin' and platform_release >= '24' and platform_release <= '24'"
+            );
+            assert_ne!(
+                NormalizedRequirements::from(requirements(&[&left])?),
+                NormalizedRequirements::from(requirements(&[&right])?),
+                "{left} != {right}"
+            );
+        }
         Ok(())
     }
 

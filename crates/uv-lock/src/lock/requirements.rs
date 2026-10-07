@@ -6,7 +6,8 @@ use uv_configuration::{
     PackageOverride,
 };
 use uv_distribution_types::{
-    IndexMetadata, IndexUrl, Requirement, RequirementScope, RequirementSource, RequiresPython,
+    IndexMetadata, IndexUrl, NameRequirementSpecification, Requirement, RequirementScope,
+    RequirementSource, RequiresPython, StaticMetadata,
 };
 use uv_fs::normalize_path;
 use uv_git_types::GitUrl;
@@ -15,6 +16,60 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use super::{LockError, LockErrorKind};
+
+/// Compare build constraints without requiring equivalent markers to share a representation.
+pub(super) fn same_build_constraints(
+    left: &BTreeSet<NameRequirementSpecification>,
+    right: &BTreeSet<NameRequirementSpecification>,
+) -> bool {
+    same_entries(left, right, |left, right| {
+        if !left
+            .requirement
+            .marker
+            .is_equivalent(right.requirement.marker)
+        {
+            return false;
+        }
+        let mut left = left.clone();
+        left.requirement.marker = right.requirement.marker;
+        left == *right
+    })
+}
+
+/// Compare static metadata while allowing equivalent dependency marker representations.
+pub(super) fn same_static_metadata(
+    left: &BTreeSet<StaticMetadata>,
+    right: &BTreeSet<StaticMetadata>,
+) -> bool {
+    same_entries(left, right, |left, right| {
+        if left.requires_dist.len() != right.requires_dist.len() {
+            return false;
+        }
+        let mut left = left.clone();
+        for (left, right) in left.requires_dist.iter_mut().zip(&right.requires_dist) {
+            if !left.marker.is_equivalent(right.marker) {
+                return false;
+            }
+            left.marker = right.marker;
+        }
+        left == *right
+    })
+}
+
+/// Compare sets by semantic membership without changing their structural equality or ordering.
+fn same_entries<T: Ord>(
+    left: &BTreeSet<T>,
+    right: &BTreeSet<T>,
+    equivalent: impl Fn(&T, &T) -> bool,
+) -> bool {
+    left == right
+        || (left
+            .iter()
+            .all(|left| right.contains(left) || right.iter().any(|right| equivalent(left, right)))
+            && right.iter().all(|right| {
+                left.contains(right) || left.iter().any(|left| equivalent(left, right))
+            }))
+}
 
 /// Prepare dependency inputs for comparison with a lockfile's paths and supported Python versions.
 ///
@@ -271,4 +326,41 @@ pub(super) fn normalize_requirement(
         }
     };
     Ok(requirement)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+    use std::error::Error;
+
+    use uv_distribution_types::{NameRequirementSpecification, Requirement};
+    use uv_pep508::Requirement as Pep508Requirement;
+    use uv_pypi_types::VerbatimParsedUrl;
+
+    use super::same_build_constraints;
+
+    #[test]
+    fn build_constraint_marker_equivalence_preserves_hashes() -> Result<(), Box<dyn Error>> {
+        let mut left = NameRequirementSpecification {
+            requirement: Requirement::from(
+                "foo>=1; sys_platform == 'darwin' and platform_release == '24'"
+                    .parse::<Pep508Requirement<VerbatimParsedUrl>>()?,
+            ),
+            hashes: vec!["sha256:1111".to_string()],
+        };
+        let mut right = left.clone();
+        right.requirement.marker =
+            "sys_platform == 'darwin' and platform_release >= '24' and platform_release <= '24'"
+                .parse()?;
+        assert!(same_build_constraints(
+            &BTreeSet::from([left.clone()]),
+            &BTreeSet::from([right.clone()]),
+        ));
+        left.hashes = vec!["sha256:2222".to_string()];
+        assert!(!same_build_constraints(
+            &BTreeSet::from([left]),
+            &BTreeSet::from([right]),
+        ));
+        Ok(())
+    }
 }

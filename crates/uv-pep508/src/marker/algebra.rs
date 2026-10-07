@@ -24,13 +24,13 @@
 //! - Isomorphic nodes are merged.
 //! - Nodes with isomorphic children are eliminated.
 //!
-//! These two rules provide an important guarantee for marker trees: marker trees are canonical for
-//! a given marker function and variable ordering. Because variable ordering is defined at compile-time,
-//! this means any functionally equivalent marker trees are normalized upon construction. Importantly,
-//! this means that we can identify trivially true marker trees, as well as unsatisfiable marker trees.
-//! This provides important information to the resolver when forking.
+//! These two rules make marker trees canonical over a fixed set of decision variables and their
+//! ordering. Version-string comparisons use separate Boolean variables to retain both numeric and
+//! lexical interpretations. We also restrict these variables using the numeric and lexical bounds
+//! accumulated on each path, allowing the resolver to discard unsatisfiable branches. Equivalent
+//! expressions can still have different trees when they use different comparison variables.
 //!
-//! ADDs provide polynomial time operations such as conjunction and negation, which is important as marker
+//! ADDs support memoized conjunction and constant-time negation, which is important as marker
 //! trees are combined during universal resolution. Because ADDs solve the SAT problem, constructing an
 //! arbitrary ADD can theoretically take exponential time in the worst case. However, in practice, marker trees
 //! have a limited number of variables and user-provided marker trees are typically very simple.
@@ -321,16 +321,14 @@ impl InternerGuard<'_> {
                     Variable::String(key),
                     Edges::from_string(key, operator, value.clone()),
                 );
-                // Darwin kernel releases are dotted versions. Other platforms can include
-                // arbitrary text in `platform_release`, so retain string comparisons there.
+                // Compare Darwin releases numerically when possible, retaining the original
+                // comparison for releases that require lexicographic evaluation.
                 if key == CanonicalMarkerValueString::PlatformRelease
-                    && let Some(operator) = operator.to_pep440_operator()
-                    && let Ok(pattern) = value.parse::<VersionPattern>()
-                    && let Ok(specifier) = VersionSpecifier::from_pattern(operator, pattern)
+                    && let Some((comparison, positive)) = VersionString::new(key, operator, value)
                 {
                     let version = self.create_node(
-                        Variable::VersionString(key),
-                        Edges::from_specifier(specifier),
+                        Variable::VersionString(Box::new(comparison)),
+                        Edges::from_bool(positive),
                     );
                     let darwin = self.expression(MarkerExpression::String {
                         key: MarkerValueString::SysPlatform,
@@ -436,8 +434,14 @@ impl InternerGuard<'_> {
             }
         };
 
-        // Create the output node.
-        let node = self.create_node(func, children);
+        // Combining trees can introduce new relationships between comparison variables.
+        let node = if let Variable::VersionString(comparison) = &func
+            && let Edges::Boolean { high, low } = children
+        {
+            self.reduce_version_string(comparison, high, low)
+        } else {
+            self.create_node(func, children)
+        };
 
         // If the node includes known incompatibilities, map it to `false`.
         let node = if conflicts {
@@ -454,10 +458,121 @@ impl InternerGuard<'_> {
         // Memoize the result of this operation.
         //
         // ADDs often contain duplicated subgraphs in distinct branches due to the restricted
-        // variable ordering. Memoizing allows ADD operations to remain polynomial time.
+        // variable ordering. Memoizing avoids recomputing conjunctions of the same nodes.
         self.state.cache.insert((xi, yi), node);
 
         node
+    }
+
+    /// Reduces a comparison after an operation combines or replaces its descendant predicates.
+    fn reduce_version_string(
+        &mut self,
+        comparison: &VersionString,
+        high: NodeId,
+        low: NodeId,
+    ) -> NodeId {
+        // Carry both domains through each branch. Pairwise implications alone cannot detect
+        // contradictions whose numeric and lexical bounds differ.
+        let high = self.restrict_version_string(high, comparison, true);
+        let low = self.restrict_version_string(low, comparison, false);
+        // Remove a comparison when the other child agrees throughout a constant branch.
+        if matches!(high, NodeId::TRUE | NodeId::FALSE)
+            && self.restrict_version_string(low, comparison, true) == high
+        {
+            return low;
+        }
+        if matches!(low, NodeId::TRUE | NodeId::FALSE)
+            && self.restrict_version_string(high, comparison, false) == low
+        {
+            return high;
+        }
+        self.create_node(
+            Variable::VersionString(Box::new(comparison.clone())),
+            Edges::Boolean { high, low },
+        )
+    }
+
+    /// Restricts the comparison prefix using a known comparison result.
+    fn restrict_version_string(
+        &mut self,
+        id: NodeId,
+        comparison: &VersionString,
+        value: bool,
+    ) -> NodeId {
+        if value {
+            self.restrict_version_string_ranges(id, comparison.key, &comparison.ranges)
+        } else {
+            self.restrict_version_string_ranges(id, comparison.key, &comparison.ranges.complement())
+        }
+    }
+
+    /// Restricts a comparison prefix with all numeric and lexical bounds accumulated on its path.
+    fn restrict_version_string_ranges(
+        &mut self,
+        id: NodeId,
+        key: CanonicalMarkerValueString,
+        ranges: &VersionStringRanges,
+    ) -> NodeId {
+        if matches!(id, NodeId::TRUE | NodeId::FALSE) {
+            return id;
+        }
+        let node = self.shared.node(id);
+        let Variable::VersionString(comparison) = &node.var else {
+            // This subtree follows a version-string comparison in the variable ordering,
+            // so no further version-string comparisons can appear below another variable.
+            return id;
+        };
+        if comparison.key != key {
+            return id;
+        }
+        let Edges::Boolean {
+            high: original_high,
+            low: original_low,
+        } = node.children
+        else {
+            return id;
+        };
+        let high_ranges = ranges.intersection(&comparison.ranges);
+        let low_ranges = ranges.intersection(&comparison.ranges.complement());
+        let high_empty = high_ranges.is_empty();
+        let low_empty = low_ranges.is_empty();
+        if high_empty && low_empty {
+            return NodeId::FALSE;
+        }
+        if high_empty {
+            return self.restrict_version_string_ranges(original_low.negate(id), key, &low_ranges);
+        }
+        if low_empty {
+            return self.restrict_version_string_ranges(
+                original_high.negate(id),
+                key,
+                &high_ranges,
+            );
+        }
+        let high = self.restrict_version_string_ranges(original_high.negate(id), key, &high_ranges);
+        let low = self.restrict_version_string_ranges(original_low.negate(id), key, &low_ranges);
+        if high == original_high.negate(id) && low == original_low.negate(id) {
+            return id;
+        }
+        self.reduce_version_string(comparison, high, low)
+    }
+
+    /// Overapproximates a tree using only comparisons of the given version-string key.
+    fn project_version_string(&mut self, id: NodeId, key: CanonicalMarkerValueString) -> NodeId {
+        if matches!(id, NodeId::TRUE | NodeId::FALSE) {
+            return id;
+        }
+        let node = self.shared.node(id);
+        let Variable::VersionString(comparison) = &node.var else {
+            return NodeId::TRUE;
+        };
+        if comparison.key != key {
+            return NodeId::TRUE;
+        }
+        let children = node
+            .children
+            .map(id, |child| self.project_version_string(child, key));
+        self.create_node(node.var.clone(), children)
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -479,22 +594,7 @@ impl InternerGuard<'_> {
         if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
             return self.and(xi, yi).is_false();
         }
-
-        // Perform Shannon Expansion of the higher order variable.
-        match x.var.cmp(&y.var) {
-            // X is higher order than Y, Y must be disjoint with every child of X.
-            Ordering::Less => x
-                .children
-                .nodes()
-                .all(|x| self.disjointness(x.negate(xi), yi)),
-            // Y is higher order than X, X must be disjoint with every child of Y.
-            Ordering::Greater => y
-                .children
-                .nodes()
-                .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisfiable.
-            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
-        }
+        self.disjointness(xi, yi)
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -523,6 +623,12 @@ impl InternerGuard<'_> {
         }
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
+
+        if matches!(x.var, Variable::VersionString(_))
+            || matches!(y.var, Variable::VersionString(_))
+        {
+            return self.and(xi, yi).is_false();
+        }
 
         // Perform Shannon Expansion of the higher order variable.
         match x.var.cmp(&y.var) {
@@ -604,13 +710,10 @@ impl InternerGuard<'_> {
 
         let value_node = self.shared.node(value);
         let assumption_node = self.shared.node(assumption);
-        let result = match value_node.var.cmp(&assumption_node.var) {
-            Ordering::Less => {
-                let children = value_node.children.map(value, |value| {
-                    self.restrict_cached(value, assumption, cache)
-                });
-                self.create_node(value_node.var.clone(), children)
-            }
+        let children = match value_node.var.cmp(&assumption_node.var) {
+            Ordering::Less => value_node.children.map(value, |value| {
+                self.restrict_cached(value, assumption, cache)
+            }),
             Ordering::Greater => {
                 // The value does not depend on this variable. Existentially quantify it out of the
                 // assumption, and continue with the remaining variables.
@@ -619,9 +722,39 @@ impl InternerGuard<'_> {
                     quantified_assumption =
                         self.or(quantified_assumption, child.negate(assumption));
                 }
-                self.restrict_cached(value, quantified_assumption, cache)
+                let result = self.restrict_cached(value, quantified_assumption, cache);
+                cache.insert((value, assumption), result);
+                return result;
             }
             Ordering::Equal => {
+                if let Variable::VersionString(comparison) = &value_node.var
+                    && let Edges::Boolean { high, low } = value_node.children
+                    && let Edges::Boolean {
+                        high: assumption_high,
+                        low: assumption_low,
+                    } = assumption_node.children
+                {
+                    let excluded = match (high.negate(value), low.negate(value)) {
+                        (NodeId::TRUE, NodeId::FALSE) => Some(assumption_low.negate(assumption)),
+                        (NodeId::FALSE, NodeId::TRUE) => Some(assumption_high.negate(assumption)),
+                        _ => None,
+                    };
+                    let excluded = excluded
+                        .map(|excluded| self.project_version_string(excluded, comparison.key));
+                    if let Some(excluded) = excluded
+                        && self.and(value, excluded).is_false()
+                    {
+                        // The excluded region describes the reachable environments where the
+                        // predicate is false. If it also excludes every true environment, its
+                        // complement can replace the predicate. Projecting out other keys avoids
+                        // introducing unrelated wheel tags. This can select a comparison
+                        // absent from the value, such as `< 25` when separating `== 24` from
+                        // wheel coverage requiring `>= 25`.
+                        let result = excluded.not();
+                        cache.insert((value, assumption), result);
+                        return result;
+                    }
+                }
                 // Split both trees into matching ranges. Replace any ranges that are unreachable
                 // under the assumption with the first reachable child, simplifying them out of the
                 // resulting marker.
@@ -643,7 +776,7 @@ impl InternerGuard<'_> {
                 let Some(fallback) = fallback else {
                     return NodeId::FALSE;
                 };
-                let children = value_node.children.apply(
+                value_node.children.apply(
                     value,
                     &assumption_node.children,
                     assumption,
@@ -654,9 +787,15 @@ impl InternerGuard<'_> {
                             self.restrict_cached(value, assumption, cache)
                         }
                     },
-                );
-                self.create_node(value_node.var.clone(), children)
+                )
             }
+        };
+        let result = if let Variable::VersionString(comparison) = &value_node.var
+            && let Edges::Boolean { high, low } = children
+        {
+            self.reduce_version_string(comparison, high, low)
+        } else {
+            self.create_node(value_node.var.clone(), children)
         };
 
         cache.insert((value, assumption), result);
@@ -1183,8 +1322,8 @@ impl InternerGuard<'_> {
 pub(crate) enum Variable {
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
-    /// A string-valued marker interpreted as a version within a platform-specific scope.
-    VersionString(CanonicalMarkerValueString),
+    /// A comparison with numeric and lexicographic interpretations.
+    VersionString(Box<VersionString>),
     /// A version marker, such as `python_version`.
     ///
     /// This is the highest order variable as it typically contains the most complex
@@ -1213,6 +1352,155 @@ pub(crate) enum Variable {
     /// We keep extras and groups at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     List(CanonicalMarkerListPair),
+}
+
+/// A comparison that uses version ordering when the environment value is a version.
+///
+/// Each comparison is a Boolean variable so range simplification cannot discard its
+/// lexicographic fallback or the original spelling needed to serialize that fallback.
+/// Lexicographic fallback retains the legacy comparison behavior and allows complements
+/// to be expressed with standard marker operators, without a general Boolean `not`.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct VersionString {
+    pub(crate) key: CanonicalMarkerValueString,
+    pub(crate) operator: MarkerOperator,
+    pub(crate) value: ArcStr,
+    ranges: VersionStringRanges,
+}
+
+impl VersionString {
+    /// Constructs a comparison and whether its Boolean variable should be positive.
+    fn new(
+        key: CanonicalMarkerValueString,
+        operator: MarkerOperator,
+        mut value: ArcStr,
+    ) -> Option<(Self, bool)> {
+        let (operator, positive, mut string) = match operator {
+            MarkerOperator::Equal => (
+                MarkerOperator::Equal,
+                true,
+                Ranges::singleton(value.clone()),
+            ),
+            MarkerOperator::NotEqual => (
+                MarkerOperator::Equal,
+                false,
+                Ranges::singleton(value.clone()),
+            ),
+            MarkerOperator::LessThan => (
+                MarkerOperator::LessThan,
+                true,
+                Ranges::strictly_lower_than(value.clone()),
+            ),
+            MarkerOperator::GreaterEqual => (
+                MarkerOperator::LessThan,
+                false,
+                Ranges::strictly_lower_than(value.clone()),
+            ),
+            MarkerOperator::LessEqual => (
+                MarkerOperator::LessEqual,
+                true,
+                Ranges::lower_than(value.clone()),
+            ),
+            MarkerOperator::GreaterThan => (
+                MarkerOperator::LessEqual,
+                false,
+                Ranges::lower_than(value.clone()),
+            ),
+            MarkerOperator::TildeEqual
+            | MarkerOperator::In
+            | MarkerOperator::NotIn
+            | MarkerOperator::Contains
+            | MarkerOperator::NotContains => return None,
+        };
+        let specifier = VersionSpecifier::from_pattern(
+            operator.to_pep440_operator()?,
+            value.parse::<VersionPattern>().ok()?,
+        )
+        .ok()?;
+        if operator == MarkerOperator::Equal && value.parse::<Version>().is_ok() {
+            // An opaque release cannot equal a valid version spelling. This also allows
+            // equivalent numeric equalities, such as `24` and `24.0`, to share a variable.
+            string = Ranges::empty();
+            value = ArcStr::from(specifier.version().only_release_trimmed().to_string());
+        }
+        let version = release_specifier_to_range(specifier.only_release(), true);
+        Some((
+            Self {
+                key,
+                operator,
+                value,
+                ranges: VersionStringRanges { version, string },
+            },
+            positive,
+        ))
+    }
+
+    /// Evaluates the numeric comparison or its lexicographic fallback.
+    pub(crate) fn evaluate(&self, value: &str) -> bool {
+        self.ranges.contains(value)
+    }
+}
+
+/// A set of release values, partitioned into versions and opaque strings.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct VersionStringRanges {
+    version: Ranges<Version>,
+    string: Ranges<ArcStr>,
+}
+
+impl VersionStringRanges {
+    /// Intersects the version and opaque-string domains independently.
+    fn intersection(&self, other: &Self) -> Self {
+        Self {
+            version: self.version.intersection(&other.version),
+            string: self.string.intersection(&other.string),
+        }
+    }
+
+    /// Complements both domains.
+    fn complement(&self) -> Self {
+        Self {
+            version: self.version.complement(),
+            string: self.string.complement(),
+        }
+    }
+
+    /// Tests membership in the domain selected by the release value.
+    fn contains(&self, value: &str) -> bool {
+        if let Ok(version) = value.parse::<Version>() {
+            self.version.contains(&version)
+        } else {
+            self.string.contains(value)
+        }
+    }
+
+    /// Returns whether neither domain can contain an environment value.
+    fn is_empty(&self) -> bool {
+        self.version.is_empty()
+            && self.string.iter().all(|(lower, upper)| {
+                // A valid version spelling cannot be an opaque environment value.
+                if let (Bound::Included(lower), Bound::Included(upper)) = (lower, upper)
+                    && lower == upper
+                {
+                    lower.parse::<Version>().is_ok()
+                } else {
+                    false
+                }
+            })
+    }
+}
+
+impl PartialOrd for VersionString {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VersionString {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // The ranges are determined by these fields and do not participate in ordering.
+        (self.key, self.operator, &self.value).cmp(&(other.key, other.operator, &other.value))
+    }
 }
 
 impl Variable {

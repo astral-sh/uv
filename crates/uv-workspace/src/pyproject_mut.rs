@@ -1793,8 +1793,8 @@ fn find_dependencies(
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
         if let Some(req) = dep.as_str().and_then(try_parse_requirement)
-            && marker.is_none_or(|m| *m == req.marker)
             && *name == req.name
+            && marker.is_none_or(|marker| marker.is_equivalent(req.marker))
         {
             to_replace.push((i, req));
         }
@@ -1802,12 +1802,12 @@ fn find_dependencies(
     to_replace
 }
 
-/// Return whether two requirements have the same serialized fields, ignoring their parsed origin.
+/// Return whether two requirements have the same fields and equivalent markers, ignoring origin.
 fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool {
     left.name == right.name
         && left.extras == right.extras
         && left.version_or_url == right.version_or_url
-        && left.marker == right.marker
+        && left.marker.is_equivalent(right.marker)
 }
 
 /// Returns the key in `tool.uv.sources` that matches the given package name.

@@ -81,7 +81,10 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
-use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
+use self::requirements::{
+    RequirementNormalizer, normalize_collection, normalize_requirement, same_build_constraints,
+    same_static_metadata,
+};
 
 mod deserialize;
 pub(crate) mod export;
@@ -4439,7 +4442,7 @@ impl Lock {
                 .cloned()
                 .map(normalize_build_constraint)
                 .collect::<Result<_, _>>()?;
-            if expected != actual {
+            if !same_build_constraints(&expected, &actual) {
                 return Ok(SatisfiesResult::MismatchedBuildConstraints(
                     expected, actual,
                 ));
@@ -4491,7 +4494,7 @@ impl Lock {
                 .cloned()
                 .collect::<BTreeSet<_>>();
             let actual = &self.manifest.dependency_metadata;
-            if expected != *actual {
+            if !same_static_metadata(&expected, actual) {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
         }
