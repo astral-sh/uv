@@ -24,9 +24,10 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
-use crate::commands::pip::latest::LatestClient;
-use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::pip::resolution_markers;
+use crate::commands::operations::resolution::latest::LatestClient;
+use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
+use crate::commands::operations::resolution::reporters::LatestVersionReporter;
+use crate::commands::operations::resolution::resolution_markers;
 use crate::commands::project::discovery::DiscoveredProject;
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::{LockMode, LockOperation};
@@ -36,7 +37,6 @@ use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ProjectPythonRequest,
     ScriptInterpreter,
 };
-use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::FrozenSource;

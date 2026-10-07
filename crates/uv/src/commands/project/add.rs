@@ -46,10 +46,12 @@ use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, Tool
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::pip::loggers::{
-    DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
+use crate::commands::operations::Modifications;
+use crate::commands::operations::installation::loggers::DefaultInstallLogger;
+use crate::commands::operations::resolution::loggers::{
+    DefaultResolveLogger, SummaryResolveLogger,
 };
-use crate::commands::pip::operations::Modifications;
+use crate::commands::operations::resolution::reporters::ResolverReporter;
 use crate::commands::project::edit::{EditTarget, ProjectEdit, PythonTarget};
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
@@ -60,7 +62,7 @@ use crate::commands::project::{
     ProjectError, ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter,
     init_script_python_requirement,
 };
-use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, ScriptPath, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
@@ -823,26 +825,31 @@ pub(crate) async fn add(
             edit.commit();
             Ok(ExitStatus::Success)
         }
-        Err(err) => match err {
-            ProjectError::Operation(err) => {
-                let standard_library_package = standard_library_package(&err, &edits, python_minor);
-                Err(UvError::from(err)
-                    .map_user(|cause| {
-                        AddDependencyError {
-                            cause,
-                            standard_library_package,
-                        }
-                        .into()
-                    })
-                    .into())
-            }
-            err => Err(UvError::from(err).into()),
-        },
+        Err(err) => {
+            let (err, standard_library_package) = match err {
+                ProjectError::Resolve(err) => {
+                    let standard_library_package =
+                        standard_library_package(&err, &edits, python_minor);
+                    (UvError::from(err), standard_library_package)
+                }
+                ProjectError::Install(err) => (UvError::from(err), None),
+                err => return Err(UvError::from(err).into()),
+            };
+            Err(err
+                .map_user(|cause| {
+                    AddDependencyError {
+                        cause,
+                        standard_library_package,
+                    }
+                    .into()
+                })
+                .into())
+        }
     }
 }
 
 fn standard_library_package(
-    operation_error: &crate::commands::pip::operations::Error,
+    operation_error: &crate::commands::operations::resolution::Error,
     edits: &[DependencyEdit],
     python_minor: u8,
 ) -> Option<PackageName> {

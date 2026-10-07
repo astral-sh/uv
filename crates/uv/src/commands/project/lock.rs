@@ -45,15 +45,20 @@ use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
 
-use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
-use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
+use crate::commands::operations::resolution::locked_requirements::{
+    LockedRequirements, read_lock_requirements,
+};
+use crate::commands::operations::resolution::loggers::{
+    DefaultResolveLogger, ResolveLogger, SummaryResolveLogger,
+};
+use crate::commands::operations::resolution::reporters::ResolverReporter;
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
     MissingLockfileSource, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError,
     ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, init_script_python_requirement,
 };
-use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::{ExitStatus, ScriptPath, UvError, operations};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
@@ -1126,14 +1131,14 @@ async fn do_lock(
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(target.members_requirements())
                 .await
-                .map_err(|err| ProjectError::Operation(err.into()))?;
+                .map_err(|err| ProjectError::Resolve(err.into()))?;
             let workspace_members = member_requirements
                 .iter()
                 .map(|requirement| (requirement.name.clone(), requirement.source.clone()))
                 .collect();
 
             // Resolve the requirements.
-            let (resolution, _) = pip::operations::resolve(
+            let (resolution, _) = operations::resolution::resolve(
                 member_requirements
                     .into_iter()
                     .chain(target.group_requirements())
@@ -1186,7 +1191,7 @@ async fn do_lock(
             logger.on_complete(resolution.len(), start, printer)?;
 
             // Notify the user of any resolution diagnostics.
-            pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+            operations::resolution::diagnose_resolution(resolution.diagnostics(), printer)?;
 
             let manifest = ResolverManifest::new(
                 members,

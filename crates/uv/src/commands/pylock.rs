@@ -14,7 +14,7 @@ use uv_normalize::{ExtraName, GroupName};
 use uv_python::{Interpreter, PythonVersion};
 use uv_types::HashStrategy;
 
-use crate::commands::pip::{resolution_markers, resolution_tags};
+use crate::commands::operations::resolution::{resolution_markers, resolution_tags};
 
 /// Read a `pylock.toml` from a local path or remote URL and parse it.
 ///

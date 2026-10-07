@@ -28,10 +28,12 @@ use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::pip::loggers::{
-    DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
+use crate::commands::operations::Modifications;
+use crate::commands::operations::installation::loggers::{
+    DefaultInstallLogger, UpgradeInstallLogger,
 };
-use crate::commands::pip::{operations::Modifications, resolution_tags};
+use crate::commands::operations::resolution::loggers::SummaryResolveLogger;
+use crate::commands::operations::resolution::resolution_tags;
 use crate::commands::project::{
     EnvironmentResolution, EnvironmentUpdate, resolve_environment, sync_environment,
     update_environment,

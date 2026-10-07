@@ -2990,6 +2990,54 @@ fn tool_run_verbose_hint() {
     ");
 }
 
+/// Include the invocation hint when resolution succeeds but building the tool fails.
+#[test]
+fn tool_run_verbose_hint_install_failure() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+
+    // Create a tool whose metadata can be resolved without running the build backend.
+    let project = context.temp_dir.child("broken-tool");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "broken-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+
+    // Fail when installation tries to build the tool's wheel.
+    project.child("backend.py").write_str(indoc! {r"
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            raise SystemExit(1)
+    "})?;
+
+    // Include the invocation hint even though the failure occurs after resolution.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("--from")
+        .arg("./broken-tool")
+        .arg("broken-tool")
+        .arg("--verbose"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to run tool
+      cause: Failed to build `broken-tool @ file://[TEMP_DIR]/broken-tool`
+      cause: The build backend returned an error
+      cause: Call to `backend.build_wheel` failed (exit status: 1)
+
+    hint: Build failures usually indicate a problem with the package or the build environment
+
+    hint: You provided `--verbose` to `broken-tool`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose broken-tool`
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn tool_run_with_compatible_build_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.9")

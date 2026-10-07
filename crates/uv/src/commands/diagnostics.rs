@@ -10,9 +10,9 @@ use uv_errors::{Hinted, Hints};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, strip_local_version_sentinels};
 
-use crate::commands::pip;
+use crate::commands::operations;
+use crate::commands::operations::resolution::ExtrasWithoutSourceError;
 use crate::commands::pip::install::ExternallyManagedError;
-use crate::commands::pip::operations::ExtrasWithoutSourceError;
 use crate::commands::project::ProjectError;
 use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
@@ -60,7 +60,8 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
         collect_hint::<uv_lock::LockError>(cause, &mut hints);
-        collect_hint::<pip::operations::Error>(cause, &mut hints);
+        collect_hint::<operations::resolution::Error>(cause, &mut hints);
+        collect_hint::<operations::installation::Error>(cause, &mut hints);
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
         collect_hint::<RecursionLimitError>(cause, &mut hints);
         collect_hint::<DependencyNotFoundError>(cause, &mut hints);

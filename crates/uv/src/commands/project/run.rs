@@ -63,10 +63,13 @@ struct GistResponse {
 struct GistFile {
     raw_url: String,
 }
-use crate::commands::pip::loggers::{
-    DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
+use crate::commands::operations::Modifications;
+use crate::commands::operations::installation::loggers::{
+    DefaultInstallLogger, SummaryInstallLogger,
 };
-use crate::commands::pip::operations::Modifications;
+use crate::commands::operations::resolution::loggers::{
+    DefaultResolveLogger, SummaryResolveLogger,
+};
 use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
 use crate::commands::project::lock::LockMode;
@@ -267,7 +270,7 @@ pub(crate) async fn run(
             .await
             {
                 Ok(result) => result.into_lock(),
-                Err(ProjectError::Operation(err)) => {
+                Err(ProjectError::Resolve(err)) => {
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
@@ -310,7 +313,7 @@ pub(crate) async fn run(
             .await
             {
                 Ok(_) => {}
-                Err(ProjectError::Operation(err)) => {
+                Err(ProjectError::Resolve(err)) => {
                     return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
@@ -457,7 +460,7 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(ProjectError::Operation(err)) => {
+                    Err(ProjectError::Resolve(err)) => {
                         return Err(UvError::from(err.with_resolution_context("script")).into());
                     }
                     Err(err) => return Err(UvError::from(err).into()),
@@ -984,7 +987,7 @@ pub(crate) async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Operation(err)) => {
+                Err(ProjectError::Resolve(err)) => {
                     return Err(UvError::from(err.with_resolution_context("`--with`")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),

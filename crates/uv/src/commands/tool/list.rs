@@ -20,8 +20,8 @@ use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
-use crate::commands::pip::latest::LatestClient;
-use crate::commands::reporters::LatestVersionReporter;
+use crate::commands::operations::resolution::latest::LatestClient;
+use crate::commands::operations::resolution::reporters::LatestVersionReporter;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 

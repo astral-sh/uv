@@ -32,7 +32,7 @@ use uv_workspace::{
     DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
 };
 
-use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
 use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;

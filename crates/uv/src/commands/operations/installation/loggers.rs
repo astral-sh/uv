@@ -10,8 +10,9 @@ use uv_configuration::DryRun;
 use uv_distribution_types::Name;
 use uv_normalize::PackageName;
 
-use crate::commands::pip::operations::{Changelog, ShortSpecifier};
-use crate::commands::{ChangeEvent, ChangeEventKind, elapsed};
+use crate::commands::elapsed;
+use crate::commands::operations::installation::{ChangeEvent, ChangeEventKind};
+use crate::commands::operations::installation::{Changelog, ShortSpecifier};
 use crate::printer::Printer;
 
 /// A trait to handle logging during install operations.
@@ -464,61 +465,6 @@ impl InstallLogger for UpgradeInstallLogger {
         // Follow-up with a detailed summary of all changes.
         DefaultInstallLogger.on_complete(changelog, printer, _dry_run)?;
 
-        Ok(())
-    }
-}
-
-/// A trait to handle logging during resolve operations.
-pub(crate) trait ResolveLogger {
-    /// Log the completion of the operation.
-    fn on_complete(&self, count: usize, start: std::time::Instant, printer: Printer)
-    -> fmt::Result;
-}
-
-/// The default logger for resolve operations.
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct DefaultResolveLogger;
-
-impl ResolveLogger for DefaultResolveLogger {
-    fn on_complete(
-        &self,
-        count: usize,
-        start: std::time::Instant,
-        printer: Printer,
-    ) -> fmt::Result {
-        if count == 0 {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!("Resolved in {}", elapsed(start.elapsed())).dimmed()
-            )
-        } else {
-            let s = if count == 1 { "" } else { "s" };
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Resolved {} {}",
-                    format!("{count} package{s}").bold(),
-                    format!("in {}", elapsed(start.elapsed())).dimmed()
-                )
-                .dimmed()
-            )
-        }
-    }
-}
-
-/// A logger that doesn't show any output.
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct SummaryResolveLogger;
-
-impl ResolveLogger for SummaryResolveLogger {
-    fn on_complete(
-        &self,
-        _count: usize,
-        _start: std::time::Instant,
-        _printer: Printer,
-    ) -> fmt::Result {
         Ok(())
     }
 }
