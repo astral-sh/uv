@@ -4,7 +4,7 @@ use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOption
 use uv_distribution_types::Resolution;
 use uv_lock::{Lock, SelectedDependency};
 use uv_normalize::{GroupName, PackageName};
-use uv_python::Interpreter;
+use uv_python_interpreter::Interpreter;
 use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_workspace::VirtualProject;
 

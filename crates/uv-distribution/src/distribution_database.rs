@@ -38,7 +38,7 @@ use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
-use uv_python::PythonVariant;
+use uv_python_types::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};

@@ -3,7 +3,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
 use assert_fs::prelude::PathChild;
 use insta::assert_snapshot;
-use uv_python::managed::platform_key_from_env;
+use uv_python_managed::platform_key_from_env;
 use uv_static::EnvVars;
 use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
 

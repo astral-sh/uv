@@ -20,9 +20,11 @@ mod macos {
 
     use uv_client::BaseClientBuilder;
     use uv_preview::Preview;
-    use uv_python::PythonDownloadMirrors;
-    use uv_python::downloads::{DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList};
-    use uv_python::managed::ManagedPythonInstallation;
+    use uv_python_managed::ManagedPythonInstallation;
+    use uv_python_managed::downloads::{
+        DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
+    };
+    use uv_python_types::PythonDownloadMirrors;
 
     const DYLIB: &str = "lib/libpython3.13.dylib";
 

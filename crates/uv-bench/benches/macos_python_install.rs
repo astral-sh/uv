@@ -20,7 +20,7 @@ mod macos {
     use criterion::{BatchSize, Criterion, measurement::WallTime};
     use tempfile::TempDir;
 
-    use uv_python::downloads::ManagedPythonDownloadList;
+    use uv_python_managed::downloads::ManagedPythonDownloadList;
 
     const DYLIB: &str = "lib/libpython3.13.dylib";
 

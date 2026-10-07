@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
-use uv_python::downloads::ManagedPythonDownloadList;
+use uv_python_managed::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
@@ -35,10 +35,9 @@ use walkdir::WalkDir;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
-use uv_python::managed::ManagedPythonInstallations;
-use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
-};
+use uv_python_discovery::PythonInstallation;
+use uv_python_managed::ManagedPythonInstallations;
+use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest, PythonVersion};
 use uv_static::EnvVars;
 
 // Shared test timestamp for deterministic package availability and relative times.

@@ -16,7 +16,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement};
-use uv_python::PythonVersion;
+use uv_python_types::PythonVersion;
 
 /// A complete packse scenario definition.
 #[derive(Debug, Deserialize)]

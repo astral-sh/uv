@@ -36,10 +36,9 @@ use uv_lock_operations::{
 };
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{
-    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
-    PythonRequest,
-};
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_interpreter::PythonEnvironment;
+use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::{script_extra_build_requires, script_specification};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;

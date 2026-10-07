@@ -15,7 +15,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Platform;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
-use uv_python::PythonVariant;
+use uv_python_types::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
 
@@ -408,7 +408,7 @@ mod tests {
     use std::str::FromStr;
     use uv_distribution_filename::WheelFilename;
     use uv_platform_tags::{Arch, Os, Platform};
-    use uv_python::PythonVariant;
+    use uv_python_types::PythonVariant;
 
     #[test]
     fn built_wheel_error_formats_freethreaded_python() {

@@ -6,7 +6,7 @@ use uv_command_support::UvError;
 use uv_distribution_types::{IndexCredentialsError, IndexUrlError, RequiresPython};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_python_context::format_requires_python_sources;
+use uv_python_discovery::format_requires_python_sources;
 use uv_requirements::ScriptRequirementsError;
 use uv_workspace::RequiresPythonSources;
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -89,10 +89,10 @@ pub enum EnvironmentError {
     IndexUrl(#[from] IndexUrlError),
 
     #[error(transparent)]
-    Python(#[from] Box<uv_python::Error>),
+    Python(#[from] Box<uv_python_discovery::Error>),
 
     #[error(transparent)]
-    PythonContext(#[from] Box<uv_python_context::PythonContextError>),
+    PythonContext(#[from] Box<uv_python_discovery::PythonSelectionError>),
 
     #[error(transparent)]
     Virtualenv(#[from] uv_virtualenv::Error),
@@ -116,7 +116,7 @@ pub enum EnvironmentError {
     Install(#[from] Box<uv_install_operations::Error>),
 
     #[error(transparent)]
-    Interpreter(#[from] uv_python::InterpreterError),
+    Interpreter(#[from] uv_python_interpreter::InterpreterError),
 
     #[error(transparent)]
     Name(#[from] uv_normalize::InvalidNameError),
@@ -158,20 +158,20 @@ pub enum EnvironmentError {
     Anyhow(#[from] anyhow::Error),
 }
 
-impl From<uv_python::Error> for EnvironmentError {
-    fn from(error: uv_python::Error) -> Self {
+impl From<uv_python_discovery::Error> for EnvironmentError {
+    fn from(error: uv_python_discovery::Error) -> Self {
         Self::Python(Box::new(error))
     }
 }
 
-impl From<uv_python::PythonEnvironmentError> for EnvironmentError {
-    fn from(error: uv_python::PythonEnvironmentError) -> Self {
+impl From<uv_python_interpreter::PythonEnvironmentError> for EnvironmentError {
+    fn from(error: uv_python_interpreter::PythonEnvironmentError) -> Self {
         Self::Python(Box::new(error.into()))
     }
 }
 
-impl From<uv_python_context::PythonContextError> for EnvironmentError {
-    fn from(error: uv_python_context::PythonContextError) -> Self {
+impl From<uv_python_discovery::PythonSelectionError> for EnvironmentError {
+    fn from(error: uv_python_discovery::PythonSelectionError) -> Self {
         Self::PythonContext(Box::new(error))
     }
 }

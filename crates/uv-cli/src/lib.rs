@@ -30,7 +30,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement, VerbatimUrl};
 use uv_preview::{MaybePreviewFeature, PreviewFeature};
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python_types::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;

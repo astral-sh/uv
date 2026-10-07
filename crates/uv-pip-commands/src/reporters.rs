@@ -6,8 +6,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_command_support::Printer;
 use uv_fs::Simplified;
-use uv_python::PythonEnvironment;
-use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
+use uv_python_interpreter::PythonEnvironment;
+use uv_python_managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_tool::InstalledTools;
 
 /// Display a message about the target environment for the operation.

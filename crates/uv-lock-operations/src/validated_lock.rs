@@ -14,7 +14,7 @@ use uv_lock::{GroupMetadata, Lock, SatisfiesResult};
 use uv_normalize::{DefaultGroups, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
-use uv_python::Interpreter;
+use uv_python_interpreter::Interpreter;
 use uv_resolver::{InMemoryIndex, Options};
 use uv_types::HashStrategy;
 use uv_warnings::warn_user;

@@ -11,12 +11,11 @@ use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
-use uv_python::downloads::{
-    Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
-};
-use uv_python::{
-    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
-    PythonSource, find_all_python_installations,
+use uv_python_discovery::find_all_python_installations;
+use uv_python_managed::downloads::{Error as PythonDownloadError, ManagedPythonDownloadList};
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloadRequest, PythonDownloads,
+    PythonPreference, PythonRequest, PythonSource,
 };
 use uv_settings::PythonInstallMirrors;
 

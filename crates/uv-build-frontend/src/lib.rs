@@ -41,7 +41,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, ResolvedRequirements, SourceBuildTrait,

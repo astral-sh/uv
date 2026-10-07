@@ -13,9 +13,9 @@ use uv_fs::Simplified;
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_python::{
+use uv_python_discovery::find_environment;
+use uv_python_types::{
     EnvironmentPreference, Prefix, PythonArchitecture, PythonPreference, PythonRequest, Target,
-    find_environment,
 };
 
 use crate::reporters::report_target_environment;

@@ -15,7 +15,7 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python_types::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;

@@ -8,7 +8,8 @@ use predicates::prelude::*;
 use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, LockedFileMode};
-use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME, PythonEnvironment};
+use uv_python_discovery::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
+use uv_python_interpreter::PythonEnvironment;
 use uv_static::EnvVars;
 
 #[cfg(unix)]

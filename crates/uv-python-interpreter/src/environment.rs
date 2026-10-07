@@ -1,0 +1,407 @@
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::{env, fmt};
+
+use owo_colors::OwoColorize;
+use thiserror::Error;
+use tracing::debug;
+
+use uv_cache::Cache;
+use uv_fs::{LockedFile, LockedFileError, Simplified};
+use uv_pep440::Version;
+use uv_static::EnvVars;
+
+use crate::Interpreter;
+use crate::interpreter::InterpreterInfo;
+use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
+use uv_python_types::{EnvironmentPreference, Prefix, PythonRequest, Target};
+
+/// A failure while inspecting an existing Python environment.
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Query(#[from] crate::InterpreterError),
+    #[error(transparent)]
+    VirtualEnv(#[from] crate::VirtualEnvError),
+    #[error(transparent)]
+    MissingEnvironment(#[from] EnvironmentNotFound),
+    #[error(transparent)]
+    InvalidEnvironment(#[from] InvalidEnvironment),
+}
+
+impl uv_errors::Hinted for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Query(error) => error.hints(),
+            Self::Io(_)
+            | Self::VirtualEnv(_)
+            | Self::MissingEnvironment(_)
+            | Self::InvalidEnvironment(_) => uv_errors::Hints::none(),
+        }
+    }
+}
+
+/// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PythonEnvironment(Arc<PythonEnvironmentShared>);
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct PythonEnvironmentShared {
+    root: PathBuf,
+    interpreter: Interpreter,
+}
+
+/// The result of failed environment discovery.
+///
+/// Records the requested Python and the environment kinds that were searched.
+#[derive(Clone, Debug, Error)]
+pub struct EnvironmentNotFound {
+    request: PythonRequest,
+    preference: EnvironmentPreference,
+}
+
+#[derive(Clone, Debug, Error)]
+pub struct InvalidEnvironment {
+    path: PathBuf,
+    pub kind: InvalidEnvironmentKind,
+}
+#[derive(Debug, Clone)]
+pub enum InvalidEnvironmentKind {
+    NotDirectory,
+    Empty,
+    MissingExecutable(PathBuf),
+}
+
+impl EnvironmentNotFound {
+    pub fn new(request: PythonRequest, preference: EnvironmentPreference) -> Self {
+        Self {
+            request,
+            preference,
+        }
+    }
+}
+
+impl fmt::Display for EnvironmentNotFound {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        #[derive(Debug, Copy, Clone)]
+        enum SearchType {
+            /// Only virtual environments were searched.
+            Virtual,
+            /// Only system installations were searched.
+            System,
+            /// Both virtual and system installations were searched.
+            VirtualOrSystem,
+        }
+
+        impl fmt::Display for SearchType {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                match self {
+                    Self::Virtual => write!(f, "virtual environment"),
+                    Self::System => write!(f, "system Python installation"),
+                    Self::VirtualOrSystem => {
+                        write!(f, "virtual environment or system Python installation")
+                    }
+                }
+            }
+        }
+
+        let search_type = match self.preference {
+            EnvironmentPreference::Any => SearchType::VirtualOrSystem,
+            EnvironmentPreference::ExplicitSystem => {
+                if self.request.is_explicit_system() {
+                    SearchType::VirtualOrSystem
+                } else {
+                    SearchType::Virtual
+                }
+            }
+            EnvironmentPreference::OnlySystem => SearchType::System,
+            EnvironmentPreference::OnlyVirtual => SearchType::Virtual,
+        };
+
+        if matches!(self.request, PythonRequest::Default | PythonRequest::Any) {
+            write!(f, "No {search_type} found")?;
+        } else {
+            write!(f, "No {search_type} found for {}", self.request)?;
+        }
+
+        match search_type {
+            // This error message assumes that the relevant API accepts the `--system` flag. This
+            // is true of the callsites today, since the project APIs never surface this error.
+            SearchType::Virtual => write!(
+                f,
+                "; run `{}` to create an environment, or pass `{}` to install into a non-virtual environment",
+                "uv venv".green(),
+                "--system".green()
+            )?,
+            SearchType::VirtualOrSystem => {
+                write!(f, "; run `{}` to create an environment", "uv venv".green())?;
+            }
+            SearchType::System => {}
+        }
+
+        Ok(())
+    }
+}
+
+impl fmt::Display for InvalidEnvironment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Invalid environment at `{}`: {}",
+            self.path.user_display(),
+            self.kind
+        )
+    }
+}
+
+impl fmt::Display for InvalidEnvironmentKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::NotDirectory => write!(f, "expected directory but found a file"),
+            Self::MissingExecutable(path) => {
+                write!(f, "missing Python executable at `{}`", path.user_display())
+            }
+            Self::Empty => write!(f, "directory is empty"),
+        }
+    }
+}
+
+impl PythonEnvironment {
+    /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
+    ///
+    /// N.B. This function also works for system Python environments and users depend on this.
+    pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
+        debug!(
+            "Checking for Python environment at: {}",
+            root.as_ref().user_display()
+        );
+        match root.as_ref().try_exists() {
+            Ok(true) => {}
+            Ok(false) => {
+                return Err(Error::MissingEnvironment(EnvironmentNotFound {
+                    preference: EnvironmentPreference::Any,
+                    request: PythonRequest::Directory(root.as_ref().to_owned()),
+                }));
+            }
+            Err(err) => return Err(Error::Io(err)),
+        }
+
+        if root.as_ref().is_file() {
+            return Err(InvalidEnvironment {
+                path: root.as_ref().to_path_buf(),
+                kind: InvalidEnvironmentKind::NotDirectory,
+            }
+            .into());
+        }
+
+        if root
+            .as_ref()
+            .read_dir()
+            .is_ok_and(|mut dir| dir.next().is_none())
+        {
+            return Err(InvalidEnvironment {
+                path: root.as_ref().to_path_buf(),
+                kind: InvalidEnvironmentKind::Empty,
+            }
+            .into());
+        }
+
+        // Note we do not canonicalize the root path or the executable path, this is important
+        // because the path the interpreter is invoked at can determine the value of
+        // `sys.executable`.
+        let executable = virtualenv_python_executable(&root);
+
+        // If we can't find an executable, exit before querying to provide a better error.
+        if !(executable.is_symlink() || executable.is_file()) {
+            return Err(InvalidEnvironment {
+                path: root.as_ref().to_path_buf(),
+                kind: InvalidEnvironmentKind::MissingExecutable(executable.clone()),
+            }
+            .into());
+        }
+
+        let interpreter = Interpreter::query(executable, cache)?;
+
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            root: interpreter.sys_prefix().to_path_buf(),
+            interpreter,
+        })))
+    }
+
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`].
+    pub fn from_interpreter(interpreter: Interpreter) -> Self {
+        Self(Arc::new(PythonEnvironmentShared {
+            root: interpreter.sys_prefix().to_path_buf(),
+            interpreter,
+        }))
+    }
+
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--target` directory.
+    pub fn with_target(self, target: Target) -> std::io::Result<Self> {
+        let inner = Arc::unwrap_or_clone(self.0);
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_target(target)?,
+            ..inner
+        })))
+    }
+
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--prefix` directory.
+    pub fn with_prefix(self, prefix: Prefix) -> std::io::Result<Self> {
+        let inner = Arc::unwrap_or_clone(self.0);
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_prefix(prefix)?,
+            ..inner
+        })))
+    }
+
+    /// Returns the root (i.e., `prefix`) of the Python interpreter.
+    pub fn root(&self) -> &Path {
+        &self.0.root
+    }
+
+    /// Return the [`Interpreter`] for this virtual environment.
+    ///
+    /// See also [`PythonEnvironment::into_interpreter`].
+    pub fn interpreter(&self) -> &Interpreter {
+        &self.0.interpreter
+    }
+
+    /// Return the [`PyVenvConfiguration`] for this environment, as extracted from the
+    /// `pyvenv.cfg` file.
+    pub fn cfg(&self) -> Result<PyVenvConfiguration, Error> {
+        Ok(PyVenvConfiguration::parse(self.0.root.join("pyvenv.cfg"))?)
+    }
+
+    /// Set a key-value pair in the `pyvenv.cfg` file.
+    pub fn set_pyvenv_cfg(&self, key: &str, value: &str) -> Result<(), Error> {
+        let content = fs_err::read_to_string(self.0.root.join("pyvenv.cfg"))?;
+        fs_err::write(
+            self.0.root.join("pyvenv.cfg"),
+            PyVenvConfiguration::set(&content, key, value),
+        )?;
+        Ok(())
+    }
+
+    /// Returns `true` if the environment is "relocatable".
+    pub fn relocatable(&self) -> bool {
+        self.cfg().is_ok_and(|cfg| cfg.is_relocatable())
+    }
+
+    /// Returns the location of the Python executable.
+    pub fn python_executable(&self) -> &Path {
+        self.0.interpreter.sys_executable()
+    }
+
+    /// Returns an iterator over the `site-packages` directories inside the environment.
+    ///
+    /// In most cases, `purelib` and `platlib` will be the same, and so the iterator will contain
+    /// a single element; however, in some distributions, they may be different.
+    ///
+    /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
+    /// still deduplicate the entries, returning a single path.
+    pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
+        self.0.interpreter.site_packages()
+    }
+
+    /// Returns the path to the `bin` directory inside this environment.
+    pub fn scripts(&self) -> &Path {
+        self.0.interpreter.scripts()
+    }
+
+    /// Grab a file lock for the environment to prevent concurrent writes across processes.
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
+        self.0.interpreter.lock().await
+    }
+
+    /// Return the [`Interpreter`] for this environment.
+    ///
+    /// See also [`PythonEnvironment::interpreter`].
+    pub fn into_interpreter(self) -> Interpreter {
+        Arc::unwrap_or_clone(self.0).interpreter
+    }
+
+    /// Returns `true` if the [`PythonEnvironment`] uses the same underlying [`Interpreter`].
+    pub fn uses(&self, interpreter: &Interpreter) -> bool {
+        // TODO(zanieb): Consider using `sysconfig.get_path("stdlib")` instead, which
+        // should be generally robust.
+        if cfg!(windows) {
+            // On Windows, we can't canonicalize an interpreter based on its executable path
+            // because the executables are separate shim files (not links). Instead, we
+            // compare the `sys.base_prefix`.
+            let old_base_prefix = self.interpreter().sys_base_prefix();
+            let selected_base_prefix = interpreter.sys_base_prefix();
+            old_base_prefix == selected_base_prefix
+        } else {
+            // On Unix, we can see if the canonicalized executable is the same file.
+            self.interpreter().sys_executable() == interpreter.sys_executable()
+                || same_file::is_same_file(
+                    self.interpreter().sys_executable(),
+                    interpreter.sys_executable(),
+                )
+                .unwrap_or(false)
+        }
+    }
+
+    /// Check if the `pyvenv.cfg` version is the same as the interpreter's Python version.
+    ///
+    /// Returns [`None`] if the versions are the consistent or there is no `pyvenv.cfg`. If the
+    /// versions do not match, returns a tuple of the `pyvenv.cfg` and interpreter's Python versions
+    /// for display.
+    pub fn get_pyvenv_version_conflict(&self) -> Option<(Version, Version)> {
+        let cfg = self.cfg().ok()?;
+        let cfg_version = cfg.version?.into_version();
+
+        // Determine if we should be checking for patch or pre-release equality
+        let exe_version = if cfg_version.release().get(2).is_none() {
+            self.interpreter().python_minor_version()
+        } else if cfg_version.pre().is_none() {
+            self.interpreter().python_patch_version()
+        } else {
+            self.interpreter().python_version().clone()
+        };
+
+        (cfg_version != exe_version).then_some((cfg_version, exe_version))
+    }
+
+    /// Cache the interpreter metadata for this venv.
+    ///
+    /// Derive the metadata from the base interpreter without running the venv's Python.
+    pub fn cache_virtualenv(&self, system_site_packages: bool, cache: &Cache) -> Result<(), Error> {
+        // Launcher overrides can change `sys.executable` and `sys.prefix`, while
+        // `sys._base_executable` isn't affected. Instead of trying to stitch together this edge
+        // case, query the actual metadata on the next run.
+        if env::var_os(EnvVars::PYTHONEXECUTABLE).is_some()
+            || env::var_os(EnvVars::PYVENV_LAUNCHER).is_some()
+        {
+            return Ok(());
+        }
+
+        // TODO: Handle system-site-packages correctly.
+        // We should infer the site packages path from the base interpreter,
+        // but for that, we first need to fix cache invalidation when it changes.
+        // https://github.com/astral-sh/uv/issues/18510
+        if system_site_packages {
+            return Ok(());
+        }
+
+        // An upgradeable venv can use a minor-version link instead of the selected base
+        // interpreter. Python may report different base paths when started through that link.
+        if let Some(home) = self.cfg()?.home
+            && self
+                .interpreter()
+                .to_base_python()?
+                .parent()
+                .is_some_and(|base| base.simplified() != home.simplified())
+        {
+            Interpreter::clear_cache(self.interpreter().sys_executable(), cache)?;
+            return Ok(());
+        }
+
+        let info = InterpreterInfo::from_virtualenv(self.interpreter())?;
+        info.cache(self.interpreter().sys_executable(), cache)?;
+        Ok(())
+    }
+}

@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 
 use uv_fs::Simplified;
 use uv_lock_operations::LockTarget;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::{VirtualProject, WorkspaceCache};

@@ -17,6 +17,7 @@ test = false
 workspace = true
 
 [dependencies]
+uv-python-types = { workspace = true, features = ["clap"] }
 uv-cache-info = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true, features = ["clap"] }
@@ -32,7 +33,6 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true, features = ["clap"] }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-torch = { workspace = true, features = ["clap"] }
@@ -63,7 +63,7 @@ schemars = [
   "uv-install-wheel/schemars",
   "uv-normalize/schemars",
   "uv-preview/schemars",
-  "uv-python/schemars",
+  "uv-python-types/schemars",
   "uv-torch/schemars",
   "uv-workspace/schemars",
 ]

@@ -20,6 +20,6 @@ pub(crate) enum ChangeEventKind {
 
 #[derive(Debug)]
 pub(crate) struct ChangeEvent {
-    key: uv_python::PythonInstallationKey,
+    key: uv_python_types::PythonInstallationKey,
     kind: ChangeEventKind,
 }

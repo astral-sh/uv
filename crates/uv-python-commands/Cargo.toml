@@ -17,6 +17,9 @@ test = false
 workspace = true
 
 [dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
+uv-python-managed = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-command-support = { workspace = true }
@@ -28,8 +31,7 @@ uv-pep440 = { workspace = true }
 uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
-uv-python = { workspace = true }
-uv-python-context = { workspace = true }
+uv-python-discovery = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true }
 uv-shell = { workspace = true }

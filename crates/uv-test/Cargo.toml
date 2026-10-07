@@ -22,6 +22,8 @@ git = []
 tracing-durations-export = []
 
 [dependencies]
+uv-python-types = { workspace = true }
+uv-python-managed = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
@@ -31,7 +33,7 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-preview = { workspace = true, features = ["testing"] }
-uv-python = { workspace = true }
+uv-python-discovery = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
 

@@ -25,10 +25,10 @@ use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_project_edit::{DependencyTarget, PyProjectTomlMut};
-use uv_python::{
-    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
-};
-use uv_python_context::{ProjectPythonRequest, ScriptInterpreter};
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::ProjectPythonRequest;
+use uv_python_discovery::ScriptInterpreter;
+use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{

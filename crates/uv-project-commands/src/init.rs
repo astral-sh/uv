@@ -23,13 +23,17 @@ use uv_install_wheel::reserved_script_name;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_project_edit::{DependencyTarget, PyProjectTomlMut};
-use uv_python::{
-    ConfigDiscovery, EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
-};
-use uv_python_context::{
-    PythonDownloadReporter, find_requires_python, init_script_python_requirement,
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::PythonInstallation;
+use uv_python_discovery::PythonVersionFile;
+use uv_python_discovery::VersionFileDiscoveryOptions;
+use uv_python_discovery::find_requires_python;
+use uv_python_discovery::init_script_python_requirement;
+use uv_python_interpreter::PythonEnvironment;
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
+    PythonVariant, VersionRequest,
 };
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;

@@ -23,7 +23,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
@@ -829,7 +829,7 @@ mod tests {
     #[cfg(unix)]
     use uv_distribution_types::Name;
     #[cfg(unix)]
-    use uv_python::Interpreter;
+    use uv_python_interpreter::Interpreter;
 
     #[cfg(unix)]
     use super::SitePackages;

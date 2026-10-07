@@ -40,13 +40,13 @@ use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, Pa
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
 use uv_project_edit::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
-use uv_python::{
-    ConfigDiscovery, PythonArchitecture, PythonDownloads, PythonEnvironment, PythonPreference,
-    PythonRequest,
-};
-use uv_python_context::{
-    ProjectPythonRequest, PythonDownloadReporter, ScriptInterpreter, init_script_python_requirement,
-};
+use uv_python_discovery::ConfigDiscovery;
+use uv_python_discovery::ProjectPythonRequest;
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::ScriptInterpreter;
+use uv_python_discovery::init_script_python_requirement;
+use uv_python_interpreter::PythonEnvironment;
+use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolve_operations::Error as ResolveError;

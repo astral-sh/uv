@@ -12,7 +12,7 @@ use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_preview::Preview;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::NamedRequirementsResolver;
 use uv_resolve_operations::reporters::ResolverReporter;
 use uv_resolver::FlatIndex;

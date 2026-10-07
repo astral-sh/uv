@@ -80,9 +80,11 @@ uv-project-edit = { version = "0.0.90", path = "crates/uv-project-edit" }
 uv-publish = { version = "0.0.90", path = "crates/uv-publish" }
 uv-publish-commands = { version = "0.0.90", path = "crates/uv-publish-commands" }
 uv-pypi-types = { version = "0.0.90", path = "crates/uv-pypi-types" }
-uv-python = { version = "0.0.90", path = "crates/uv-python" }
 uv-python-commands = { version = "0.0.90", path = "crates/uv-python-commands" }
-uv-python-context = { version = "0.0.90", path = "crates/uv-python-context" }
+uv-python-discovery = { version = "0.0.90", path = "crates/uv-python-discovery" }
+uv-python-interpreter = { version = "0.0.90", path = "crates/uv-python-interpreter" }
+uv-python-managed = { version = "0.0.90", path = "crates/uv-python-managed" }
+uv-python-types = { version = "0.0.90", path = "crates/uv-python-types" }
 uv-redacted = { version = "0.0.90", path = "crates/uv-redacted" }
 uv-requirements = { version = "0.0.90", path = "crates/uv-requirements" }
 uv-requirements-txt = { version = "0.0.90", path = "crates/uv-requirements-txt" }

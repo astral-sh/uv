@@ -4,7 +4,7 @@ use anyhow::Context;
 use owo_colors::OwoColorize;
 
 use uv_fs::Simplified;
-use uv_python::managed::{ManagedPythonInstallations, python_executable_dir};
+use uv_python_managed::{ManagedPythonInstallations, python_executable_dir};
 
 use uv_command_support::Printer;
 

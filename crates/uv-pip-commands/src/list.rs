@@ -23,9 +23,9 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_python::PythonRequest;
-use uv_python::{
-    EnvironmentPreference, Prefix, PythonArchitecture, PythonPreference, Target, find_environment,
+use uv_python_discovery::find_environment;
+use uv_python_types::{
+    EnvironmentPreference, Prefix, PythonArchitecture, PythonPreference, PythonRequest, Target,
 };
 use uv_resolver::{ExcludeNewer, Prerelease};
 

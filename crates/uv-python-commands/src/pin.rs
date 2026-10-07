@@ -4,16 +4,18 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
-use uv_python::downloads::ManagedPythonDownloadList;
+use uv_python_managed::downloads::ManagedPythonDownloadList;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
-use uv_python::{
-    EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonArchitecture, PythonDownloads,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions,
+use uv_python_discovery::PYTHON_VERSION_FILENAME;
+use uv_python_discovery::PythonInstallation;
+use uv_python_discovery::PythonVersionFile;
+use uv_python_discovery::VersionFileDiscoveryOptions;
+use uv_python_types::{
+    EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user_once, warn_user_once_with_chain};
@@ -21,7 +23,8 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
-use uv_python_context::{PythonDownloadReporter, find_requires_python};
+use uv_python_discovery::PythonDownloadReporter;
+use uv_python_discovery::find_requires_python;
 
 /// Pin to a specific Python version.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -154,7 +157,7 @@ pub async fn pin(
     {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
-        Err(uv_python::Error::MissingPython(err, ..)) if !resolved => {
+        Err(uv_python_discovery::Error::MissingPython(err, ..)) if !resolved => {
             // N.B. We omit the hint and just show the inner error message
             warn_user_once!("{err}");
             None

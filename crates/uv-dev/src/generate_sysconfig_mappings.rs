@@ -44,7 +44,7 @@ pub(crate) async fn main(args: &Args) -> Result<()> {
     let filename = "generated_mappings.rs";
     let reference_path = PathBuf::from(ROOT_DIR)
         .join("crates")
-        .join("uv-python")
+        .join("uv-python-managed")
         .join("src")
         .join("sysconfig")
         .join(filename);

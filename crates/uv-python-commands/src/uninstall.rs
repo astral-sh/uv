@@ -12,12 +12,13 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
 
 use uv_fs::Simplified;
-use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::{
+use uv_python_managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
     python_executable_dir,
 };
-use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
+use uv_python_types::{
+    PythonDownloadRequest, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
+};
 
 use crate::install::format_executables;
 use crate::{ChangeEvent, ChangeEventKind};
@@ -112,7 +113,7 @@ async fn do_uninstall(
             // Clear any remnants in the registry
             #[cfg(windows)]
             {
-                uv_python::managed::windows_registry::remove_orphan_registry_entries(
+                uv_python_managed::windows_registry::remove_orphan_registry_entries(
                     &installed_installations,
                 );
             }
@@ -143,12 +144,12 @@ async fn do_uninstall(
     let mut errors = vec![];
     #[cfg(windows)]
     {
-        uv_python::managed::windows_registry::remove_registry_entry(
+        uv_python_managed::windows_registry::remove_registry_entry(
             &matching_installations,
             all,
             &mut errors,
         );
-        uv_python::managed::windows_registry::remove_orphan_registry_entries(
+        uv_python_managed::windows_registry::remove_orphan_registry_entries(
             &installed_installations,
         );
     }

@@ -37,7 +37,7 @@ use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
-use uv_python::{
+use uv_python_types::{
     Prefix, PythonArchitecture, PythonDownloads, PythonPreference, PythonVersion, Target,
 };
 use uv_redacted::DisplaySafeUrl;
