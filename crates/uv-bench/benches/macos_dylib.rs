@@ -1,13 +1,6 @@
-//! Benchmark dylib patching with a Python Build Standalone `libpython`.
+//! Benchmark managed Python dylib patching on macOS.
 //!
-//! Run on macOS with Xcode or its command-line tools installed:
 //! `cargo bench -p uv-bench --bench macos_dylib --profile profiling`
-//!
-//! Setup downloads CPython 3.13.1 for the host architecture using uv's embedded catalog
-//! and checksum verification. Each iteration places pristine dylib bytes in a managed
-//! Python layout and times the production patch operation, including file I/O and
-//! child-process startup. Downloading, extraction, file preparation, verification, and
-//! cleanup are excluded. Compare runs on the same machine and filesystem.
 
 // Don't optimize the alloc crate away due to it being otherwise unused.
 // https://github.com/rust-lang/rust/issues/64402
