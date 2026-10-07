@@ -19,7 +19,7 @@ on:
       debug-level:
         description: Cargo debug information level for the symbols build
         type: choice
-        options: [full, line-tables-only]
+        options: [full, limited, line-tables-only]
         default: full
       benchmark:
         description: Compare repeated offline resolutions with the verified uv binaries
@@ -102,7 +102,7 @@ jobs:
           cargo fmt --manifest-path scripts/debug-symbols/Cargo.toml --check
           cargo clippy --manifest-path scripts/debug-symbols/Cargo.toml --all-targets --locked -- -D warnings
       - name: Run experiment
-        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run.py --debug-level ${{ inputs.debug-level == 'line-tables-only' && 'line-tables-only' || 'full' }}
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run.py --debug-level ${{ inputs.debug-level == 'limited' && 'limited' || inputs.debug-level == 'line-tables-only' && 'line-tables-only' || 'full' }}
       - name: Install cargo-auditable
         if: env.RUN_UV == 'true' && inputs.verify-run == ''
         run: cargo install cargo-auditable --locked --version 0.7.6
@@ -123,7 +123,7 @@ jobs:
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Run uv experiment
         if: env.RUN_UV == 'true' && inputs.verify-run == ''
-        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run_uv.py --debug-level ${{ inputs.debug-level == 'line-tables-only' && 'line-tables-only' || 'full' }} ${{ inputs.pgo && '--pgo' || '' }} ${{ inputs.benchmark && '--benchmark' || '' }}
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run_uv.py --debug-level ${{ inputs.debug-level == 'limited' && 'limited' || inputs.debug-level == 'line-tables-only' && 'line-tables-only' || 'full' }} ${{ inputs.pgo && '--pgo' || '' }} ${{ inputs.benchmark && '--benchmark' || '' }}
       - name: Download retained uv outputs
         if: env.RUN_UV == 'true' && inputs.verify-run != ''
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

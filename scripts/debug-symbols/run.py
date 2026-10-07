@@ -270,7 +270,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--debug-level",
-        choices=("full", "line-tables-only"),
+        choices=("full", "limited", "line-tables-only"),
         default="full",
         help="Cargo debug information level for the symbols build",
     )

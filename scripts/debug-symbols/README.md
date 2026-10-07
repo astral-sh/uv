@@ -24,14 +24,15 @@ The experiment builds two Maturin wheels from identical source:
 | Baseline | None                              | Cargo and Maturin strip symbols  | Level 3, fat LTO, abort on panic |
 | Symbols  | Full Rust and C debug information | Deferred until symbols are saved | Level 3, fat LTO, abort on panic |
 
-Both scripts accept `--debug-level line-tables-only` to reduce the symbols build's debug
-information; the default is `full`. The workflow exposes the same `debug-level` choice. Line tables
-retain Rust file and line information for backtraces but omit variable and parameter information.
-Cargo exposes debug information to build scripts through the boolean `DEBUG` environment variable,
-so the pinned `cc` crate still uses full C debug information by default (`-g` for GCC/Clang and
-`/Z7` for MSVC). Native build logs and Rust/C source lookups remain part of the experiment at either
-level. Reports record the selected Rust debug level; measurements below use `full` unless stated
-otherwise.
+Both scripts accept `--debug-level limited` or `--debug-level line-tables-only` to reduce the
+symbols build's debug information; the default is `full`. The workflow exposes the same
+`debug-level` choices. Line tables retain Rust file and line information for backtraces but omit
+variable and parameter information. Limited debug information adds module-level metadata but still
+omits type and variable information. Cargo exposes debug information to build scripts through the
+boolean `DEBUG` environment variable, so the pinned `cc` crate still uses full C debug information
+by default (`-g` for GCC/Clang and `/Z7` for MSVC). Native build logs and Rust/C source lookups
+remain part of the experiment at every level. Reports record the selected Rust debug level;
+measurements below use `full` unless stated otherwise.
 
 Linux embeds debug information during compilation, extracts a `.debug` file with `llvm-objcopy`,
 strips the executable, and adds a GNU debug link. macOS uses Cargo's packed `.dSYM` output, strips
