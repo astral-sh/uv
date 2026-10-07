@@ -1,13 +1,14 @@
-name: Compare release codegen units
+name: Repeat native runtime measurements
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: cgu-comparison-${{ github.ref }}
+  group: cgu-runtime-repeat-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -22,7 +23,7 @@ jobs:
   compare:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -30,9 +31,6 @@ jobs:
           - target: aarch64-apple-darwin
             runner: namespace-profile-macos-15
             python-architecture: arm64
-          - target: x86_64-pc-windows-msvc
-            runner: namespace-profile-windows-2022-x86-64-16x32
-            python-architecture: x64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,36 +40,23 @@ jobs:
           cache: ""
           python-version: "3.11"
           architecture: ${{ matrix.python-architecture }}
-      - name: Install Rust and measurement tools
-        shell: bash
-        run: |
-          rustup toolchain install 1.99.0 --profile minimal --component llvm-tools-preview
-          python -m pip install psutil==7.0.0
-          scripts/install-cargo-extensions.sh
-      - name: Install NASM
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $version = '3.02'
-          $sha256 = '0DDB40310861EB29F4D649FEB9466779982A2D251C0DB2B9CF0D21CF591171F3'
-          $installer = Join-Path $env:RUNNER_TEMP "nasm-${version}-installer-x64.exe"
-          Invoke-WebRequest "https://www.nasm.us/pub/nasm/releasebuilds/$version/win64/nasm-${version}-installer-x64.exe" -OutFile $installer
-          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $sha256) {
-            throw 'NASM installer checksum mismatch'
-          }
-          $installation = Start-Process $installer -ArgumentList '/S' -Wait -PassThru
-          if ($installation.ExitCode -ne 0) {
-            throw "NASM installation failed: $($installation.ExitCode)"
-          }
-          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
-      - name: Compare builds and runtime
-        run: python -u scripts/compare_codegen_units.py
+      - name: Install measurement tools
+        run: python -m pip install psutil==7.0.0
+      - name: Download measured binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cgu-comparison-${{ matrix.target }}
+          run-id: 37685797363
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/cgu-comparison
+      - name: Repeat runtime measurements
+        run: python -u scripts/repeat_codegen_runtime.py
       - name: Upload measurements
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cgu-comparison-${{ matrix.target }}
+          name: cgu-runtime-repeat-${{ matrix.target }}
           path: |
             ${{ runner.temp }}/cgu-comparison/evidence
-            ${{ runner.temp }}/cgu-comparison/binaries
+            ${{ runner.temp }}/cgu-comparison/runtime-repeat/*.json*
           if-no-files-found: warn
