@@ -12,7 +12,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{BuildOptions, Concurrency, DryRun, Reinstall};
+use uv_configuration::{BuildOptions, Concurrency, DryRun, Modifications, Reinstall};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
@@ -33,7 +33,6 @@ use uv_python::PythonEnvironment;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
-use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::bytecode::{
     compile_bytecode, compile_bytecode_files,
 };

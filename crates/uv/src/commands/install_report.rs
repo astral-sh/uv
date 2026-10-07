@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use serde::Serialize;
 
-use uv_cli::PipInstallFormat;
 use uv_configuration::DryRun;
+use uv_configuration::PipInstallFormat;
 
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::report::{PackageChangesReport, SchemaReport};

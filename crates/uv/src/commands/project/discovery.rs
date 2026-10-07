@@ -7,7 +7,7 @@ use uv_preview::Preview;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::project::lockfile::FrozenWorkspace;
-use crate::settings::FrozenSource;
+use uv_settings::FrozenSource;
 
 /// A project discovered from its manifests or a frozen workspace lockfile.
 #[derive(Debug)]

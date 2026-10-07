@@ -23,7 +23,7 @@ use crate::commands::ExitStatus;
 use crate::commands::operations::resolution::latest::LatestClient;
 use crate::commands::operations::resolution::reporters::LatestVersionReporter;
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use uv_settings::ResolverInstallerSettings;
 
 /// List installed tools.
 #[expect(clippy::fn_params_excessive_bools)]

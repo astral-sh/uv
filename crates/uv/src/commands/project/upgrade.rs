@@ -41,7 +41,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
-use crate::settings::ResolverSettings;
+use uv_settings::ResolverSettings;
 
 /// A dependency requirement selected for upgrading.
 struct UpgradableRequirement {

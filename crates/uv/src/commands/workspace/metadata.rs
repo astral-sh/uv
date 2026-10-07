@@ -16,7 +16,6 @@ use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
-use crate::commands::operations::Modifications;
 use crate::commands::operations::resolution::loggers::DefaultResolveLogger;
 use crate::commands::project::discovery::DiscoveredProject;
 use crate::commands::project::install_target::{InstallTarget, PackageSelection};
@@ -30,7 +29,8 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::{Printer, Stdout};
-use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
+use uv_configuration::Modifications;
+use uv_settings::{FrozenSource, LockCheck, ResolverSettings};
 
 use super::module_owners::collect_module_owners;
 

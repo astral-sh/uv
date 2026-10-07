@@ -10,10 +10,10 @@ use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlError, VersionControlSystem,
+    AuthorFrom, DependencyGroupsWithDefaults, InitKind, InitProjectKind, ProjectBuildBackend,
+    VersionControlError, VersionControlSystem,
 };
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
@@ -409,7 +409,8 @@ async fn init_project(
     )
     .await?;
 
-    project_kind.init(
+    init_project_kind(
+        project_kind,
         name,
         path,
         &requires_python,
@@ -721,99 +722,71 @@ async fn determine_requires_python(
     }
 }
 
-/// The kind of entity to initialize (either a PEP 723 script or a Python project).
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum InitKind {
-    /// Initialize a Python project.
-    Project(InitProjectKind),
-    /// Initialize a PEP 723 script.
-    Script,
-}
+/// Initialize this project kind at the target path.
+fn init_project_kind(
+    project_kind: InitProjectKind,
+    name: &PackageName,
+    path: &Path,
+    requires_python: &RequiresPython,
+    description: Option<&str>,
+    no_description: bool,
+    bare: bool,
+    vcs: Option<VersionControlSystem>,
+    build_backend: Option<ProjectBuildBackend>,
+    author_from: Option<AuthorFrom>,
+    no_readme: bool,
+) -> Result<()> {
+    fs_err::create_dir_all(path)?;
 
-/// The kind of Python project to initialize (either an application or a library).
-#[derive(Debug, Copy, Clone, Default)]
-pub(crate) enum InitProjectKind {
-    /// A python package with a `main` function in a `__init__.py` and a script entrypoint pointing
-    /// to that.
-    #[default]
-    ApplicationWithLibrary,
-    /// A flat application with a `main.py`.
-    Application,
-    /// A python package, no entrypoint.
-    Library,
-    /// Initialize only a `pyproject.toml`
-    Bare,
-    /// Initialize only a `pyproject.toml` with `[build-system]` table (but without associated
-    /// source files).
-    BareWithBuildSystem,
-}
+    // Initialize the version control system first so that Git configuration can properly
+    // read conditional includes that depend on the repository path.
+    init_vcs(path, vcs)?;
 
-impl InitProjectKind {
-    /// Initialize this project kind at the target path.
-    fn init(
-        self,
-        name: &PackageName,
-        path: &Path,
-        requires_python: &RequiresPython,
-        description: Option<&str>,
-        no_description: bool,
-        bare: bool,
-        vcs: Option<VersionControlSystem>,
-        build_backend: Option<ProjectBuildBackend>,
-        author_from: Option<AuthorFrom>,
-        no_readme: bool,
-    ) -> Result<()> {
-        fs_err::create_dir_all(path)?;
+    // Do not fill in `authors` for non-packaged applications unless explicitly requested.
+    let author_from = author_from.unwrap_or_else(|| match project_kind {
+        InitProjectKind::ApplicationWithLibrary
+        | InitProjectKind::Library
+        | InitProjectKind::BareWithBuildSystem => AuthorFrom::default(),
+        InitProjectKind::Application | InitProjectKind::Bare => AuthorFrom::None,
+    });
+    let author = get_author_info(path, author_from);
 
-        // Initialize the version control system first so that Git configuration can properly
-        // read conditional includes that depend on the repository path.
-        init_vcs(path, vcs)?;
+    // Create the `pyproject.toml`
+    let mut pyproject = pyproject_project(
+        name,
+        requires_python,
+        author.as_ref(),
+        description,
+        no_description,
+        no_readme || bare,
+    );
 
-        // Do not fill in `authors` for non-packaged applications unless explicitly requested.
-        let author_from = author_from.unwrap_or_else(|| match self {
-            Self::ApplicationWithLibrary | Self::Library | Self::BareWithBuildSystem => {
-                AuthorFrom::default()
-            }
-            Self::Application | Self::Bare => AuthorFrom::None,
-        });
-        let author = get_author_info(path, author_from);
+    match project_kind {
+        // Create only the most barebones `pyproject.toml`, no build system
+        InitProjectKind::Bare => {}
+        // Create only a barebones `pyproject.toml`, but with a build system table
+        InitProjectKind::BareWithBuildSystem => {
+            // Add a build system
+            let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
+            pyproject.push('\n');
+            pyproject.push_str(&pyproject_build_system(name, build_backend));
+        }
+        InitProjectKind::ApplicationWithLibrary => {
+            // Since it'll be packaged, we can add a `[project.scripts]` entry
+            pyproject.push('\n');
+            pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
 
-        // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(
-            name,
-            requires_python,
-            author.as_ref(),
-            description,
-            no_description,
-            no_readme || bare,
-        );
+            // Add a build system
+            let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
+            pyproject.push('\n');
+            pyproject.push_str(&pyproject_build_system(name, build_backend));
+            pyproject_build_backend_prerequisites(name, path, build_backend)?;
 
-        match self {
-            // Create only the most barebones `pyproject.toml`, no build system
-            Self::Bare => {}
-            // Create only a barebones `pyproject.toml`, but with a build system table
-            Self::BareWithBuildSystem => {
-                // Add a build system
-                let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
-                pyproject.push('\n');
-                pyproject.push_str(&pyproject_build_system(name, build_backend));
-            }
-            Self::ApplicationWithLibrary => {
-                // Since it'll be packaged, we can add a `[project.scripts]` entry
-                pyproject.push('\n');
-                pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
-
-                // Add a build system
-                let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
-                pyproject.push('\n');
-                pyproject.push_str(&pyproject_build_system(name, build_backend));
-                pyproject_build_backend_prerequisites(name, path, build_backend)?;
-
-                // Generate `src` files with app-style `main()` in `__init__.py`
-                generate_package_scripts(name, path, build_backend, false)?;
-            }
-            Self::Application => {
-                let main_contents = indoc::formatdoc! {r#"
+            // Generate `src` files with app-style `main()` in `__init__.py`
+            generate_package_scripts(name, path, build_backend, false)?;
+        }
+        InitProjectKind::Application => {
+            let main_contents = indoc::formatdoc! {r#"
                     def main():
                         print("Hello from {name}!")
 
@@ -822,27 +795,26 @@ impl InitProjectKind {
                         main()
                 "#};
 
-                // Create `main.py` if it doesn't exist
-                // (This isn't intended to be a particularly special or magical filename, just nice)
-                // TODO(zanieb): Only create `main.py` if there are no other Python files?
-                let main_py = path.join("main.py");
-                if !main_py.try_exists()? && !bare {
-                    fs_err::write(path.join("main.py"), main_contents)?;
-                }
-            }
-            Self::Library => {
-                let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
-                pyproject.push('\n');
-                pyproject.push_str(&pyproject_build_system(name, build_backend));
-                pyproject_build_backend_prerequisites(name, path, build_backend)?;
-
-                // Generate `src` files
-                generate_package_scripts(name, path, build_backend, true)?;
+            // Create `main.py` if it doesn't exist
+            // (This isn't intended to be a particularly special or magical filename, just nice)
+            // TODO(zanieb): Only create `main.py` if there are no other Python files?
+            let main_py = path.join("main.py");
+            if !main_py.try_exists()? && !bare {
+                fs_err::write(path.join("main.py"), main_contents)?;
             }
         }
-        fs_err::write(path.join("pyproject.toml"), pyproject)?;
-        Ok(())
+        InitProjectKind::Library => {
+            let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
+            pyproject.push('\n');
+            pyproject.push_str(&pyproject_build_system(name, build_backend));
+            pyproject_build_backend_prerequisites(name, path, build_backend)?;
+
+            // Generate `src` files
+            generate_package_scripts(name, path, build_backend, true)?;
+        }
     }
+    fs_err::write(path.join("pyproject.toml"), pyproject)?;
+    Ok(())
 }
 
 #[derive(Debug)]

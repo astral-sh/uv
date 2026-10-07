@@ -7,8 +7,8 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_cli::PipInstallFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::PipInstallFormat;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
@@ -45,7 +45,6 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::install_report::write_install_report;
 use crate::commands::operations;
-use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::Changelog;
 use crate::commands::operations::installation::loggers::DefaultInstallLogger;
 use crate::commands::operations::report_interpreter;
@@ -56,6 +55,7 @@ use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
+use uv_configuration::Modifications;
 
 /// Install a set of locked requirements into the current Python environment.
 #[expect(clippy::fn_params_excessive_bools)]

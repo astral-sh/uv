@@ -8,8 +8,8 @@ use tracing::debug;
 
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
-use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
+use uv_configuration::ColorChoice;
 use uv_fs::Simplified;
 use uv_pep440::Version;
 use uv_scripts::{ScriptDiscoveryError, find_scripts};
@@ -20,7 +20,7 @@ use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck};
+use uv_settings::{FrozenSource, LockCheck};
 
 /// Run a type check powered by ty.
 #[expect(clippy::fn_params_excessive_bools)]

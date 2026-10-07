@@ -1,5 +1,4 @@
 use std::ffi::OsString;
-use std::fmt::Display;
 use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -19,7 +18,7 @@ use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyMode, DependencyModifiers, Excludes, GitLfsSetting,
-    Overrides, TargetTriple,
+    Overrides, TargetTriple, ToolRunCommand,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
@@ -63,26 +62,8 @@ use crate::commands::tool::error::ToolError;
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{UvError, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
-use crate::settings::ResolverSettings;
-
-/// The user-facing command used to invoke a tool run.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum ToolRunCommand {
-    /// via the `uvx` alias
-    Uvx,
-    /// via `uv tool run`
-    ToolRun,
-}
-
-impl Display for ToolRunCommand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Uvx => write!(f, "uvx"),
-            Self::ToolRun => write!(f, "uv tool run"),
-        }
-    }
-}
+use uv_settings::ResolverInstallerSettings;
+use uv_settings::ResolverSettings;
 
 /// Context for invocation mistakes that are specific to `uv tool run` and `uvx`.
 #[derive(Debug)]

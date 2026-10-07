@@ -5,8 +5,8 @@ use owo_colors::OwoColorize;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use uv_cli::VersionFormat;
 use uv_cli::version::uv_self_version;
+use uv_configuration::VersionFormat;
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(

@@ -64,7 +64,6 @@ struct GistResponse {
 struct GistFile {
     raw_url: String,
 }
-use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::loggers::{
     DefaultInstallLogger, SummaryInstallLogger,
 };
@@ -84,7 +83,8 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
 use crate::printer::Printer;
-use crate::settings::{
+use uv_configuration::Modifications;
+use uv_settings::{
     FrozenSource, LockCheck, LockedSource, ResolverInstallerSettings, ResolverSettings,
 };
 

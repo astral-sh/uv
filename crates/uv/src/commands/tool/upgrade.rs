@@ -28,7 +28,6 @@ use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::operations::Modifications;
 use crate::commands::operations::installation::loggers::{
     DefaultInstallLogger, UpgradeInstallLogger,
 };
@@ -42,7 +41,8 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use uv_configuration::Modifications;
+use uv_settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
@@ -451,7 +451,7 @@ async fn upgrade_tool(
             // Otherwise, upgrade the existing environment.
             let ResolverInstallerSettings {
                 resolver:
-                    crate::settings::ResolverSettings {
+                    uv_settings::ResolverSettings {
                         config_setting,
                         config_settings_package,
                         extra_build_dependencies,

@@ -16,7 +16,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, PythonUpgrade, PythonUpgradeSource};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
@@ -159,23 +159,6 @@ enum InstallErrorKind {
     Registry,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum PythonUpgradeSource {
-    /// The user invoked `uv python install --upgrade`
-    Install,
-    /// The user invoked `uv python upgrade`
-    Upgrade,
-}
-
-impl std::fmt::Display for PythonUpgradeSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Install => write!(f, "uv python install --upgrade"),
-            Self::Upgrade => write!(f, "uv python upgrade"),
-        }
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 #[error("`{command}` only accepts minor versions, got: {request}")]
 pub(crate) struct InvalidUpgradeRequestError {
@@ -194,14 +177,6 @@ impl uv_errors::Hinted for InvalidUpgradeRequestError {
             Hints::none()
         }
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum PythonUpgrade {
-    /// Python upgrades are enabled.
-    Enabled(PythonUpgradeSource),
-    /// Python upgrades are disabled.
-    Disabled,
 }
 
 /// Download and install Python versions.
