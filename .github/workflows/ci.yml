@@ -49,10 +49,10 @@ jobs:
       issues: read
       pull-requests: read
 
-  review-maintainer:
+  review-code-quality:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.run-checks == 'true' }}
-    uses: $/.github/workflows/pull-request-maintainer-review.yml
+    uses: $/.github/workflows/pull-request-code-quality-review.yml
     secrets: inherit
     permissions:
       contents: read

@@ -157,7 +157,7 @@
       "environment": "automations",
       "caller_ref": "refs/pull/*/merge",
       "caller_workflow": "ci.yml",
-      "reusable_workflow": "pull-request-maintainer-review.yml",
+      "reusable_workflow": "pull-request-code-quality-review.yml",
       "on": ["pull_request"],
       "permissions": { "pull_requests": "write" },
       "target": "uv-dev"
