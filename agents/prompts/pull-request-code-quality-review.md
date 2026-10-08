@@ -34,12 +34,25 @@ defaults with the repository's instructions and concrete constraints:
    actionable context. Follow validation through shortcuts as well as normal paths. For concurrency
    changes, reason about resource lifetimes, interprocess behavior, and consistency across related
    data; passing race tests do not establish those guarantees.
-6. **Require meaningful evidence.** Tests should exercise the changed behavior and reach the
+6. **Keep tests direct and focused.** Read neighboring tests and check existing coverage before
+   recommending more cases. Follow the repository's test style throughout setup, commands, and
+   assertions, and use the relevant existing test module. Integration scenarios should use explicit
+   command invocations and snapshots, not loops, case tables, or `insta::allow_duplicates!`. Do not
+   multiply cases across `-q`, `-qq`, flag aliases, boolean spellings, or unrelated options unless
+   each case exercises behavior specific to the change. Shared parsing and rendering should be
+   covered in their owning layer. Prefer readable repetition over local helpers that hide the
+   fixture inputs or command arguments; reuse existing `uv-test` helpers for common infrastructure.
+   Prefer `uv_snapshot!` and context filters over manually parsing, sorting, or reconstructing
+   command output. Check that filters do not hide the behavior being tested. Keep fixtures minimal
+   and representative, and explain non-obvious regression scenarios in test doc comments. Identify
+   the redundant coverage, hidden inputs, or departure from a concrete nearby pattern when reporting
+   a finding; do not request new helpers merely to remove duplication.
+7. **Require meaningful evidence.** Tests should exercise the changed behavior and reach the
    intended failure mode. Establish why a regression test would fail without the fix. Prefer focused
    fixtures and existing infrastructure over tests that mirror the implementation. Performance
    claims need representative workloads, comparable revisions and build settings, uncertainty, and
    adverse results. Verify that measurements detect the cost being discussed.
-7. **Keep explanations precise.** Comments should explain current rationale, invariants, and unusual
+8. **Keep explanations precise.** Comments should explain current rationale, invariants, and unusual
    constraints. Documentation and diagnostics should describe the user's task and actual behavior.
    Flag unsupported causal claims, conversation history, and distracting implementation detail when
    there is a concrete improvement to make.
