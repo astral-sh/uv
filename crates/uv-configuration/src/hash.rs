@@ -17,17 +17,11 @@ impl HashCheckingMode {
         if require_hashes == Some(true) {
             // Given `--require-hashes`, always require hashes, regardless of any other flags.
             Some(Self::Require)
-        } else if verify_hashes == Some(true) {
-            // Given `--verify-hashes`, always verify hashes, regardless of any other flags.
-            Some(Self::Verify)
         } else if verify_hashes == Some(false) {
             // Given `--no-verify-hashes` (without `--require-hashes`), do not verify hashes.
             None
-        } else if require_hashes == Some(false) {
-            // Given `--no-require-hashes` (without `--verify-hashes`), do not require hashes.
-            None
         } else {
-            // By default, verify hashes.
+            // By default, verify hashes, even if `--no-require-hashes` was provided.
             Some(Self::Verify)
         }
     }

@@ -3881,6 +3881,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     uv_snapshot!(context.filters(), context.build()
         .arg("--wheel")
         .arg("--no-cache")
+        .arg("--no-require-hashes")
         .args(["--build-constraint", "constraints.txt"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
