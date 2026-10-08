@@ -15,8 +15,9 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
-use uv_resolver_types::PackageRole;
+use uv_resolver_types::{PackageRole, SelectionNames};
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -33,6 +34,7 @@ use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResp
 pub(crate) struct ResolutionGraphBuilder<'a> {
     graph: Graph<ResolutionGraphNode, UniversalMarker, Directed>,
     root_index: NodeIndex,
+    root_markers: FxHashMap<NodeIndex, MarkerTree>,
     inverse: FxHashMap<ResolutionNode, NodeIndex>,
     fork_markers: Vec<UniversalMarker>,
     diagnostics: Vec<ResolutionDiagnostic>,
@@ -59,6 +61,7 @@ impl<'a> ResolutionGraphBuilder<'a> {
         Self {
             graph,
             root_index,
+            root_markers: FxHashMap::default(),
             inverse: FxHashMap::default(),
             fork_markers: Vec::new(),
             diagnostics: Vec::new(),
@@ -134,6 +137,14 @@ impl<'a> ResolutionGraphBuilder<'a> {
                 .from
                 .map_or(self.root_index, |from| node_indices[from.0]);
             let to_index = node_indices[edge.to.0];
+
+            if let Some(selection_marker) = edge.selection_marker {
+                let marker = selection_marker.and(marker.pep508());
+                self.root_markers
+                    .entry(to_index)
+                    .and_modify(|existing: &mut MarkerTree| *existing = existing.or(marker))
+                    .or_insert(marker);
+            }
             // Local indices can denote different packages in different forks. Deduplicate only
             // after translating both endpoints into the merged graph.
             if !seen.insert((from_index, to_index, edge.marker)) {
@@ -149,6 +160,7 @@ impl<'a> ResolutionGraphBuilder<'a> {
     /// Apply global reachability and conflict simplification after every fork has completed.
     pub(crate) fn finish(
         self,
+        selection_names: Option<SelectionNames>,
         requirements: Vec<Requirement>,
         constraints: Constraints,
         modifiers: DependencyModifiers,
@@ -162,6 +174,8 @@ impl<'a> ResolutionGraphBuilder<'a> {
             mut fork_markers,
             mut diagnostics,
             inverse,
+            root_index,
+            root_markers,
             ..
         } = self;
         // The construction-only node lookup can be large; release it before propagating markers.
@@ -188,6 +202,38 @@ impl<'a> ResolutionGraphBuilder<'a> {
         }
 
         simplify_conflict_markers(conflicts, &mut graph);
+        if selection_names.is_some() {
+            let selection_graph = graph.map(
+                |_, _| (),
+                |edge_index, marker| {
+                    if let Some((source, target)) = graph.edge_endpoints(edge_index)
+                        && source == root_index
+                    {
+                        root_markers
+                            .get(&target)
+                            .copied()
+                            .unwrap_or(MarkerTree::FALSE)
+                    } else {
+                        marker.pep508()
+                    }
+                },
+            );
+            let forks = fork_markers
+                .iter()
+                .map(|marker| marker.pep508())
+                .collect::<Vec<_>>();
+            let reachability = marker_reachability(&selection_graph, &forks);
+            for index in graph.node_indices() {
+                if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
+                    dist.selection_marker = Some(
+                        reachability
+                            .get(&index)
+                            .copied()
+                            .unwrap_or(MarkerTree::FALSE),
+                    );
+                }
+            }
+        }
 
         // Discard any unreachable nodes.
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
@@ -197,6 +243,7 @@ impl<'a> ResolutionGraphBuilder<'a> {
         }
 
         let output = ResolverOutput {
+            selection_names,
             graph,
             requires_python,
             fork_markers,
@@ -350,6 +397,7 @@ fn add_version(
         metadata,
         role: package_role,
         marker: UniversalMarker::TRUE,
+        selection_marker: None,
     }))
 }
 

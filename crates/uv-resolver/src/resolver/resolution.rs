@@ -212,6 +212,7 @@ pub(crate) struct ResolutionDependencyEdge {
     pub(crate) from: Option<ResolutionNodeId>,
     pub(crate) to: ResolutionNodeId,
     pub(crate) marker: MarkerTree,
+    pub(crate) selection_marker: Option<MarkerTree>,
 }
 
 impl ResolutionDependencyEdge {
