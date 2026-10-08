@@ -1758,7 +1758,7 @@ fn add_remove_workspace() -> Result<()> {
      + child2==0.1.0 (from file://[TEMP_DIR]/child2)
     ");
 
-    let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("child1/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1842,7 +1842,7 @@ fn add_remove_workspace() -> Result<()> {
      - child2==0.1.0 (from file://[TEMP_DIR]/child2)
     ");
 
-    let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("child1/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2344,7 +2344,7 @@ fn add_workspace_editable() -> Result<()> {
      + child2==0.1.0 (from file://[TEMP_DIR]/child2)
     ");
 
-    let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("child1/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2384,7 +2384,7 @@ fn add_workspace_editable() -> Result<()> {
      ~ child2==0.1.0 (from file://[TEMP_DIR]/child2)
     ");
 
-    let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("child1/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2631,7 +2631,7 @@ fn add_path_implicit_workspace() -> Result<()> {
      + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
     ");
 
-    let pyproject_toml = fs_err::read_to_string(workspace.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("workspace/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2658,7 +2658,7 @@ fn add_path_implicit_workspace() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(workspace.join("uv.lock"))?;
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2752,7 +2752,7 @@ fn add_path_no_workspace() -> Result<()> {
      + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
     ");
 
-    let pyproject_toml = fs_err::read_to_string(workspace.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("workspace/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2774,7 +2774,7 @@ fn add_path_no_workspace() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(workspace.join("uv.lock"))?;
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2860,7 +2860,7 @@ fn add_path_adjacent_directory() -> Result<()> {
      + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
     ");
 
-    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("project/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -2882,7 +2882,7 @@ fn add_path_adjacent_directory() -> Result<()> {
     });
 
     // `uv add` implies a full lock and sync, including development dependencies.
-    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+    let lock = context.read("project/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3058,7 +3058,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
 
     // Check pyproject.toml - relative paths stay relative, absolute paths and file:// URLs
     // stay absolute.
-    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("project/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3086,7 +3086,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
     });
 
     // Check uv.lock - relative paths stay relative, absolute paths stay absolute.
-    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+    let lock = context.read("project/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3193,7 +3193,7 @@ fn add_relative_and_absolute_archives() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("project/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11142,7 +11142,7 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     ");
 
-    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("project/pyproject.toml");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -11194,7 +11194,7 @@ fn add_index_with_relative_path_for_project() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     ");
 
-    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+    let pyproject_toml = context.read("project/pyproject.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -11252,7 +11252,7 @@ fn add_index_with_existing_relative_path_in_script() -> Result<()> {
     warning: `--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation
     ");
 
-    let script = fs_err::read_to_string(script.path())?;
+    let script = context.read("scripts/main.py");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -11437,7 +11437,7 @@ fn add_index_by_name_with_relative_path() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     ");
 
-    let pyproject_toml = fs_err::read_to_string(pyproject_toml.path())?;
+    let pyproject_toml = context.read("project/pyproject.toml");
 
     // Preserve the relative URL spelling and pin the dependency to the configured index.
     insta::with_settings!({
@@ -15106,7 +15106,7 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
      + dep==0.1.0 (from file://[TEMP_DIR]/external_dep)
     ");
 
-    let pyproject_toml = fs_err::read_to_string(workspace_toml)?;
+    let pyproject_toml = context.read("workspace/pyproject.toml");
     assert_snapshot!(
         pyproject_toml, @r#"
     [project]
