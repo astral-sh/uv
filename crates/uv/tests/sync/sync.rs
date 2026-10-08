@@ -10533,6 +10533,170 @@ fn sync_no_editable() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_no_editable_configuration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv]
+        no-editable = true
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("root")
+        .child("__init__.py")
+        .touch()?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    let src = child.child("src").child("child");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // The workspace setting applies to both the root and the member.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + root==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&child).arg("--all-packages"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--editable"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ root==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import child, root; print('installed')"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ root==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--editable").env(EnvVars::UV_NO_EDITABLE, "1").arg("python").arg("-c").arg("import child, root; print('installed')"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ root==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-editable").env(EnvVars::UV_NO_EDITABLE, "0").arg("python").arg("-c").arg("import child, root; print('installed')"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ root==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // The environment variable alone overrides the configuration.
+    uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_EDITABLE, "0").arg("python").arg("-c").arg("import child, root; print('installed')"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ root==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import child, root; print('installed')"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ root==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Remove the project.
+    fs_err::remove_dir_all(&child)?;
+
+    // Ensure that we can still import it.
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import child"), @"
+    exit_code: 0 (success)
+    ");
+
+    Ok(())
+}
+
 /// Captures the behavior described in <https://github.com/astral-sh/uv/issues/15224>.
 #[test]
 fn sync_no_editable_ignores_source_changes() -> Result<()> {

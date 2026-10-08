@@ -302,6 +302,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         add: _,
         audit: _,
         pip: _,
+        no_editable: _,
         cache_keys: _,
         override_dependencies: _,
         exclude_dependencies: _,
@@ -461,6 +462,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         add: AddOptions { add_bounds },
         audit: _,
         pip,
+        no_editable,
         cache_keys,
         override_dependencies,
         exclude_dependencies,
@@ -657,6 +659,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if pip.is_some() {
         masked_fields.push("pip");
+    }
+    if no_editable.is_some() {
+        masked_fields.push("no-editable");
     }
     if cache_keys.is_some() {
         masked_fields.push("cache_keys");
