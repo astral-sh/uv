@@ -12878,7 +12878,8 @@ fn frozen_lockfile_non_project_workspace() -> Result<()> {
           "path": "[VENV]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
-        }
+        },
+        "packages": {}
       },
       "workspace": {
         "path": "[TEMP_DIR]/",
