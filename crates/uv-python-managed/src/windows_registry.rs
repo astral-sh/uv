@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use anyhow::anyhow;
 use target_lexicon::PointerWidth;
 use thiserror::Error;
 use tracing::debug;
@@ -24,6 +23,12 @@ pub enum ManagedPep514Error {
     InvalidPointerSize(Arch),
     #[error("Failed to write registry entry: {0}")]
     WriteError(#[from] windows::core::Error),
+    #[error("Failed to clear registry entries under HKCU:\\{key}: {source}")]
+    RemoveError {
+        key: String,
+        #[source]
+        source: windows::core::Error,
+    },
 }
 
 /// Register a managed Python installation in the Windows registry following PEP 514.
@@ -146,7 +151,11 @@ pub fn remove_registry_entry<'a>(
             } else {
                 errors.push((
                     installation.key().clone(),
-                    anyhow!("Failed to clear registry entries under HKCU:\\{python_entry}: {err}"),
+                    ManagedPep514Error::RemoveError {
+                        key: python_entry,
+                        source: err,
+                    }
+                    .into(),
                 ));
             }
         }
