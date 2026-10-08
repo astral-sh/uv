@@ -1271,41 +1271,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cyclonedx-bom"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3132b69ba8c13808bd2fa5748ac5b9816eb4f4e1f0bff6b7f9254a5940dcdeef"
-dependencies = [
- "base64 0.22.1",
- "cyclonedx-bom-macros",
- "fluent-uri",
- "indexmap",
- "once_cell",
- "ordered-float",
- "purl",
- "regex",
- "serde",
- "serde_json",
- "spdx",
- "strum",
- "thiserror",
- "time",
- "uuid",
- "xml-rs",
-]
-
-[[package]]
-name = "cyclonedx-bom-macros"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c50341f21df64b412b4f917e34b7aa786c092d64f3f905f478cb76950c7e980c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
 name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1742,7 +1707,6 @@ checksum = "bc74ac4d8359ae70623506d512209619e5cf8f347124910440dbc221714b328e"
 dependencies = [
  "borrow-or-share",
  "ref-cast",
- "serde",
 ]
 
 [[package]]
@@ -3136,15 +3100,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
-name = "ordered-float"
-version = "5.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "ordered-multimap"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3596,17 +3551,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
-]
-
-[[package]]
-name = "purl"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60ebe4262ae91ddd28c8721111a0a6e9e58860e211fc92116c4bb85c98fd96ad"
-dependencies = [
- "hex",
- "percent-encoding",
- "thiserror",
 ]
 
 [[package]]
@@ -4876,27 +4820,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "strum"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
-dependencies = [
- "strum_macros",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
 
 [[package]]
 name = "subtle"
@@ -7005,8 +6928,8 @@ dependencies = [
 name = "uv-lock"
 version = "0.0.92"
 dependencies = [
- "cyclonedx-bom",
  "either",
+ "fluent-uri",
  "fs-err",
  "futures",
  "insta",
@@ -7027,6 +6950,7 @@ dependencies = [
  "toml_writer",
  "tracing",
  "url",
+ "uuid",
  "uv-cache-key",
  "uv-client",
  "uv-configuration",
@@ -8937,12 +8861,6 @@ dependencies = [
  "thiserror",
  "time",
 ]
-
-[[package]]
-name = "xml-rs"
-version = "0.8.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
 
 [[package]]
 name = "xmlwriter"

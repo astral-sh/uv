@@ -164,7 +164,6 @@ console = { version = "0.16.0", default-features = false, features = ["std"] }
 crc32fast = { version = "1.5.0", default-features = false, features = ["std"] }
 csv = { version = "1.3.0", default-features = false }
 ctrlc = { version = "3.4.5", default-features = false }
-cyclonedx-bom = { version = "0.8.1", default-features = false }
 data-encoding = { version = "2.6.0", default-features = false, features = ["alloc"] }
 diskus = { version = "0.9.0", default-features = false }
 dotenvy = { version = "0.15.7", default-features = false }
@@ -179,6 +178,7 @@ fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
 flate2 = { version = "1.0.33", default-features = false, features = [
   "zlib-rs",
 ] }
+fluent-uri = { version = "0.4.1", default-features = false }
 fs-err = { version = "3.2.2", default-features = false, features = ["tokio"] }
 futures = { version = "0.3.30", default-features = false, features = ["async-await", "executor"] }
 futures-lite = { version = "2.6.1", default-features = false, features = ["std"] }
@@ -352,6 +352,7 @@ tracing-tree = { version = "0.4.0", default-features = false, features = ["traci
 unicode-width = { version = "0.2.0", default-features = false }
 unscanny = { version = "0.1.0", default-features = false }
 url = { version = "2.5.2", default-features = false, features = ["serde", "std"] }
+uuid = { version = "1.24.0", default-features = false }
 version-ranges = { version = "0.2.2", package = "astral-version-ranges", default-features = false }
 walkdir = { version = "2.5.0", default-features = false }
 webpki-root-certs = { version = "1", default-features = false }
