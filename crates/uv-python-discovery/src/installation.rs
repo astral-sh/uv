@@ -96,7 +96,7 @@ impl PythonInstallation {
     /// but if you want to allow an interpreter from a virtual environment if it satisfies the request,
     /// then use [`EnvironmentPreference::Any`].
     ///
-    /// See [`find_installation`] for implementation details.
+    /// See `find_python_installation` for implementation details.
     pub fn find(
         request: &PythonRequest,
         environments: EnvironmentPreference,
