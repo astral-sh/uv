@@ -39,7 +39,7 @@ use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
 use uv_macros::DebugNoInline;
-use uv_platform::{self as platform, Arch, Libc, Os, Platform};
+use uv_platform::{Arch, Libc, Os, Platform};
 use uv_pypi_types::{Digest, HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::{
@@ -47,8 +47,8 @@ use uv_static::{
 };
 
 use uv_python_types::{
-    BuildVersionError, ImplementationError, ImplementationName, LenientImplementationName,
-    PythonDownloadMirrors, PythonInstallationKey, PythonVariant, PythonVersion,
+    ImplementationName, LenientImplementationName, PythonDownloadMirrors, PythonInstallationKey,
+    PythonVariant, PythonVersion,
 };
 
 #[derive(Error, DebugNoInline)]
@@ -56,15 +56,9 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
-    ImplementationError(#[from] ImplementationError),
+    Request(#[from] PythonDownloadRequestError),
     #[error("Expected download URL (`{0}`) to end in a supported file extension: {1}")]
     MissingExtension(String, ExtensionError),
-    #[error("Invalid Python version: {0}")]
-    InvalidPythonVersion(String),
-    #[error("Invalid request key (empty request)")]
-    EmptyRequest,
-    #[error("Invalid request key (too many parts): {0}")]
-    TooManyParts(String),
     #[error("Failed to download `{0}`")]
     NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
     #[error(
@@ -110,14 +104,10 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to parse request part")]
-    InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
     #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {1}")]
     Mirror(&'static str, DisplaySafeUrl),
-    #[error("Failed to determine the libc used on the current platform")]
-    LibcDetection(#[from] platform::LibcDetectionError),
     #[error("Unable to parse the JSON Python download list at `{0}`")]
     InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
     #[error("This version of uv is too old to support the JSON Python download list at `{0}`")]
@@ -134,32 +124,10 @@ pub enum Error {
         url: Box<DisplaySafeUrl>,
         python_builds_dir: PathBuf,
     },
-    #[error(transparent)]
-    BuildVersion(#[from] BuildVersionError),
     #[error("No download URL found for Python")]
     NoPythonDownloadUrlFound,
     #[error(transparent)]
     SystemTime(#[from] SystemTimeError),
-}
-
-impl From<PythonDownloadRequestError> for Error {
-    fn from(error: PythonDownloadRequestError) -> Self {
-        match error {
-            PythonDownloadRequestError::ImplementationError(error) => {
-                Self::ImplementationError(error)
-            }
-            PythonDownloadRequestError::InvalidPythonVersion(version) => {
-                Self::InvalidPythonVersion(version)
-            }
-            PythonDownloadRequestError::EmptyRequest => Self::EmptyRequest,
-            PythonDownloadRequestError::TooManyParts(value) => Self::TooManyParts(value),
-            PythonDownloadRequestError::InvalidRequestPlatform(error) => {
-                Self::InvalidRequestPlatform(error)
-            }
-            PythonDownloadRequestError::LibcDetection(error) => Self::LibcDetection(error),
-            PythonDownloadRequestError::BuildVersion(error) => Self::BuildVersion(error),
-        }
-    }
 }
 
 impl RetriableError for Error {
@@ -1221,13 +1189,15 @@ mod tests {
     #[test]
     fn test_download_error_debug() {
         let errors = [
-            Error::EmptyRequest,
+            Error::Request(PythonDownloadRequestError::EmptyRequest),
             Error::Mirror(
                 "UV_PYTHON_INSTALL_MIRROR",
                 DisplaySafeUrl::parse("file:///mirror").expect("mirror URL should be valid"),
             ),
             Error::NetworkErrorWithRetries {
-                err: Box::new(Error::InvalidPythonVersion("3.x".to_owned())),
+                err: Box::new(Error::Request(
+                    PythonDownloadRequestError::InvalidPythonVersion("3.x".to_owned()),
+                )),
                 retries: 2,
                 duration: Duration::from_secs(3),
             },
@@ -1240,7 +1210,9 @@ mod tests {
 
         insta::assert_debug_snapshot!(errors, @r#"
         [
-            EmptyRequest,
+            Request(
+                EmptyRequest,
+            ),
             Mirror(
                 "UV_PYTHON_INSTALL_MIRROR",
                 DisplaySafeUrl {
@@ -1256,8 +1228,10 @@ mod tests {
                 },
             ),
             NetworkErrorWithRetries {
-                err: InvalidPythonVersion(
-                    "3.x",
+                err: Request(
+                    InvalidPythonVersion(
+                        "3.x",
+                    ),
                 ),
                 retries: 2,
                 duration: 3s,
