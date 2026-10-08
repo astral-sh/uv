@@ -17,7 +17,7 @@ uv-distribution-filename = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
 
-async_zip = { workspace = true, features = ["zstd"] }
+async_zip = { workspace = true, features = ["zstd-read"] }
 fs-err = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
