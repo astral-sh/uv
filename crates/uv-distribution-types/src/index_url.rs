@@ -14,7 +14,7 @@ use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, PersistSafeUrl};
 use uv_warnings::warn_user;
 
 use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
@@ -201,7 +201,7 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.inner().without_credentials().serialize(serializer)
+        PersistSafeUrl::ref_cast(self.url()).serialize(serializer)
     }
 }
 

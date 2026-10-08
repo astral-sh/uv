@@ -2,7 +2,9 @@ pub use base_url::*;
 pub use build::*;
 pub use conflicts::*;
 pub use dependency_groups::*;
-pub use direct_url::*;
+pub use direct_url::{
+    ArchiveInfo, DirInfo, DirectUrlMetadata, ParsedDirectUrl as DirectUrl, VcsInfo, VcsKind,
+};
 pub use identifier::*;
 pub use lenient_requirement::*;
 pub use marker_environment::*;

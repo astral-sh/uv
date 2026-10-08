@@ -7,6 +7,10 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+pub use persistence::PersistSafeUrl;
+
+mod persistence;
+
 const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
     "sig",
     "X-Amz-Credential",

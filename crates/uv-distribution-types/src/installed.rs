@@ -15,7 +15,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{DirectUrl, MetadataError};
+use uv_pypi_types::{DirectUrl, DirectUrlMetadata, MetadataError};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::{
@@ -387,9 +387,14 @@ impl InstalledDist {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let direct_url =
-            serde_json::from_reader::<BufReader<fs_err::File>, DirectUrl>(BufReader::new(file))?;
-        Ok(Some(direct_url))
+        let direct_url: DirectUrlMetadata = serde_json::from_reader(BufReader::new(file))?;
+        match direct_url.into_direct_url() {
+            Ok(direct_url) => Ok(Some(direct_url)),
+            Err(err) => {
+                warn!("Failed to parse direct URL: {err}");
+                Ok(None)
+            }
+        }
     }
 
     /// Read the `uv_cache.json` file from a `.dist-info` directory.

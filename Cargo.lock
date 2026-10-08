@@ -6977,7 +6977,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
- "url",
  "uv-cache",
  "uv-cache-info",
  "uv-cache-key",
@@ -7756,6 +7755,7 @@ dependencies = [
  "ref-cast",
  "schemars",
  "serde",
+ "serde_json",
  "thiserror",
  "url",
 ]
