@@ -13,7 +13,7 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
-use uv_redacted::{CredentialPersistingUrl, DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{CredentialPersistingUrl, DisplaySafeUrl, DisplaySafeUrlError, PersistSafeUrl};
 
 use crate::{IndexMetadata, IndexUrl};
 
@@ -936,7 +936,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<DisplaySafeUrl>,
+        index: Option<PersistSafeUrl>,
         conflict: Option<ConflictItem>,
     },
 }
@@ -949,10 +949,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 index,
                 conflict,
             } => {
-                let index = index.map(|index| index.url.into_url()).map(|mut index| {
-                    index.remove_credentials();
-                    index
-                });
+                let index = index.map(|index| index.url.into_url().into());
                 Self::Registry {
                     specifier,
                     index,
@@ -1115,8 +1112,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             } => Ok(Self::Registry {
                 specifier,
-                index: index
-                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
+                index: index.map(|index| {
+                    IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index.into_url())))
+                }),
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {

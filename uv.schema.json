@@ -939,7 +939,7 @@
       }
     },
     "DisplaySafeUrl": {
-      "description": "A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.\n\n`DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask\nsecrets by default when the URL is displayed or logged. This helps prevent accidental\nexposure of sensitive information in logs and debug output.\n\n# Examples\n\n```\nuse uv_redacted::DisplaySafeUrl;\nuse std::str::FromStr;\n\n// Create a `DisplaySafeUrl` from a `&str`\nlet mut url = DisplaySafeUrl::parse(\"https://user:password@example.com\").unwrap();\n\n// Display will mask secrets\nassert_eq!(url.to_string(), \"https://user:****@example.com/\");\n\n// You can still access the username and password\nassert_eq!(url.username(), \"user\");\nassert_eq!(url.password(), Some(\"password\"));\n\n// And you can still update the username and password\nlet _ = url.set_username(\"new_user\");\nlet _ = url.set_password(Some(\"new_password\"));\nassert_eq!(url.username(), \"new_user\");\nassert_eq!(url.password(), Some(\"new_password\"));\n\n// It is also possible to remove the credentials entirely\nurl.remove_credentials();\nassert_eq!(url.username(), \"\");\nassert_eq!(url.password(), None);\n```",
+      "description": "A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.\n\n`DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask\nsecrets by default when the URL is displayed or logged. This helps prevent accidental\nexposure of sensitive information in logs and debug output.\n\nTo serialize a URL, choose either [`PersistSafeUrl`] or\n[`CredentialPersistingUrl`] according to the required persistence policy.\n\n```compile_fail\nuse uv_redacted::DisplaySafeUrl;\n\nfn require_serialize<T: serde::Serialize>() {}\nrequire_serialize::<DisplaySafeUrl>();\n```\n\n# Examples\n\n```\nuse uv_redacted::DisplaySafeUrl;\nuse std::str::FromStr;\n\n// Create a `DisplaySafeUrl` from a `&str`\nlet mut url = DisplaySafeUrl::parse(\"https://user:password@example.com\").unwrap();\n\n// Display will mask secrets\nassert_eq!(url.to_string(), \"https://user:****@example.com/\");\n\n// You can still access the username and password\nassert_eq!(url.username(), \"user\");\nassert_eq!(url.password(), Some(\"password\"));\n\n// And you can still update the username and password\nlet _ = url.set_username(\"new_user\");\nlet _ = url.set_password(Some(\"new_password\"));\nassert_eq!(url.username(), \"new_user\");\nassert_eq!(url.password(), Some(\"new_password\"));\n\n// It is also possible to remove the credentials entirely\nurl.remove_credentials();\nassert_eq!(url.username(), \"\");\nassert_eq!(url.password(), None);\n```",
       "type": "string",
       "format": "uri"
     },
@@ -1144,7 +1144,7 @@
           "description": "The URL of the upload endpoint.\n\nWhen using `uv publish --index <name>`, this URL is used for publishing.\n\nA configuration for the default index PyPI would look as follows:\n\n```toml\n[[tool.uv.index]]\nname = \"pypi\"\nurl = \"https://pypi.org/simple\"\npublish-url = \"https://upload.pypi.org/legacy/\"\n```",
           "anyOf": [
             {
-              "$ref": "#/definitions/DisplaySafeUrl"
+              "$ref": "#/definitions/PersistSafeUrl"
             },
             {
               "type": "null"
@@ -1385,6 +1385,14 @@
       },
       "additionalProperties": false,
       "required": ["name"]
+    },
+    "PersistSafeUrl": {
+      "description": "A URL that removes sensitive userinfo when serialized.\n\nThe full parsed URL is retained in memory. Display and debug output use\n[`DisplaySafeUrl`]'s redaction. Serialization preserves the entire query and\nretains a passwordless `git` username for `ssh`, `git+ssh`, and `git+https` URLs.\nDeserialization uses [`Url`] parsing without the ambiguity checks applied to\nhuman input.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/DisplaySafeUrl"
+        }
+      ]
     },
     "PipGroupName": {
       "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>.\nIf <path> is omitted it defaults to \"pyproject.toml\".",

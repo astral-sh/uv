@@ -5578,6 +5578,56 @@ async fn pep_751_https_credentials() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn pep_751_index_query() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { registry = "https://user:password@example.com/simple?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D" }
+        wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl", hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--format", "pylock.toml"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "example"
+    version = "1.0.0"
+    index = "https://example.com/simple?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D"
+    wheels = [{ url = "https://example.com/example-1.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+    "#);
+
+    Ok(())
+}
+
 /// Check that relative and absolute paths are preserved in pylock.toml export.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16514>

@@ -20,15 +20,24 @@ use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
 ///
-/// The original string is not preserved after serialization/deserialization.
+/// To serialize the parsed URL, borrow it with [`VerbatimUrl::raw`] and choose
+/// either [`uv_redacted::PersistSafeUrl`] or [`uv_redacted::CredentialPersistingUrl`]
+/// according to the required persistence policy. Neither wrapper preserves the
+/// original string.
+///
+/// ```compile_fail
+/// use uv_pep508::VerbatimUrl;
+///
+/// fn require_serialize<T: serde::Serialize>() {}
+/// require_serialize::<VerbatimUrl>();
+/// ```
 #[derive(Clone, Eq)]
 pub struct VerbatimUrl {
     /// The parsed URL.
     url: DisplaySafeUrl,
     /// The URL as it was provided by the user.
     ///
-    /// Even if originally set, this will be [`None`] after
-    /// serialization/deserialization.
+    /// This is [`None`] when the URL is deserialized.
     given: Option<ArcStr>,
     /// Given value is a [`Pep508Url`] which contained variable references which were successfully
     /// expanded.
@@ -388,16 +397,6 @@ impl From<DisplaySafeUrl> for VerbatimUrl {
 impl From<VerbatimUrl> for Url {
     fn from(url: VerbatimUrl) -> Self {
         Self::from(url.url)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl serde::Serialize for VerbatimUrl {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.url.serialize(serializer)
     }
 }
 
