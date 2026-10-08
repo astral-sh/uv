@@ -132,6 +132,7 @@ jobs:
           HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:windows-trampoline') }}
           BASE_SHA: ${{ inputs.base-sha || github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha }}
+          HAS_EXPLICIT_SHAS: ${{ inputs.base-sha != '' || inputs.head-sha != '' }}
         run: |
           [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
           [[ "$GH_REPOSITORY" == "astral-sh/uv" ]] && is_uv=1
@@ -151,9 +152,16 @@ jobs:
           [[ "$HAS_BUILD_PUSH_DOCKER_LABEL" == "true" ]] && has_build_push_docker_label=1
           [[ "$HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL" == "true" ]] && has_build_windows_trampoline_label=1
 
-          # Detect changes to uv's project version.
+          comparison_base="${BASE_SHA:-origin/main}"
           version_head="${HEAD_SHA:-HEAD}"
-          merge_base="$(git merge-base "${BASE_SHA:-origin/main}" "$version_head")"
+          if [[ "$GH_REF" == refs/pull/*/merge && "$HAS_EXPLICIT_SHAS" != "true" ]]; then
+            # A PR's merge commit records its actual base, including the preceding layer of a stack.
+            comparison_base="$(git rev-parse HEAD^1)"
+            version_head=HEAD
+          fi
+
+          # Detect changes to uv's project version.
+          merge_base="$(git merge-base "$comparison_base" "$version_head")"
           version_dir="$RUNNER_TEMP/uv-release-version"
           mkdir -p "$version_dir/base" "$version_dir/head"
           git show "${merge_base}:pyproject.toml" > "$version_dir/base/pyproject.toml"
@@ -164,7 +172,8 @@ jobs:
             uv_version_changed=1
           fi
 
-          # Detect changed files
+          # Detect changed files. A failed comparison must not skip required jobs.
+          changed_files="$(git diff --no-ext-diff --no-textconv --name-only "${comparison_base}...HEAD")"
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
@@ -194,7 +203,7 @@ jobs:
             [[ "$file" == "scripts/check_system_python.py" || "$file" == "scripts/check_embedded_python.py" ]] && system_test_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ || "$file" =~ ^agents/ || "$file" =~ ^\.claude/ || "$file" =~ ^\.codex/ ]] && continue
             any_code_changed=1
-          done <<< "$(git diff --no-ext-diff --no-textconv --name-only "${BASE_SHA:-origin/main}...HEAD")"
+          done <<< "$changed_files"
 
           # Derived groups
           [[ $is_uv && $is_pull_request && $is_same_repository && $targets_main_branch && $uv_version_changed ]] && is_release_pr=1
