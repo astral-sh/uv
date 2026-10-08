@@ -1,19 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use cyclonedx_bom::models::component::Classification;
-use cyclonedx_bom::models::dependency::{Dependencies, Dependency};
-use cyclonedx_bom::models::external_reference::{
-    ExternalReference, ExternalReferenceType, ExternalReferences, Uri as ExternalReferenceUri,
-};
-use cyclonedx_bom::models::hash::{Hash, HashAlgorithm, HashValue, Hashes};
-use cyclonedx_bom::models::metadata::Metadata;
-use cyclonedx_bom::models::property::{Properties, Property};
-use cyclonedx_bom::models::tool::{Tool, Tools};
-use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString, Uri};
+use fluent_uri::UriRef;
 use itertools::Itertools;
+use jiff::Timestamp;
 use percent_encoding::{AsciiSet, CONTROLS, percent_encode};
 use rustc_hash::FxHashSet;
+use serde::Serialize;
+use uuid::Uuid;
 
 use uv_configuration::{
     DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
@@ -22,7 +16,7 @@ use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::HashAlgorithm as UvHashAlgorithm;
+use uv_pypi_types::HashAlgorithm;
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
@@ -50,6 +44,91 @@ const PURL_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b']')
     .add(b'^')
     .add(b'|');
+
+/// The subset of the CycloneDX 1.5 JSON format emitted by uv.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bom {
+    #[serde(rename = "bomFormat")]
+    format: &'static str,
+    spec_version: &'static str,
+    version: u32,
+    serial_number: String,
+    metadata: Metadata,
+    components: Vec<Component>,
+    dependencies: Vec<Dependency>,
+}
+
+#[derive(Serialize)]
+struct Metadata {
+    timestamp: String,
+    tools: [Tool; 1],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    component: Option<Component>,
+}
+
+#[derive(Serialize)]
+struct Tool {
+    vendor: &'static str,
+    name: &'static str,
+    version: &'static str,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Component {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(rename = "bom-ref")]
+    bom_ref: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    purl: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    external_references: Vec<ExternalReference>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    properties: Vec<Property>,
+}
+
+#[derive(Clone, Serialize)]
+struct ExternalReference {
+    #[serde(rename = "type")]
+    reference_type: &'static str,
+    url: String,
+    hashes: [Hash; 1],
+}
+
+#[derive(Clone, Serialize)]
+struct Hash {
+    alg: &'static str,
+    content: String,
+}
+
+#[derive(Clone, Serialize)]
+struct Property {
+    name: &'static str,
+    value: String,
+}
+
+impl Property {
+    fn new(name: &'static str, value: &str) -> Self {
+        Self {
+            name,
+            // CycloneDX property values use XML normalized strings, including in JSON exports.
+            value: value.replace("\r\n", " ").replace(['\r', '\n', '\t'], " "),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct Dependency {
+    #[serde(rename = "ref")]
+    dependency_ref: String,
+    #[serde(rename = "dependsOn", skip_serializing_if = "Vec::is_empty")]
+    dependencies: Vec<String>,
+}
 
 /// Creates `CycloneDX` components, registering them in a `HashMap` so that they can be retrieved by `PackageId`.
 /// Also ensures uniqueness when generating bom-refs by using a numeric prefix which is incremented for each component.
@@ -159,36 +238,17 @@ impl<'a> ComponentBuilder<'a> {
     fn create_synthetic_root_component(&mut self, root: Option<&Package>) -> Component {
         let name = root.map(Self::get_package_name).unwrap_or("uv-workspace");
         let bom_ref = self.create_bom_ref(name, None);
-        let properties = Properties(vec![Property::new("uv:package:is_synthetic_root", "true")]);
+        let properties = vec![Property::new("uv:package:is_synthetic_root", "true")];
 
         // No need to register as we manually add dependencies in `if all_packages` check in `from_lock`
         Component {
-            component_type: Classification::Library,
-            name: NormalizedString::new(name),
+            kind: "library",
+            bom_ref,
+            name: name.to_string(),
             version: None,
-            bom_ref: Some(bom_ref),
             purl: None,
-            mime_type: None,
-            supplier: None,
-            author: None,
-            publisher: None,
-            group: None,
-            description: None,
-            scope: None,
-            hashes: None,
-            licenses: None,
-            copyright: None,
-            cpe: None,
-            swid: None,
-            modified: None,
-            pedigree: None,
-            external_references: None,
-            properties: Some(properties),
-            components: None,
-            evidence: None,
-            signature: None,
-            model_card: None,
-            data: None,
+            external_references: Vec::new(),
+            properties,
         }
     }
 
@@ -201,7 +261,7 @@ impl<'a> ComponentBuilder<'a> {
         let name = Self::get_package_name(package);
         let version = Self::get_version_string(package);
         let bom_ref = self.create_bom_ref(name, version.as_deref());
-        let purl = Self::create_purl(package).and_then(|purl_string| purl_string.parse().ok());
+        let purl = Self::create_purl(package);
         let mut properties = vec![];
 
         match package_type {
@@ -224,9 +284,8 @@ impl<'a> ComponentBuilder<'a> {
             ));
         }
 
-        let external_references = if self.include_hashes {
-            let mut external_references = Vec::new();
-
+        let mut external_references = Vec::new();
+        if self.include_hashes {
             let source_dist = package
                 .sdist
                 .iter()
@@ -239,66 +298,34 @@ impl<'a> ComponentBuilder<'a> {
             });
 
             for (url, hash) in source_dist.chain(wheels) {
-                if let Ok(uri) = Uri::try_from(url.to_string()) {
+                if UriRef::parse(url.as_ref()).is_ok() {
                     let alg = match hash.algorithm() {
-                        UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
-                        UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
-                        UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
-                        UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
-                        UvHashAlgorithm::Blake2b256 => HashAlgorithm::BLAKE2b_256,
+                        HashAlgorithm::Md5 => "MD5",
+                        HashAlgorithm::Sha256 => "SHA-256",
+                        HashAlgorithm::Sha384 => "SHA-384",
+                        HashAlgorithm::Sha512 => "SHA-512",
+                        HashAlgorithm::Blake2b256 => "BLAKE2b-256",
                     };
                     external_references.push(ExternalReference {
-                        url: ExternalReferenceUri::Url(uri),
-                        comment: None,
-                        hashes: Some(Hashes(vec![Hash {
+                        reference_type: "distribution",
+                        url: url.to_string(),
+                        hashes: [Hash {
                             alg,
-                            content: HashValue(hash.digest().to_string()),
-                        }])),
-                        external_reference_type: ExternalReferenceType::Distribution,
+                            content: hash.digest().to_string(),
+                        }],
                     });
                 }
             }
-
-            if external_references.is_empty() {
-                None
-            } else {
-                Some(ExternalReferences(external_references))
-            }
-        } else {
-            None
-        };
+        }
 
         Component {
-            component_type: Classification::Library,
-            name: NormalizedString::new(name),
-            version: version.as_deref().map(NormalizedString::new),
-            bom_ref: Some(bom_ref),
+            kind: "library",
+            bom_ref,
+            name: name.to_string(),
+            version,
             purl,
-            mime_type: None,
-            supplier: None,
-            author: None,
-            publisher: None,
-            group: None,
-            description: None,
-            scope: None,
-            hashes: None,
-            licenses: None,
-            copyright: None,
-            cpe: None,
-            swid: None,
-            modified: None,
-            pedigree: None,
             external_references,
-            properties: if !properties.is_empty() {
-                Some(Properties(properties))
-            } else {
-                None
-            },
-            components: None,
-            evidence: None,
-            signature: None,
-            model_card: None,
-            data: None,
+            properties,
         }
     }
 
@@ -357,15 +384,12 @@ pub fn from_lock<'lock>(
     let mut metadata = Metadata {
         component: root
             .map(|package| component_builder.create_component(package, PackageType::Root, None)),
-        timestamp: cyclonedx_bom::prelude::DateTime::now().ok(),
-        tools: Some(Tools::List(vec![Tool {
-            vendor: Some(NormalizedString::new("Astral Software Inc.")),
-            name: Some(NormalizedString::new("uv")),
-            version: Some(NormalizedString::new(uv_version::version())),
-            hashes: None,
-            external_references: None,
-        }])),
-        ..Metadata::default()
+        timestamp: format!("{:.9}", Timestamp::now()),
+        tools: [Tool {
+            vendor: "Astral Software Inc.",
+            name: "uv",
+            version: uv_version::version(),
+        }],
     };
 
     let workspace_member_ids = nodes
@@ -412,21 +436,16 @@ pub fn from_lock<'lock>(
     // 2. For virtual workspaces (no root project): provides an anchor for the dependency graph.
     if all_packages || metadata.component.is_none() {
         let synthetic_root = component_builder.create_synthetic_root_component(root);
-        let synthetic_root_bom_ref = synthetic_root
-            .bom_ref
-            .clone()
-            .expect("bom-ref should always exist");
+        let synthetic_root_bom_ref = synthetic_root.bom_ref.clone();
         let root = metadata.component.replace(synthetic_root);
 
         let mut synthetic_root_deps = workspace_member_ids
             .iter()
             .filter_map(|c| component_builder.get_component(c))
-            .map(|c| c.bom_ref.clone().expect("bom-ref should always exist"))
+            .map(|c| c.bom_ref.clone())
             .collect::<Vec<_>>();
-        if let Some(ref root_component) = root
-            && let Some(ref root_bom_ref) = root_component.bom_ref
-        {
-            synthetic_root_deps.push(root_bom_ref.clone());
+        if let Some(ref root_component) = root {
+            synthetic_root_deps.push(root_component.bom_ref.clone());
         }
 
         if let Some(workspace_root) = root {
@@ -444,10 +463,13 @@ pub fn from_lock<'lock>(
     }
 
     let bom = Bom {
-        metadata: Some(metadata),
-        components: Some(Components(components)),
-        dependencies: Some(Dependencies(dependencies)),
-        ..Bom::default()
+        format: "CycloneDX",
+        spec_version: "1.5",
+        version: 1,
+        serial_number: Uuid::new_v4().urn().to_string(),
+        metadata,
+        components,
+        dependencies,
     };
 
     Ok(bom)
@@ -475,16 +497,13 @@ fn create_dependencies(
                 .filter_map(|dep| component_builder.get_component(&dep.package_id));
 
             let bom_refs = package_deps
-                .map(|p| p.bom_ref.clone().expect("bom-ref should always exist"))
+                .map(|p| p.bom_ref.clone())
                 .sorted_unstable()
                 .unique()
                 .collect();
 
             Dependency {
-                dependency_ref: component
-                    .bom_ref
-                    .clone()
-                    .expect("bom-ref should always exist"),
+                dependency_ref: component.bom_ref.clone(),
                 dependencies: bom_refs,
             }
         })
