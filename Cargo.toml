@@ -229,7 +229,7 @@ pathdiff = { version = "0.2.1", default-features = false }
 percent-encoding = { version = "2.3.1", default-features = false, features = ["std"] }
 petgraph = { version = "0.8.0", default-features = false, features = ["std"] }
 proc-macro2 = { version = "1.0.86", default-features = false, features = ["proc-macro"] }
-procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }
+procfs = { version = "0.18.0", default-features = false }
 pubgrub = { version = "0.6.1", package = "astral-pubgrub", default-features = false }
 quote = { version = "1.0.37", default-features = false, features = ["proc-macro"] }
 rand = { version = "0.10.2", default-features = false, features = ["thread_rng"] }

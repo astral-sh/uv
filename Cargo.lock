@@ -3565,7 +3565,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25485360a54d6861439d60facef26de713b1e126bf015ec8f98239467a2b82f7"
 dependencies = [
  "bitflags 2.13.2",
- "flate2",
  "procfs-core",
  "rustix",
 ]
