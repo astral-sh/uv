@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use url::Url;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError, PersistSafeUrl};
 
 use crate::{HashAlgorithm, Hashes};
 
@@ -17,7 +18,7 @@ pub enum DirectUrl {
     /// {"url": "file:///home/user/project", "dir_info": {}}
     /// ```
     LocalDirectory {
-        url: String,
+        url: PersistSafeUrl,
         dir_info: DirInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<Box<Path>>,
@@ -31,7 +32,7 @@ pub enum DirectUrl {
         ///
         /// For example, for `pip install git+https://github.com/tqdm/tqdm@cc372d09dcd5a5eabdc6ed4cf365bdb0be004d44#subdirectory=.`,
         /// the URL is `https://github.com/tqdm/tqdm`.
-        url: String,
+        url: PersistSafeUrl,
         archive_info: ArchiveInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<Box<Path>>,
@@ -41,7 +42,7 @@ pub enum DirectUrl {
     /// {"url": "https://github.com/pallets/flask.git", "vcs_info": {"commit_id": "8d9519df093864ff90ca446d4af2dc8facd3c542", "vcs": "git", "git_lfs": true }}
     /// ```
     VcsUrl {
-        url: String,
+        url: PersistSafeUrl,
         vcs_info: VcsInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<Box<Path>>,
@@ -108,7 +109,7 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                 subdirectory,
                 dir_info: _,
             } => {
-                let mut url = Self::parse(url)?;
+                let mut url = url.as_url().clone();
                 if let Some(subdirectory) = subdirectory {
                     url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
                 }
@@ -119,7 +120,7 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                 subdirectory,
                 archive_info,
             } => {
-                let mut url = Self::parse(url)?;
+                let mut url = url.as_url().clone();
                 let mut fragments = Vec::new();
                 if let Some(subdirectory) = subdirectory {
                     fragments.push(format!("subdirectory={}", subdirectory.display()));
@@ -152,7 +153,8 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                 subdirectory,
                 path,
             } => {
-                let mut url = Self::parse(&format!("{}+{}", vcs_info.vcs, url))?;
+                let mut url =
+                    Self::from_url(Url::parse(&format!("{}+{}", vcs_info.vcs, url.as_ref()))?);
                 if let Some(commit_id) = &vcs_info.commit_id {
                     let path = format!("{}@{commit_id}", url.path());
                     url.set_path(&path);

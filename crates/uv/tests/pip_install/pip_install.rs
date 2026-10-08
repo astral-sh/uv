@@ -12466,6 +12466,38 @@ fn direct_url_json_direct_url() -> Result<()> {
 }
 
 #[test]
+fn direct_url_json_protocol_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = context.site_packages().join("project-1.0.0.dist-info");
+    fs::create_dir_all(&dist_info)?;
+    fs::write(
+        dist_info.join("METADATA"),
+        indoc! {"
+            Metadata-Version: 2.1
+            Name: project
+            Version: 1.0.0
+        "},
+    )?;
+    fs::write(
+        dist_info.join("direct_url.json"),
+        r#"{"url":"https://example.com/project:build@nightly/project-1.0.0-py3-none-any.whl?sig=abc%2Bdef%3D","archive_info":{}}"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("--no-deps")
+        .arg("project @ https://example.com/project%3Abuild@nightly/project-1.0.0-py3-none-any.whl?sig=abc%2Bdef%3D"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    Would make no changes
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn direct_url_json_query() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
