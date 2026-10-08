@@ -1742,7 +1742,7 @@ fn native_auth_host_fallback() -> Result<()> {
 /// Test credential helper with basic auth credentials
 #[test]
 fn bazel_helper_basic_auth() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Store credentials
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1772,7 +1772,7 @@ fn bazel_helper_basic_auth() {
 /// Test credential helper with token credentials
 #[test]
 fn bazel_helper_token() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Store token
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1833,7 +1833,7 @@ fn bazel_helper_invalid_bearer_token() -> Result<()> {
 /// Test credential helper with no credentials found
 #[test]
 fn bazel_helper_no_credentials() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
     uv_snapshot!(context.filters(), context.auth_helper()
         .arg("--protocol=bazel")
         .arg("get"),
@@ -1852,7 +1852,7 @@ fn bazel_helper_no_credentials() {
 /// Test credential helper with invalid JSON input
 #[test]
 fn bazel_helper_invalid_json() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.auth_helper()
         .arg("--protocol=bazel")
@@ -1871,7 +1871,7 @@ fn bazel_helper_invalid_json() {
 /// Test credential helper with invalid URI
 #[test]
 fn bazel_helper_invalid_uri() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.auth_helper()
         .arg("--protocol=bazel")
@@ -1890,7 +1890,7 @@ fn bazel_helper_invalid_uri() {
 /// Test credential helper with username in URI
 #[test]
 fn bazel_helper_username_in_uri() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Store credentials with specific username
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1921,7 +1921,7 @@ fn bazel_helper_username_in_uri() {
 /// Test credential helper with unknown username in URI
 #[test]
 fn bazel_helper_unknown_username_in_uri() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Store credentials with specific username
     uv_snapshot!(context.filters(), context.auth_login()
