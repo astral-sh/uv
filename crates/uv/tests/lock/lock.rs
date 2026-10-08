@@ -509,23 +509,23 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
         "build-constraint-dependencies = [\"a>=1\", \"a>=2\", \"a<3\"]",
         "build-constraint-dependencies = [\"a>=2,<3\"]",
     ))?;
-    for preview in [false, true] {
-        let mut command = context.lock();
-        command.arg("--locked").arg("--offline");
-        if preview {
-            command.args(["--preview-features", "lockfile-normalization"]);
-        }
-        insta::allow_duplicates! {
-            uv_snapshot!(context.filters(), command, @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
-            hint: To update the lockfile, run `uv lock`.
-            ");
-        }
-    }
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline")
+        .args(["--preview-features", "lockfile-normalization"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
     Ok(())
 }
 
