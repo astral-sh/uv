@@ -154,10 +154,12 @@ jobs:
 
           comparison_base="${BASE_SHA:-origin/main}"
           version_head="${HEAD_SHA:-HEAD}"
+          # Reusable-workflow callers can choose the comparison with explicit SHAs.
+          # For ordinary PR runs, `HEAD` is GitHub's merge of the PR into its target
+          # branch, and `HEAD^1` is the target branch commit used for that merge.
+          # The event's base SHA can be older, causing changes already in the target
+          # branch (including earlier stack layers) to appear in the diff.
           if [[ "$GH_REF" == refs/pull/*/merge && "$HAS_EXPLICIT_SHAS" != "true" ]]; then
-            # GitHub checks out a merge of the PR into its target branch.
-            # `HEAD^1` is the target branch commit used for that merge, so the
-            # comparison includes only changes introduced by this PR.
             comparison_base="$(git rev-parse HEAD^1)"
             version_head=HEAD
           fi
@@ -174,8 +176,9 @@ jobs:
             uv_version_changed=1
           fi
 
-          # Run `git diff` separately so a Git error fails this step.
-          # Inside the loop's here-string, an error would look like no changed files.
+          # Capture the file list in a separate assignment so `bash -e` propagates
+          # a `git diff` failure. A command substitution in the loop's here-string
+          # would hide the exit status, allowing required jobs to be skipped.
           changed_files="$(git diff --no-ext-diff --no-textconv --name-only "${comparison_base}...HEAD")"
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
