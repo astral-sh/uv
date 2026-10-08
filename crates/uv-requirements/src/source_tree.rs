@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::slice;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -15,10 +16,10 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep508::RequirementOrigin;
+use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{InMemoryIndex, MetadataResponse};
+use uv_resolver::{InMemoryIndex, MetadataResponse, RootSelections};
 use uv_types::{BuildContext, HashStrategy, HashVerification};
 
 #[derive(Debug, Clone)]
@@ -49,6 +50,7 @@ impl SourceTree {
 
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
+    selections: Option<RootSelections>,
     /// The requirements sourced from the source trees.
     requirements: Box<[Requirement]>,
     /// The names of the projects that were resolved.
@@ -58,6 +60,9 @@ pub struct SourceTreeResolution {
 }
 
 impl SourceTreeResolution {
+    pub fn take_selections(&mut self) -> Option<RootSelections> {
+        self.selections.take()
+    }
     /// Return the name of the project that was resolved.
     pub fn project(&self) -> &PackageName {
         &self.project
@@ -79,6 +84,7 @@ impl SourceTreeResolution {
 /// Used, e.g., to determine the input requirements when a user specifies a `pyproject.toml`
 /// file, which may require running PEP 517 build hooks to extract metadata.
 pub struct SourceTreeResolver<'a, Context: BuildContext> {
+    preserve_selections: bool,
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
     /// The hash policy to enforce.
@@ -98,6 +104,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
+            preserve_selections: false,
             extras,
             hasher,
             index,
@@ -112,6 +119,12 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             database: self.database.with_reporter(reporter),
             ..self
         }
+    }
+
+    #[must_use]
+    pub fn with_selections(mut self, preserve_selections: bool) -> Self {
+        self.preserve_selections = preserve_selections;
+        self
     }
 
     /// Resolve the requirements from the provided source trees.
@@ -134,31 +147,68 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             RequirementOrigin::Project(source_tree.path().to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
+        //
+        // NOTE: Not an exhaustive list of extras, inline extras like `extra == 'bar'` AREN'T
+        // included.
         let extras = self
             .extras
             .extra_names(metadata.provides_extra.iter())
             .cloned()
             .collect::<Vec<_>>();
 
+        let flattened = FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
+            .into_iter()
+            .collect::<Vec<_>>();
+        let mut selections = self.preserve_selections.then(RootSelections::default);
+        if let Some(selections) = &mut selections {
+            selections.extras.extend(extras.iter().cloned());
+            for requirement in &flattened {
+                let base_marker = requirement.marker.simplify_not_extras_with(|_| true);
+                if !base_marker.is_false() {
+                    selections.requirements.push((
+                        Requirement {
+                            marker: base_marker,
+                            origin: Some(origin.clone()),
+                            ..requirement.clone()
+                        },
+                        MarkerTree::TRUE,
+                    ));
+                }
+                for extra in &extras {
+                    let marker = requirement
+                        .marker
+                        .simplify_extras(slice::from_ref(extra))
+                        .simplify_not_extras_with(|candidate| candidate != extra)
+                        .and(base_marker.negate());
+                    if !marker.is_false() {
+                        selections.requirements.push((
+                            Requirement {
+                                marker,
+                                origin: Some(origin.clone()),
+                                ..requirement.clone()
+                            },
+                            format!("'{extra}' in extras").parse::<MarkerTree>()?,
+                        ));
+                    }
+                }
+            }
+        }
+
         let mut requirements = Vec::new();
 
         // Flatten any transitive extras and include dependencies
         // (unless something like --only-group was passed)
-        requirements.extend(
-            FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
-                .into_iter()
-                .map(|requirement| Requirement {
-                    origin: Some(origin.clone()),
-                    marker: requirement.marker.simplify_extras(&extras),
-                    ..requirement
-                }),
-        );
+        requirements.extend(flattened.into_iter().map(|requirement| Requirement {
+            origin: Some(origin.clone()),
+            marker: requirement.marker.simplify_extras(&extras),
+            ..requirement
+        }));
 
         let requirements = requirements.into_boxed_slice();
         let project = metadata.name;
         let extras = metadata.provides_extra;
-
         Ok(SourceTreeResolution {
+            selections,
             requirements,
             project,
             extras,

@@ -247,6 +247,8 @@ where
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PylockToml {
+    #[serde(skip)]
+    multi_use: bool,
     #[serde(deserialize_with = "deserialize_lock_version")]
     lock_version: Version,
     created_by: String,
@@ -464,11 +466,21 @@ impl<'lock> PylockToml {
         // Use the `requires-python` from the target lockfile.
         let requires_python = resolution.requires_python.clone();
 
-        // We don't support locking for multiple extras at time of writing.
-        let extras = vec![];
+        // List of extras used when creating this pylock
+        let extras = resolution
+            .selection_names
+            .as_ref()
+            .map_or_else(Vec::new, |selections| {
+                selections.extras.iter().cloned().collect()
+            });
 
-        // We don't support locking for multiple dependency groups at time of writing.
-        let dependency_groups = vec![];
+        // List of groups used when creating this pylock
+        let dependency_groups = resolution
+            .selection_names
+            .as_ref()
+            .map_or_else(Vec::new, |selections| {
+                selections.groups.iter().cloned().collect()
+            });
 
         // We don't support locking for multiple dependency groups at time of writing.
         let default_groups = vec![];
@@ -495,7 +507,9 @@ impl<'lock> PylockToml {
             let mut package = PylockTomlPackage {
                 name: dist.name().clone(),
                 version: version.cloned(),
-                marker: node.marker.pep508(),
+                marker: node
+                    .selection_marker
+                    .unwrap_or_else(|| node.marker.pep508()),
                 requires_python: None,
                 dependencies: vec![],
                 index: None,
@@ -684,6 +698,7 @@ impl<'lock> PylockToml {
 
         // Return the constructed `pylock.toml`.
         Ok(Self {
+            multi_use: resolution.selection_names.is_some(),
             lock_version,
             created_by,
             requires_python: Some(requires_python),
@@ -1052,6 +1067,7 @@ impl<'lock> PylockToml {
         }
 
         Ok(Self {
+            multi_use: false,
             lock_version,
             created_by,
             requires_python: Some(requires_python),
@@ -1163,7 +1179,9 @@ impl<'lock> PylockToml {
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
-        if !self.extras.is_empty() {
+        // Need to explicitly set this to an empty array or accurate extras used per
+        // PEP751
+        if self.multi_use || !self.extras.is_empty() {
             doc.insert(
                 "extras",
                 value(each_element_on_its_line_array(
@@ -1171,7 +1189,9 @@ impl<'lock> PylockToml {
                 )),
             );
         }
-        if !self.dependency_groups.is_empty() {
+        // Need to explicitly set this to an empty array or accurate dependencies per
+        // PEP751
+        if self.multi_use || !self.dependency_groups.is_empty() {
             doc.insert(
                 "dependency-groups",
                 value(each_element_on_its_line_array(
