@@ -474,6 +474,7 @@ large_stack_arrays = "allow"
 debug = "line-tables-only"
 
 [profile.release]
+codegen-units = 1
 strip = true
 lto = "fat"
 # This will still show a panic message, we only skip the unwind.
@@ -517,6 +518,7 @@ panic = "abort"
 # release builds.
 [profile.profiling]
 inherits = "release"
+codegen-units = 16
 strip = false
 debug = "full"
 lto = false
