@@ -96,6 +96,11 @@ impl PersistSafeUrl {
     pub fn as_url(&self) -> &DisplaySafeUrl {
         &self.0
     }
+
+    /// Return the underlying [`DisplaySafeUrl`].
+    pub fn into_url(self) -> DisplaySafeUrl {
+        self.0
+    }
 }
 
 impl From<DisplaySafeUrl> for PersistSafeUrl {
@@ -171,7 +176,7 @@ mod tests {
         let persisted = PersistSafeUrl::ref_cast(&url);
 
         assert_snapshot!(serde_json::to_string(persisted)?, @r#""https://example.com/file.whl?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D&other=a+b""#);
-        assert_eq!(persisted.as_ref(), input);
+        assert_eq!(persisted.as_url().as_str(), input);
         assert_eq!(persisted.to_string(), url.to_string());
         assert_eq!(format!("{persisted:?}"), format!("{url:?}"));
 

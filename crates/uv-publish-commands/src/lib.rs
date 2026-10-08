@@ -78,7 +78,8 @@ pub async fn publish(
         let publish_url = index
             .publish_url
             .clone()
-            .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
+            .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?
+            .into_url();
 
         let check_url = index.url.clone();
         (publish_url, Some(check_url))

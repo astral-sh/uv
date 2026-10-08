@@ -38,7 +38,7 @@ use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
-use uv_redacted::{CredentialPersistingUrl, DisplaySafeUrl};
+use uv_redacted::{CredentialPersistingUrl, DisplaySafeUrl, PersistSafeUrl};
 use uv_small_str::SmallString;
 use uv_warnings::warn_user_once;
 
@@ -317,7 +317,7 @@ pub struct PylockTomlPackage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Version>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<DisplaySafeUrl>,
+    pub index: Option<PersistSafeUrl>,
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1041,7 +1041,7 @@ impl<'lock> PylockToml {
                 marker: node.marker,
                 requires_python: None,
                 dependencies: vec![],
-                index,
+                index: index.map(Into::into),
                 vcs,
                 directory,
                 archive,
@@ -1338,7 +1338,7 @@ impl<'lock> PylockToml {
                         install_path,
                         &package.name,
                         package.version.as_ref(),
-                        package.index.as_ref(),
+                        package.index.as_ref().map(PersistSafeUrl::as_url),
                     )?],
                     best_wheel_index: 0,
                     sdist: None,
@@ -1358,7 +1358,7 @@ impl<'lock> PylockToml {
                     install_path,
                     &package.name,
                     package.version.as_ref(),
-                    package.index.as_ref(),
+                    package.index.as_ref().map(PersistSafeUrl::as_url),
                 )?));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
@@ -1478,7 +1478,13 @@ impl PylockTomlPackage {
             table.insert("dependencies", value(dependencies));
         }
         if let Some(ref index) = self.index {
-            table.insert("index", value(index.to_string()));
+            table.insert(
+                "index",
+                value(serde::Serialize::serialize(
+                    index,
+                    toml_edit::ser::ValueSerializer::new(),
+                )?),
+            );
         }
         if let Some(ref vcs) = self.vcs {
             table.insert(
