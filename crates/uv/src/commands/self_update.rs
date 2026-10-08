@@ -54,6 +54,16 @@ fn installer_download_url(
     ))
 }
 
+/// Provide a link to the release location actually used for a successful update.
+/// Custom Astral mirrors serve artifacts, not necessarily GitHub tag HTML pages.
+fn update_success_url(target_version: &Pep440Version, astral_mirror_url: Option<&str>) -> String {
+    if let Some(download_url) = installer_download_url(target_version, astral_mirror_url) {
+        format!("{download_url}/{}", installer_filename())
+    } else {
+        format!("https://github.com/astral-sh/uv/releases/tag/{target_version}")
+    }
+}
+
 const AXOUPDATER_CONFIG_PATH: &str = "AXOUPDATER_CONFIG_PATH";
 const AXOUPDATER_CONFIG_WORKING_DIR: &str = "AXOUPDATER_CONFIG_WORKING_DIR";
 
@@ -376,6 +386,7 @@ async fn run_official_updater(
     } else {
         "Upgraded"
     };
+    let update_url = update_success_url(target_version, custom_astral_mirror.as_deref());
     writeln!(
         printer.stderr(),
         "{}",
@@ -385,7 +396,7 @@ async fn run_official_updater(
             ":".bold(),
             format!("v{current_version}").bold().cyan(),
             format!("v{target_version}").bold().cyan(),
-            format!("https://github.com/astral-sh/uv/releases/tag/{target_version}").cyan(),
+            update_url.cyan(),
         )
     )?;
 
@@ -1019,6 +1030,32 @@ mod tests {
                 "https://nexus.example.com/repository/releases.astral.sh/github/uv/releases/download/1.2.3/{}",
                 installer_filename()
             )]
+        );
+    }
+
+    #[test]
+    fn test_update_success_url_for_default_mirror() {
+        let version = Pep440Version::new([1, 2, 3]);
+        assert_eq!(
+            update_success_url(&version, None),
+            "https://github.com/astral-sh/uv/releases/tag/1.2.3"
+        );
+        assert_eq!(
+            update_success_url(&version, Some("")),
+            "https://github.com/astral-sh/uv/releases/tag/1.2.3"
+        );
+    }
+
+    #[test]
+    fn test_update_success_url_for_custom_mirror() {
+        let version = Pep440Version::new([1, 2, 3]);
+        let mirror = "https://nexus.example.com/repository/releases.astral.sh/";
+        assert_eq!(
+            update_success_url(&version, Some(mirror)),
+            format!(
+                "https://nexus.example.com/repository/releases.astral.sh/github/uv/releases/download/1.2.3/{}",
+                installer_filename()
+            )
         );
     }
 
