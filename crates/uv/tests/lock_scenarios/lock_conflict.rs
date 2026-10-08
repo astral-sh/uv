@@ -2959,7 +2959,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3103,7 +3103,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3246,7 +3246,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3409,7 +3409,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -3721,7 +3721,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -3858,7 +3858,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -3996,7 +3996,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -4138,7 +4138,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -4276,7 +4276,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -4419,7 +4419,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -4560,7 +4560,7 @@ fn shared_dependency_extra() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -4723,7 +4723,7 @@ fn shared_dependency_group() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -4887,7 +4887,7 @@ fn shared_dependency_mixed() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -5090,7 +5090,7 @@ conflicts = [
      + sniffio==1.3.1
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -5273,7 +5273,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
     Checked in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -5432,7 +5432,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
     Checked in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
