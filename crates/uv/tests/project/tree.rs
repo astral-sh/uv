@@ -2072,96 +2072,380 @@ fn repeated_dependencies() -> Result<()> {
     "
     );
 
-    let mut projected_edges = Vec::new();
-    for invert in [false, true] {
-        let mut command = context.tree();
-        command
-            .arg("--preview-features")
-            .arg("json-output")
-            .arg("--format")
-            .arg("json")
-            .arg("--universal");
-        if invert {
-            command.arg("--invert");
-        }
-        let output = command.output()?;
-        output.clone().assert().success();
-        let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-        let resolution = report["resolution"]
-            .as_object()
-            .context("dependency graph resolution should be an object")?;
-        let project_edges = if invert {
-            resolution
-                .iter()
-                .filter(|(_, node)| node["name"] == "anyio" && node["kind"] == "package")
-                .flat_map(|(package, node)| {
-                    node["dependencies"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter(|dependency| {
-                            dependency["id"]
-                                .as_str()
-                                .is_some_and(|id| id.starts_with("project=="))
-                        })
-                        .map(move |dependency| {
-                            serde_json::json!({
-                                "package": package,
-                                "marker": dependency["marker"],
-                            })
-                        })
-                })
-                .collect::<Vec<_>>()
-        } else {
-            resolution
-                .values()
-                .find(|node| node["name"] == "project" && node["kind"] == "package")
-                .and_then(|node| node["dependencies"].as_array())
-                .context("project should have dependency graph edges")?
-                .iter()
-                .map(|dependency| {
-                    serde_json::json!({
-                        "package": dependency["id"],
-                        "marker": dependency["marker"],
-                    })
-                })
-                .collect::<Vec<_>>()
-        };
-
-        projected_edges.push(serde_json::json!({
-            "inverted": invert,
-            "edges": project_edges,
-        }));
-    }
-    assert_json_snapshot!(projected_edges, @r#"
-    [
-      {
-        "edges": [
-          {
-            "marker": "sys_platform == 'win32'",
-            "package": "anyio==1.4.0@registry+https://pypi.org/simple"
-          },
-          {
-            "marker": "sys_platform == 'linux'",
-            "package": "anyio==4.3.0@registry+https://pypi.org/simple"
-          }
-        ],
-        "inverted": false
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--preview-features", "json-output", "--format", "json", "--universal"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
       },
-      {
-        "edges": [
-          {
-            "marker": "sys_platform == 'win32'",
-            "package": "anyio==1.4.0@registry+https://pypi.org/simple"
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "anyio==1.4.0@registry+https://pypi.org/simple": {
+          "name": "anyio",
+          "version": "1.4.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
           },
-          {
-            "marker": "sys_platform == 'linux'",
-            "package": "anyio==4.3.0@registry+https://pypi.org/simple"
-          }
-        ],
-        "inverted": true
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "async-generator==1.10@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "idna==3.6@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "sniffio==1.3.1@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/c3/5f/ad80678e9ed82f8c4236a108b203b1aeb05f8d5de66b9b7bbed8e3255eaf/anyio-1.4.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "9ee67e8131853f42957e214d4531cee6f2b66dda164a298d9686a768b7161a4f"
+              },
+              "size": 36800,
+              "upload_time": "2020-07-06T09:49:50.807Z",
+              "filename": "anyio-1.4.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "anyio==4.3.0@registry+https://pypi.org/simple": {
+          "name": "anyio",
+          "version": "4.3.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "idna==3.6@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "sniffio==1.3.1@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+              },
+              "size": 85584,
+              "upload_time": "2024-02-19T08:36:26.842Z",
+              "filename": "anyio-4.3.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "async-generator==1.10@registry+https://pypi.org/simple": {
+          "name": "async-generator",
+          "version": "1.10",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/71/52/39d20e03abd0ac9159c162ec24b93fbcaa111e8400308f2465432495ca2b/async_generator-1.10-py3-none-any.whl",
+              "hashes": {
+                "sha256": "01c7bf666359b4967d2cda0000cc2e4af16a0ae098cbffcb8472fb9e8ad6585b"
+              },
+              "size": 18857,
+              "upload_time": "2018-08-01T03:36:20.029Z",
+              "filename": "async_generator-1.10-py3-none-any.whl"
+            }
+          ]
+        },
+        "idna==3.6@registry+https://pypi.org/simple": {
+          "name": "idna",
+          "version": "3.6",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl",
+              "hashes": {
+                "sha256": "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f"
+              },
+              "size": 61567,
+              "upload_time": "2023-11-25T15:40:52.604Z",
+              "filename": "idna-3.6-py3-none-any.whl"
+            }
+          ]
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "anyio==1.4.0@registry+https://pypi.org/simple",
+              "marker": "sys_platform == 'win32'"
+            },
+            {
+              "id": "anyio==4.3.0@registry+https://pypi.org/simple",
+              "marker": "sys_platform == 'linux'"
+            }
+          ]
+        },
+        "sniffio==1.3.1@registry+https://pypi.org/simple": {
+          "name": "sniffio",
+          "version": "1.3.1",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl",
+              "hashes": {
+                "sha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"
+              },
+              "size": 10235,
+              "upload_time": "2024-02-25T23:20:01.196Z",
+              "filename": "sniffio-1.3.1-py3-none-any.whl"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
       }
-    ]
+    }
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--preview-features", "json-output", "--format", "json", "--universal", "--invert"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "async-generator==1.10@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "idna==3.6@registry+https://pypi.org/simple"
+        },
+        {
+          "id": "sniffio==1.3.1@registry+https://pypi.org/simple"
+        }
+      ],
+      "inverted": true,
+      "members": [
+        {
+          "name": "project",
+          "path": "[TEMP_DIR]/",
+          "id": "project==0.1.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "anyio==1.4.0@registry+https://pypi.org/simple": {
+          "name": "anyio",
+          "version": "1.4.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "project==0.1.0@virtual+[TEMP_DIR]/",
+              "marker": "sys_platform == 'win32'"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/c3/5f/ad80678e9ed82f8c4236a108b203b1aeb05f8d5de66b9b7bbed8e3255eaf/anyio-1.4.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "9ee67e8131853f42957e214d4531cee6f2b66dda164a298d9686a768b7161a4f"
+              },
+              "size": 36800,
+              "upload_time": "2020-07-06T09:49:50.807Z",
+              "filename": "anyio-1.4.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "anyio==4.3.0@registry+https://pypi.org/simple": {
+          "name": "anyio",
+          "version": "4.3.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "project==0.1.0@virtual+[TEMP_DIR]/",
+              "marker": "sys_platform == 'linux'"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
+              },
+              "size": 85584,
+              "upload_time": "2024-02-19T08:36:26.842Z",
+              "filename": "anyio-4.3.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "async-generator==1.10@registry+https://pypi.org/simple": {
+          "name": "async-generator",
+          "version": "1.10",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "anyio==1.4.0@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/71/52/39d20e03abd0ac9159c162ec24b93fbcaa111e8400308f2465432495ca2b/async_generator-1.10-py3-none-any.whl",
+              "hashes": {
+                "sha256": "01c7bf666359b4967d2cda0000cc2e4af16a0ae098cbffcb8472fb9e8ad6585b"
+              },
+              "size": 18857,
+              "upload_time": "2018-08-01T03:36:20.029Z",
+              "filename": "async_generator-1.10-py3-none-any.whl"
+            }
+          ]
+        },
+        "idna==3.6@registry+https://pypi.org/simple": {
+          "name": "idna",
+          "version": "3.6",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "anyio==1.4.0@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "anyio==4.3.0@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl",
+              "hashes": {
+                "sha256": "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f"
+              },
+              "size": 61567,
+              "upload_time": "2023-11-25T15:40:52.604Z",
+              "filename": "idna-3.6-py3-none-any.whl"
+            }
+          ]
+        },
+        "project==0.1.0@virtual+[TEMP_DIR]/": {
+          "name": "project",
+          "version": "0.1.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "sniffio==1.3.1@registry+https://pypi.org/simple": {
+          "name": "sniffio",
+          "version": "1.3.1",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "anyio==1.4.0@registry+https://pypi.org/simple"
+            },
+            {
+              "id": "anyio==4.3.0@registry+https://pypi.org/simple"
+            }
+          ],
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl",
+              "hashes": {
+                "sha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"
+              },
+              "size": 10235,
+              "upload_time": "2024-02-25T23:20:01.196Z",
+              "filename": "sniffio-1.3.1-py3-none-any.whl"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
     "#);
 
     // `uv tree` should update the lockfile
