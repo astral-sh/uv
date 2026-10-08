@@ -1102,7 +1102,10 @@ fn init_no_readme() {
     ");
 
     let pyproject = context.read("foo/pyproject.toml");
-    let _ = fs_err::read_to_string(context.temp_dir.join("foo/README.md")).unwrap_err();
+    context
+        .temp_dir
+        .child("foo/README.md")
+        .assert(predicate::path::missing());
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1138,7 +1141,10 @@ fn init_no_pin_python() {
     ");
 
     let pyproject = context.read("foo/pyproject.toml");
-    let _ = fs_err::read_to_string(context.temp_dir.join("foo/.python-version")).unwrap_err();
+    context
+        .temp_dir
+        .child("foo/.python-version")
+        .assert(predicate::path::missing());
 
     insta::with_settings!({
         filters => context.filters(),
