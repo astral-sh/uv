@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::io;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -50,27 +50,6 @@ if __name__ == "__main__":
     sys.exit({function}())
 "#
     )
-}
-
-/// Part of entrypoints parsing
-pub(crate) fn read_scripts_from_section(
-    scripts_section: &HashMap<String, Option<String>>,
-    section_name: &str,
-) -> Result<Vec<Script>, Error> {
-    let mut scripts = Vec::new();
-    for (script_name, python_location) in scripts_section {
-        match python_location {
-            Some(value) => {
-                scripts.push(Script::from_value(script_name, value)?);
-            }
-            None => {
-                return Err(Error::InvalidWheel(format!(
-                    "[{section_name}] key {script_name} must have a value"
-                )));
-            }
-        }
-    }
-    Ok(scripts)
 }
 
 /// Shamelessly stolen (and updated for recent sha2)
