@@ -3,6 +3,64 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.24
+
+Released on 2026-10-08.
+
+### Enhancements
+
+- Remove orphaned temporary build environments with `uv cache prune` ([#22171](https://github.com/astral-sh/uv/pull/22171))
+- Accept PEP 508 marker operators directly before grouped expressions ([#22309](https://github.com/astral-sh/uv/pull/22309))
+- Reject malformed requirements-file options instead of partially parsing or ignoring them ([#22317](https://github.com/astral-sh/uv/pull/22317))
+- Show underlying filesystem and registry errors when managed Python uninstallation fails ([#22362](https://github.com/astral-sh/uv/pull/22362))
+- Identify the invalid source URL in Python mirror errors ([#22364](https://github.com/astral-sh/uv/pull/22364))
+
+### Preview features
+
+- Display preferred advisory IDs in `uv audit` reports, prioritizing PYSEC, GHSA, then CVE identifiers ([#22292](https://github.com/astral-sh/uv/pull/22292))
+
+### Configuration
+
+- Support custom installation mirrors for GraalPy ([#22269](https://github.com/astral-sh/uv/pull/22269))
+- Support custom installation mirrors for Pyodide ([#22271](https://github.com/astral-sh/uv/pull/22271))
+- Allow `UV_NO_CACHE=false` to override `no-cache = true` in configuration ([#22324](https://github.com/astral-sh/uv/pull/22324))
+- Report more precise error locations for invalid trusted-host ports and preview-feature list entries ([#22144](https://github.com/astral-sh/uv/pull/22144))
+
+### Performance
+
+- Speed up later commands after creating an environment by warming its interpreter cache ([#21304](https://github.com/astral-sh/uv/pull/21304))
+- Reduce code-signature verification work for ARM64 macOS releases with 16 KiB signature pages ([#22246](https://github.com/astral-sh/uv/pull/22246))
+- Enforce resource limits when parsing package indexes and `--find-links` pages with `astral-html` ([#22203](https://github.com/astral-sh/uv/pull/22203))
+- Reduce standalone `uv-build` executable size by 7.5% by omitting unused Zstandard support ([#22242](https://github.com/astral-sh/uv/pull/22242))
+- Reduce uv's binary size by about 232 KB by simplifying configuration deserialization ([#22144](https://github.com/astral-sh/uv/pull/22144))
+- Reduce Python download error formatting code size by sharing its formatter ([#22141](https://github.com/astral-sh/uv/pull/22141))
+
+### Bug fixes
+
+- Verify supplied hashes even when hash presence is disabled with `--no-require-hashes` or `require-hashes = false` ([#22369](https://github.com/astral-sh/uv/pull/22369))
+- Honor exact managed Python patch pins when creating script environments instead of following patch upgrades ([#22360](https://github.com/astral-sh/uv/pull/22360))
+- Prevent dependency overrides and constraints from activating optional dependencies when their extras are not selected ([#22237](https://github.com/astral-sh/uv/pull/22237))
+- Exclude optional dependencies from exports when their extras are activated only in incompatible environments ([#22234](https://github.com/astral-sh/uv/pull/22234))
+- Give explicit `uv publish --trusted-publishing` values precedence over configuration ([#22279](https://github.com/astral-sh/uv/pull/22279))
+- Allow `UV_OFFLINE=false` to override `offline = true` in configuration ([#22283](https://github.com/astral-sh/uv/pull/22283))
+- Allow `UV_SYSTEM_CERTS=false` to override `system-certs = true` in configuration ([#22291](https://github.com/astral-sh/uv/pull/22291))
+- Allow `uv auth login` over IPv6 loopback addresses ([#22306](https://github.com/astral-sh/uv/pull/22306))
+- Resolve GitHub dependencies whose Git references contain `#` or `%` characters ([#22281](https://github.com/astral-sh/uv/pull/22281))
+- Recognize existing Pyodide interpreters as satisfying Pyodide Python requests ([#22322](https://github.com/astral-sh/uv/pull/22322))
+- Preserve JSON output from `uv version` and `uv self version` with a single `--quiet` flag ([#22280](https://github.com/astral-sh/uv/pull/22280))
+- Preserve trailing spaces and tabs in passwords returned by subprocess keyrings ([#22284](https://github.com/astral-sh/uv/pull/22284))
+- Restore wheel incompatibility hints when `WHEEL` metadata contains multiple expanded `Tag:` rows ([#22235](https://github.com/astral-sh/uv/pull/22235))
+- Preserve Windows wheel-script rename errors unless a cross-drive copy fallback applies ([#22302](https://github.com/astral-sh/uv/pull/22302))
+- Prevent workspace-cache assertion failures after modifying a project at the workspace root ([#22236](https://github.com/astral-sh/uv/pull/22236))
+- Hide the ignored `--keyring-provider` option from `uv auth` help ([#19520](https://github.com/astral-sh/uv/pull/19520))
+- Report HTTP client setup failures directly when resolving unnamed `uv tool` requirements ([#22320](https://github.com/astral-sh/uv/pull/22320))
+
+### Documentation
+
+- Update Docker and AWS Lambda examples to cache dependency layers using frozen lockfiles without project manifests ([#22172](https://github.com/astral-sh/uv/pull/22172))
+- Fix stale links and descriptions in Rust crate documentation ([#22311](https://github.com/astral-sh/uv/pull/22311), [#22361](https://github.com/astral-sh/uv/pull/22361))
+- Fix a typo in the `required-environments` documentation ([#22238](https://github.com/astral-sh/uv/pull/22238))
+
 ## 0.12.23
 
 Released on 2026-10-03.

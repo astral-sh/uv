@@ -10,22 +10,25 @@ for more information.
 This crate is the entry point to the uv command-line interface. The Rust API exposed here is not
 considered public interface.
 
-This is version 0.12.23. The source can be found
-[here](https://github.com/astral-sh/uv/blob/0.12.23/crates/uv).
+This is version 0.12.24. The source can be found
+[here](https://github.com/astral-sh/uv/blob/0.12.24/crates/uv).
 
 The following uv workspace members are also available:
 
 - [uv-audit](https://crates.io/crates/uv-audit)
+- [uv-audit-operations](https://crates.io/crates/uv-audit-operations)
 - [uv-auth](https://crates.io/crates/uv-auth)
 - [uv-bin-install](https://crates.io/crates/uv-bin-install)
 - [uv-build](https://crates.io/crates/uv-build)
 - [uv-build-backend](https://crates.io/crates/uv-build-backend)
+- [uv-build-commands](https://crates.io/crates/uv-build-commands)
 - [uv-build-frontend](https://crates.io/crates/uv-build-frontend)
 - [uv-cache](https://crates.io/crates/uv-cache)
 - [uv-cache-info](https://crates.io/crates/uv-cache-info)
 - [uv-cache-key](https://crates.io/crates/uv-cache-key)
 - [uv-cli](https://crates.io/crates/uv-cli)
 - [uv-client](https://crates.io/crates/uv-client)
+- [uv-command-support](https://crates.io/crates/uv-command-support)
 - [uv-configuration](https://crates.io/crates/uv-configuration)
 - [uv-console](https://crates.io/crates/uv-console)
 - [uv-dirs](https://crates.io/crates/uv-dirs)
@@ -33,6 +36,7 @@ The following uv workspace members are also available:
 - [uv-distribution](https://crates.io/crates/uv-distribution)
 - [uv-distribution-filename](https://crates.io/crates/uv-distribution-filename)
 - [uv-distribution-types](https://crates.io/crates/uv-distribution-types)
+- [uv-environment-operations](https://crates.io/crates/uv-environment-operations)
 - [uv-errors](https://crates.io/crates/uv-errors)
 - [uv-extract](https://crates.io/crates/uv-extract)
 - [uv-fastid](https://crates.io/crates/uv-fastid)
@@ -41,10 +45,12 @@ The following uv workspace members are also available:
 - [uv-git](https://crates.io/crates/uv-git)
 - [uv-git-types](https://crates.io/crates/uv-git-types)
 - [uv-globfilter](https://crates.io/crates/uv-globfilter)
+- [uv-install-operations](https://crates.io/crates/uv-install-operations)
 - [uv-install-wheel](https://crates.io/crates/uv-install-wheel)
 - [uv-installer](https://crates.io/crates/uv-installer)
 - [uv-keyring](https://crates.io/crates/uv-keyring)
 - [uv-lock](https://crates.io/crates/uv-lock)
+- [uv-lock-operations](https://crates.io/crates/uv-lock-operations)
 - [uv-logging](https://crates.io/crates/uv-logging)
 - [uv-macros](https://crates.io/crates/uv-macros)
 - [uv-metadata](https://crates.io/crates/uv-metadata)
@@ -55,15 +61,24 @@ The following uv workspace members are also available:
 - [uv-pep440](https://crates.io/crates/uv-pep440)
 - [uv-pep508](https://crates.io/crates/uv-pep508)
 - [uv-performance-memory-allocator](https://crates.io/crates/uv-performance-memory-allocator)
+- [uv-pip-commands](https://crates.io/crates/uv-pip-commands)
 - [uv-platform](https://crates.io/crates/uv-platform)
 - [uv-platform-tags](https://crates.io/crates/uv-platform-tags)
 - [uv-preview](https://crates.io/crates/uv-preview)
+- [uv-project-commands](https://crates.io/crates/uv-project-commands)
+- [uv-project-edit](https://crates.io/crates/uv-project-edit)
 - [uv-publish](https://crates.io/crates/uv-publish)
+- [uv-publish-commands](https://crates.io/crates/uv-publish-commands)
 - [uv-pypi-types](https://crates.io/crates/uv-pypi-types)
-- [uv-python](https://crates.io/crates/uv-python)
+- [uv-python-commands](https://crates.io/crates/uv-python-commands)
+- [uv-python-discovery](https://crates.io/crates/uv-python-discovery)
+- [uv-python-interpreter](https://crates.io/crates/uv-python-interpreter)
+- [uv-python-managed](https://crates.io/crates/uv-python-managed)
+- [uv-python-types](https://crates.io/crates/uv-python-types)
 - [uv-redacted](https://crates.io/crates/uv-redacted)
 - [uv-requirements](https://crates.io/crates/uv-requirements)
 - [uv-requirements-txt](https://crates.io/crates/uv-requirements-txt)
+- [uv-resolve-operations](https://crates.io/crates/uv-resolve-operations)
 - [uv-resolver](https://crates.io/crates/uv-resolver)
 - [uv-resolver-types](https://crates.io/crates/uv-resolver-types)
 - [uv-scripts](https://crates.io/crates/uv-scripts)
@@ -76,6 +91,7 @@ The following uv workspace members are also available:
 - [uv-threads](https://crates.io/crates/uv-threads)
 - [uv-toml](https://crates.io/crates/uv-toml)
 - [uv-tool](https://crates.io/crates/uv-tool)
+- [uv-tool-commands](https://crates.io/crates/uv-tool-commands)
 - [uv-torch](https://crates.io/crates/uv-torch)
 - [uv-trampoline-builder](https://crates.io/crates/uv-trampoline-builder)
 - [uv-types](https://crates.io/crates/uv-types)
@@ -85,6 +101,7 @@ The following uv workspace members are also available:
 - [uv-warnings](https://crates.io/crates/uv-warnings)
 - [uv-windows](https://crates.io/crates/uv-windows)
 - [uv-workspace](https://crates.io/crates/uv-workspace)
+- [uv-workspace-commands](https://crates.io/crates/uv-workspace-commands)
 
 uv's workspace members are considered internal and will have frequent breaking changes.
 
