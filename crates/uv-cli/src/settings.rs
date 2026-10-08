@@ -56,14 +56,14 @@ use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies, OverrideDe
 use crate::comma::CommaSeparatedRequirements;
 use crate::{
     AddArgs, AuditArgs, AuditCommonArgs, AuditOutputFormat, AuthLoginArgs, AuthLogoutArgs,
-    AuthTokenArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    MetadataArgs, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipInstallFormat,
-    PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
-    ProjectDependencyGroupsArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, SyncFormat, ToolAuditArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
-    VersionFormat,
+    AuthTokenArgs, ColorChoice, DependencyConstraintsArgs, ExternalCommand, GlobalArgs, InitArgs,
+    ListFormat, LockArgs, Maybe, MetadataArgs, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
+    PipInstallArgs, PipInstallFormat, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs,
+    PipUninstallArgs, ProjectDependencyGroupsArgs, PythonFindArgs, PythonInstallArgs,
+    PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs,
+    RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolAuditArgs, ToolDirArgs, ToolInstallArgs,
+    ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs,
+    VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use crate::{
     AuthorFrom, BuildArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs,
@@ -1082,10 +1082,13 @@ impl ToolInstallSettings {
             with_editable,
             with_requirements,
             with_executables_from,
-            constraints,
-            overrides,
-            excludes,
-            build_constraints,
+            constraints:
+                DependencyConstraintsArgs {
+                    constraints,
+                    overrides,
+                    excludes,
+                    build_constraints,
+                },
             lfs,
             installer,
             force,
@@ -3364,13 +3367,16 @@ impl PipCompileSettings {
     ) -> anyhow::Result<Self> {
         let PipCompileArgs {
             src_file,
-            constraints,
-            overrides,
-            excludes,
+            constraints:
+                DependencyConstraintsArgs {
+                    constraints,
+                    overrides,
+                    excludes,
+                    build_constraints,
+                },
             extra,
             all_extras,
             no_all_extras,
-            build_constraints,
             refresh,
             no_deps,
             deps,
@@ -3706,10 +3712,13 @@ impl PipInstallSettings {
             editable,
             no_editable,
             no_editable_package,
-            constraints,
-            overrides,
-            excludes,
-            build_constraints,
+            constraints:
+                DependencyConstraintsArgs {
+                    constraints,
+                    overrides,
+                    excludes,
+                    build_constraints,
+                },
             extra,
             all_extras,
             no_all_extras,
