@@ -2289,26 +2289,29 @@ fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
     let editable_url = Url::from_directory_path(editable_source.path())
         .map_err(|()| anyhow::anyhow!("failed to convert source path to file URL"))?;
     let site_packages = ChildPath::new(context.site_packages());
-    for (version, editable) in [("0.1.0", false), ("0.2.0", true)] {
-        let dist_info = site_packages.child(format!("module_owner-{version}.dist-info"));
-        dist_info.create_dir_all()?;
-        dist_info.child("METADATA").write_str(&formatdoc! {"
-            Metadata-Version: 2.1
-            Name: module-owner
-            Version: {version}
-            "
-        })?;
-        dist_info.child("RECORD").write_str("")?;
-        if editable {
-            dist_info.child("direct_url.json").write_str(
-                &serde_json::json!({
-                    "url": editable_url.as_str(),
-                    "dir_info": {"editable": true},
-                })
-                .to_string(),
-            )?;
-        }
-    }
+    let installed = site_packages.child("module_owner-0.1.0.dist-info");
+    installed.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: module-owner
+        Version: 0.1.0
+        "
+    })?;
+    installed.child("RECORD").write_str("")?;
+    let editable = site_packages.child("module_owner-0.2.0.dist-info");
+    editable.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: module-owner
+        Version: 0.2.0
+        "
+    })?;
+    editable.child("RECORD").write_str("")?;
+    editable.child("direct_url.json").write_str(
+        &serde_json::json!({
+            "url": editable_url.as_str(),
+            "dir_info": {"editable": true},
+        })
+        .to_string(),
+    )?;
 
     let assert = context.workspace_metadata().assert().success();
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
@@ -2348,16 +2351,22 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
     })?;
 
     let site_packages = ChildPath::new(context.site_packages());
-    for name in ["missing-record", "stub-only"] {
-        let dist_info = site_packages.child(format!("{}-0.1.0.dist-info", name.replace('-', "_")));
-        dist_info.create_dir_all()?;
-        dist_info.child("METADATA").write_str(&formatdoc! {"
-            Metadata-Version: 2.1
-            Name: {name}
-            Version: 0.1.0
-            "
+    site_packages
+        .child("missing_record-0.1.0.dist-info/METADATA")
+        .write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: missing-record
+        Version: 0.1.0
+        "
         })?;
-    }
+    site_packages
+        .child("stub_only-0.1.0.dist-info/METADATA")
+        .write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: stub-only
+        Version: 0.1.0
+        "
+        })?;
     site_packages.child("stub_only.pyi").write_str("")?;
     site_packages
         .child("stub_only-0.1.0.dist-info/RECORD")
