@@ -389,7 +389,7 @@
       "type": ["boolean", "null"]
     },
     "no-editable": {
-      "description": "Install editable dependencies, including the project and its workspace members, as\nnon-editable packages by default.\n\nApplies to `uv sync`, `uv run`, and `uv export`. The `--editable`, `--no-editable`, and\n`--no-editable-package` command-line flags and the `UV_NO_EDITABLE` environment variable\noverride this setting.",
+      "description": "Treat editable dependencies, including the project and its workspace members, as\nnon-editable by default.\n\nApplies to `uv sync`, `uv run`, and `uv export`. The `--editable`, `--no-editable`, and\n`--no-editable-package` command-line flags and the `UV_NO_EDITABLE` environment variable\noverride this setting.",
       "type": ["boolean", "null"]
     },
     "no-index": {

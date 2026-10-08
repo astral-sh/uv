@@ -839,7 +839,7 @@ impl RunSettings {
                 flag(editable.into(), no_editable.into(), "editable")?,
                 no_editable_package,
             )
-            .or_else(|| configured_editable_mode(&environment.no_editable, configured_no_editable)),
+            .or_else(|| configured_editable_mode(environment.no_editable, configured_no_editable)),
             modifications: if flag(exact, inexact, "inexact")?.unwrap_or(false) {
                 Modifications::Exact
             } else {
@@ -1994,7 +1994,7 @@ impl SyncSettings {
                 flag(editable.into(), no_editable.into(), "editable")?,
                 no_editable_package,
             )
-            .or_else(|| configured_editable_mode(&environment.no_editable, configured_no_editable)),
+            .or_else(|| configured_editable_mode(environment.no_editable, configured_no_editable)),
             install_options: InstallOptions::new(
                 no_install_project,
                 only_install_project,
@@ -2956,7 +2956,7 @@ impl ExportSettings {
                 flag(editable.into(), no_editable.into(), "editable")?,
                 no_editable_package,
             )
-            .or_else(|| configured_editable_mode(&environment.no_editable, configured_no_editable)),
+            .or_else(|| configured_editable_mode(environment.no_editable, configured_no_editable)),
             hashes: flag(hashes, no_hashes, "hashes")?.unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
@@ -4402,7 +4402,7 @@ impl VenvSettings {
 
 /// Return the configured [`EditableMode`] when the environment flag is unset.
 fn configured_editable_mode(
-    environment: &EnvFlag,
+    environment: EnvFlag,
     configured_no_editable: Option<bool>,
 ) -> Option<EditableMode> {
     if environment.value.is_none() && configured_no_editable == Some(true) {

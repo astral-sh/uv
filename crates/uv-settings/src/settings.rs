@@ -99,8 +99,8 @@ pub struct Options {
     #[option_group]
     pub pip: Option<PipOptions>,
 
-    /// Install editable dependencies, including the project and its workspace members, as
-    /// non-editable packages by default.
+    /// Treat editable dependencies, including the project and its workspace members, as
+    /// non-editable by default.
     ///
     /// Applies to `uv sync`, `uv run`, and `uv export`. The `--editable`, `--no-editable`, and
     /// `--no-editable-package` command-line flags and the `UV_NO_EDITABLE` environment variable
