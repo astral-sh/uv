@@ -5860,6 +5860,7 @@ dependencies = [
  "uv-lock",
  "uv-lock-operations",
  "uv-logging",
+ "uv-macho",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -7137,6 +7138,11 @@ name = "uv-macho"
 version = "0.0.90"
 dependencies = [
  "anyhow",
+ "assert_cmd",
+ "fs-err",
+ "insta",
+ "sha2 0.11.0",
+ "tempfile",
  "thiserror",
 ]
 
