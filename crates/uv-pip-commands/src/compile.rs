@@ -601,6 +601,11 @@ pub async fn pip_compile(
         None,
         Box::new(DefaultResolveLogger),
         printer,
+        match format {
+            // Gating extras behaviour on universal.
+            PipCompileFormat::PylockToml => universal,
+            PipCompileFormat::RequirementsTxt => false,
+        },
     )
     .await
     {

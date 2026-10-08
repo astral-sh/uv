@@ -1,4 +1,7 @@
-use crate::{AnnotatedDist, DistributionMetadataIndex, MetadataResponse, Options, UniversalMarker};
+use crate::{
+    AnnotatedDist, DistributionMetadataIndex, MetadataResponse, Options, SelectionNames,
+    UniversalMarker,
+};
 use indexmap::IndexSet;
 use petgraph::{
     Directed,
@@ -22,6 +25,7 @@ use uv_pypi_types::{HashDigests, ParsedUrlError};
 /// edge represents a dependency between two pinned packages.
 #[derive(Debug)]
 pub struct ResolverOutput {
+    pub selection_names: Option<SelectionNames>,
     /// The underlying graph.
     pub graph: Graph<ResolutionGraphNode, UniversalMarker, Directed>,
     /// The range of supported Python versions.

@@ -477,6 +477,7 @@ pub async fn pip_sync(
             None,
             Box::new(DefaultResolveLogger),
             printer,
+            false,
         )
         .await
         {

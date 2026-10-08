@@ -717,6 +717,43 @@ impl InternerGuard<'_> {
         result
     }
 
+    pub(crate) fn without_selections(&mut self, i: NodeId) -> NodeId {
+        let mut cache = FxHashMap::default();
+        self.without_selections_cached(i, &mut cache)
+    }
+
+    fn without_selections_cached(
+        &mut self,
+        i: NodeId,
+        cache: &mut FxHashMap<NodeId, NodeId>,
+    ) -> NodeId {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return i;
+        }
+
+        if let Some(&cached) = cache.get(&i) {
+            return cached;
+        }
+
+        let node = self.shared.node(i);
+        let result = {
+            if matches!(&node.var, Variable::List(_)) {
+                let mut combi = NodeId::FALSE;
+                for child in node.children.nodes() {
+                    combi = self.or(combi, child.negate(i));
+                }
+                self.without_selections_cached(combi, cache)
+            } else {
+                let children = node
+                    .children
+                    .map(i, |child| self.without_selections_cached(child, cache));
+                self.create_node(node.var.clone(), children)
+            }
+        };
+        cache.insert(i, result);
+        result
+    }
+
     /// Returns a new tree where the only nodes remaining are `extra` nodes.
     ///
     /// If there are no extra nodes, then this returns a tree that is always
