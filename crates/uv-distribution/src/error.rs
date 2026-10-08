@@ -74,6 +74,14 @@ pub enum Error {
     Build(AnyErrorBuild),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
+    #[error(
+        "The build backend returned a wheel path (`{path}`) instead of a wheel filename; PEP 517 requires `build_wheel` to return the basename of the built wheel"
+    )]
+    BuiltWheelPathFromBackend {
+        path: String,
+        #[source]
+        source: WheelFilenameError,
+    },
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     WheelMetadataNameMismatch {
         given: PackageName,
@@ -297,6 +305,7 @@ impl Error {
             | Self::InvalidUrl(_)
             | Self::NonFileUrl(_)
             | Self::WheelFilename(_)
+            | Self::BuiltWheelPathFromBackend { .. }
             | Self::WheelMetadataNameMismatch { .. }
             | Self::WheelMetadataVersionMismatch { .. }
             | Self::WheelFilenameNameMismatch { .. }
@@ -433,6 +442,23 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "The built wheel `cryptography-47.0.0.dev1-cp315-abi3t-macosx_11_0_arm64.whl` is not compatible with the current Python 3.15t on macOS aarch64"
+        );
+    }
+
+    #[test]
+    fn built_wheel_error_formats_backend_path() {
+        let source = WheelFilename::from_str(
+            "/tmp/builds-v0/.tmpS2lnVm/coherent_build-0.28.0-py3-none-any.whl",
+        )
+        .unwrap_err();
+        let err = Error::BuiltWheelPathFromBackend {
+            path: "/tmp/builds-v0/.tmpS2lnVm/coherent_build-0.28.0-py3-none-any.whl".to_string(),
+            source,
+        };
+
+        assert_eq!(
+            err.to_string(),
+            "The build backend returned a wheel path (`/tmp/builds-v0/.tmpS2lnVm/coherent_build-0.28.0-py3-none-any.whl`) instead of a wheel filename; PEP 517 requires `build_wheel` to return the basename of the built wheel"
         );
     }
 
