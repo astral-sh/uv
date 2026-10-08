@@ -3,6 +3,82 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.24
+
+Released on 2026-10-08.
+
+### Enhancements
+
+- Accept PEP 508 marker operators before parentheses ([#22309](https://github.com/astral-sh/uv/pull/22309))
+- Reject malformed requirements file options ([#22317](https://github.com/astral-sh/uv/pull/22317))
+- Retain managed Python uninstall error sources ([#22362](https://github.com/astral-sh/uv/pull/22362))
+- Show the offending URL in Python mirror errors ([#22364](https://github.com/astral-sh/uv/pull/22364))
+- Use 16 KiB code-signature pages for ARM64 macOS releases ([#22246](https://github.com/astral-sh/uv/pull/22246))
+
+### Preview features
+
+- Honor advisory ID preference in `uv audit` ([#22292](https://github.com/astral-sh/uv/pull/22292))
+
+### Configuration
+
+- Add GraalPy installation mirrors ([#22269](https://github.com/astral-sh/uv/pull/22269))
+- Add Pyodide installation mirrors ([#22271](https://github.com/astral-sh/uv/pull/22271))
+- Honor explicit false for UV_NO_CACHE ([#22324](https://github.com/astral-sh/uv/pull/22324))
+
+### Performance
+
+- Disable unused Zstandard support in `uv-build` ([#22242](https://github.com/astral-sh/uv/pull/22242))
+- Migrate HTML parsing to astral-html ([#22203](https://github.com/astral-sh/uv/pull/22203))
+- Share debug formatting for Python download errors ([#22141](https://github.com/astral-sh/uv/pull/22141))
+- Warm the interpreter cache when syncing workspace metadata ([#21304](https://github.com/astral-sh/uv/pull/21304))
+
+### Bug fixes
+
+- Allow `UV_OFFLINE=false` to override configuration ([#22283](https://github.com/astral-sh/uv/pull/22283))
+- Allow `UV_SYSTEM_CERTS=false` to override configuration ([#22291](https://github.com/astral-sh/uv/pull/22291))
+- Allow auth login over IPv6 loopback ([#22306](https://github.com/astral-sh/uv/pull/22306))
+- Avoid publishing the project workspace root twice ([#22236](https://github.com/astral-sh/uv/pull/22236))
+- Fix Pyodide Python request satisfaction ([#22322](https://github.com/astral-sh/uv/pull/22322))
+- Fix trusted-publishing CLI precedence ([#22279](https://github.com/astral-sh/uv/pull/22279))
+- Percent-encode Git references in GitHub API requests ([#22281](https://github.com/astral-sh/uv/pull/22281))
+- Preserve JSON version output in quiet mode ([#22280](https://github.com/astral-sh/uv/pull/22280))
+- Preserve compound extra guards in dependency overrides ([#22237](https://github.com/astral-sh/uv/pull/22237))
+- Preserve expanded wheel tag rows when checking compatibility ([#22235](https://github.com/astral-sh/uv/pull/22235))
+- Preserve trailing whitespace in subprocess-keyring passwords ([#22284](https://github.com/astral-sh/uv/pull/22284))
+- Restrict Windows script-copy fallback to `CrossesDevices` ([#22302](https://github.com/astral-sh/uv/pull/22302))
+- Retain resolved Python requests when creating environments ([#22360](https://github.com/astral-sh/uv/pull/22360))
+- Track optional-extra activation when exporting locked dependencies ([#22234](https://github.com/astral-sh/uv/pull/22234))
+
+### Documentation
+
+- Fix Python discovery documentation references ([#22361](https://github.com/astral-sh/uv/pull/22361))
+- Update Docker guides for frozen lockfiles ([#22172](https://github.com/astral-sh/uv/pull/22172))
+- fix typo in `required-environments` documentation ([#22238](https://github.com/astral-sh/uv/pull/22238))
+
+### Other changes
+
+- Benchmark managed Python dylib patching on macOS ([#22216](https://github.com/astral-sh/uv/pull/22216))
+- Decouple Python requests from package and discovery context ([#22300](https://github.com/astral-sh/uv/pull/22300))
+- Deserialize trusted hosts and preview features directly ([#22144](https://github.com/astral-sh/uv/pull/22144))
+- Fix stale references in crate documentation ([#22311](https://github.com/astral-sh/uv/pull/22311))
+- Hide ignored auth keyring provider option ([#19520](https://github.com/astral-sh/uv/pull/19520))
+- Honor ARMv7 APT mirror fallback settings ([#22331](https://github.com/astral-sh/uv/pull/22331))
+- Prune temporary build environments in `uv cache prune` ([#22171](https://github.com/astral-sh/uv/pull/22171))
+- Remove the command exit status re-export ([#22313](https://github.com/astral-sh/uv/pull/22313))
+- Revert "Benchmark CLI construction and configuration parsing" ([#22349](https://github.com/astral-sh/uv/pull/22349))
+- Review premature formatting of domain values ([#22334](https://github.com/astral-sh/uv/pull/22334))
+- Separate Python download requests from installation metadata ([#22298](https://github.com/astral-sh/uv/pull/22298))
+- Separate Python environment discovery from inspection ([#22296](https://github.com/astral-sh/uv/pull/22296))
+- Separate Python request matching from request values ([#22297](https://github.com/astral-sh/uv/pull/22297))
+- Separate Windows Python registration from discovery ([#22315](https://github.com/astral-sh/uv/pull/22315))
+- Separate code quality review configuration from security review ([#22318](https://github.com/astral-sh/uv/pull/22318))
+- Separate managed Python detection from interpreter queries ([#22299](https://github.com/astral-sh/uv/pull/22299))
+- Split Python types, interpreter queries, management, and discovery ([#22301](https://github.com/astral-sh/uv/pull/22301))
+- Stop asserting requirements error types ([#22312](https://github.com/astral-sh/uv/pull/22312))
+- Use a typed error for extras without a source ([#22319](https://github.com/astral-sh/uv/pull/22319))
+- Use workflow errors for tool name resolution ([#22320](https://github.com/astral-sh/uv/pull/22320))
+- Verify hashes even when they are not required ([#22369](https://github.com/astral-sh/uv/pull/22369))
+
 ## 0.12.23
 
 Released on 2026-10-03.
