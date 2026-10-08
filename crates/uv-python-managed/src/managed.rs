@@ -640,7 +640,7 @@ impl ManagedPythonInstallation {
     }
 
     /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
-    /// [`create_bin_link`].
+    /// [`create_link_to_executable`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
         if cfg!(unix) {
             same_file::is_same_file(path, self.executable(false)).unwrap_or_default()

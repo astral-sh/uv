@@ -49,14 +49,12 @@ pub(crate) struct DiscoveryPreferences {
     environment_preference: EnvironmentPreference,
 }
 
-/// The result of an Python installation search.
+/// The result of a Python installation search.
 ///
 /// Returned by [`find_python_installation`].
 type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 
 /// The result of failed Python installation discovery.
-///
-/// See [`FindPythonResult`].
 #[derive(Clone, Debug, Error)]
 pub struct PythonNotFound {
     pub(super) request: PythonRequest,
@@ -1147,9 +1145,9 @@ fn find_python_installations_with_strategy<'a>(
 /// Find all Python installations that satisfy the given request, querying interpreters
 /// concurrently.
 ///
-/// Unlike [`find_python_installations`], this eagerly collects matching installations instead of
-/// returning a lazy iterator. Interpreter query failures produce warnings and are skipped. Other
-/// non-critical discovery errors are dropped, while critical errors are propagated in discovery order.
+/// Eagerly collects matching installations. Interpreter query failures produce warnings and are
+/// skipped. Other non-critical discovery errors are dropped, while critical errors are propagated in
+/// discovery order.
 pub fn find_all_python_installations(
     request: &PythonRequest,
     environments: EnvironmentPreference,
