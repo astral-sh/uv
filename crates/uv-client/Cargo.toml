@@ -30,6 +30,7 @@ uv-extract = { workspace = true }
 uv-fastid = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
+uv-macros = { workspace = true }
 uv-metadata = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }

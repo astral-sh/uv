@@ -1,6 +1,7 @@
 use std::fmt::Formatter;
 use std::str::FromStr;
 
+use uv_macros::DebugNoInline;
 use uv_small_str::SmallString;
 
 use crate::tags::AndroidAbi;
@@ -55,7 +56,7 @@ impl std::fmt::Display for ReleaseArch {
 /// FreeBSD) store an opaque suffix, which combines the release (like `3.14`) and architecture (like
 /// `x86_64`) into a single string (like `3_14_x86_64`).
 #[derive(
-    Debug,
+    DebugNoInline,
     Clone,
     Eq,
     PartialEq,
