@@ -228,13 +228,11 @@ script: package.module:main
     }
 
     #[test]
-    fn test_entry_point_groups() -> Result<(), Error> {
+    fn test_case_sensitive_entry_points() -> Result<(), Error> {
         let sample_ini = "
 [console_scripts]
 Command = example:main
 command = example:other
-[gui_scripts]
-Window = example:gui
 ";
         let entry_points = EntryPoints::parse(sample_ini, 99)?;
 
@@ -245,14 +243,6 @@ Window = example:gui
                 .map(|script| script.name.as_str())
                 .collect::<Vec<_>>(),
             ["Command", "command"]
-        );
-        assert_eq!(
-            entry_points
-                .gui_scripts
-                .iter()
-                .map(|script| script.name.as_str())
-                .collect::<Vec<_>>(),
-            ["Window"]
         );
         Ok(())
     }

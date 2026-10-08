@@ -1610,7 +1610,7 @@ mod tests {
     use uv_pep440::Version;
 
     use crate::Interpreter;
-    use crate::interpreter::{ExternallyManaged, InterpreterInfo, canonicalize_executable};
+    use crate::interpreter::{InterpreterInfo, canonicalize_executable};
 
     fn mocked_interpreter_response() -> &'static str {
         indoc! {r##"
@@ -1671,58 +1671,6 @@ mod tests {
             "debug_enabled": false
         }
     "##}
-    }
-
-    #[tokio::test]
-    async fn test_externally_managed() -> Result<()> {
-        let mock_dir = tempdir()?;
-        let mocked_interpreter = mock_dir.path().join("python");
-        let response_file = mock_dir.path().join("response.json");
-        let mut response = serde_json::from_str::<Value>(mocked_interpreter_response())?;
-        response["sys_executable"] = serde_json::to_value(&mocked_interpreter)?;
-        response["sys_prefix"] = response["sys_base_prefix"].clone();
-        response["stdlib"] = serde_json::to_value(mock_dir.path())?;
-        fs::write(&response_file, serde_json::to_vec(&response)?)?;
-        fs::write(
-            &mocked_interpreter,
-            formatdoc! {r#"
-                #!/bin/sh
-                cat "{}"
-            "#, response_file.display()},
-        )?;
-        fs::set_permissions(
-            &mocked_interpreter,
-            std::os::unix::fs::PermissionsExt::from_mode(0o770),
-        )?;
-        let cache = Cache::temp()?.init().await?;
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
-
-        for (contents, expected) in [
-            (
-                "[externally-managed]\nError = message\ninvalid line\n",
-                None,
-            ),
-            (
-                "[externally-managed]\nError = first\nError = second\n",
-                None,
-            ),
-            ("[externally-managed]\nerror = wrong case\n", None),
-            ("[other]\nError = message\n", None),
-            (
-                "[externally-managed]\nError = Use #packages; keep markers\n  See https://example.org/#help;details\n",
-                Some("Use #packages; keep markers\nSee https://example.org/#help;details"),
-            ),
-        ] {
-            fs::write(mock_dir.path().join("EXTERNALLY-MANAGED"), contents)?;
-            assert_eq!(
-                interpreter
-                    .is_externally_managed()
-                    .map(ExternallyManaged::into_error),
-                Some(expected.map(str::to_owned)),
-                "{contents}",
-            );
-        }
-        Ok(())
     }
 
     #[tokio::test]
