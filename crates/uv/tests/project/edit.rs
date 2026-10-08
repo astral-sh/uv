@@ -13,6 +13,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 use serde_json::json;
 use std::path::Path;
 #[cfg(unix)]
@@ -8664,11 +8665,15 @@ fn remove_version_build_failure_reverts_project() -> Result<()> {
             context.command().args(args).assert().code(1);
             assert!(context.temp_dir.join("built").exists(), "{args:?}");
             assert_eq!(context.read("pyproject.toml"), pyproject, "{args:?}");
-            assert_eq!(
-                fs_err::read_to_string(context.temp_dir.join("uv.lock")).ok(),
-                lock,
-                "{args:?}"
-            );
+            match lock {
+                Some(lock) => assert_eq!(context.read("uv.lock"), lock, "{args:?}"),
+                None => {
+                    context
+                        .temp_dir
+                        .child("uv.lock")
+                        .assert(predicate::path::missing());
+                }
+            }
         }
     }
     Ok(())
@@ -8718,11 +8723,15 @@ fn edit_interrupt_reverts_project() -> Result<()> {
 
             context.command().args(args).assert().code(130);
             assert_eq!(context.read("pyproject.toml"), pyproject, "{args:?}");
-            assert_eq!(
-                fs_err::read_to_string(context.temp_dir.join("uv.lock")).ok(),
-                lock,
-                "{args:?}"
-            );
+            match lock {
+                Some(lock) => assert_eq!(context.read("uv.lock"), lock, "{args:?}"),
+                None => {
+                    context
+                        .temp_dir
+                        .child("uv.lock")
+                        .assert(predicate::path::missing());
+                }
+            }
         }
     }
     Ok(())
