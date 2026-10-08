@@ -1,4 +1,4 @@
-use astral_ini::{Delimiters, Options};
+use astral_ini::{Delimiters, Options, Section};
 use regex::regex;
 use serde::Serialize;
 use std::io;
@@ -77,7 +77,7 @@ impl EntryPoints {
             entry_points
                 .section(section)
                 .into_iter()
-                .flat_map(|section| section.iter())
+                .flat_map(Section::iter)
                 .map(|(name, value)| Script::from_value(name, value))
                 .collect::<Result<Vec<_>, _>>()
         };

@@ -1610,7 +1610,7 @@ mod tests {
     use uv_pep440::Version;
 
     use crate::Interpreter;
-    use crate::interpreter::{InterpreterInfo, canonicalize_executable};
+    use crate::interpreter::{ExternallyManaged, InterpreterInfo, canonicalize_executable};
 
     fn mocked_interpreter_response() -> &'static str {
         indoc! {r##"
@@ -1717,7 +1717,7 @@ mod tests {
             assert_eq!(
                 interpreter
                     .is_externally_managed()
-                    .map(|managed| managed.into_error()),
+                    .map(ExternallyManaged::into_error),
                 Some(expected.map(str::to_owned)),
                 "{contents}",
             );
