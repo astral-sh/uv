@@ -114,8 +114,8 @@ pub enum Error {
     InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
-    #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {0}")]
-    Mirror(&'static str, String),
+    #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {1}")]
+    Mirror(&'static str, DisplaySafeUrl),
     #[error("Failed to determine the libc used on the current platform")]
     LibcDetection(#[from] platform::LibcDetectionError),
     #[error("Unable to parse the JSON Python download list at `{0}`")]
@@ -840,7 +840,7 @@ impl ManagedPythonDownload {
                     let Some(suffix) = self.url.strip_prefix(CPYTHON_DOWNLOADS_URL_PREFIX) else {
                         return Err(Error::Mirror(
                             EnvVars::UV_PYTHON_INSTALL_MIRROR,
-                            self.url.to_string(),
+                            DisplaySafeUrl::parse(&self.url)?,
                         ));
                     };
                     return Ok(vec![DisplaySafeUrl::parse(
@@ -869,7 +869,7 @@ impl ManagedPythonDownload {
                     else {
                         return Err(Error::Mirror(
                             EnvVars::UV_PYPY_INSTALL_MIRROR,
-                            self.url.to_string(),
+                            DisplaySafeUrl::parse(&self.url)?,
                         ));
                     };
                     return Ok(vec![DisplaySafeUrl::parse(
@@ -886,7 +886,7 @@ impl ManagedPythonDownload {
                     else {
                         return Err(Error::Mirror(
                             EnvVars::UV_GRAALPY_INSTALL_MIRROR,
-                            self.url.to_string(),
+                            DisplaySafeUrl::parse(&self.url)?,
                         ));
                     };
                     return Ok(vec![DisplaySafeUrl::parse(
@@ -903,7 +903,7 @@ impl ManagedPythonDownload {
                     else {
                         return Err(Error::Mirror(
                             EnvVars::UV_PYODIDE_INSTALL_MIRROR,
-                            self.url.to_string(),
+                            DisplaySafeUrl::parse(&self.url)?,
                         ));
                     };
                     return Ok(vec![DisplaySafeUrl::parse(
@@ -1222,7 +1222,10 @@ mod tests {
     fn test_download_error_debug() {
         let errors = [
             Error::EmptyRequest,
-            Error::Mirror("UV_PYTHON_INSTALL_MIRROR", "file:///mirror".to_owned()),
+            Error::Mirror(
+                "UV_PYTHON_INSTALL_MIRROR",
+                DisplaySafeUrl::parse("file:///mirror").expect("mirror URL should be valid"),
+            ),
             Error::NetworkErrorWithRetries {
                 err: Box::new(Error::InvalidPythonVersion("3.x".to_owned())),
                 retries: 2,
@@ -1240,7 +1243,17 @@ mod tests {
             EmptyRequest,
             Mirror(
                 "UV_PYTHON_INSTALL_MIRROR",
-                "file:///mirror",
+                DisplaySafeUrl {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/mirror",
+                    query: None,
+                    fragment: None,
+                },
             ),
             NetworkErrorWithRetries {
                 err: InvalidPythonVersion(
@@ -1331,6 +1344,42 @@ mod tests {
             sha256: Some(Digest::from_bytes([0xab; 32])),
             build: Some("20240713"),
         }
+    }
+
+    #[test]
+    fn test_cpython_mirror_unexpected_download_url_redacts_credentials() {
+        let download = cpython_download_for_url(
+            "https://user:password@example.com/cpython.tar.gz?X-Amz-Signature=signature&safe=value",
+        );
+
+        let error = download
+            .download_urls_with_astral_mirror(
+                PythonDownloadMirrors {
+                    cpython: Some("https://python-mirror.example.com/releases/"),
+                    ..PythonDownloadMirrors::default()
+                },
+                None,
+            )
+            .expect_err("the download URL should not match the CPython mirror format");
+
+        insta::assert_snapshot!(error, @"A mirror was provided via `UV_PYTHON_INSTALL_MIRROR`, but the URL does not match the expected format: https://user:****@example.com/cpython.tar.gz?X-Amz-Signature=****&safe=value");
+    }
+
+    #[test]
+    fn test_cpython_mirror_invalid_download_url() {
+        let download = cpython_download_for_url("not a URL");
+
+        let error = download
+            .download_urls_with_astral_mirror(
+                PythonDownloadMirrors {
+                    cpython: Some("https://python-mirror.example.com/releases/"),
+                    ..PythonDownloadMirrors::default()
+                },
+                None,
+            )
+            .expect_err("the download URL should be invalid");
+
+        insta::assert_snapshot!(error, @"Invalid download URL");
     }
 
     #[test]
