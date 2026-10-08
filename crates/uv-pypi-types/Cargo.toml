@@ -36,7 +36,6 @@ rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
-serde-untagged = { workspace = true }
 thiserror = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
