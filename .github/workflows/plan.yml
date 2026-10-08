@@ -155,7 +155,9 @@ jobs:
           comparison_base="${BASE_SHA:-origin/main}"
           version_head="${HEAD_SHA:-HEAD}"
           if [[ "$GH_REF" == refs/pull/*/merge && "$HAS_EXPLICIT_SHAS" != "true" ]]; then
-            # A PR's merge commit records its actual base, including the preceding layer of a stack.
+            # GitHub checks out a merge of the PR into its target branch.
+            # `HEAD^1` is the target branch commit used for that merge, so the
+            # comparison includes only changes introduced by this PR.
             comparison_base="$(git rev-parse HEAD^1)"
             version_head=HEAD
           fi
@@ -172,7 +174,8 @@ jobs:
             uv_version_changed=1
           fi
 
-          # Detect changed files. A failed comparison must not skip required jobs.
+          # Run `git diff` separately so a Git error fails this step.
+          # Inside the loop's here-string, an error would look like no changed files.
           changed_files="$(git diff --no-ext-diff --no-textconv --name-only "${comparison_base}...HEAD")"
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
