@@ -1,10 +1,10 @@
-use configparser::ini::{Ini, IniDefault};
+use astral_ini::{Delimiters, Options};
 use regex::regex;
 use serde::Serialize;
 use std::io;
 use std::path::Path;
 
-use crate::{Error, wheel};
+use crate::Error;
 
 /// A script defining the name of the runnable entrypoint and the module and function that should be
 /// run.
@@ -60,33 +60,29 @@ impl EntryPoints {
             Err(err) => return Err(err.into()),
         };
 
-        Self::parse(ini, python_minor)
+        Self::parse(&ini, python_minor)
     }
 
-    fn parse(ini: String, python_minor: u8) -> Result<Self, Error> {
+    fn parse(ini: &str, python_minor: u8) -> Result<Self, Error> {
         // Per the Entry Points specification, `entry_points.txt` is a case-sensitive
         // INI file that only uses `=` as the field delimiter.
         // See: <https://packaging.python.org/en/latest/specifications/entry-points/#file-format>
-        let mut ini_options = IniDefault::default();
-        ini_options.case_sensitive = true;
-        ini_options.delimiters = vec!['='];
-
-        let mut parser = Ini::new_from_defaults(ini_options);
-
-        let entry_points_mapping = parser
-            .read(ini)
+        let entry_points = Options::default()
+            .case_sensitive(true)
+            .delimiters(Delimiters::Equals)
+            .parse(ini)
             .map_err(|err| Error::InvalidWheel(format!("`entry_points.txt` is invalid: {err}")))?;
 
-        let mut console_scripts = match entry_points_mapping.get("console_scripts") {
-            Some(console_scripts) => {
-                wheel::read_scripts_from_section(console_scripts, "console_scripts")?
-            }
-            None => Vec::new(),
+        let read_scripts = |section| {
+            entry_points
+                .section(section)
+                .into_iter()
+                .flat_map(|section| section.iter())
+                .map(|(name, value)| Script::from_value(name, value))
+                .collect::<Result<Vec<_>, _>>()
         };
-        let gui_scripts = match entry_points_mapping.get("gui_scripts") {
-            Some(gui_scripts) => wheel::read_scripts_from_section(gui_scripts, "gui_scripts")?,
-            None => Vec::new(),
-        };
+        let mut console_scripts = read_scripts("console_scripts")?;
+        let gui_scripts = read_scripts("gui_scripts")?;
 
         // Special case to generate versioned pip launchers.
         // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
@@ -116,6 +112,7 @@ impl EntryPoints {
 
 #[cfg(test)]
 mod test {
+    use crate::Error;
     use crate::script::{EntryPoints, Script};
 
     #[test]
@@ -167,9 +164,7 @@ pip4.11 = a:b5
 memray = a:b6
 memray3.11 = a:b7
 ";
-        let mut console_scripts = EntryPoints::parse(sample_ini.to_string(), 99)
-            .unwrap()
-            .console_scripts;
+        let mut console_scripts = EntryPoints::parse(sample_ini, 99).unwrap().console_scripts;
         console_scripts.sort();
 
         assert_eq!(
@@ -229,6 +224,36 @@ memray3.11 = a:b7
 script: package.module:main
 ";
 
-        assert!(EntryPoints::parse(sample_ini.to_string(), 99).is_err());
+        assert!(EntryPoints::parse(sample_ini, 99).is_err());
+    }
+
+    #[test]
+    fn test_entry_point_groups() -> Result<(), Error> {
+        let sample_ini = "
+[console_scripts]
+Command = example:main
+command = example:other
+[gui_scripts]
+Window = example:gui
+";
+        let entry_points = EntryPoints::parse(sample_ini, 99)?;
+
+        assert_eq!(
+            entry_points
+                .console_scripts
+                .iter()
+                .map(|script| script.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Command", "command"]
+        );
+        assert_eq!(
+            entry_points
+                .gui_scripts
+                .iter()
+                .map(|script| script.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Window"]
+        );
+        Ok(())
     }
 }

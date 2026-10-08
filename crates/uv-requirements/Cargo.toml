@@ -39,7 +39,7 @@ uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-configparser = { workspace = true }
+astral-ini = { workspace = true }
 console = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }

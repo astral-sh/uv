@@ -31,7 +31,7 @@ uv-python-types = { workspace = true }
 uv-static = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 
-configparser = { workspace = true }
+astral-ini = { workspace = true }
 dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 owo-colors = { workspace = true }
