@@ -16,7 +16,7 @@ use uv_test::{apply_filters, uv_snapshot};
 // Print the version
 #[test]
 fn version_get() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -51,7 +51,7 @@ fn version_get() -> Result<()> {
 // Print the version (json format)
 #[test]
 fn version_get_json() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -104,7 +104,7 @@ fn version_get_json() -> Result<()> {
 // Print the version (--short)
 #[test]
 fn version_get_short() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2263,7 +2263,7 @@ fn version_get_missing_with_hint() -> Result<()> {
 // (also setup a honeypot project and make sure it's not used)
 #[test]
 fn self_version() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2297,7 +2297,7 @@ fn self_version() -> Result<()> {
 // (also setup a honeypot project and make sure it's not used)
 #[test]
 fn self_version_short() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2337,7 +2337,7 @@ fn self_version_short() -> Result<()> {
 // (also setup a honeypot project and make sure it's not used)
 #[test]
 fn self_version_json() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filter((
             r#"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
             r#"version": "[VERSION]""#,
