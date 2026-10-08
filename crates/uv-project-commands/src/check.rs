@@ -38,6 +38,7 @@ use uv_scripts::Pep723Script;
 use uv_settings::{
     FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
 };
+use uv_virtualenv::UpgradePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
@@ -350,7 +351,7 @@ pub async fn check(
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             false,
             uv_virtualenv::Seed::Disabled,
-            false,
+            UpgradePolicy::Fixed,
         )?)
     } else {
         None

@@ -71,6 +71,7 @@ use uv_settings::{
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
+use uv_virtualenv::UpgradePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
@@ -495,7 +496,7 @@ pub async fn run(
                     ),
                     false,
                     uv_virtualenv::Seed::Disabled,
-                    false,
+                    UpgradePolicy::Fixed,
                 )?;
 
                 Some(environment.into_interpreter())
@@ -688,7 +689,7 @@ pub async fn run(
                     ),
                     false,
                     uv_virtualenv::Seed::Disabled,
-                    false,
+                    UpgradePolicy::Fixed,
                 )?
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
@@ -892,7 +893,7 @@ pub async fn run(
                     ),
                     false,
                     uv_virtualenv::Seed::Disabled,
-                    false,
+                    UpgradePolicy::Fixed,
                 )?;
                 venv.into_interpreter()
             } else {
@@ -1024,7 +1025,7 @@ pub async fn run(
                 ),
                 false,
                 uv_virtualenv::Seed::Disabled,
-                false,
+                UpgradePolicy::Fixed,
             )
         })
         .transpose()?;

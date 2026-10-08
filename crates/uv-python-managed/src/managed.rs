@@ -33,8 +33,8 @@ use crate::sysconfig;
 use uv_python_interpreter::Interpreter;
 use uv_python_types::{
     ArchRequest, ImplementationError, ImplementationName, LenientImplementationName,
-    PythonDownloadRequest, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonVariant,
-    PythonVersion, VersionRequest,
+    PythonDownloadRequest, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
+    PythonVariant, PythonVersion, VersionRequest,
 };
 
 #[derive(Error, Debug)]
@@ -740,10 +740,35 @@ impl ManagedPythonInstallation {
     }
 }
 
+/// Whether an environment may follow uv-managed Python patch upgrades.
+#[derive(Debug, Clone, Copy)]
+pub enum UpgradePolicy {
+    /// Use the selected interpreter's base executable without substituting a minor-version link.
+    Fixed,
+    /// Allow patch upgrades through a suitable uv-managed minor-version link.
+    Patch,
+}
+
+impl UpgradePolicy {
+    /// Derive the upgrade policy from the resolved request used to select the interpreter.
+    ///
+    /// Requests containing a patch version require the selected installation. Other requests may
+    /// follow patch upgrades when a suitable uv-managed minor-version link exists.
+    pub fn from_request(request: &PythonRequest) -> Self {
+        if request.includes_patch() {
+            Self::Fixed
+        } else {
+            Self::Patch
+        }
+    }
+}
+
 /// A representation of a minor version symlink directory (or junction on Windows)
 /// linking to the home directory of a Python installation.
 #[derive(Clone, Debug)]
 pub struct PythonMinorVersionLink {
+    /// The installation key shared by patch versions using this link.
+    key: PythonInstallationMinorVersionKey,
     /// The symlink directory (or junction on Windows).
     pub symlink_directory: PathBuf,
     /// The full path to the executable including the symlink directory
@@ -820,6 +845,7 @@ impl PythonMinorVersionLink {
             *key.os(),
         );
         let minor_version_link = Self {
+            key: PythonInstallationMinorVersionKey::ref_cast(key).clone(),
             symlink_directory,
             symlink_executable,
             target_directory,
@@ -829,6 +855,24 @@ impl PythonMinorVersionLink {
 
     pub fn from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
         Self::from_executable(installation.executable(false).as_path(), installation.key())
+    }
+
+    /// Return an existing managed link when the environment's policy permits patch upgrades.
+    ///
+    /// The link must still point to the selected installation.
+    pub fn from_interpreter(interpreter: &Interpreter, policy: UpgradePolicy) -> Option<Self> {
+        match policy {
+            UpgradePolicy::Fixed => None,
+            UpgradePolicy::Patch => {
+                let installation = ManagedPythonInstallation::try_from_interpreter(interpreter)?;
+                Self::from_installation(&installation).filter(Self::exists)
+            }
+        }
+    }
+
+    /// Return the managed installation key shared by this link's patch versions.
+    pub fn key(&self) -> &PythonInstallationMinorVersionKey {
+        &self.key
     }
 
     fn create_directory(&self) -> Result<(), Error> {

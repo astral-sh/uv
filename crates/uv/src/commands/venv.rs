@@ -35,7 +35,7 @@ use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
 };
-use uv_virtualenv::{OnExisting, RemovalReason, Seed};
+use uv_virtualenv::{OnExisting, RemovalReason, Seed, UpgradePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
@@ -178,17 +178,19 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
-    let upgradeable = project_python
-        .python_request
-        .as_ref()
-        .is_none_or(|request| !request.includes_patch());
+    let upgrade_policy = UpgradePolicy::from_request(
+        project_python
+            .python_request
+            .as_ref()
+            .unwrap_or(&PythonRequest::Default),
+    );
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {
         centralized_environment_root(
             ProjectEnvironmentTarget::from(workspace),
             &interpreter,
-            upgradeable,
+            upgrade_policy,
             cache,
         )
     } else {
@@ -273,7 +275,7 @@ pub(crate) async fn venv(
         on_existing,
         relocatable,
         seed,
-        upgradeable,
+        upgrade_policy,
     )
     .map_err(VenvError::Creation)?;
     venv.cache_virtualenv(system_site_packages, cache)?;

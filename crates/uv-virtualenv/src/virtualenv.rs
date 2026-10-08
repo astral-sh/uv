@@ -21,7 +21,7 @@ use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_python_interpreter::{Interpreter, VirtualEnvironment};
 use uv_python_managed::{
-    ManagedPythonInstallation, PythonExecutable, PythonMinorVersionLink, replace_link_to_executable,
+    PythonExecutable, PythonMinorVersionLink, UpgradePolicy, replace_link_to_executable,
 };
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
@@ -70,7 +70,7 @@ pub(crate) fn create(
     on_existing: OnExisting,
     relocatable: bool,
     seed: Seed,
-    upgradeable: bool,
+    upgrade_policy: UpgradePolicy,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.
@@ -216,32 +216,21 @@ pub(crate) fn create(
     // Create a `.gitignore` file to ignore all files in the venv.
     fs_err::write(location.join(".gitignore"), "*")?;
 
-    let mut using_minor_version_link = false;
-    let executable_target = if upgradeable {
-        if let Some(minor_version_link) =
-            ManagedPythonInstallation::try_from_interpreter(interpreter)
-                .and_then(|installation| PythonMinorVersionLink::from_installation(&installation))
-        {
-            if !minor_version_link.exists() {
-                base_python.clone()
-            } else {
-                let debug_symlink_term = if cfg!(windows) {
-                    "junction"
-                } else {
-                    "symlink directory"
-                };
-                debug!(
-                    "Using {} `{}` instead of base Python path `{}`",
-                    debug_symlink_term,
-                    &minor_version_link.symlink_directory.display(),
-                    &base_python.display()
-                );
-                using_minor_version_link = true;
-                minor_version_link.symlink_executable.clone()
-            }
+    let minor_version_link = PythonMinorVersionLink::from_interpreter(interpreter, upgrade_policy);
+    let using_minor_version_link = minor_version_link.is_some();
+    let executable_target = if let Some(minor_version_link) = minor_version_link {
+        let debug_symlink_term = if cfg!(windows) {
+            "junction"
         } else {
-            base_python.clone()
-        }
+            "symlink directory"
+        };
+        debug!(
+            "Using {} `{}` instead of base Python path `{}`",
+            debug_symlink_term,
+            &minor_version_link.symlink_directory.display(),
+            &base_python.display()
+        );
+        minor_version_link.symlink_executable
     } else {
         base_python.clone()
     };

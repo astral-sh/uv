@@ -30,7 +30,7 @@ use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python_discovery::ConfigDiscovery;
 use uv_python_discovery::PythonInstallation;
 use uv_python_interpreter::{BrokenLink, Interpreter, InvalidEnvironmentKind, PythonEnvironment};
-use uv_python_managed::{ManagedPythonInstallation, PythonMinorVersionLink};
+use uv_python_managed::{PythonMinorVersionLink, UpgradePolicy};
 use uv_python_types::{
     EnvironmentPreference, LenientImplementationName, PythonArchitecture, PythonDownloads,
     PythonPreference, PythonRequest,
@@ -409,7 +409,7 @@ pub fn is_centralized_environment_reference(path: &Path, cache: &Cache) -> bool 
 pub fn centralized_environment_root(
     target: ProjectEnvironmentTarget<'_>,
     interpreter: &Interpreter,
-    upgradeable: bool,
+    upgrade_policy: UpgradePolicy,
     cache: &Cache,
 ) -> PathBuf {
     let install_path = target.install_path();
@@ -419,21 +419,18 @@ pub fn centralized_environment_root(
     // Use the workspace path to isolate projects and the interpreter key to maximize intra-project
     // environment re-use while avoiding clashes with incompatible environments. Ignoring the patch
     // version allows upgradeable managed environments to be re-used after an upgrade.
-    let (digest, python_version) = if upgradeable
-        && let Some(installation) = ManagedPythonInstallation::try_from_interpreter(interpreter)
-        && PythonMinorVersionLink::from_installation(&installation)
-            .is_some_and(|link| link.exists())
-    {
-        (
-            cache_digest(&(&workspace_path, installation.minor_version_key())),
-            interpreter.python_minor_version(),
-        )
-    } else {
-        (
-            cache_digest(&(&workspace_path, &interpreter_key)),
-            interpreter.python_version().clone(),
-        )
-    };
+    let (digest, python_version) =
+        if let Some(link) = PythonMinorVersionLink::from_interpreter(interpreter, upgrade_policy) {
+            (
+                cache_digest(&(&workspace_path, link.key())),
+                interpreter.python_minor_version(),
+            )
+        } else {
+            (
+                cache_digest(&(&workspace_path, &interpreter_key)),
+                interpreter.python_version().clone(),
+            )
+        };
     let name = target
         .project_name()
         .and_then(|name| cache_name(name.as_ref(), Some(100)))
@@ -630,11 +627,12 @@ impl ProjectInterpreter {
     ) -> Result<Self, EnvironmentError> {
         let python_request = project_python.python_request.as_ref();
         let requires_python = project_python.requires_python();
+        let upgrade_policy =
+            UpgradePolicy::from_request(python_request.unwrap_or(&PythonRequest::Default));
 
         let environment_selection =
             ProjectEnvironmentSelection::from_install_path(target.install_path(), active);
         let centralized = centralized_environments_enabled(&environment_selection, cache);
-        let upgradeable = python_request.is_none_or(|request| !request.includes_patch());
 
         // Prefer `.venv`'s interpreter to keep its compatible cached environment selected; derive
         // the cache root instead of trusting the link target.
@@ -650,7 +648,7 @@ impl ProjectInterpreter {
                 let root = centralized_environment_root(
                     target,
                     candidate.interpreter(),
-                    upgradeable,
+                    upgrade_policy,
                     cache,
                 );
                 if let Some(environment) = discover_project_environment(
@@ -709,7 +707,7 @@ impl ProjectInterpreter {
 
         if centralized {
             let root =
-                centralized_environment_root(target, python.interpreter(), upgradeable, cache);
+                centralized_environment_root(target, python.interpreter(), upgrade_policy, cache);
             if let Some(environment) = discover_project_environment(
                 &root,
                 python_request,
@@ -891,10 +889,6 @@ impl ProjectEnvironment {
             )
             .await?
         };
-        let upgradeable = project_python
-            .python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
 
         match ProjectInterpreter::discover(
             target,
@@ -925,9 +919,11 @@ impl ProjectEnvironment {
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let interpreter = interpreter.into_interpreter();
+                let requested = interpreter.into_requested_interpreter();
+                let upgrade_policy = UpgradePolicy::from_request(requested.request());
+                let interpreter = requested.into_interpreter();
                 let root = if centralized {
-                    centralized_environment_root(target, &interpreter, upgradeable, cache)
+                    centralized_environment_root(target, &interpreter, upgrade_policy, cache)
                 } else {
                     environment_selection
                         .explicit_path()
@@ -1003,7 +999,7 @@ impl ProjectEnvironment {
                         ),
                         uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                         uv_virtualenv::Seed::Disabled,
-                        upgradeable,
+                        upgrade_policy,
                     )?;
                     return Ok(if replace_environment {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1064,7 +1060,7 @@ impl ProjectEnvironment {
                     ),
                     uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                     uv_virtualenv::Seed::Disabled,
-                    upgradeable,
+                    upgrade_policy,
                 )?;
                 environment.cache_virtualenv(false, cache)?;
 
@@ -1170,10 +1166,6 @@ impl ScriptEnvironment {
             })
             .ok();
 
-        let upgradeable = python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
-
         match ScriptInterpreter::discover(
             script,
             python_request,
@@ -1194,7 +1186,9 @@ impl ScriptEnvironment {
             ScriptInterpreter::Environment(environment) => Ok(Self::Existing(environment)),
 
             // Otherwise, create a virtual environment with the discovered interpreter.
-            ScriptInterpreter::Interpreter(interpreter) => {
+            ScriptInterpreter::Interpreter(requested) => {
+                let upgrade_policy = UpgradePolicy::from_request(requested.request());
+                let interpreter = requested.into_interpreter();
                 let root = ScriptInterpreter::root(script, active, cache);
 
                 // Determine a prompt for the environment, in order of preference:
@@ -1221,7 +1215,7 @@ impl ScriptEnvironment {
                         ),
                         false,
                         uv_virtualenv::Seed::Disabled,
-                        upgradeable,
+                        upgrade_policy,
                     )?;
                     return Ok(if root.exists() {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1258,7 +1252,7 @@ impl ScriptEnvironment {
                     ),
                     false,
                     uv_virtualenv::Seed::Disabled,
-                    upgradeable,
+                    upgrade_policy,
                 )?;
                 environment.cache_virtualenv(false, cache)?;
 

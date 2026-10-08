@@ -18,6 +18,7 @@ use uv_pep440::Version;
 use uv_python_interpreter::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
+use uv_virtualenv::UpgradePolicy;
 use uv_warnings::warn_user;
 
 pub(crate) use receipt::ToolReceipt;
@@ -357,7 +358,7 @@ impl InstalledTools {
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
             false,
             uv_virtualenv::Seed::Disabled,
-            false,
+            UpgradePolicy::Fixed,
         )?;
         venv.cache_virtualenv(false, cache)?;
 
