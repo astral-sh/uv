@@ -7733,7 +7733,6 @@ version = "0.0.90"
 dependencies = [
  "assert_fs",
  "clap",
- "fs-err",
  "ref-cast",
  "schemars",
  "serde",
@@ -7744,7 +7743,6 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform",
- "uv-pypi-types",
  "uv-static",
 ]
 

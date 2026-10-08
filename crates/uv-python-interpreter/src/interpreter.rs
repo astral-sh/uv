@@ -160,7 +160,7 @@ impl Interpreter {
 
     /// Return a new [`Interpreter`] to install into the given `--target` directory.
     pub(crate) fn with_target(self, target: Target) -> io::Result<Self> {
-        target.init()?;
+        fs::create_dir_all(target.root())?;
         Ok(Self {
             target: Some(target),
             ..self
@@ -169,7 +169,7 @@ impl Interpreter {
 
     /// Return a new [`Interpreter`] to install into the given `--prefix` directory.
     pub(crate) fn with_prefix(self, prefix: Prefix) -> io::Result<Self> {
-        prefix.init(self.virtualenv())?;
+        fs::create_dir_all(prefix.root().join(&self.virtualenv.purelib))?;
         Ok(Self {
             prefix: Some(prefix),
             ..self
@@ -568,9 +568,21 @@ impl Interpreter {
             sys_executable: self.sys_executable().to_path_buf(),
             os_name: self.markers.os_name().to_string(),
             scheme: if let Some(target) = self.target.as_ref() {
-                target.scheme()
+                Scheme {
+                    purelib: target.root().to_path_buf(),
+                    platlib: target.root().to_path_buf(),
+                    scripts: target.root().join("bin"),
+                    data: target.root().to_path_buf(),
+                    include: target.root().join("include"),
+                }
             } else if let Some(prefix) = self.prefix.as_ref() {
-                prefix.scheme(&self.virtualenv)
+                Scheme {
+                    purelib: prefix.root().join(&self.virtualenv.purelib),
+                    platlib: prefix.root().join(&self.virtualenv.platlib),
+                    scripts: prefix.root().join(&self.virtualenv.scripts),
+                    data: prefix.root().join(&self.virtualenv.data),
+                    include: prefix.root().join(&self.virtualenv.include),
+                }
             } else {
                 Scheme {
                     purelib: self.purelib().to_path_buf(),
@@ -604,11 +616,11 @@ impl Interpreter {
     /// Note this does not include all runtime site-packages directories if the interpreter has been
     /// customized. See [`Interpreter::runtime_site_packages`].
     pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
-        let target = self.target().map(Target::site_packages);
+        let target = self.target().map(Target::root);
 
         let prefix = self
             .prefix()
-            .map(|prefix| prefix.site_packages(self.virtualenv()));
+            .map(|prefix| prefix.root().join(&self.virtualenv.purelib));
 
         let interpreter = if target.is_none() && prefix.is_none() {
             let purelib = self.purelib();
@@ -626,9 +638,8 @@ impl Interpreter {
 
         target
             .into_iter()
-            .flatten()
             .map(Cow::Borrowed)
-            .chain(prefix.into_iter().flatten().map(Cow::Owned))
+            .chain(prefix.into_iter().map(Cow::Owned))
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
     }
 
