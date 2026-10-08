@@ -137,7 +137,7 @@ pub enum LockError {
     Tags(#[from] TagsError),
 
     #[error(transparent)]
-    PythonContext(#[from] Box<PythonSelectionError>),
+    PythonSelection(#[from] Box<PythonSelectionError>),
 
     #[error(transparent)]
     Resolve(#[from] Box<ResolveError>),
@@ -207,7 +207,7 @@ impl From<LockError> for UvError {
             | LockError::IndexUrl(_)
             | LockError::Lock(_)
             | LockError::Tags(_)
-            | LockError::PythonContext(_)
+            | LockError::PythonSelection(_)
             | LockError::HashStrategy(_)
             | LockError::DependencyGroup(_)
             | LockError::DefaultGroups(_)
@@ -233,7 +233,7 @@ impl Hinted for LockError {
             }
             Self::Resolve(error) => error.hints(),
             Self::Lock(error) => error.hints(),
-            Self::PythonContext(error) => error.hints(),
+            Self::PythonSelection(error) => error.hints(),
             Self::MissingLockfile(..)
             | Self::UnsupportedLockVersion(..)
             | Self::UnparsableLockVersion(..)
@@ -277,7 +277,7 @@ impl From<LoweringError> for LockError {
 
 impl From<PythonSelectionError> for LockError {
     fn from(error: PythonSelectionError) -> Self {
-        Self::PythonContext(Box::new(error))
+        Self::PythonSelection(Box::new(error))
     }
 }
 

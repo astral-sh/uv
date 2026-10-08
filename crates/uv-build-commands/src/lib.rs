@@ -94,7 +94,7 @@ pub enum Error {
     #[error("Build requirement is not satisfied: `{0}`")]
     UnsatisfiedBuildRequirement(Box<Requirement>),
     #[error(transparent)]
-    PythonContext(#[from] Box<PythonSelectionError>),
+    PythonSelection(#[from] Box<PythonSelectionError>),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -120,7 +120,7 @@ pub enum Error {
 
 impl From<PythonSelectionError> for Error {
     fn from(error: PythonSelectionError) -> Self {
-        Self::PythonContext(Box::new(error))
+        Self::PythonSelection(Box::new(error))
     }
 }
 
@@ -130,7 +130,7 @@ impl Hinted for Error {
             Self::BuildBackend(err) => err.hints(),
             Self::BuildFrontend(err) => err.hints(),
             Self::BuildDispatch(err) => err.hints(),
-            Self::PythonContext(err) => err.hints(),
+            Self::PythonSelection(err) => err.hints(),
             Self::Operations(err) => err.hints(),
             Self::Extract(uv_extract::Error::Tar(err)) => {
                 // TODO(konsti): astral-tokio-tar should use a proper error instead of

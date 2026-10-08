@@ -92,7 +92,7 @@ pub enum EnvironmentError {
     Python(#[from] Box<uv_python_discovery::Error>),
 
     #[error(transparent)]
-    PythonContext(#[from] Box<uv_python_discovery::PythonSelectionError>),
+    PythonSelection(#[from] Box<uv_python_discovery::PythonSelectionError>),
 
     #[error(transparent)]
     Virtualenv(#[from] uv_virtualenv::Error),
@@ -172,7 +172,7 @@ impl From<uv_python_interpreter::PythonEnvironmentError> for EnvironmentError {
 
 impl From<uv_python_discovery::PythonSelectionError> for EnvironmentError {
     fn from(error: uv_python_discovery::PythonSelectionError) -> Self {
-        Self::PythonContext(Box::new(error))
+        Self::PythonSelection(Box::new(error))
     }
 }
 
@@ -229,7 +229,7 @@ impl From<EnvironmentError> for UvError {
             | EnvironmentError::IndexCredentials(..)
             | EnvironmentError::IndexUrl(..)
             | EnvironmentError::Python(..)
-            | EnvironmentError::PythonContext(..)
+            | EnvironmentError::PythonSelection(..)
             | EnvironmentError::Virtualenv(..)
             | EnvironmentError::HashStrategy(..)
             | EnvironmentError::Tags(..)
@@ -257,7 +257,7 @@ impl uv_errors::Hinted for EnvironmentError {
         match self {
             Self::Lock(error) => error.hints(),
             Self::Python(error) => error.hints(),
-            Self::PythonContext(error) => error.hints(),
+            Self::PythonSelection(error) => error.hints(),
             Self::Resolve(error) => error.hints(),
             Self::Install(error) => error.hints(),
             Self::Client(error) => error.hints(),
