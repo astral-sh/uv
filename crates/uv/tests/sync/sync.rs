@@ -10602,6 +10602,13 @@ fn sync_no_editable_configuration() -> Result<()> {
      + root==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable-package").arg("child"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 2 packages in [TIME]
+    ");
+
     uv_snapshot!(context.filters(), context.sync().current_dir(&child).arg("--all-packages"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -10620,7 +10627,7 @@ fn sync_no_editable_configuration() -> Result<()> {
      ~ root==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import child, root; print('installed')"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--no-editable-package").arg("child").arg("python").arg("-c").arg("import child, root; print('installed')"), @"
     exit_code: 0 (success)
     ----- stdout -----
     installed

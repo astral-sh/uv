@@ -5912,6 +5912,16 @@ fn no_editable_configuration() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().arg("--no-editable-package").arg("child").arg("--no-header").arg("--no-annotate"), @"
     exit_code: 0 (success)
     ----- stdout -----
+    .
+    ./child
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export().env(EnvVars::UV_NO_EDITABLE, "0").arg("--no-editable-package").arg("child").arg("--no-header").arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
     -e .
     ./child
 

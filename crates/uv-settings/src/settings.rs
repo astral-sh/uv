@@ -102,9 +102,9 @@ pub struct Options {
     /// Treat editable dependencies, including the project and its workspace members, as
     /// non-editable by default.
     ///
-    /// Applies to `uv sync`, `uv run`, and `uv export`. The `--editable`, `--no-editable`, and
-    /// `--no-editable-package` command-line flags and the `UV_NO_EDITABLE` environment variable
-    /// override this setting.
+    /// Applies to `uv sync`, `uv run`, and `uv export`. The `--editable` and `--no-editable`
+    /// command-line flags and the `UV_NO_EDITABLE` environment variable override this setting.
+    /// With this setting enabled, `--no-editable-package` does not make other packages editable.
     #[option(
         default = "false",
         value_type = "bool",
