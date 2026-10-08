@@ -1499,8 +1499,11 @@ fn frozen() -> Result<()> {
         "#,
     )?;
 
-    // Running with `--frozen` should install the stale lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    // Install the stale lockfile without consulting an unused find-links location.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--find-links")
+        .arg(context.temp_dir.child("missing-wheels").path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Prepared 3 packages in [TIME]
@@ -13868,8 +13871,14 @@ fn sync_dry_run_and_frozen() -> Result<()> {
         "#,
     )?;
 
-    // Running with `--frozen` with `--dry-run` should preview dependencies to be installed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--dry-run"), @"
+    // Previewing a source build must not resolve its build-dependency indexes.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--dry-run")
+        .arg("--no-binary-package")
+        .arg("anyio")
+        .arg("--find-links")
+        .arg(context.temp_dir.child("missing-wheels").path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv
