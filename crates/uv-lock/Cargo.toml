@@ -30,6 +30,7 @@ uv-flags = { workspace = true }
 uv-fs = { workspace = true, features = ["serde"] }
 uv-git = { workspace = true }
 uv-git-types = { workspace = true }
+uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }

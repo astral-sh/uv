@@ -1,8 +1,10 @@
 use std::{ffi::OsString, path::PathBuf};
 
+use uv_macros::DebugNoInline;
+
 use crate::validate_archive_member_name;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
