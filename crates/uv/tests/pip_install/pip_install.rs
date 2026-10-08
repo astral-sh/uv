@@ -8960,6 +8960,29 @@ fn require_hashes_build_dependencies() -> Result<()> {
                sha256:872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f
     ");
 
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r").arg("requirements.txt")
+        .arg("--no-require-hashes")
+        .arg("--build-constraint").arg("build_constraints.txt")
+        .arg("--reinstall")
+        .arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `a==1.0.0`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `hatchling==1.20.0`
+      cause: Hash mismatch for `hatchling==1.20.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f
+    ");
+
     Ok(())
 }
 
@@ -10172,6 +10195,27 @@ fn verify_hashes_mismatch() -> Result<()> {
     "
     );
 
+    // Disabling required hashes must still reject mismatched hashes when provided.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-require-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `idna==3.6`
+      cause: Hash mismatch for `idna==3.6`
+
+             Expected:
+               sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
+               sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+
+             Computed:
+               sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+    "
+    );
+
     uv_snapshot!(context.pip_install()
         .arg("--no-deps")
         .arg("-r")
@@ -10337,7 +10381,7 @@ fn verify_hashes_match() -> Result<()> {
     Ok(())
 }
 
-/// Omit a transitive dependency in `--verify-hashes`. This is allowed.
+/// Allow unhashed transitive dependencies with `--no-require-hashes`.
 #[test]
 fn verify_hashes_omit_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10348,11 +10392,34 @@ fn verify_hashes_omit_dependency() -> Result<()> {
         "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
     )?;
 
-    // Install without error when `--require-hashes` is omitted.
+    // Verify the supplied hash without requiring hashes for transitive dependencies.
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    // Verify the supplied hash without requiring hashes for transitive dependencies.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-require-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]

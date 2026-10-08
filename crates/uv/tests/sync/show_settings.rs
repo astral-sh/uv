@@ -3863,20 +3863,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("-r")
             .arg("requirements.in")
             .arg("--no-require-hashes")
-            .arg("--show-settings"), @"
-    ...
-             link_mode: Clone,
-             compile_bytecode: false,
-             sources: None,
-    -        hash_checking: Some(
-    -            Verify,
-    -        ),
-    +        hash_checking: None,
-             upgrade: Upgrade {
-                 strategy: None,
-                 constraints: {},
-    ...
-    "
+            .arg("--show-settings"), @""
     );
 
     // Compare against output of the same command without `UV_NO_VERIFY_HASHES=1`.
@@ -3912,6 +3899,18 @@ fn verify_hashes() -> anyhow::Result<()> {
             .arg("--show-settings"),
         @""
     );
+
+    // Explicitly configuring the default must also retain verification.
+    context.temp_dir.child("uv.toml").write_str(
+        r"
+        [pip]
+        require-hashes = false
+        ",
+    )?;
+    diff_uv_snapshot!(context.filters(), &default, add_shared_args(context.pip_install())
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--show-settings"), @"");
 
     Ok(())
 }
