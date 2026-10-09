@@ -391,6 +391,9 @@ impl PythonEnvironment {
         // metadata instead of inferring the base executable from the selected interpreter.
         let base_python = self.interpreter().to_base_python()?;
         if cfg!(unix) && fs_err::symlink_metadata(&base_python)?.is_symlink() {
+            // Skip cache warming for symlinked base executables and clear any existing
+            // entry for this venv. Recreation can change the reported base path while
+            // leaving the cache key and underlying binary's timestamp unchanged.
             Interpreter::clear_cache(self.interpreter().sys_executable(), cache)?;
             return Ok(());
         }
