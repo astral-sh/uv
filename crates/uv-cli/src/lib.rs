@@ -6712,10 +6712,15 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     dev: bool,
 
-    /// Disable the development dependency group [env: UV_NO_DEV=]
+    /// Exclude the development dependency group from the sync/install set [env: UV_NO_DEV=]
+    ///
+    /// This only changes which packages are installed when syncing the environment.
+    /// It does not disable the group in the lockfile, and it will not remove packages
+    /// that were already installed by a previous sync. With `--no-sync`, the environment
+    /// is left unchanged.
     ///
     /// This option is an alias of `--no-group dev`.
-    /// See `--no-default-groups` to disable all default groups instead.
+    /// See `--no-default-groups` to exclude all default groups instead.
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
@@ -6752,7 +6757,11 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     )]
     group: Vec<GroupName>,
 
-    /// Disable the specified dependency group [env: `UV_NO_GROUP`=]
+    /// Exclude the specified dependency group from the sync/install set [env: `UV_NO_GROUP`=]
+    ///
+    /// This only changes which packages are installed when syncing the environment.
+    /// With `--no-sync`, or after a previous sync that included the group, already-installed
+    /// packages are left unchanged.
     ///
     /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
@@ -6761,10 +6770,11 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     #[arg(long, value_delimiter = ' ', value_hint = ValueHint::Other)]
     no_group: Vec<GroupName>,
 
-    /// Ignore the default dependency groups.
+    /// Exclude the default dependency groups from the sync/install set.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
-    /// This disables that option, however, specific groups can still be included with `--group`.
+    /// This option excludes those groups when syncing; specific groups can still be
+    /// included with `--group`. With `--no-sync`, the environment is left unchanged.
     #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     no_default_groups: bool,
 
