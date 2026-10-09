@@ -34,63 +34,11 @@ pub async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitS
         Err(err) => return Err(err.into()),
     };
 
-    // Perform the uninstallation.
+    // Keep the root and its lock file in place. Processes already waiting on the lock must not
+    // acquire a different lock from processes that start after this uninstallation.
     do_uninstall(&installed_tools, name, printer).await?;
 
-    // Clean up any empty directories.
-    if uv_fs::directories(installed_tools.root())?.all(|path| uv_fs::is_temporary(&path)) {
-        fs_err::tokio::remove_dir_all(&installed_tools.root())
-            .await
-            .ignore_currently_being_deleted()?;
-        if let Some(parent) = installed_tools.root().parent() {
-            if uv_fs::directories(parent)?.all(|path| uv_fs::is_temporary(&path)) {
-                fs_err::tokio::remove_dir_all(parent)
-                    .await
-                    .ignore_currently_being_deleted()?;
-            }
-        }
-    }
-
     Ok(ExitStatus::Success)
-}
-
-trait IoErrorExt: std::error::Error + 'static {
-    #[inline]
-    fn is_in_process_of_being_deleted(&self) -> bool {
-        if cfg!(target_os = "windows") {
-            use std::error::Error;
-            let mut e: &dyn Error = &self;
-            loop {
-                if e.to_string().contains("The file cannot be opened because it is in the process of being deleted. (os error 303)") {
-                    return true;
-                }
-                e = match e.source() {
-                    Some(e) => e,
-                    None => break,
-                }
-            }
-        }
-
-        false
-    }
-}
-
-impl IoErrorExt for std::io::Error {}
-
-/// An extension trait to suppress "cannot open file because it's currently being deleted"
-trait IgnoreCurrentlyBeingDeleted {
-    fn ignore_currently_being_deleted(self) -> Self;
-}
-
-impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
-    fn ignore_currently_being_deleted(self) -> Self {
-        match self {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
-            Err(err) if err.is_in_process_of_being_deleted() => Ok(()),
-            Err(err) => Err(err),
-        }
-    }
 }
 
 /// Perform the uninstallation.
