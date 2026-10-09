@@ -825,6 +825,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 StaticMetadata::None => false,
             };
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         match CachedMetadata::read(&metadata_entry).await {
@@ -906,20 +920,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         let task = self
             .reporter
@@ -1224,6 +1224,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             StaticMetadata::None => false,
         };
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         match CachedMetadata::read(&metadata_entry).await {
@@ -1280,20 +1294,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -1569,6 +1569,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         match CachedMetadata::read(&metadata_entry).await {
@@ -1652,20 +1666,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?,
             ));
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -2043,6 +2043,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             StaticMetadata::None => false,
         };
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
         match CachedMetadata::read(&metadata_entry).await {
@@ -2091,20 +2105,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -2181,7 +2181,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
-        let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -2241,6 +2240,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Store the metadata.
+        let metadata_entry = cache_shard.entry(METADATA);
         write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
             .await
             .map_err(Error::CacheWrite)?;
@@ -2373,7 +2373,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
-        let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -2414,7 +2413,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 StaticMetadata::None => false,
             };
 
+        // Dynamic metadata and wheels must use the same build settings.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+
         // If the cache contains compatible metadata, return it.
+        let metadata_entry = cache_shard.entry(METADATA);
         if self
             .build_context
             .cache()
@@ -2505,20 +2519,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?,
             ));
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info = BuildInfo::from_settings(
-            config_settings.into_owned(),
-            extra_build_deps.to_vec(),
-            extra_build_variables.cloned(),
-        );
-        let cache_shard = build_info
-            .cache_shard()
-            .map(|digest| cache_shard.shard(digest))
-            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
