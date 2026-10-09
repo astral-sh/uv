@@ -129,11 +129,6 @@ documentation for more details.
 
 ## Upgrading Python versions
 
-!!! important
-
-    Support for upgrading Python patch versions is in _preview_. This means the behavior is
-    experimental and subject to change.
-
 To upgrade a Python version to the latest supported patch release:
 
 ```console
