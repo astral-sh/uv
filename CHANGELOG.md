@@ -99,6 +99,7 @@ There are no breaking changes to the configuration of the [uv build backend](htt
 
 ### Bug fixes
 
+- Fix incorrect dependency resolution when reusing source metadata with different build settings ([#22404](https://github.com/astral-sh/uv/pull/22404))
 - Avoid overlong wheel cache lock filenames on Windows ([#22134](https://github.com/astral-sh/uv/pull/22134))
 
 ## 0.12.x
