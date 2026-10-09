@@ -828,3 +828,170 @@ Reports, prepared outputs, provenance, raw timings, and normalized comparisons a
 - [Line tables](https://github.com/astral-sh/uv/actions/runs/37963882186)
 - [Limited](https://github.com/astral-sh/uv/actions/runs/37963887151)
 - [Full](https://github.com/astral-sh/uv/actions/runs/37963892027)
+
+### Repeat of the current-main debug-level comparison
+
+All twelve attempt-2 jobs passed at the same experiment commit
+`eb7920ef2a1c1f62d89a3c68f6f494193f5ca093` and main revision
+`238d6ba651d13f0dfddab0cc1826f963cdf21711`. Source, toolchain, optimization settings, one codegen
+unit, runner profiles, Cargo job counts, PGO corpus, and benchmark harness were unchanged. Each job
+again built a fresh no-debug baseline first, then its symbols build, with independent PGO training.
+GitHub Actions runner/step diagnostic logging was enabled for this round.
+
+The first-round measurements above remain intact. These are two observations per configuration, with
+each symbols build compared against its own baseline. The observed spread is not a confidence
+interval. With the baseline always first, cache warming remains a potential source of bias. These
+native experiment runners also differ from production manylinux CI, including its smaller Linux
+x86-64 runner.
+
+Combined build/training overhead, first observation → repeat:
+
+| Platform       |     Line tables |         Limited |              Full |
+| -------------- | --------------: | --------------: | ----------------: |
+| Linux x86-64   | +10.6% → +11.4% |  -6.1% → +11.4% |   +47.3% → +48.4% |
+| Linux ARM64    |   +7.9% → +8.3% |  +8.3% → +10.3% |   +45.4% → +44.3% |
+| macOS ARM64    | +10.3% → +10.8% | +11.6% → +10.8% | +157.8% → +155.1% |
+| Windows x86-64 | +46.4% → +20.5% |  +9.3% → +21.2% |   +57.9% → +37.3% |
+
+Repeat wall times below are no debug → symbols, including instrumented compilation, PGO training,
+and final compilation/wheel creation. Parentheses show the paired overhead. Setup, symbol
+processing, verification, and upload time are excluded:
+
+| Platform       |                Line tables |                    Limited |                        Full |
+| -------------- | -------------------------: | -------------------------: | --------------------------: |
+| Linux x86-64   | 13m 37s → 15m 10s (+11.4%) | 16m 48s → 18m 43s (+11.4%) |  17m 10s → 25m 29s (+48.4%) |
+| Linux ARM64    |  18m 24s → 19m 55s (+8.3%) | 17m 54s → 19m 44s (+10.3%) |  17m 32s → 25m 18s (+44.3%) |
+| macOS ARM64    |  12m 46s → 14m 8s (+10.8%) | 12m 51s → 14m 14s (+10.8%) | 12m 48s → 32m 38s (+155.1%) |
+| Windows x86-64 | 20m 44s → 24m 59s (+20.5%) | 21m 26s → 25m 58s (+21.2%) |   28m 4s → 38m 32s (+37.3%) |
+
+Repeat instrumented compilation and training:
+
+| Platform       |                Line tables |                    Limited |                       Full |
+| -------------- | -------------------------: | -------------------------: | -------------------------: |
+| Linux x86-64   |   8m 46s → 9m 39s (+10.0%) |  10m 55s → 12m 2s (+10.3%) |  11m 9s → 15m 38s (+40.3%) |
+| Linux ARM64    |   12m 0s → 12m 47s (+6.5%) |  11m 38s → 12m 41s (+9.0%) | 11m 23s → 15m 50s (+39.2%) |
+| macOS ARM64    |    8m 12s → 8m 56s (+8.9%) |    8m 16s → 8m 59s (+8.7%) | 8m 14s → 22m 49s (+177.2%) |
+| Windows x86-64 | 12m 56s → 15m 13s (+17.6%) | 13m 35s → 15m 38s (+15.0%) | 17m 56s → 21m 40s (+20.8%) |
+
+Repeat final compilation and wheel creation:
+
+| Platform       |              Line tables |                   Limited |                      Full |
+| -------------- | -----------------------: | ------------------------: | ------------------------: |
+| Linux x86-64   | 4m 51s → 5m 31s (+14.0%) |  5m 53s → 6m 41s (+13.5%) |   6m 1s → 9m 51s (+63.5%) |
+| Linux ARM64    |  6m 24s → 7m 8s (+11.5%) |   6m 16s → 7m 3s (+12.7%) |   6m 9s → 9m 28s (+53.9%) |
+| macOS ARM64    | 4m 34s → 5m 13s (+14.2%) |  4m 35s → 5m 15s (+14.6%) | 4m 33s → 9m 49s (+115.3%) |
+| Windows x86-64 | 7m 48s → 9m 46s (+25.2%) | 7m 51s → 10m 21s (+31.8%) | 10m 8s → 16m 52s (+66.5%) |
+
+Linux x86-64 limited's negative first-round overhead did not repeat. Its symbols total changed from
+18m 51s to 18m 43s, while the no-debug baseline fell from 20m 4s to 16m 48s. Baseline instrumented
+Cargo compilation fell from 13m 24s to 10m 10s; the symbols compilation changed only from 11m 22s to
+11m 17s. This supports treating the original negative overhead as an anomalous baseline observation,
+without establishing its underlying cause. In both rounds, the baseline logged its first compilation
+within two seconds of starting the Cargo stage, with no crate-download messages during that stage.
+The delay occurred after compilation had begun, rather than in a long initial dependency download.
+
+Windows line tables changed from 23m 57s → 35m 4s (+46.4%) to 20m 44s → 24m 59s (+20.5%). Its final
+symbols stage fell from 15m 38s to 9m 46s. Line-table and limited costs were close in the repeat
+(+20.5% and +21.2%), although limited had measured +9.3% initially. The line-table job's Jupyter
+baseline/symbol medians also fell from 62.129/60.613 ms to 40.328/40.878 ms. The large first-round
+gap between the reduced debug levels did not recur.
+
+Windows full illustrates why the percentage alone is insufficient: overhead fell from +57.9% to
++37.3%, but the symbols build became slower, from 36m 0s to 38m 32s. Its baseline grew even more,
+from 22m 48s to 28m 4s. Both raw times and each run's paired overhead are retained. The three
+Windows repeat baselines were checked for configuration differences: all use `debug=none`, one
+codegen unit, four Cargo jobs, the same AWS-LC settings and optimization flags, and MSVC
+14.44.35207. Their instrumented Cargo stages began compiling within 8–11 seconds and logged no crate
+downloads. The full job's baseline instrumented Cargo build took 16m 51s, versus 12m 17s for the
+line-table job and 12m 56s for limited. This locates the extra time inside the build, but does not
+distinguish slower available compute from scheduling, I/O, or compiler-work variation.
+
+Separate `uv` symbol sizes in the repeat are uncompressed decimal MB (1 MB = 1,000,000 bytes). They
+remain excluded from shipped wheels; no-debug companion size is zero. All twelve companion sizes
+changed by less than 0.1% from their first-round counterparts:
+
+| Platform       | Line tables | Limited |  Full |
+| -------------- | ----------: | ------: | ----: |
+| Linux x86-64   |       169.5 |   266.5 | 582.2 |
+| Linux ARM64    |       179.3 |   273.7 | 600.0 |
+| macOS ARM64    |       188.8 |   300.8 | 581.1 |
+| Windows x86-64 |       119.0 |   120.2 | 442.8 |
+
+Repeat stripped `uv` executable sizes, no debug → symbols in decimal MB, with paired size changes:
+
+| Platform       |               Line tables |                   Limited |                      Full |
+| -------------- | ------------------------: | ------------------------: | ------------------------: |
+| Linux x86-64   | 39.809 → 39.796 (-0.031%) | 39.824 → 39.835 (+0.029%) | 39.840 → 39.612 (-0.572%) |
+| Linux ARM64    | 33.481 → 33.481 (+0.001%) | 33.482 → 33.474 (-0.024%) | 33.486 → 33.734 (+0.740%) |
+| macOS ARM64    | 29.258 → 29.526 (+0.916%) | 29.258 → 29.542 (+0.973%) | 29.258 → 29.543 (+0.973%) |
+| Windows x86-64 | 33.268 → 33.287 (+0.057%) | 33.288 → 33.515 (+0.681%) | 33.267 → 33.537 (+0.813%) |
+
+Repeat processed wheel sizes, using the same convention:
+
+| Platform       |               Line tables |                   Limited |                      Full |
+| -------------- | ------------------------: | ------------------------: | ------------------------: |
+| Linux x86-64   | 17.499 → 17.493 (-0.031%) | 17.499 → 17.510 (+0.061%) | 17.509 → 17.402 (-0.613%) |
+| Linux ARM64    | 16.457 → 16.459 (+0.014%) | 16.456 → 16.461 (+0.034%) | 16.462 → 16.588 (+0.766%) |
+| macOS ARM64    | 14.937 → 15.079 (+0.950%) | 14.946 → 15.082 (+0.907%) | 14.947 → 15.078 (+0.876%) |
+| Windows x86-64 | 15.762 → 15.772 (+0.059%) | 15.773 → 15.886 (+0.715%) | 15.762 → 15.894 (+0.838%) |
+
+The raw reports retain exact bytes for every executable and `uv`/`uvx`/`uvw` companion. Debug
+settings and independently trained PGO profiles can change executable layout; symbol separation does
+not guarantee identical shipped bytes. Reduced Rust debug levels still enable full native C debug
+information in the configured native build scripts.
+
+Repeat cached resolver medians below are no debug → symbols in milliseconds. All twenty samples per
+mode and their output hashes were checked. Source, Rust/Maturin/Python versions, requirements
+hashes, and resolution hashes match across levels within each platform and against attempt 1. The
+paired comparisons remain useful even where absolute timings differ between runners, but these short
+workloads and two observations per configuration do not establish overall runtime equivalence.
+
+Jupyter:
+
+| Platform       |             Line tables |                 Limited |                    Full |
+| -------------- | ----------------------: | ----------------------: | ----------------------: |
+| Linux x86-64   |   8.338 → 8.381 (+0.5%) | 12.123 → 12.090 (-0.3%) | 14.052 → 13.692 (-2.6%) |
+| Linux ARM64    | 10.722 → 10.819 (+0.9%) | 10.579 → 10.499 (-0.8%) | 10.298 → 10.423 (+1.2%) |
+| macOS ARM64    | 10.770 → 10.805 (+0.3%) | 10.848 → 10.946 (+0.9%) | 10.950 → 11.006 (+0.5%) |
+| Windows x86-64 | 40.328 → 40.878 (+1.4%) | 43.338 → 43.698 (+0.8%) | 39.644 → 39.942 (+0.8%) |
+
+Trio:
+
+| Platform       |             Line tables |                 Limited |                    Full |
+| -------------- | ----------------------: | ----------------------: | ----------------------: |
+| Linux x86-64   |   6.764 → 6.727 (-0.6%) |   9.837 → 9.781 (-0.6%) | 11.188 → 11.064 (-1.1%) |
+| Linux ARM64    |   8.288 → 8.205 (-1.0%) |   8.151 → 8.128 (-0.3%) |   7.778 → 7.964 (+2.4%) |
+| macOS ARM64    |   9.034 → 8.975 (-0.7%) |   8.912 → 8.961 (+0.5%) |   8.992 → 9.050 (+0.6%) |
+| Windows x86-64 | 24.958 → 24.554 (-1.6%) | 26.096 → 26.157 (+0.2%) | 24.208 → 23.835 (-1.5%) |
+
+Every repeat passed Rust/AWS-LC/jitterentropy source lookup, negative lookup with companion files
+hidden, SBOM retention, wheel installation, and smoke checks. Final compiler flags, archive/job
+provenance, executable/profile hashes, wheel contents, and symbol sizes were verified. macOS
+signatures and Windows static CRT checks passed. Windows again reported 16 logical CPUs and
+34,359,107,584 bytes of physical RAM. The training environment retained the selected debug/CGU
+settings; training logs do not expose every compiler invocation.
+
+PGO diagnostics matched the corresponding first-round counts exactly, with zero mismatches: 18
+missing-profile warnings per mode on Linux, 19 on Windows, and macOS baseline 3,565 with symbols
+3,567/3,555/3,585 for line tables/limited/full. Linux and Windows warnings are confined to the
+launchers; the macOS coverage caveat remains.
+
+All three attempt-2 workflow log archives were retained, including twelve nested per-job diagnostic
+ZIPs with a runner log and a worker log each. Inspection found execution/coordination details but no
+sampled CPU utilization, paging, peak-process-memory, or I/O-pressure measurements that explain the
+timing variation. Generic resource terms appeared in embedded workflow definitions. The logs
+therefore do not establish CPU contention, paging, cache state, or another specific root cause.
+Diagnostic logging was added only in the repeat, and baseline-first order was unchanged; neither
+round should be discarded or treated as a definitive recurring CI cost.
+
+Repeat evidence is retained under `target/debug-symbols-experiment/main-2026-10-09-repeat/`,
+separately from the original `main-2026-10-09/` directory. Artifact IDs, creation times, job IDs,
+upload logs, and archive digests distinguish attempt 2 despite duplicate artifact names and the
+identical source commit. Workflow logs for both observations:
+
+- Line tables: [first](https://github.com/astral-sh/uv/actions/runs/37963882186/attempts/1),
+  [repeat](https://github.com/astral-sh/uv/actions/runs/37963882186/attempts/2).
+- Limited: [first](https://github.com/astral-sh/uv/actions/runs/37963887151/attempts/1),
+  [repeat](https://github.com/astral-sh/uv/actions/runs/37963887151/attempts/2).
+- Full: [first](https://github.com/astral-sh/uv/actions/runs/37963892027/attempts/1),
+  [repeat](https://github.com/astral-sh/uv/actions/runs/37963892027/attempts/2).
