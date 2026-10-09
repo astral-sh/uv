@@ -697,8 +697,7 @@ profiles with eight Cargo jobs; macOS uses `namespace-profile-macos-15` with fou
 smaller `depot-ubuntu-latest-4` profile. These native timings do not reproduce production manylinux
 CI.
 
-10 of 12 comparisons have completed and been verified. Pending: Windows x86-64 line tables, Windows
-x86-64 full.
+12 of 12 comparisons have completed and been verified. All twelve jobs passed.
 
 Combined instrumented-build, training, and final-build wall times are no debug → symbols, with
 overhead against each run's own baseline. Setup, symbol processing, verification, and uploads are
@@ -709,7 +708,7 @@ excluded:
 | Linux x86-64   | 17m 16s → 19m 5s (+10.6%) |   20m 4s → 18m 51s (-6.1%) |  17m 11s → 25m 18s (+47.3%) |
 | Linux ARM64    |  18m 4s → 19m 29s (+7.9%) |  16m 56s → 18m 20s (+8.3%) |   17m 5s → 24m 50s (+45.4%) |
 | macOS ARM64    | 12m 50s → 14m 9s (+10.3%) | 12m 52s → 14m 21s (+11.6%) | 12m 40s → 32m 39s (+157.8%) |
-| Windows x86-64 |                   Pending |  23m 16s → 25m 25s (+9.3%) |                     Pending |
+| Windows x86-64 | 23m 57s → 35m 4s (+46.4%) |  23m 16s → 25m 25s (+9.3%) |   22m 48s → 36m 0s (+57.9%) |
 
 The negative Linux x86-64 limited total is a timing anomaly, not evidence of a reliable speedup. Its
 no-debug instrumented Cargo build took 13m 24s, compared with 11m 22s for limited and 10m 26s for
@@ -718,33 +717,41 @@ so the extra baseline time is primarily compilation rather than corpus downloads
 limited final build was slower than its baseline. The observed total is retained; baselines are
 neither pooled nor substituted, and single observations do not establish recurring overhead.
 
+Windows line tables also need a repeat before interpreting their measured +46.4% overhead as a
+stable debug-level cost. The symbols final build took 15m 38s, versus 9m 54s for limited. Both
+binaries in the line-table job had substantially slower resolver medians: Jupyter measured
+62.129/60.613 ms, versus 38.194/38.520 ms for limited and 38.446/38.219 ms for full. This is
+consistent with variation in run conditions, but does not identify its cause or establish that line
+tables intrinsically cost more than limited debug information. The configured runner profile,
+CPU/RAM allocation, optimization settings, benchmark inputs and outputs were checked and matched.
+
 Instrumented compilation and training, using the same no debug → symbols convention:
 
-| Platform       |               Line tables |                    Limited |                       Full |
-| -------------- | ------------------------: | -------------------------: | -------------------------: |
-| Linux x86-64   | 11m 11s → 12m 13s (+9.3%) |   14m 8s → 12m 8s (-14.1%) |  11m 8s → 15m 43s (+41.1%) |
-| Linux ARM64    | 11m 46s → 12m 31s (+6.3%) |   11m 3s → 11m 46s (+6.5%) | 11m 10s → 15m 18s (+37.0%) |
-| macOS ARM64    |   8m 17s → 8m 56s (+7.9%) |     8m 16s → 9m 4s (+9.7%) |  8m 7s → 22m 49s (+181.5%) |
-| Windows x86-64 |                   Pending | 13m 51s → 15m 31s (+12.0%) |                    Pending |
+| Platform       |                Line tables |                    Limited |                       Full |
+| -------------- | -------------------------: | -------------------------: | -------------------------: |
+| Linux x86-64   |  11m 11s → 12m 13s (+9.3%) |   14m 8s → 12m 8s (-14.1%) |  11m 8s → 15m 43s (+41.1%) |
+| Linux ARM64    |  11m 46s → 12m 31s (+6.3%) |   11m 3s → 11m 46s (+6.5%) | 11m 10s → 15m 18s (+37.0%) |
+| macOS ARM64    |    8m 17s → 8m 56s (+7.9%) |     8m 16s → 9m 4s (+9.7%) |  8m 7s → 22m 49s (+181.5%) |
+| Windows x86-64 | 15m 25s → 19m 26s (+26.1%) | 13m 51s → 15m 31s (+12.0%) |  14m 7s → 22m 19s (+58.2%) |
 
 Final compilation and wheel creation:
 
-| Platform       |              Line tables |                  Limited |                      Full |
-| -------------- | -----------------------: | -----------------------: | ------------------------: |
-| Linux x86-64   |  6m 5s → 6m 52s (+12.8%) | 5m 56s → 6m 42s (+13.1%) |   6m 3s → 9m 35s (+58.5%) |
-| Linux ARM64    | 6m 17s → 6m 58s (+10.9%) | 5m 53s → 6m 34s (+11.7%) |  5m 55s → 9m 33s (+61.3%) |
-| macOS ARM64    | 4m 33s → 5m 13s (+14.4%) | 4m 36s → 5m 17s (+15.0%) | 4m 33s → 9m 50s (+115.6%) |
-| Windows x86-64 |                  Pending |  9m 24s → 9m 54s (+5.3%) |                   Pending |
+| Platform       |               Line tables |                  Limited |                      Full |
+| -------------- | ------------------------: | -----------------------: | ------------------------: |
+| Linux x86-64   |   6m 5s → 6m 52s (+12.8%) | 5m 56s → 6m 42s (+13.1%) |   6m 3s → 9m 35s (+58.5%) |
+| Linux ARM64    |  6m 17s → 6m 58s (+10.9%) | 5m 53s → 6m 34s (+11.7%) |  5m 55s → 9m 33s (+61.3%) |
+| macOS ARM64    |  4m 33s → 5m 13s (+14.4%) | 4m 36s → 5m 17s (+15.0%) | 4m 33s → 9m 50s (+115.6%) |
+| Windows x86-64 | 8m 32s → 15m 38s (+83.1%) |  9m 24s → 9m 54s (+5.3%) | 8m 41s → 13m 41s (+57.6%) |
 
 Separate `uv` symbol sizes are uncompressed decimal MB (1 MB = 1,000,000 bytes), excluded from
 shipped wheels. Reports also retain `uvx` and Windows `uvw` companion sizes:
 
-| Platform       | No debug | Line tables | Limited |    Full |
-| -------------- | -------: | ----------: | ------: | ------: |
-| Linux x86-64   |        0 |       169.6 |   266.4 |   582.5 |
-| Linux ARM64    |        0 |       179.3 |   273.8 |   600.3 |
-| macOS ARM64    |        0 |       188.8 |   300.8 |   580.8 |
-| Windows x86-64 |        0 |     Pending |   120.2 | Pending |
+| Platform       | No debug | Line tables | Limited |  Full |
+| -------------- | -------: | ----------: | ------: | ----: |
+| Linux x86-64   |        0 |       169.6 |   266.4 | 582.5 |
+| Linux ARM64    |        0 |       179.3 |   273.8 | 600.3 |
+| macOS ARM64    |        0 |       188.8 |   300.8 | 580.8 |
+| Windows x86-64 |        0 |       119.1 |   120.2 | 442.9 |
 
 Stripped `uv` executable sizes in decimal MB, no debug → symbols, with the paired size change:
 
@@ -753,7 +760,7 @@ Stripped `uv` executable sizes in decimal MB, no debug → symbols, with the pai
 | Linux x86-64   | 39.832 → 39.821 (-0.028%) | 39.835 → 39.828 (-0.018%) | 39.823 → 39.623 (-0.502%) |
 | Linux ARM64    | 33.462 → 33.481 (+0.057%) | 33.464 → 33.469 (+0.015%) | 33.474 → 33.739 (+0.790%) |
 | macOS ARM64    | 29.258 → 29.542 (+0.972%) | 29.258 → 29.542 (+0.973%) | 29.258 → 29.543 (+0.973%) |
-| Windows x86-64 |                   Pending | 33.269 → 33.511 (+0.728%) |                   Pending |
+| Windows x86-64 | 33.286 → 33.289 (+0.009%) | 33.269 → 33.511 (+0.728%) | 33.272 → 33.538 (+0.799%) |
 
 Processed wheel sizes in decimal MB, with the same convention:
 
@@ -762,7 +769,7 @@ Processed wheel sizes in decimal MB, with the same convention:
 | Linux x86-64   | 17.509 → 17.489 (-0.112%) | 17.502 → 17.505 (+0.019%) | 17.500 → 17.404 (-0.548%) |
 | Linux ARM64    | 16.442 → 16.460 (+0.104%) | 16.450 → 16.465 (+0.090%) | 16.455 → 16.595 (+0.853%) |
 | macOS ARM64    | 14.944 → 15.079 (+0.905%) | 14.943 → 15.080 (+0.916%) | 14.945 → 15.078 (+0.890%) |
-| Windows x86-64 |                   Pending | 15.763 → 15.884 (+0.767%) |                   Pending |
+| Windows x86-64 | 15.773 → 15.772 (-0.009%) | 15.763 → 15.884 (+0.767%) | 15.764 → 15.891 (+0.806%) |
 
 These comparisons measure shipped artifacts after companion symbols have been separated; they do not
 guarantee identical executable sizes. Reduced Rust debug levels still enable full native C debug
@@ -781,7 +788,7 @@ Jupyter:
 | Linux x86-64   | 12.882 → 12.977 (+0.7%) | 12.202 → 12.338 (+1.1%) | 13.469 → 13.442 (-0.2%) |
 | Linux ARM64    | 10.694 → 10.414 (-2.6%) |   9.914 → 9.833 (-0.8%) | 10.533 → 10.467 (-0.6%) |
 | macOS ARM64    | 10.849 → 10.948 (+0.9%) | 11.253 → 11.429 (+1.6%) | 10.912 → 11.085 (+1.6%) |
-| Windows x86-64 |                 Pending | 38.194 → 38.520 (+0.9%) |                 Pending |
+| Windows x86-64 | 62.129 → 60.613 (-2.4%) | 38.194 → 38.520 (+0.9%) | 38.446 → 38.219 (-0.6%) |
 
 Trio:
 
@@ -790,7 +797,7 @@ Trio:
 | Linux x86-64   | 10.410 → 10.306 (-1.0%) |  9.804 → 10.014 (+2.1%) | 10.817 → 10.680 (-1.3%) |
 | Linux ARM64    |   8.148 → 8.036 (-1.4%) |   7.643 → 7.586 (-0.7%) |   8.156 → 8.092 (-0.8%) |
 | macOS ARM64    |   8.986 → 9.133 (+1.6%) |   9.111 → 9.201 (+1.0%) |   9.079 → 9.119 (+0.4%) |
-| Windows x86-64 |                 Pending | 22.545 → 22.520 (-0.1%) |                 Pending |
+| Windows x86-64 | 36.847 → 38.040 (+3.2%) | 22.545 → 22.520 (-0.1%) | 22.594 → 22.517 (-0.3%) |
 
 Every completed job passed Rust source lookups for its executables, AWS-LC and jitterentropy source
 lookups, negative lookups with companion files hidden, SBOM retention, wheel installation, and smoke
@@ -808,7 +815,7 @@ symbols:
 | Linux x86-64   |     18 → 18 |     18 → 18 |     18 → 18 |
 | Linux ARM64    |     18 → 18 |     18 → 18 |     18 → 18 |
 | macOS ARM64    | 3565 → 3567 | 3565 → 3555 | 3565 → 3585 |
-| Windows x86-64 |     Pending |     19 → 19 |     Pending |
+| Windows x86-64 |     19 → 19 |     19 → 19 |     19 → 19 |
 
 The Linux counts are confined to `uvx` and the Windows counts to `uvx`/`uvw`. macOS includes uv
 dependency functions, so its profile coverage caveat still applies. Warning counts alone do not
