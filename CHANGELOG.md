@@ -7,6 +7,14 @@
 
 ### Breaking changes
 
+- **Use Python 3.15 as the default stable version**
+
+  The default stable Python version has changed from 3.14 to 3.15. This affects Python downloads when no version is requested or pinned, e.g., when running `uv python install`.
+
+  uv continues to use compatible Python installations that are already present. For example, `uv venv` can still use an installed Python 3.14. If no suitable interpreter is installed and automatic downloads are enabled, commands such as `uv venv` and `uvx python` can now download Python 3.15.
+
+  You can opt out of this behavior by requesting Python 3.14 explicitly, e.g., `uv venv --python 3.14`. For projects, use `uv python pin 3.14` to record the version in `.python-version`.
+
 - **Honor `--require-hashes` in included constraints files** ([#22275](https://github.com/astral-sh/uv/pull/22275))
 
   Previously, uv ignored `--require-hashes` in constraints files included with `-c` from a requirements file. Now, uv honors the directive and requires hashes for all requirements in the installation. Installs that previously succeeded can now fail if a requirement is missing a hash.
