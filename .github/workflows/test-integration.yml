@@ -815,6 +815,14 @@ jobs:
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
+      - name: "Start Docker"
+        # Docker can fail to start during runner boot.
+        # https://github.com/actions/runner-images/issues/13729#issuecomment-4183956802
+        run: |
+          if ((Get-Service -Name docker).Status -ne 'Running') {
+            Start-Service -Name docker
+          }
+
       - name: "Run uv on Windows NanoServer"
         run: |
           docker run --rm `
