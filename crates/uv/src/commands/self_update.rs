@@ -462,45 +462,47 @@ async fn download_installer_from_urls(
 
     let used_installer_url =
         fetch_with_url_fallback(urls, retry_policy, "official uv installer", |url| async {
-        let mut request = client.for_host(&url).get(Url::from(url.clone()));
-        if let Some(github_token) = installer_download_github_token(&url, github_token) {
-            request = request.header("Authorization", format!("Bearer {github_token}"));
-        }
+            let mut request = client.for_host(&url).get(Url::from(url.clone()));
+            if let Some(github_token) = installer_download_github_token(&url, github_token) {
+                request = request.header("Authorization", format!("Bearer {github_token}"));
+            }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|source| InstallerDownloadError::Download {
-                url: url.clone(),
-                source: source.into(),
-            })?;
+            let response =
+                request
+                    .send()
+                    .await
+                    .map_err(|source| InstallerDownloadError::Download {
+                        url: url.clone(),
+                        source: source.into(),
+                    })?;
 
-        let response =
-            response
-                .error_for_status()
-                .map_err(|source| InstallerDownloadError::Download {
-                    url: url.clone(),
-                    source: source.into(),
+            let response =
+                response
+                    .error_for_status()
+                    .map_err(|source| InstallerDownloadError::Download {
+                        url: url.clone(),
+                        source: source.into(),
+                    })?;
+
+            let bytes =
+                response
+                    .bytes()
+                    .await
+                    .map_err(|source| InstallerDownloadError::Download {
+                        url: url.clone(),
+                        source: source.into(),
+                    })?;
+
+            fs_err::tokio::write(installer_path, &bytes)
+                .await
+                .map_err(|source| InstallerDownloadError::Write {
+                    path: installer_path.to_path_buf(),
+                    source,
                 })?;
 
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|source| InstallerDownloadError::Download {
-                url: url.clone(),
-                source: source.into(),
-            })?;
-
-        fs_err::tokio::write(installer_path, &bytes)
-            .await
-            .map_err(|source| InstallerDownloadError::Write {
-                path: installer_path.to_path_buf(),
-                source,
-            })?;
-
-        Ok::<DisplaySafeUrl, InstallerDownloadError>(url)
-    })
-    .await?;
+            Ok::<DisplaySafeUrl, InstallerDownloadError>(url)
+        })
+        .await?;
 
     #[cfg(unix)]
     {
@@ -1045,7 +1047,8 @@ mod tests {
     #[test]
     fn test_update_success_url_for_default_mirror() {
         let version = Pep440Version::new([1, 2, 3]);
-        let installer = DisplaySafeUrl::parse("https://mirror.example.com/uv-installer.sh").unwrap();
+        let installer =
+            DisplaySafeUrl::parse("https://mirror.example.com/uv-installer.sh").unwrap();
         assert_eq!(
             update_success_url(&version, None, &installer),
             "https://github.com/astral-sh/uv/releases/tag/1.2.3"
