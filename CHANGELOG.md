@@ -51,6 +51,8 @@ There are no breaking changes to the configuration of the [uv build backend](htt
 
   Previously, uv installed `_virtualenv.py` and `_virtualenv.pth` into every new virtual environment to prevent distutils configuration from changing installation paths. Now, uv omits these files on Python 3.10 and later, which already ignore the affected configuration keys. This reduces Python startup overhead. Python 3.9 and earlier retain the patch.
 
+  This matches [`virtualenv` 21.6.0](https://github.com/pypa/virtualenv/releases/tag/21.6.0), which also omits the patch on Python 3.10 and later.
+
   You cannot opt out of this behavior. Existing virtual environments are not modified automatically. Recreate an environment with Python 3.10 or later to remove the patch.
 
   This stabilizes the `no-distutils-patch` preview feature.
