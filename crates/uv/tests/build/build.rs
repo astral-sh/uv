@@ -2775,7 +2775,7 @@ fn build_fast_path_require_hashes() -> Result<()> {
     Building source distribution...
     error: Failed to build `[WORKSPACE]/test/packages/built-by-uv`
       cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `uv-build>=0.8.0, <0.13`
+      cause: No solution found when resolving: `uv-build>=0.8.0, <0.14`
       cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
     ");
 
