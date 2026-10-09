@@ -2,9 +2,12 @@ use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use reqsign::ProvideCredential;
 use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
-use reqsign::google::DefaultSigner as GcsDefaultSigner;
+use reqsign::google::{
+    Credential, DefaultCredentialProvider, DefaultSigner as GcsDefaultSigner, EnvCredentialProvider,
+};
 use tracing::debug;
 use url::{ParseError, Url};
 
@@ -146,6 +149,37 @@ impl GcsEndpointProvider {
     /// should be cached.
     pub(crate) fn create_signer() -> GcsDefaultSigner {
         reqsign::google::default_signer("storage.googleapis.com")
+            .with_credential_provider(GcsCredentialProvider::default())
+    }
+}
+
+/// The environment variable with the path to the Google Cloud credentials file.
+const GOOGLE_APPLICATION_CREDENTIALS: &str = "GOOGLE_APPLICATION_CREDENTIALS";
+
+/// A provider for Google Cloud credentials that fails when the credentials file set in
+/// `GOOGLE_APPLICATION_CREDENTIALS` cannot be loaded.
+///
+/// The default chain ignores that failure and tries the next provider, so requests can end up
+/// signed with another identity, e.g., the service account of the VM.
+#[derive(Debug, Default)]
+pub(crate) struct GcsCredentialProvider {
+    default: DefaultCredentialProvider,
+}
+
+impl ProvideCredential for GcsCredentialProvider {
+    type Credential = Credential;
+
+    async fn provide_credential(
+        &self,
+        ctx: &reqsign::Context,
+    ) -> reqsign::Result<Option<Self::Credential>> {
+        if ctx
+            .env_var(GOOGLE_APPLICATION_CREDENTIALS)
+            .is_some_and(|path| !path.is_empty())
+        {
+            return EnvCredentialProvider::new().provide_credential(ctx).await;
+        }
+        self.default.provide_credential(ctx).await
     }
 }
 
@@ -214,7 +248,82 @@ fn is_endpoint_url(url: &Url, endpoint_url: &Url) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::future::{self, Future};
+
+    use reqsign::{FileRead, StaticEnv};
+
     use super::*;
+
+    #[derive(Debug)]
+    struct FsFileRead;
+
+    impl FileRead for FsFileRead {
+        fn file_read(&self, path: &str) -> impl Future<Output = reqsign::Result<Vec<u8>>> {
+            future::ready(
+                fs_err::read(path).map_err(|err| reqsign::Error::unexpected(err.to_string())),
+            )
+        }
+    }
+
+    /// A context without HTTP access, so that the VM metadata service is never reached.
+    fn gcs_context(google_application_credentials: Option<&str>) -> reqsign::Context {
+        let envs = google_application_credentials
+            .map(|path| (GOOGLE_APPLICATION_CREDENTIALS.to_string(), path.to_string()))
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        reqsign::Context::new()
+            .with_file_read(FsFileRead)
+            .with_env(StaticEnv {
+                home_dir: None,
+                envs,
+            })
+    }
+
+    #[tokio::test]
+    async fn gcs_credentials_file_that_does_not_parse_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        fs_err::write(
+            &path,
+            r#"{"type": "external_account", "credential_source": {"file": "token"}}"#,
+        )
+        .unwrap();
+        let ctx = gcs_context(Some(path.to_str().unwrap()));
+
+        // The default chain ignores the failure and moves on to the next provider.
+        let default = DefaultCredentialProvider::new()
+            .provide_credential(&ctx)
+            .await;
+        assert!(matches!(default, Ok(None)));
+
+        let strict = GcsCredentialProvider::default()
+            .provide_credential(&ctx)
+            .await;
+        assert!(strict.is_err());
+    }
+
+    #[tokio::test]
+    async fn gcs_credentials_file_that_does_not_exist_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing.json");
+        let ctx = gcs_context(Some(path.to_str().unwrap()));
+
+        let strict = GcsCredentialProvider::default()
+            .provide_credential(&ctx)
+            .await;
+        assert!(strict.is_err());
+    }
+
+    #[tokio::test]
+    async fn gcs_credentials_use_the_default_chain_without_a_credentials_file() {
+        for ctx in [gcs_context(None), gcs_context(Some(""))] {
+            let strict = GcsCredentialProvider::default()
+                .provide_credential(&ctx)
+                .await;
+            assert!(matches!(strict, Ok(None)));
+        }
+    }
 
     #[test]
     fn test_endpoint_url_matches_path_prefix() {
