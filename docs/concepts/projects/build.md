@@ -58,11 +58,14 @@ that the downloaded `setuptools` distribution matches the specified hash:
 $ uv build --build-constraint constraints.txt --require-hashes
 ```
 
+To require hashes for every build dependency, including transitive dependencies, use
+`--require-build-hashes` instead.
+
 ### Project build dependency hashes
 
-Projects can also specify build constraints in
-[`build-constraint-dependencies`](../../reference/settings.md#build-constraint-dependencies). To
-verify a downloaded build dependency, provide its `requirement` and `hashes` in a table:
+For example, to verify build dependencies during project resolution and installation, add hashes to
+[`build-constraint-dependencies`](../../reference/settings.md#build-constraint-dependencies) in your
+workspace's `pyproject.toml`:
 
 ```toml
 [tool.uv]
@@ -72,43 +75,24 @@ build-constraint-dependencies = [
 ]
 ```
 
-An entry without hashes can be written as a string, as shown with `wheel<1` above. uv checks the
-supplied hashes when it downloads pinned build dependencies during project resolution or
-installation, including builds in `uv run --with` environments. These hashes apply to build
-dependencies. Packages installed in the project environment are verified against their own lockfile
-hashes.
+uv checks supplied hashes when it downloads pinned build dependencies. Constraints without hashes,
+such as `wheel<1`, are also allowed. To require a hash for every build dependency, including
+transitive dependencies, set
+[`require-build-hashes = true`](../../reference/settings.md#require-build-hashes) under `[tool.uv]`
+or pass `--require-build-hashes`.
 
-To require hashes for **every** build dependency, use `--require-build-hashes` on supported
-commands, including those that may build packages while updating a lockfile. You can also set
-`UV_REQUIRE_BUILD_HASHES=true` or configure the workspace root:
+You'll need to pin each build dependency to an exact version (or use a direct URL) and provide a
+hash. Hashes can also come from URL fragments in `build-system.requires`, but not from requirements
+returned by a build backend.
 
-```toml
-[tool.uv]
-require-build-hashes = true
-```
+When build isolation is disabled, uv uses the installed build dependencies without checking their
+hashes. uv also does not recheck already-installed packages or previously built wheels. The bundled
+`uv_build` backend does not need a hash because it is part of the uv executable.
 
-This option is experimental. Enable `--preview-features build-dependency-hashes` to suppress the
-warning.
+!!! note
 
-Command-line flags take precedence over the environment variable, which takes precedence over
-configuration. `--no-require-build-hashes` and `UV_REQUIRE_BUILD_HASHES=false` allow build
-dependencies without hashes; provided hashes are still checked. Workspace members cannot override
-the root's configuration. For `uv pip` commands, use `[tool.uv.pip] require-build-hashes = false` to
-opt out of the top-level setting.
-
-With `--require-build-hashes`, provide exact versions or direct URLs and hashes for all build
-dependencies, including their dependencies. Hashes can also come from URL fragments (e.g.,
-`#sha256=...`) in `build-system.requires`. Hashes in requirements or metadata returned by a build
-backend, such as through `get_requires_for_build_wheel`, do not count: those dependencies need
-hashes from build constraints or `build-system.requires`. Requirements whose environment markers do
-not match the current environment are ignored.
-
-When uv uses its bundled `uv_build` backend, no hash is required for it: the backend is part of the
-uv executable, not a separately downloaded package.
-
-When build isolation is disabled with `--no-build-isolation` or `--no-build-isolation-package`,
-build dependencies must already be installed and their hashes are not checked. Already-installed
-packages and previously built wheels are not checked.
+    `--require-build-hashes` is experimental. Use `--preview-features build-dependency-hashes` to
+    suppress the warning.
 
 ## Preventing publish to PyPI
 

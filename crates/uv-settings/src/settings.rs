@@ -1086,14 +1086,14 @@ pub struct ResolverInstallerSchema {
 
     /// Require hashes for all build dependencies.
     ///
-    /// Hashes in `build-constraint-dependencies` are checked when downloading build dependencies.
-    /// Enable this option to reject build dependencies without hashes. Hashes in URL fragments in
-    /// `build-system.requires` also count, but hashes returned by a build backend do not.
+    /// uv checks hashes provided in `build-constraint-dependencies` when downloading build
+    /// dependencies. Enable this setting to require a hash for every build dependency, including
+    /// transitive dependencies. You can also provide hashes as URL fragments in
+    /// `build-system.requires`. Hashes returned by a build backend do not count.
     ///
-    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
-    /// executable. When build isolation is disabled, build dependencies must already be installed
-    /// and their hashes are not checked. Already-installed packages and previously built wheels
-    /// are not checked.
+    /// Hashes are not required for the `uv_build` backend bundled in uv. When build isolation is
+    /// disabled, build dependencies must already be installed and their hashes are not checked.
+    /// Already-installed packages and previously built wheels are not checked.
     ///
     /// This setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.
     #[option(
