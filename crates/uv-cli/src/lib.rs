@@ -3930,7 +3930,7 @@ pub struct UpgradeArgs {
         overrides_with("no_require_build_hashes"),
         help_heading = "Build options"
     )]
-    pub require_build_hashes: bool,
+    require_build_hashes: bool,
 
     /// Do not require hashes for every build dependency.
     #[arg(
@@ -3938,7 +3938,7 @@ pub struct UpgradeArgs {
         overrides_with("require_build_hashes"),
         help_heading = "Build options"
     )]
-    pub no_require_build_hashes: bool,
+    no_require_build_hashes: bool,
 }
 
 #[derive(Args)]
