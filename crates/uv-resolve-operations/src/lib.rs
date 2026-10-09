@@ -164,20 +164,6 @@ pub async fn resolve(
 
         if let Some(selections) = &mut root_selections {
             // Treating named requirements with extras/groups markers as selections
-            for requirement in &requirements {
-                requirement.marker.visit_selections(|key, val| match key {
-                    MarkerValueList::Extras => {
-                        if let Ok(extra) = val.parse::<ExtraName>() {
-                            selections.extras.insert(extra);
-                        }
-                    }
-                    MarkerValueList::DependencyGroups => {
-                        if let Ok(group) = val.parse::<GroupName>() {
-                            selections.groups.insert(group);
-                        }
-                    }
-                });
-            }
             selections
                 .requirements
                 .extend(requirements.iter().map(|requirement| {
@@ -319,6 +305,25 @@ pub async fn resolve(
 
         requirements
     };
+
+    if let Some(selections) = &mut root_selections {
+        // Ensure we get the selections not necessarily from optional-dependencies/
+        // dependency-groups
+        for requirement in &requirements {
+            requirement.marker.visit_selections(|key, val| match key {
+                MarkerValueList::Extras => {
+                    if let Ok(extra) = val.parse::<ExtraName>() {
+                        selections.extras.insert(extra);
+                    }
+                }
+                MarkerValueList::DependencyGroups => {
+                    if let Ok(group) = val.parse::<GroupName>() {
+                        selections.groups.insert(group);
+                    }
+                }
+            });
+        }
+    }
 
     // Incorporate hashes from requirements discovered while resolving source trees and groups.
     let mut hasher = hasher
