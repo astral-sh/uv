@@ -49,6 +49,20 @@ impl NamedTempFile {
                 file: Self(error.file),
             })
     }
+
+    /// Persist the temporary file without replacing an existing destination.
+    ///
+    /// On failure, the returned [`PersistError`] retains the temporary file so callers can retry.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn persist_noclobber(self, path: &Path) -> Result<(), PersistError> {
+        self.0
+            .persist_noclobber(path)
+            .map(drop)
+            .map_err(|error| PersistError {
+                error: error.error,
+                file: Self(error.file),
+            })
+    }
 }
 
 impl AsRef<Path> for NamedTempFile {
