@@ -1664,11 +1664,11 @@ async fn mount_simple_launcher_index(server: &PackageServer, hash: &str, wheel: 
 async fn tool_upgrade_resolution_hints() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
-    let wheel = fs_err::read(
+    let wheel = context.read_bytes(
         context
             .workspace_root
             .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
-    )?;
+    );
     let server = PackageServer::new(&"simple-launcher".parse()?).await;
     mount_simple_launcher_index(
         &server,
@@ -1721,12 +1721,12 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
         .with_filtered_http_retries();
     let bin_dir = context.temp_dir.child("bin");
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
-    let wheel = fs_err::read(
+    let wheel = context.read_bytes(
         context
             .workspace_root
             .join("test/links")
             .join(wheel_filename),
-    )?;
+    );
     let server = PackageServer::new(&"simple-launcher".parse()?).await;
     mount_simple_launcher_index(
         &server,

@@ -2069,6 +2069,15 @@ impl TestContext {
             .unwrap_or_else(|_| panic!("Missing file: `{}`", file.user_display()))
     }
 
+    /// Read a file as bytes, resolving relative paths against the temporary directory.
+    #[track_caller]
+    pub fn read_bytes(&self, file: impl AsRef<Path>) -> Vec<u8> {
+        match fs_err::read(self.temp_dir.join(&file)) {
+            Ok(contents) => contents,
+            Err(error) => panic!("Failed to read `{}`: {error}", file.user_display()),
+        }
+    }
+
     /// Creates a new `Command` that is intended to be suitable for use in
     /// all tests.
     fn new_command(&self) -> Command {
@@ -2775,5 +2784,44 @@ mod cache_directory_tests {
             .env_remove(EnvVars::UV_CACHE_DIR);
 
         assert_effective_cache_directory(&command);
+    }
+}
+
+#[cfg(test)]
+mod file_read_tests {
+    use std::path::PathBuf;
+
+    use assert_fs::prelude::*;
+
+    use super::TestContext;
+
+    #[test]
+    fn reads_non_utf8_bytes() -> anyhow::Result<()> {
+        let context = TestContext::new_with_versions_and_bin(&[], PathBuf::from("uv"));
+        let bytes = [0, 0xff, 0x80, b'\n'];
+        context.temp_dir.child("binary").write_binary(&bytes)?;
+
+        assert_eq!(context.read_bytes("binary"), bytes);
+
+        Ok(())
+    }
+
+    #[test]
+    fn reads_absolute_path_outside_project() -> anyhow::Result<()> {
+        let context = TestContext::new_with_versions_and_bin(&[], PathBuf::from("uv"));
+        let file = context.cache_dir.child("binary");
+        file.write_binary(&[0xff, 0])?;
+
+        assert_eq!(context.read_bytes(file), [0xff, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to read `missing.bin`")]
+    fn reports_missing_file() {
+        let context = TestContext::new_with_versions_and_bin(&[], PathBuf::from("uv"));
+
+        context.read_bytes("missing.bin");
     }
 }

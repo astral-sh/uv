@@ -5787,8 +5787,8 @@ fn pep_751_output_file_relative_paths() -> Result<()> {
     uv_snapshot!(context.filters(), context.export()
         .args(["--frozen", "--offline", "--no-header", "--batch", "dist/batch.toml", "--preview-features", "batch-export"]), @"exit_code: 0 (success)");
     assert_eq!(
-        fs_err::read(context.temp_dir.join("dist/pylock.toml"))?,
-        fs_err::read(context.temp_dir.join("dist/pylock.batch.toml"))?
+        context.read_bytes("dist/pylock.toml"),
+        context.read_bytes("dist/pylock.batch.toml")
     );
 
     uv_snapshot!(context.filters(), context.export()

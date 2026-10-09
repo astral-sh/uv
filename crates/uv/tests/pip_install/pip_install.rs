@@ -159,7 +159,7 @@ fn install_http_wheel_hashes_trailing_bytes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let filename = "ok-1.0.0-py3-none-any.whl";
     let wheel = context.temp_dir.join(filename);
-    let mut bytes = fs::read(context.workspace_root.join("test/links").join(filename))?;
+    let mut bytes = context.read_bytes(context.workspace_root.join("test/links").join(filename));
     // Exceed the pipe capacity so some bytes must be hashed after extraction finishes.
     bytes.resize(bytes.len() + 1024 * 1024, b'x');
     let hash = hex::encode(Sha256::digest(&bytes));
@@ -8927,7 +8927,7 @@ async fn registry_wheel_size_is_advisory() -> Result<()> {
     server
         .serve_with(
             wheel_filename,
-            &fs::read(wheel_path)?,
+            &context.read_bytes(wheel_path),
             None,
             json!({ "size": 1, "core-metadata": true }),
         )
@@ -8974,7 +8974,7 @@ async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
     server
         .serve_with(
             wheel_filename,
-            &fs::read(wheel_path)?,
+            &context.read_bytes(wheel_path),
             None,
             json!({ "core-metadata": true }),
         )
@@ -16137,7 +16137,7 @@ fn repacked_wheel_with_entrypoint(
             block_on(writer.write_entry_whole(entry, &[]))?;
         } else {
             let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
-            block_on(writer.write_entry_whole(entry, &fs_err::read(path)?))?;
+            block_on(writer.write_entry_whole(entry, &context.read_bytes(path)))?;
         }
     }
     fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
@@ -18680,7 +18680,7 @@ fn handle_record_mismatches() -> Result<()> {
             block_on(writer.write_entry_whole(entry, &[]))?;
         } else {
             let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
-            block_on(writer.write_entry_whole(entry, &fs_err::read(path)?))?;
+            block_on(writer.write_entry_whole(entry, &context.read_bytes(path)))?;
         }
     }
     fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
@@ -18736,7 +18736,10 @@ fn handle_record_mismatches() -> Result<()> {
         .join("archive-v0")
         .join(healed_digest.as_str())
         .join("foo-0.1.0.dist-info/RECORD");
-    assert_eq!(fs_err::read(cached_record)?, fs_err::read(healed_record)?);
+    assert_eq!(
+        context.read_bytes(cached_record),
+        context.read_bytes(healed_record)
+    );
 
     // Read the healed RECORD.
     let installed_record = context.read(context.site_packages().join("foo-0.1.0.dist-info/RECORD"));
