@@ -1,5 +1,7 @@
 #[cfg(target_os = "macos")]
 use std::fs::Permissions;
+#[cfg(unix)]
+use std::io::ErrorKind;
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::PermissionsExt;
 
@@ -492,8 +494,14 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
 
     assert!(victim_dir.is_dir());
     assert!(victim_dir.child("payload.txt").is_file());
-    assert!(fs_err::symlink_metadata(package_entry).is_err());
-    assert!(fs_err::symlink_metadata(archive_entry).is_err());
+    assert!(
+        fs_err::symlink_metadata(package_entry)
+            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
+    );
+    assert!(
+        fs_err::symlink_metadata(archive_entry)
+            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
+    );
     assert!(!shard.child("orphan").exists());
     assert!(!shard.child("nested").exists());
     assert!(fs_err::symlink_metadata(files.child("escape"))?.is_symlink());
