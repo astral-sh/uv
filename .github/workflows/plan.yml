@@ -198,8 +198,8 @@ jobs:
             [[ "$file" == ".github/workflows/test-windows-trampolines.yml" ]] && trampoline_workflow_changed=1
             [[ "$file" =~ ^crates/uv-trampoline/ || "$file" =~ ^crates/uv-trampoline-builder/ ]] && trampoline_code_changed=1
             [[ "$file" == "crates/uv-trampoline/rust-toolchain.toml" || "$file" == "crates/uv-trampoline/Dockerfile" || "$file" =~ ^crates/uv-trampoline/.*\.rs$ || "$file" =~ ^crates/uv-trampoline-builder/trampolines/ ]] && trampoline_repro_changed=1
-            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" ]] && trampoline_build_scripts_changed=1
-            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == "scripts/check-trampoline-version-consistency.py" ]] && trampoline_scripts_changed=1
+            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == scripts/normalize-trampoline-versions.py* ]] && trampoline_build_scripts_changed=1
+            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == scripts/normalize-trampoline-versions.py* || "$file" == "scripts/check-trampoline-version-consistency.py" ]] && trampoline_scripts_changed=1
             [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" || "$file" == ".github/workflows/publish-docker.yml" || "$file" == ".github/workflows/publish-docker-image.yml" ]] && docker_workflow_changed=1
