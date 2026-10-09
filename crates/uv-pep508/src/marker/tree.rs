@@ -1497,9 +1497,7 @@ impl MarkerTree {
                     }
                 }
                 MarkerTreeKind::List(kind) => {
-                    if !kind.edge(true).is_false() {
-                        f(kind.key(), &kind.value());
-                    }
+                    f(kind.key(), &kind.value());
                     for (_, tree) in kind.children() {
                         imp(tree, f);
                     }
