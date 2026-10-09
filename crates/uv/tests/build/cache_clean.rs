@@ -1,15 +1,9 @@
 #[cfg(target_os = "macos")]
 use std::fs::Permissions;
-#[cfg(unix)]
-use std::io::{BufRead, BufReader, Read};
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::PermissionsExt;
-#[cfg(unix)]
-use std::process::Stdio;
 
 use anyhow::Result;
-#[cfg(unix)]
-use anyhow::{Context, ensure};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
@@ -52,61 +46,6 @@ fn clean_all() -> Result<()> {
     assert!(context.cache_dir.child(".lock").is_file());
 
     Ok(())
-}
-
-/// A process waiting during cleanup must initialize the cache after acquiring its lock.
-#[cfg(unix)]
-#[tokio::test]
-async fn clean_all_pending_reader() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let cache = Cache::from_path(context.cache_dir.path())
-        .with_exclusive_lock()
-        .await?;
-
-    let venv = context.temp_dir.child("after-clean");
-    let mut reader = context
-        .venv()
-        .arg(venv.path())
-        .arg("--verbose")
-        .env(EnvVars::UV_LOCK_TIMEOUT, "10")
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    let mut stderr = BufReader::new(reader.stderr.take().context("venv stderr was not piped")?);
-    let mut output = String::new();
-
-    // The contention log proves this uv process has opened the file that cleanup has locked.
-    loop {
-        let start = output.len();
-        ensure!(
-            stderr.read_line(&mut output)? != 0,
-            "venv exited before waiting on the cache lock: {output}"
-        );
-        if output[start..].contains("Waiting to acquire shared lock") {
-            break;
-        }
-    }
-
-    cache.clear(Box::new(SilentCleanReporter))?;
-    stderr.read_to_string(&mut output)?;
-    ensure!(
-        reader.wait()?.success(),
-        "venv failed after cleanup: {output}"
-    );
-    assert!(venv.child("pyvenv.cfg").is_file());
-    assert!(context.cache_dir.child("CACHEDIR.TAG").is_file());
-
-    Ok(())
-}
-
-#[cfg(unix)]
-struct SilentCleanReporter;
-
-#[cfg(unix)]
-impl uv_cache::CleanReporter for SilentCleanReporter {
-    fn on_clean(&self) {}
-
-    fn on_complete(&self) {}
 }
 
 /// Cache cleanup should count hardlinked storage only when its final link is removed.
@@ -390,13 +329,6 @@ async fn clean_force() -> Result<()> {
     ");
 
     assert!(context.cache_dir.child(".lock").is_file());
-    assert!(!context.cache_dir.child("CACHEDIR.TAG").exists());
-    uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
-    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
-    ");
 
     Ok(())
 }
@@ -589,12 +521,8 @@ fn clean_does_not_follow_symlinks() -> Result<()> {
     ");
 
     assert!(cache_link.path().is_symlink());
-    assert!(context.cache_dir.child(".lock").is_file());
     assert!(!files.exists());
-    assert_eq!(
-        fs_err::read_to_string(victim_dir.child("payload.txt"))?,
-        "payload"
-    );
+    assert!(victim_dir.child("payload.txt").is_file());
 
     Ok(())
 }

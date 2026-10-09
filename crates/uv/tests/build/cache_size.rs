@@ -1,20 +1,17 @@
-use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 
 use uv_test::uv_snapshot;
 
 /// Test that `cache size` returns 0 when the cache directory does not exist.
 #[test]
-fn cache_size_missing_raw() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    fs_err::remove_dir(&context.cache_dir)?;
+fn cache_size_missing_raw() {
+    let context = uv_test::test_context_with_versions!(&[]).with_cache_dir("missing-cache");
 
     uv_snapshot!(context.cache_size().arg("--preview"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0
     ");
-    Ok(())
 }
 
 /// Test that `cache size` returns raw bytes after installing packages.
@@ -51,9 +48,8 @@ fn cache_size_with_packages_human() {
 
 /// Explicit output formats override terminal detection.
 #[test]
-fn cache_size_output_formats() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    fs_err::remove_dir(&context.cache_dir)?;
+fn cache_size_output_formats() {
+    let context = uv_test::test_context_with_versions!(&[]).with_cache_dir("missing-cache");
 
     uv_snapshot!(context.cache_size().arg("--preview").arg("--output-format").arg("auto"), @"
     exit_code: 0 (success)
@@ -72,14 +68,12 @@ fn cache_size_output_formats() -> Result<()> {
     ----- stdout -----
     0
     ");
-    Ok(())
 }
 
 /// Existing human-readable flags remain equivalent to `--output-format human`.
 #[test]
-fn cache_size_human_aliases() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
-    fs_err::remove_dir(&context.cache_dir)?;
+fn cache_size_human_aliases() {
+    let context = uv_test::test_context_with_versions!(&[]).with_cache_dir("missing-cache");
 
     uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human"), @"
     exit_code: 0 (success)
@@ -98,7 +92,6 @@ fn cache_size_human_aliases() -> Result<()> {
     ----- stdout -----
     0B
     ");
-    Ok(())
 }
 
 /// Legacy human-readable flags cannot be combined with an explicit output format.
