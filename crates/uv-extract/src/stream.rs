@@ -481,7 +481,14 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
 
     let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut reader, offset);
     loop {
-        match directory.next().await? {
+        let entry = match directory.next().await {
+            Ok(entry) => entry,
+            // Trailing validation happens after all directory entries. Leave the remainder for
+            // callers to drain when finalizing download hashes.
+            Err(ZipError::TrailingContents) if skip_validation => break,
+            Err(error) => return Err(error.into()),
+        };
+        match entry {
             Entry::CentralDirectoryEntry(entry) => {
                 // Count the number of entries in the central directory.
                 num_entries += 1;
