@@ -140,8 +140,7 @@ Note that it's _never_ safe to modify the cache directly (e.g., by removing a fi
 uv provides a few different mechanisms for removing entries from the cache:
 
 - `uv cache clean` removes _all_ cache entries from the cache directory, clearing it out entirely.
-  uv removes the directory if possible. It may remain if it is in use, is a symbolic link, or the
-  operating system prevents its removal.
+  The directory and its lock file remain so that other uv processes can safely share the cache.
 - `uv cache clean ruff` removes all cache entries for the `ruff` package, useful for invalidating
   the cache for a single or finite set of packages.
 - `uv cache prune` removes all _unused_ cache entries and all centralized project environments. For
