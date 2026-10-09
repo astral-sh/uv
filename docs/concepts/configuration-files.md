@@ -97,9 +97,28 @@ The `--env-file` flag can be provided multiple times, with subsequent files over
 defined in previous files. To provide multiple files via the `UV_ENV_FILE` environment variable,
 separate the paths with a space (e.g., `UV_ENV_FILE="/path/to/file1 /path/to/file2"`).
 
-To disable dotenv loading (e.g., to override `UV_ENV_FILE` or the `--env-file` command-line
-argument), set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the`--no-env-file` flag to
-`uv run`.
+The files to load can also be declared in the [`env-file`](../reference/settings.md#env-file)
+setting, in a `pyproject.toml` or `uv.toml` file:
+
+```toml title="pyproject.toml"
+[tool.uv]
+env-file = [".env", ".env.local"]
+```
+
+Paths are relative to the directory containing the configuration file, so the same files are loaded
+when `uv run` is invoked from a subdirectory. Files are loaded in order, with later files overriding
+values defined in earlier files. Unlike files passed via `--env-file`, files that don't exist are
+skipped, which allows listing optional files that aren't checked into version control.
+
+If multiple configuration files define `env-file` (e.g., the project's `pyproject.toml` and the
+user-level `uv.toml`), the files from all of them are loaded, with files from the project
+configuration taking precedence over user-level and system-level files. Files passed via
+`--env-file` or `UV_ENV_FILE` are loaded after the files from the setting, and take precedence over
+them.
+
+To disable dotenv loading (e.g., to override the `env-file` setting, `UV_ENV_FILE`, or the
+`--env-file` command-line argument), set the `UV_NO_ENV_FILE` environment variable to `1`, or pass
+the`--no-env-file` flag to `uv run`.
 
 If the same variable is defined in the environment and in a `.env` file, the value from the
 environment will take precedence.
