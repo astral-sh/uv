@@ -105,6 +105,21 @@ pub struct Options {
     #[option_group]
     pub pip: Option<PipOptions>,
 
+    /// Treat editable dependencies, including the project and its workspace members, as
+    /// non-editable by default.
+    ///
+    /// Applies to `uv sync`, `uv run`, and `uv export`. The `--editable` and `--no-editable`
+    /// command-line flags and the `UV_NO_EDITABLE` environment variable override this setting.
+    /// With this setting enabled, `--no-editable-package` does not make other packages editable.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-editable = true
+        "#
+    )]
+    pub no_editable: Option<bool>,
+
     /// The keys to consider when caching builds for the project.
     ///
     /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
@@ -2681,6 +2696,7 @@ struct OptionsWire {
 
     audit: Option<AuditOptions>,
     pip: Option<PipOptions>,
+    no_editable: Option<bool>,
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
@@ -2771,6 +2787,7 @@ impl TryFrom<OptionsWire> for Options {
             torch_backend,
             audit,
             pip,
+            no_editable,
             cache_keys,
             override_dependencies,
             exclude_dependencies,
@@ -2853,6 +2870,7 @@ impl TryFrom<OptionsWire> for Options {
                 torch_backend,
             },
             pip,
+            no_editable,
             cache_keys,
             build_backend,
             override_dependencies,

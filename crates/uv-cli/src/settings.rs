@@ -774,6 +774,7 @@ impl RunSettings {
             no_env_file,
             max_recursion_depth,
         } = args;
+        let configured_no_editable = filesystem.as_ref().and_then(|fs| fs.no_editable);
 
         let filesystem_install_mirrors = filesystem
             .as_ref()
@@ -835,7 +836,9 @@ impl RunSettings {
                 all_groups,
             ),
             editable: EditableMode::from_args(
-                flag(editable.into(), no_editable.into(), "editable")?,
+                flag(editable.into(), no_editable.into(), "editable")?.or_else(|| {
+                    configured_editable(environment.no_editable, configured_no_editable)
+                }),
                 no_editable_package,
             ),
             modifications: if flag(exact, inexact, "inexact")?.unwrap_or(false) {
@@ -1883,6 +1886,7 @@ impl SyncSettings {
             no_check,
             output_format,
         } = args;
+        let configured_no_editable = filesystem.as_ref().and_then(|fs| fs.no_editable);
         let filesystem_install_mirrors = filesystem
             .as_ref()
             .map(|fs| fs.install_mirrors.clone())
@@ -1991,7 +1995,9 @@ impl SyncSettings {
                 all_groups,
             ),
             editable: EditableMode::from_args(
-                flag(editable.into(), no_editable.into(), "editable")?,
+                flag(editable.into(), no_editable.into(), "editable")?.or_else(|| {
+                    configured_editable(environment.no_editable, configured_no_editable)
+                }),
                 no_editable_package,
             ),
             install_options: InstallOptions::new(
@@ -2891,6 +2897,7 @@ impl ExportSettings {
             script,
             python,
         } = args;
+        let configured_no_editable = filesystem.as_ref().and_then(|fs| fs.no_editable);
         let filesystem_install_mirrors = filesystem
             .as_ref()
             .map(|fs| fs.install_mirrors.clone())
@@ -2951,7 +2958,9 @@ impl ExportSettings {
                 all_groups,
             ),
             editable: EditableMode::from_args(
-                flag(editable.into(), no_editable.into(), "editable")?,
+                flag(editable.into(), no_editable.into(), "editable")?.or_else(|| {
+                    configured_editable(environment.no_editable, configured_no_editable)
+                }),
                 no_editable_package,
             ),
             hashes: flag(hashes, no_hashes, "hashes")?.unwrap_or(true),
@@ -4400,6 +4409,15 @@ impl VenvSettings {
                 environment,
             ),
         })
+    }
+}
+
+/// Return the configured global editable flag when the environment flag is unset.
+fn configured_editable(environment: EnvFlag, configured_no_editable: Option<bool>) -> Option<bool> {
+    if environment.value.is_none() && configured_no_editable == Some(true) {
+        Some(false)
+    } else {
+        None
     }
 }
 

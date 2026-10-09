@@ -388,6 +388,10 @@
       "description": "Avoid reading from or writing to the cache, instead using a temporary directory for the\nduration of the operation.",
       "type": ["boolean", "null"]
     },
+    "no-editable": {
+      "description": "Treat editable dependencies, including the project and its workspace members, as\nnon-editable by default.\n\nApplies to `uv sync`, `uv run`, and `uv export`. The `--editable` and `--no-editable`\ncommand-line flags and the `UV_NO_EDITABLE` environment variable override this setting.\nWith this setting enabled, `--no-editable-package` does not make other packages editable.",
+      "type": ["boolean", "null"]
+    },
     "no-index": {
       "description": "Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and\nthose provided via `--find-links`.",
       "type": ["boolean", "null"]
