@@ -1,7 +1,7 @@
 #[cfg(windows)]
 use std::path::PathBuf;
 
-use std::{env, path::Path, process::Command};
+use std::{env, io::ErrorKind, path::Path, process::Command};
 
 use anyhow::Context;
 use assert_cmd::assert::OutputAssertExt;
@@ -3351,9 +3351,11 @@ fn uninstall_last_patch_removes_minor_version_link() {
     // not just dangling. We use `symlink_metadata` because `Path::exists` follows
     // symlinks/junctions and would return false for a dangling link, hiding the bug.
     assert!(
-        minor_version_link.path().symlink_metadata().is_err(),
-        "minor version link should be removed after uninstalling the last patch, \
-         but it still exists at: {}",
+        minor_version_link
+            .path()
+            .symlink_metadata()
+            .is_err_and(|error| error.kind() == ErrorKind::NotFound),
+        "minor version link should be absent after uninstalling the last patch: {}",
         minor_version_link.path().display()
     );
 }
@@ -3452,9 +3454,11 @@ fn uninstall_highest_patch_updates_minor_version_link() {
     // `uninstall_last_patch_removes_minor_version_link` for why we use
     // `symlink_metadata` instead of `predicate::path::missing`).
     assert!(
-        minor_version_link.path().symlink_metadata().is_err(),
-        "minor version link should be removed after uninstalling the last patch, \
-         but it still exists at: {}",
+        minor_version_link
+            .path()
+            .symlink_metadata()
+            .is_err_and(|error| error.kind() == ErrorKind::NotFound),
+        "minor version link should be absent after uninstalling the last patch: {}",
         minor_version_link.path().display()
     );
 }
