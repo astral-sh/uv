@@ -940,6 +940,10 @@ formats, which need to be supported for backward compatibility, were also allowe
     [PEP 625]'s extension requirements with the exception of `.zip` archives,
     which are still accepted for backward compatibility.
 
+uv uses `tar-codec` to extract tar archives. It may reject archives accepted by older uv versions,
+including those containing hard links or unsupported tar extensions. To use the legacy tar backend,
+set [`UV_LEGACY_TAR_BACKEND`](../reference/environment.md#uv_legacy_tar_backend) to `1`.
+
 ## Lockfile versioning
 
 The `uv.lock` file uses a versioned schema. The schema version is included in the `version` field of

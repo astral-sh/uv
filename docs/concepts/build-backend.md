@@ -59,6 +59,15 @@ with the `uv_build` requirement. If it's not compatible, a compatible version of
 package will be used. Other build frontends, such as `python -m build`, will always use the
 `uv_build` package, typically choosing the latest compatible version.
 
+## Source distribution archives
+
+The uv build backend uses `tar-codec` to write source distributions. The resulting archive bytes and
+hashes can differ from those produced by the legacy tar backend, even when the included files are
+unchanged.
+
+To use the legacy tar backend, set
+[`UV_LEGACY_TAR_BACKEND`](../reference/environment.md#uv_legacy_tar_backend) to `1`.
+
 ## Modules
 
 Python packages are expected to contain one or more Python modules, which are directories containing
