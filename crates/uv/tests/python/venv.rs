@@ -19,7 +19,7 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
-use uv_test::{assert_link_target, site_packages_path, uv_snapshot};
+use uv_test::{assert_link_target, diff_snapshot, site_packages_path, uv_snapshot};
 
 #[test]
 fn create_venv() {
@@ -113,6 +113,10 @@ fn create_venv_caches_interpreter() -> Result<()> {
         .context("Fresh interpreter cache is locked")?;
     let queried = PythonEnvironment::from_root(&root_path, &fresh_cache)?;
     assert!(startup_marker.is_file());
+    insta::assert_snapshot!(
+        diff_snapshot(&format!("{cached:#?}"), &format!("{queried:#?}"), 3),
+        @""
+    );
     assert_eq!(cached, queried);
 
     Ok(())
@@ -189,6 +193,10 @@ fn create_venv_caches_symlinked_base_interpreter() -> Result<()> {
         .context("Fresh interpreter cache is locked")?;
     let queried = PythonEnvironment::from_root(context.venv.path(), &fresh_cache)?;
     assert!(startup_marker.is_file());
+    insta::assert_snapshot!(
+        diff_snapshot(&format!("{cached:#?}"), &format!("{queried:#?}"), 3),
+        @""
+    );
     assert_eq!(cached, queried);
 
     uv_snapshot!(context.filters(), context.venv()
@@ -273,6 +281,10 @@ fn create_venv_caches_upgradeable_interpreter() -> Result<()> {
     let cached = PythonEnvironment::from_root(context.venv.path(), &cache)?;
     let queried = PythonEnvironment::from_root(context.venv.path(), &fresh_cache)?;
     assert!(startup_marker.is_file());
+    insta::assert_snapshot!(
+        diff_snapshot(&format!("{cached:#?}"), &format!("{queried:#?}"), 3),
+        @""
+    );
     assert_eq!(cached, queried);
 
     Ok(())
