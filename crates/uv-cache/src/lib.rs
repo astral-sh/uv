@@ -184,8 +184,8 @@ impl Cache {
         Self {
             root: root.into(),
             refresh: Refresh::None(Timestamp::now()),
-            lock_file: None,
             temp_dir: None,
+            lock_file: None,
             removal_accounting: RemovalAccounting::Coarse,
         }
     }
@@ -196,8 +196,8 @@ impl Cache {
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
-            lock_file: None,
             temp_dir: Some(Arc::new(temp_dir)),
+            lock_file: None,
             removal_accounting: RemovalAccounting::Coarse,
         })
     }
@@ -235,8 +235,8 @@ impl Cache {
         let Self {
             root,
             refresh,
-            lock_file,
             temp_dir,
+            lock_file,
             removal_accounting,
         } = self;
 
@@ -248,7 +248,7 @@ impl Cache {
                 ),
             );
         }
-        let lock_file = LockedFile::acquire_with_parent(
+        let lock_file = LockedFile::acquire(
             root.join(".lock"),
             LockedFileMode::Exclusive,
             root.simplified_display(),
@@ -258,8 +258,8 @@ impl Cache {
         Ok(Self {
             root,
             refresh,
-            lock_file: Some(Arc::new(lock_file)),
             temp_dir,
+            lock_file: Some(Arc::new(lock_file)),
             removal_accounting,
         })
     }
@@ -271,12 +271,12 @@ impl Cache {
         let Self {
             root,
             refresh,
-            lock_file,
             temp_dir,
+            lock_file,
             removal_accounting,
         } = self;
 
-        match LockedFile::acquire_with_parent_no_wait(
+        match LockedFile::acquire_no_wait(
             root.join(".lock"),
             LockedFileMode::Exclusive,
             root.simplified_display(),
@@ -284,8 +284,8 @@ impl Cache {
             Some(lock_file) => Ok(Self {
                 root,
                 refresh,
-                lock_file: Some(Arc::new(lock_file)),
                 temp_dir,
+                lock_file: Some(Arc::new(lock_file)),
                 removal_accounting,
             }),
             None => Err(Self {
@@ -526,7 +526,7 @@ impl Cache {
         fs_err::create_dir_all(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
-        let lock_file = match LockedFile::acquire_with_parent(
+        let lock_file = match LockedFile::acquire(
             root.join(".lock"),
             LockedFileMode::Shared,
             root.simplified_display(),
@@ -563,7 +563,7 @@ impl Cache {
         fs_err::create_dir_all(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
-        let Some(lock_file) = LockedFile::acquire_with_parent_no_wait(
+        let Some(lock_file) = LockedFile::acquire_no_wait(
             root.join(".lock"),
             LockedFileMode::Shared,
             root.simplified_display(),
@@ -580,59 +580,12 @@ impl Cache {
 
     /// Clear the cache, removing all entries.
     pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
-        // Resolve only the explicit root: the remover must not follow links inside the cache.
-        // Leave a root symlink and its target intact, so the configured cache path stays usable.
-        #[cfg(unix)]
-        let remove_root = self
-            .lock_file
-            .as_ref()
-            .is_some_and(|lock_file| lock_file.is_exclusive())
-            && !fs_err::symlink_metadata(self.root.components().as_path())?.is_symlink();
+        // Waiters may have already opened the lock. Retain its path and directory so they acquire
+        // the same lock as new uv processes. Resolve only the root: never follow links inside it.
         let root = fs_err::canonicalize(&self.root)?;
-        let removal = Remover::new(reporter)
+        Remover::new(reporter)
             .with_removal_accounting(self.removal_accounting)
-            .rm_rf(&root, true)?;
-
-        // Windows may not unlink the open lock, and cannot check whether a waiter acquired the
-        // current lock file. An unlocked, forced cleanup must also keep the path in place.
-        #[cfg(unix)]
-        {
-            let mut removal = removal;
-            if remove_root {
-                // Keep the exclusive lock held while unlinking it. Waiters that opened the old
-                // file must detect the stale lock and retry before using the cache.
-                match fs_err::remove_file(root.join(".lock")) {
-                    Ok(()) => removal.num_files += 1,
-                    Err(err)
-                        if err.kind() == io::ErrorKind::Unsupported
-                            || err.kind() == io::ErrorKind::PermissionDenied =>
-                    {
-                        return Ok(removal);
-                    }
-                    Err(err) => return Err(err),
-                }
-
-                // A new process can recreate the lock once it was unlinked. Never recursively
-                // remove the root here: that process may already be using the new cache.
-                match fs_err::remove_dir(&root) {
-                    Ok(()) => removal.num_dirs += 1,
-                    Err(err)
-                        if err.kind() == io::ErrorKind::DirectoryNotEmpty
-                            || err.kind() == io::ErrorKind::NotFound
-                            // A bind-mounted cache or a read-only parent cannot be removed even
-                            // when its contents have been cleared.
-                            || err.kind() == io::ErrorKind::ResourceBusy
-                            || err.kind() == io::ErrorKind::PermissionDenied
-                            || err.kind() == io::ErrorKind::Unsupported => {}
-                    Err(err) => return Err(err),
-                }
-            }
-            Ok(removal)
-        }
-        #[cfg(not(unix))]
-        {
-            Ok(removal)
-        }
+            .rm_rf(&root, true)
     }
 
     /// Remove a package from the cache.

@@ -1,15 +1,11 @@
 use std::fmt::Display;
 use std::io;
-#[cfg(all(unix, feature = "tokio"))]
-use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::time::Duration;
 #[cfg(feature = "tokio")]
 use std::{convert::Into, env, path::Path, sync::LazyLock};
 
 use thiserror::Error;
-#[cfg(feature = "tokio")]
-use tokio::time::Instant;
 #[cfg(feature = "tokio")]
 use tracing::{debug, error, info, trace, warn};
 
@@ -196,7 +192,7 @@ impl Display for LockedFileMode {
 #[cfg(feature = "tokio")]
 #[derive(Debug)]
 #[must_use]
-pub struct LockedFile(fs_err::File, LockedFileMode);
+pub struct LockedFile(fs_err::File);
 
 #[cfg(feature = "tokio")]
 impl LockedFile {
@@ -205,7 +201,6 @@ impl LockedFile {
         file: fs_err::File,
         mode: LockedFileMode,
         resource: &str,
-        deadline: Instant,
     ) -> Result<Self, LockedFileError> {
         trace!(
             "Checking lock for `{resource}` at `{}`",
@@ -216,7 +211,7 @@ impl LockedFile {
         let file = match try_lock_exclusive.await? {
             (Ok(()), file) => {
                 trace!("Acquired {mode} lock for `{resource}`");
-                return Ok(Self(file, mode));
+                return Ok(Self(file));
             }
             (Err(err), file) => {
                 // Log error code and enum kind to help debugging more exotic failures.
@@ -234,7 +229,7 @@ impl LockedFile {
         );
         let path = file.path().to_path_buf();
         let lock_exclusive = tokio::task::spawn_blocking(move || (mode.lock(&file), file));
-        let (result, file) = tokio::time::timeout_at(deadline, lock_exclusive)
+        let (result, file) = tokio::time::timeout(*LOCK_TIMEOUT, lock_exclusive)
             .await
             .map_err(|_| LockedFileError::Timeout {
                 timeout: *LOCK_TIMEOUT,
@@ -249,7 +244,7 @@ impl LockedFile {
         })?;
 
         trace!("Acquired {mode} lock for `{resource}`");
-        Ok(Self(file, mode))
+        Ok(Self(file))
     }
 
     /// Inner implementation for [`LockedFile::acquire_no_wait`].
@@ -261,7 +256,7 @@ impl LockedFile {
         match mode.try_lock(&file) {
             Ok(()) => {
                 trace!("Acquired {mode} lock for `{resource}`");
-                Some(Self(file, mode))
+                Some(Self(file))
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
@@ -280,10 +275,9 @@ impl LockedFile {
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Result<Self, LockedFileError> {
-        let deadline = Instant::now() + *LOCK_TIMEOUT;
         let file = Self::create(&path)?;
         let resource = resource.to_string();
-        Self::lock_file(file, mode, &resource, deadline).await
+        Self::lock_file(file, mode, &resource).await
     }
 
     /// Acquire a cross-process lock for a resource using a file at the provided path
@@ -299,99 +293,6 @@ impl LockedFile {
         let file = Self::create(path).ok()?;
         let resource = resource.to_string();
         Self::lock_file_no_wait(file, mode, &resource)
-    }
-
-    /// Whether this file is exclusively locked.
-    pub fn is_exclusive(&self) -> bool {
-        match self.1 {
-            LockedFileMode::Exclusive => true,
-            LockedFileMode::Shared => false,
-        }
-    }
-
-    /// Acquire a lock whose containing directory can be removed by another lock holder.
-    ///
-    /// The parent is recreated if needed. A waiter can have opened a lock just before it was
-    /// removed, so it must verify the lock's identity after acquisition and retry if stale.
-    /// Retries, including waits for subsequent locks, share a single timeout.
-    pub async fn acquire_with_parent(
-        path: impl AsRef<Path>,
-        mode: LockedFileMode,
-        resource: impl Display,
-    ) -> Result<Self, LockedFileError> {
-        let path = path.as_ref();
-        let resource = resource.to_string();
-        let deadline = Instant::now() + *LOCK_TIMEOUT;
-        loop {
-            let acquired: Result<Option<Self>, LockedFileError> = async {
-                if let Some(parent) = path.parent() {
-                    fs_err::create_dir_all(parent)?;
-                }
-                let file = Self::create(path)?;
-                let file = Self::lock_file(file, mode, &resource, deadline).await?;
-                if file.is_current()? {
-                    Ok(Some(file))
-                } else {
-                    Ok(None)
-                }
-            }
-            .await;
-            match acquired {
-                Ok(Some(file)) => return Ok(file),
-                Ok(None) => {}
-                Err(err)
-                    if err
-                        .as_io_error()
-                        .is_some_and(|err| err.kind() == io::ErrorKind::NotFound) => {}
-                Err(err) => return Err(err),
-            }
-
-            // Don't reset the timeout on a stale lock, or repeated cleanup could starve a waiter.
-            if Instant::now() >= deadline {
-                return Err(LockedFileError::Timeout {
-                    timeout: *LOCK_TIMEOUT,
-                    resource,
-                    path: path.to_path_buf(),
-                });
-            }
-            tokio::task::yield_now().await;
-        }
-    }
-
-    /// Try to acquire a removable lock without blocking, recreating its parent if necessary.
-    ///
-    /// A stale lock counts as unavailable. The caller can decide whether to wait and retry.
-    pub fn acquire_with_parent_no_wait(
-        path: impl AsRef<Path>,
-        mode: LockedFileMode,
-        resource: impl Display,
-    ) -> Option<Self> {
-        let path = path.as_ref();
-        if let Some(parent) = path.parent() {
-            fs_err::create_dir_all(parent).ok()?;
-        }
-        let file = Self::acquire_no_wait(path, mode, resource)?;
-        file.is_current().ok()?.then_some(file)
-    }
-
-    /// Whether the locked file is still the lock at its original path.
-    ///
-    /// On platforms without Unix file identity, users of these methods must leave the lock file
-    /// and its parent in place.
-    fn is_current(&self) -> io::Result<bool> {
-        #[cfg(unix)]
-        {
-            let locked = self.0.metadata()?;
-            match fs_err::metadata(self.0.path()) {
-                Ok(current) => Ok(locked.dev() == current.dev() && locked.ino() == current.ino()),
-                Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
-                Err(err) => Err(err),
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            Ok(true)
-        }
     }
 
     #[cfg(unix)]

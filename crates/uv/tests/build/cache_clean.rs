@@ -49,13 +49,12 @@ fn clean_all() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
-    #[cfg(unix)]
-    assert!(!context.cache_dir.exists());
+    assert!(context.cache_dir.child(".lock").is_file());
 
     Ok(())
 }
 
-/// A process waiting on a deleted cache lock must initialize and lock the replacement cache.
+/// A process waiting during cleanup must initialize the cache after acquiring its lock.
 #[cfg(unix)]
 #[tokio::test]
 async fn clean_all_pending_reader() -> Result<()> {
@@ -76,7 +75,7 @@ async fn clean_all_pending_reader() -> Result<()> {
     let mut stderr = BufReader::new(reader.stderr.take().context("venv stderr was not piped")?);
     let mut output = String::new();
 
-    // The contention log proves this uv process has opened the file that cleanup will delete.
+    // The contention log proves this uv process has opened the file that cleanup has locked.
     loop {
         let start = output.len();
         ensure!(
@@ -401,8 +400,7 @@ async fn clean_force() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
-    #[cfg(unix)]
-    assert!(!context.cache_dir.exists());
+    assert!(context.cache_dir.child(".lock").is_file());
 
     // Install a requirement, to re-populate the cache.
     context
