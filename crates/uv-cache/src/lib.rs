@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
-use tracing::{debug, trace, warn};
+use tracing::{debug, warn};
 
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
@@ -166,14 +166,14 @@ pub struct Cache {
     root: PathBuf,
     /// The refresh strategy to use when reading from the cache.
     refresh: Refresh,
+    /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
+    /// uv process. Drop the lock before a temporary directory so it can be removed on Windows.
+    lock_file: Option<Arc<LockedFile>>,
     /// A temporary cache directory, if the user requested `--no-cache`.
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
     /// is dropped at the end as appropriate.
     temp_dir: Option<Arc<tempfile::TempDir>>,
-    /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
-    /// uv process.
-    lock_file: Option<Arc<LockedFile>>,
     /// The storage accounting used when removing cache entries.
     removal_accounting: RemovalAccounting,
 }
@@ -184,8 +184,8 @@ impl Cache {
         Self {
             root: root.into(),
             refresh: Refresh::None(Timestamp::now()),
-            temp_dir: None,
             lock_file: None,
+            temp_dir: None,
             removal_accounting: RemovalAccounting::Coarse,
         }
     }
@@ -196,8 +196,8 @@ impl Cache {
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
-            temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
+            temp_dir: Some(Arc::new(temp_dir)),
             removal_accounting: RemovalAccounting::Coarse,
         })
     }
@@ -235,8 +235,8 @@ impl Cache {
         let Self {
             root,
             refresh,
-            temp_dir,
             lock_file,
+            temp_dir,
             removal_accounting,
         } = self;
 
@@ -248,7 +248,7 @@ impl Cache {
                 ),
             );
         }
-        let lock_file = LockedFile::acquire(
+        let lock_file = LockedFile::acquire_with_parent(
             root.join(".lock"),
             LockedFileMode::Exclusive,
             root.simplified_display(),
@@ -258,8 +258,8 @@ impl Cache {
         Ok(Self {
             root,
             refresh,
-            temp_dir,
             lock_file: Some(Arc::new(lock_file)),
+            temp_dir,
             removal_accounting,
         })
     }
@@ -271,12 +271,12 @@ impl Cache {
         let Self {
             root,
             refresh,
-            temp_dir,
             lock_file,
+            temp_dir,
             removal_accounting,
         } = self;
 
-        match LockedFile::acquire_no_wait(
+        match LockedFile::acquire_with_parent_no_wait(
             root.join(".lock"),
             LockedFileMode::Exclusive,
             root.simplified_display(),
@@ -284,15 +284,15 @@ impl Cache {
             Some(lock_file) => Ok(Self {
                 root,
                 refresh,
-                temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
+                temp_dir,
                 removal_accounting,
             }),
             None => Err(Self {
                 root,
                 refresh,
-                temp_dir,
                 lock_file,
+                temp_dir,
                 removal_accounting,
             }),
         }
@@ -461,9 +461,6 @@ impl Cache {
 
     /// Populate the cache scaffold.
     fn create_base_files(root: &PathBuf) -> io::Result<()> {
-        // Create the cache directory, if it doesn't exist.
-        fs_err::create_dir_all(root)?;
-
         // Add the CACHEDIR.TAG.
         cachedir::ensure_tag(root)?;
 
@@ -526,10 +523,10 @@ impl Cache {
     pub async fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
+        fs_err::create_dir_all(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
-        let lock_file = match LockedFile::acquire(
+        let lock_file = match LockedFile::acquire_with_parent(
             root.join(".lock"),
             LockedFileMode::Shared,
             root.simplified_display(),
@@ -551,6 +548,7 @@ impl Cache {
             Err(err) => return Err(err.into()),
         };
 
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
         Ok(Self {
             root: std::path::absolute(root).map_err(Error::Absolute)?,
             lock_file,
@@ -562,16 +560,17 @@ impl Cache {
     pub fn init_no_wait(self) -> Result<Option<Self>, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
+        fs_err::create_dir_all(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
-        let Some(lock_file) = LockedFile::acquire_no_wait(
+        let Some(lock_file) = LockedFile::acquire_with_parent_no_wait(
             root.join(".lock"),
             LockedFileMode::Shared,
             root.simplified_display(),
         ) else {
             return Ok(None);
         };
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
         Ok(Some(Self {
             root: std::path::absolute(root).map_err(Error::Absolute)?,
             lock_file: Some(Arc::new(lock_file)),
@@ -581,35 +580,59 @@ impl Cache {
 
     /// Clear the cache, removing all entries.
     pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
-        // Remove everything but `.lock`, Windows does not allow removal of a locked file
-        let mut removal = Remover::new(reporter)
+        // Resolve only the explicit root: the remover must not follow links inside the cache.
+        // Leave a root symlink and its target intact, so the configured cache path stays usable.
+        #[cfg(unix)]
+        let remove_root = self
+            .lock_file
+            .as_ref()
+            .is_some_and(|lock_file| lock_file.is_exclusive())
+            && !fs_err::symlink_metadata(self.root.components().as_path())?.is_symlink();
+        let root = fs_err::canonicalize(&self.root)?;
+        let removal = Remover::new(reporter)
             .with_removal_accounting(self.removal_accounting)
-            .rm_rf(&self.root, true)?;
-        let Self {
-            root, lock_file, ..
-        } = self;
+            .rm_rf(&root, true)?;
 
-        // Remove the `.lock` file, unlocking it first
-        if let Some(lock) = lock_file {
-            drop(lock);
-            fs_err::remove_file(root.join(".lock"))?;
-        }
-        removal.num_files += 1;
+        // Windows may not unlink the open lock, and cannot check whether a waiter acquired the
+        // current lock file. An unlocked, forced cleanup must also keep the path in place.
+        #[cfg(unix)]
+        {
+            let mut removal = removal;
+            if remove_root {
+                // Keep the exclusive lock held while unlinking it. Waiters that opened the old
+                // file must detect the stale lock and retry before using the cache.
+                match fs_err::remove_file(root.join(".lock")) {
+                    Ok(()) => removal.num_files += 1,
+                    Err(err)
+                        if err.kind() == io::ErrorKind::Unsupported
+                            || err.kind() == io::ErrorKind::PermissionDenied =>
+                    {
+                        return Ok(removal);
+                    }
+                    Err(err) => return Err(err),
+                }
 
-        // Remove the root directory
-        match fs_err::remove_dir(root) {
-            Ok(()) => {
-                removal.num_dirs += 1;
+                // A new process can recreate the lock once it was unlinked. Never recursively
+                // remove the root here: that process may already be using the new cache.
+                match fs_err::remove_dir(&root) {
+                    Ok(()) => removal.num_dirs += 1,
+                    Err(err)
+                        if err.kind() == io::ErrorKind::DirectoryNotEmpty
+                            || err.kind() == io::ErrorKind::NotFound
+                            // A bind-mounted cache or a read-only parent cannot be removed even
+                            // when its contents have been cleared.
+                            || err.kind() == io::ErrorKind::ResourceBusy
+                            || err.kind() == io::ErrorKind::PermissionDenied
+                            || err.kind() == io::ErrorKind::Unsupported => {}
+                    Err(err) => return Err(err),
+                }
             }
-            // On Windows, when `--force` is used, the `.lock` file can exist and be unremovable,
-            // so we make this non-fatal
-            Err(err) if err.kind() == io::ErrorKind::DirectoryNotEmpty => {
-                trace!("Failed to remove root cache directory: not empty");
-            }
-            Err(err) => return Err(err),
+            Ok(removal)
         }
-
-        Ok(removal)
+        #[cfg(not(unix))]
+        {
+            Ok(removal)
+        }
     }
 
     /// Remove a package from the cache.
