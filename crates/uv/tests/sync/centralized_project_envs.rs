@@ -4,14 +4,13 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
-use std::io::ErrorKind;
 use std::process::Command;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 #[cfg(unix)]
 use uv_test::ReadOnlyDirectoryGuard;
-use uv_test::{TestContext, uv_snapshot};
+use uv_test::{TestContext, assert_path_missing, uv_snapshot};
 
 fn write_project(
     context: &TestContext,
@@ -76,9 +75,7 @@ fn sync_centralized_env() -> Result<()> {
     Would make no changes
     "#);
     // Only the cached environment remains.
-    assert!(
-        fs_err::symlink_metadata(&link).is_err_and(|error| error.kind() == ErrorKind::NotFound)
-    );
+    assert_path_missing(&link);
     assert!(target.is_dir());
     Ok(())
 }
@@ -313,10 +310,7 @@ fn sync_centralized_env_respects_explicit_environments() -> Result<()> {
         .success();
     // `UV_PROJECT_ENVIRONMENT` bypasses centralized environments.
     assert!(context.temp_dir.child("override").is_dir());
-    assert!(
-        fs_err::symlink_metadata(context.temp_dir.child(".venv"))
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
-    );
+    assert_path_missing(context.temp_dir.child(".venv"));
 
     let active = context.temp_dir.child("active");
     context.venv().arg(active.path()).assert().success();
@@ -331,10 +325,7 @@ fn sync_centralized_env_respects_explicit_environments() -> Result<()> {
         .success();
     // `--active` uses `VIRTUAL_ENV` directly.
     assert!(active.is_dir());
-    assert!(
-        fs_err::symlink_metadata(context.temp_dir.child(".venv"))
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
-    );
+    assert_path_missing(context.temp_dir.child(".venv"));
     Ok(())
 }
 
@@ -394,10 +385,7 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
         assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/temp-cp3.12.[X]-[HASH]");
     });
     // The workspace member does not get its own environment.
-    assert!(
-        fs_err::symlink_metadata(member.child(".venv"))
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
-    );
+    assert_path_missing(member.child(".venv"));
 
     context
         .sync()
@@ -413,10 +401,7 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
         fs_err::read_link(context.temp_dir.child(".venv").path())?,
         target
     );
-    assert!(
-        fs_err::symlink_metadata(member.child(".venv"))
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
-    );
+    assert_path_missing(member.child(".venv"));
     Ok(())
 }
 
@@ -441,10 +426,7 @@ fn sync_centralized_env_dry_run() -> Result<()> {
      + iniconfig==2.0.0
     "#);
     // Dry-run creates neither the persistent environment nor its project link.
-    assert!(
-        fs_err::symlink_metadata(context.temp_dir.child(".venv"))
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
-    );
+    assert_path_missing(context.temp_dir.child(".venv"));
     assert!(!context.cache_dir.child("environments-v2").exists());
     Ok(())
 }

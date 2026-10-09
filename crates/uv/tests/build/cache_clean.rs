@@ -1,7 +1,5 @@
 #[cfg(target_os = "macos")]
 use std::fs::Permissions;
-#[cfg(unix)]
-use std::io::ErrorKind;
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::PermissionsExt;
 
@@ -17,6 +15,8 @@ use uv_cache::Cache;
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_static::EnvVars;
 
+#[cfg(unix)]
+use uv_test::assert_path_missing;
 use uv_test::uv_snapshot;
 
 /// `cache clean` should remove all packages.
@@ -494,14 +494,8 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
 
     assert!(victim_dir.is_dir());
     assert!(victim_dir.child("payload.txt").is_file());
-    assert!(
-        fs_err::symlink_metadata(package_entry)
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
-    );
-    assert!(
-        fs_err::symlink_metadata(archive_entry)
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound)
-    );
+    assert_path_missing(package_entry);
+    assert_path_missing(archive_entry);
     assert!(!shard.child("orphan").exists());
     assert!(!shard.child("nested").exists());
     assert!(fs_err::symlink_metadata(files.child("escape"))?.is_symlink());

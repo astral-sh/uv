@@ -1,7 +1,7 @@
 #[cfg(windows)]
 use std::path::PathBuf;
 
-use std::{env, io::ErrorKind, path::Path, process::Command};
+use std::{env, path::Path, process::Command};
 
 use anyhow::Context;
 use assert_cmd::assert::OutputAssertExt;
@@ -12,7 +12,7 @@ use assert_fs::{
 use indoc::indoc;
 use predicates::prelude::predicate;
 use tracing::debug;
-use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
+use uv_test::{LATEST_PYTHON_3_12, assert_path_missing, uv_snapshot};
 
 use uv_fs::Simplified;
 use uv_python_managed::platform_key_from_env;
@@ -3356,17 +3356,8 @@ fn uninstall_last_patch_removes_minor_version_link() {
     // The patch directory should be removed
     patch_dir.assert(predicate::path::missing());
 
-    // The minor version link (symlink/junction) itself should be fully removed,
-    // not just dangling. We use `symlink_metadata` because `Path::exists` follows
-    // symlinks/junctions and would return false for a dangling link, hiding the bug.
-    assert!(
-        minor_version_link
-            .path()
-            .symlink_metadata()
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound),
-        "minor version link should be absent after uninstalling the last patch: {}",
-        minor_version_link.path().display()
-    );
+    // Removing the last patch also removes the minor version link itself.
+    assert_path_missing(minor_version_link);
 }
 
 /// After uninstalling the highest patch but with other patches remaining,
@@ -3459,17 +3450,8 @@ fn uninstall_highest_patch_updates_minor_version_link() {
     // The patch directory should be removed
     patch_dir_8.assert(predicate::path::missing());
 
-    // The minor version link should be fully removed (see comment in
-    // `uninstall_last_patch_removes_minor_version_link` for why we use
-    // `symlink_metadata` instead of `predicate::path::missing`).
-    assert!(
-        minor_version_link
-            .path()
-            .symlink_metadata()
-            .is_err_and(|error| error.kind() == ErrorKind::NotFound),
-        "minor version link should be absent after uninstalling the last patch: {}",
-        minor_version_link.path().display()
-    );
+    // Removing the last patch also removes the minor version link itself.
+    assert_path_missing(minor_version_link);
 }
 
 #[cfg(unix)] // Pyodide cannot be used on Windows

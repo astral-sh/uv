@@ -6,8 +6,11 @@ pub mod find_links;
 mod http_server;
 pub mod package_server;
 pub mod packse;
+mod path;
 pub mod pypi_proxy;
 mod vendor;
+
+pub use path::assert_path_missing;
 
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
