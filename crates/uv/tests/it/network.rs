@@ -1360,12 +1360,11 @@ fn assert_wheel_download(
 
     let site_packages = context.site_packages();
     assert_eq!(
-        fs_err::read_to_string(site_packages.join("build_tag/__init__.py"))?,
+        context.read(site_packages.join("build_tag/__init__.py")),
         "def main():\n    print(\"1\")\n",
     );
-    let metadata =
-        fs_err::read_to_string(site_packages.join("build_tag-1.0.0.dist-info/METADATA"))?;
-    let wheel = fs_err::read_to_string(site_packages.join("build_tag-1.0.0.dist-info/WHEEL"))?;
+    let metadata = context.read(site_packages.join("build_tag-1.0.0.dist-info/METADATA"));
+    let wheel = context.read(site_packages.join("build_tag-1.0.0.dist-info/WHEEL"));
     allow_duplicates! {
         assert_snapshot!(metadata, @"
         Metadata-Version: 2.3

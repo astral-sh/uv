@@ -4623,7 +4623,7 @@ fn install_copy_long_paths() -> Result<()> {
             Installed 1 package in [TIME]
              + long-paths==1.0.0 (from file://[TEMP_DIR]/long_paths-1.0.0-py3-none-any.whl)
             ");
-            assert_eq!(fs::read_to_string(&destination)?, "data");
+            assert_eq!(context.read(&destination), "data");
         }
         Ok::<(), anyhow::Error>(())
     }?;
@@ -12633,7 +12633,7 @@ fn direct_url_json_git_preserves_repository_url() -> Result<()> {
     });
     direct_url.assert(predicates::path::is_file());
 
-    let direct_url_content = fs_err::read_to_string(direct_url.path())?;
+    let direct_url_content = context.read(direct_url.path());
     insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://github.com/astral-test/uv-public-pypackage.git","vcs_info":{"vcs":"git","commit_id":"b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"}}"#);
 
     Ok(())
@@ -12668,7 +12668,7 @@ fn direct_url_json_git_tag() -> Result<()> {
     });
     direct_url.assert(predicates::path::is_file());
 
-    let direct_url_content = fs_err::read_to_string(direct_url.path())?;
+    let direct_url_content = context.read(direct_url.path());
     insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://github.com/astral-test/uv-public-pypackage","vcs_info":{"vcs":"git","commit_id":"0dacfd662c64cb4ceb16e6cf65a157a8b715b979","requested_revision":"0.0.1"}}"#);
 
     Ok(())
@@ -12702,7 +12702,7 @@ fn direct_url_json_direct_url() -> Result<()> {
     });
     direct_url.assert(predicates::path::is_file());
 
-    let direct_url_content = fs_err::read_to_string(direct_url.path())?;
+    let direct_url_content = context.read(direct_url.path());
     insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz","archive_info":{}}"#);
 
     Ok(())
@@ -12735,7 +12735,7 @@ fn direct_url_json_query() -> Result<()> {
     });
     direct_url.assert(predicates::path::is_file());
 
-    let direct_url_content = fs_err::read_to_string(direct_url.path())?;
+    let direct_url_content = context.read(direct_url.path());
     insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D","archive_info":{}}"#);
 
     uv_snapshot!(context.pip_install()
@@ -16641,7 +16641,7 @@ fn strip_shebang_arguments() -> Result<()> {
 
     // Check the installed scripts have their shebangs stripped of arguments.
     let custom_script_path = venv_bin_path(&context.venv).join("custom_script");
-    let script_content = fs::read_to_string(&custom_script_path)?;
+    let script_content = context.read(&custom_script_path);
 
     insta::with_settings!({filters => context.filters()
     }, {
@@ -16655,7 +16655,7 @@ fn strip_shebang_arguments() -> Result<()> {
     });
 
     let custom_gui_script_path = venv_bin_path(&context.venv).join("custom_gui_script");
-    let gui_script_content = fs::read_to_string(&custom_gui_script_path)?;
+    let gui_script_content = context.read(&custom_gui_script_path);
 
     insta::with_settings!({filters => context.filters()
     }, {
@@ -18124,15 +18124,15 @@ fn install_editable_uv_build_data() -> Result<()> {
     ");
 
     assert_snapshot!(
-        fs::read_to_string(context.site_packages().join("project-data.txt"))?,
+        context.read(context.site_packages().join("project-data.txt")),
         @"project data"
     );
     assert_snapshot!(
-        fs::read_to_string(context.site_packages().join("project-platform-data.txt"))?,
+        context.read(context.site_packages().join("project-platform-data.txt")),
         @"project platform data"
     );
 
-    let project_script = fs::read_to_string(venv_bin_path(&context.venv).join("project-script"))?;
+    let project_script = context.read(venv_bin_path(&context.venv).join("project-script"));
     let normalized_project_script = if let Some(index) = project_script.find('\n') {
         format!("#![PYTHON]{}", &project_script[index..])
     } else {
@@ -18146,12 +18146,12 @@ fn install_editable_uv_build_data() -> Result<()> {
         "#
     );
 
-    let record = fs::read_to_string(
+    let record = context.read(
         context
             .site_packages()
             .join("project-0.1.0.dist-info")
             .join("RECORD"),
-    )?;
+    );
     assert!(record.lines().any(|line| line.contains("/project-script")));
     assert!(record.lines().any(|line| line.contains("/project.h")));
     assert!(
@@ -18209,7 +18209,7 @@ fn record_uses_forward_slashes() -> Result<()> {
         .join("project-0.1.0.dist-info")
         .join("RECORD");
 
-    let record = fs::read_to_string(&record_path)?;
+    let record = context.read(&record_path);
     let record_lines: Vec<_> = record
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -18641,7 +18641,7 @@ fn handle_record_mismatches() -> Result<()> {
 
     // Snapshot the current (correct) RECORD.
     let record = unpacked.join("foo-0.1.0.dist-info/RECORD");
-    let correct_record = fs_err::read_to_string(&record)?;
+    let correct_record = context.read(&record);
     let correct_record = apply_filters(correct_record, context.filters());
     assert_snapshot!(correct_record, @"
     foo/__init__.py,sha256=jv2QBpHSNajIRNeADSmtqOWL9QcdUddyMK277kbp06o,49
@@ -18739,8 +18739,7 @@ fn handle_record_mismatches() -> Result<()> {
     assert_eq!(fs_err::read(cached_record)?, fs_err::read(healed_record)?);
 
     // Read the healed RECORD.
-    let installed_record =
-        fs_err::read_to_string(context.site_packages().join("foo-0.1.0.dist-info/RECORD"))?;
+    let installed_record = context.read(context.site_packages().join("foo-0.1.0.dist-info/RECORD"));
     let snapshot = apply_filters(installed_record, context.filters());
 
     // Ensure that all expected files are present.
