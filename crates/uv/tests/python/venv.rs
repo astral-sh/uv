@@ -464,6 +464,8 @@ async fn create_venv_project_environment_lock() -> Result<()> {
             requires-python = ">=3.12"
             "#,
     )?;
+    let project_link = context.temp_dir.child("project-link");
+    uv_fs::create_symlink(context.temp_dir.path(), project_link.path())?;
 
     // Simulate another project command holding the environment lock.
     let install_path = dunce::canonicalize(context.temp_dir.path())?;
@@ -476,18 +478,20 @@ async fn create_venv_project_environment_lock() -> Result<()> {
     .await?;
     let context = context.with_filtered_path(&lock_path, "PROJECT_ENVIRONMENT_LOCK");
 
-    // A pathless invocation from the project root uses the workspace-derived lock, including when
-    // `UV_PROJECT_ENVIRONMENT` changes the environment path. Lock errors warn and continue.
+    // A project alias uses the same lock, including when `UV_PROJECT_ENVIRONMENT` changes the
+    // environment path. Lock errors warn and continue.
     uv_snapshot!(context.filters(), context.venv()
+        .arg("--project")
+        .arg(project_link.path())
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo")
         .env(EnvVars::RUST_LOG, "warn")
         .env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: foo
-    WARN Failed to acquire project environment lock: Timeout ([TIME]) when waiting for lock on `[TEMP_DIR]/` at `[PROJECT_ENVIRONMENT_LOCK]/`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
-    Activate with: source foo/[BIN]/activate
+    Creating virtual environment at: project-link/foo
+    WARN Failed to acquire project environment lock: Timeout ([TIME]) when waiting for lock on `[TEMP_DIR]/project-link` at `[PROJECT_ENVIRONMENT_LOCK]/`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    Activate with: source project-link/foo/[BIN]/activate
     ");
     drop(lock);
 
