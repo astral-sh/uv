@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 from analyze_study import analyze, classify, median_interval, plan_fingerprint
+from run import symbolize
 from study import TREATMENTS, treatment_order
 from telemetry import PhaseSampler
 
@@ -103,6 +104,44 @@ class StudyChecks(unittest.TestCase):
             with PhaseSampler(path, enabled=False) as sampler:
                 self.assertIsNone(sampler.summary)
             self.assertFalse(path.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "Mach-O debug information")
+    def test_macos_negative_lookup_detects_embedded_debug_information(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            source = directory / "native.c"
+            source.write_text("int symbol_frame(int value) { return value + 7; }\n")
+            binary = directory / "native.o"
+            subprocess.run(
+                ["xcrun", "clang", "-g", "-O1", "-c", source, "-o", binary],
+                check=True,
+            )
+            dwarf_tool = subprocess.check_output(
+                ["xcrun", "--find", "llvm-dwarfdump"], text=True
+            ).strip()
+            symbols = directory / "missing.dSYM"
+            tools = {"llvm-dwarfdump": dwarf_tool}
+            _, resolved = symbolize(binary, symbols, 1, tools, "Darwin")
+            self.assertTrue(resolved)
+            subprocess.run(["strip", "-S", binary], check=True)
+            _, resolved = symbolize(binary, symbols, 1, tools, "Darwin")
+            self.assertFalse(resolved)
+
+    @unittest.skipUnless(sys.platform == "darwin", "Mach-O debug information")
+    def test_macos_missing_input_is_not_an_unknown_source_location(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            dwarf_tool = subprocess.check_output(
+                ["xcrun", "--find", "llvm-dwarfdump"], text=True
+            ).strip()
+            with self.assertRaises(RuntimeError):
+                symbolize(
+                    directory / "missing.o",
+                    directory / "missing.dSYM",
+                    1,
+                    {"llvm-dwarfdump": dwarf_tool},
+                    "Darwin",
+                )
 
     def test_sampler_observes_real_child_cpu_and_memory(self):
         with tempfile.TemporaryDirectory() as temporary:

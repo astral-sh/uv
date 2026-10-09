@@ -100,6 +100,12 @@ executable/profile hashes, static CRT or signature checks, smoke tests, and matc
 hashes. Keep missing/mismatched PGO diagnostics visible. Calibration must demonstrate working
 process/resource collection on each OS.
 
+On macOS, positive lookups read the companion DWARF with `atos`. Negative lookups inspect the
+executable's own DWARF with `llvm-dwarfdump --lookup`: renaming an indexed dSYM does not reliably
+prevent `atos` from finding it through external symbol discovery. The check must not depend on the
+state of the runner's symbol index. A native Mach-O regression test verifies that embedded source
+information is detected before stripping and absent after stripping.
+
 Retain every attempt. Provisioning/setup failure before timing may be retried with the same block
 ID/order and a recorded reason. Compiler OOM, timeout, incorrect outputs, and failures after timing
 begins are outcomes, not silently discarded samples. Resolve their interpretation before making an

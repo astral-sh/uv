@@ -171,10 +171,17 @@ def symbolize(binary, symbols, address, tools, system):
         # atos reads the packed DWARF directly; UUID equality is verified separately.
         if symbols.exists():
             (source,) = (symbols / "Contents" / "Resources" / "DWARF").iterdir()
-        else:
-            source = binary
-        output = run(["atos", "-o", source, hex(address)])
-        return output, bool(re.search(r"\([^)]*:[1-9][0-9]*\)", output))
+            output = run(["atos", "-o", source, hex(address)])
+            return output, bool(re.search(r"\([^)]*:[1-9][0-9]*\)", output))
+        # atos can rediscover an indexed dSYM after it is renamed. Inspect the
+        # binary's own DWARF so external symbol stores cannot satisfy this check.
+        output = run(
+            [tools["llvm-dwarfdump"], f"--lookup={hex(address)}", binary],
+            allowed_exit_codes=(0, 1),
+        )
+        if "file format Mach-O" not in output or "error:" in output:
+            raise RuntimeError(f"Cannot inspect Mach-O debug information:\n{output}")
+        return output, bool(re.search(r"Line info: .*\bline [1-9][0-9]*\b", output))
     arguments = [
         tools["llvm-symbolizer"],
         "--output-style=JSON",

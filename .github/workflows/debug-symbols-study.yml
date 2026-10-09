@@ -17,13 +17,18 @@ on:
         description: Unique independent runner block number
         type: string
         default: "0"
+      platform:
+        description: Platform selection for calibration recovery or complete study blocks
+        type: choice
+        options: [all, Linux, Linux-ARM64, macOS, Windows]
+        default: all
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
-  group: debug-study-${{ github.ref }}-${{ inputs.phase }}-${{ inputs.block }}
+  group: debug-study-${{ github.ref }}-${{ inputs.phase }}-${{ inputs.block }}-${{ inputs.platform }}
   cancel-in-progress: false
 
 jobs:
@@ -40,8 +45,35 @@ jobs:
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           enable-cache: false
       - run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_study.py
+  targets:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - id: select
+        env:
+          STUDY_PLATFORM: ${{ inputs.platform }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          matrix = [
+              {"os": "Linux", "runner": "depot-ubuntu-24.04-16", "uv-checksum": "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"},
+              {"os": "Linux-ARM64", "runner": "depot-ubuntu-24.04-arm-16", "uv-checksum": "2eaa5d94f5db7b3a1a092156b9420459e42ab0217d917fe74a876309cef9b5e9"},
+              {"os": "macOS", "runner": "namespace-profile-macos-15", "uv-checksum": "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"},
+              {"os": "Windows", "runner": "namespace-profile-windows-2022-x86-64-16x32", "uv-checksum": "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"},
+          ]
+          selected = [entry for entry in matrix if os.environ["STUDY_PLATFORM"] in ("all", entry["os"])]
+          if not selected:
+              raise ValueError("Unknown study platform")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+              stream.write("matrix=" + json.dumps(selected) + "\n")
+          PY
   study:
     if: github.event_name == 'workflow_dispatch'
+    needs: targets
     name: ${{ matrix.os }} / block ${{ inputs.block }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
@@ -52,19 +84,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        include:
-          - os: Linux
-            runner: depot-ubuntu-24.04-16
-            uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
-          - os: Linux-ARM64
-            runner: depot-ubuntu-24.04-arm-16
-            uv-checksum: "2eaa5d94f5db7b3a1a092156b9420459e42ab0217d917fe74a876309cef9b5e9"
-          - os: macOS
-            runner: namespace-profile-macos-15
-            uv-checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
-          - os: Windows
-            runner: namespace-profile-windows-2022-x86-64-16x32
-            uv-checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
+        include: ${{ fromJSON(needs.targets.outputs.matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
