@@ -26,8 +26,29 @@ jobs:
     needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
-  review:
+  check-vet:
+    name: "Cargo Vet (${{ matrix.workspace }})"
     needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: ${{ fromJSON(needs.plan.outputs.cargo-vet-workspaces == '[]' && '["."]' || needs.plan.outputs.cargo-vet-workspaces) }}
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@tk/cargo-vet
+    with:
+      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+      run-vet: ${{ needs.plan.outputs.cargo-vet-workspaces != '[]' && github.repository_owner == 'astral-sh' }}
+      workspace: ${{ matrix.workspace }}
+      first-party-workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
+      # renovate: datasource=github-release-attachments depName=astral-sh/uv
+      uv-version: "0.12.13"
+      uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
+  review:
+    needs: [plan, check-vet]
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
     uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@3c57a5dba8ad854a97e8b9fbf454286a7574e677
     with:
@@ -50,7 +71,7 @@ jobs:
       pull-requests: read
 
   review-code-quality:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/pull-request-code-quality-review.yml
     secrets: inherit
@@ -61,14 +82,14 @@ jobs:
       pull-requests: read
 
   check-lint:
-    needs: plan
+    needs: [plan, check-vet]
     uses: $/.github/workflows/check-lint.yml
     with:
       code-changed: ${{ needs.plan.outputs.test-code }}
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   check-docs:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-docs.yml
     secrets: inherit
@@ -82,17 +103,17 @@ jobs:
       security-events: write
 
   check-publish:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/check-publish.yml
 
   check-release:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-release.yml
 
   check-crates-policies:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
     uses: $/.github/workflows/check-crates-policies.yml
     secrets: inherit
@@ -106,7 +127,7 @@ jobs:
     uses: $/.github/workflows/check-lock.yml
 
   check-generated-files:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/check-generated-files.yml
     with:
@@ -114,7 +135,7 @@ jobs:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   test:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/test.yml
     with:
@@ -122,14 +143,14 @@ jobs:
       test-macos: ${{ needs.plan.outputs.test-macos }}
 
   test-windows-trampolines:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.test-windows-trampoline == 'true' }}
     uses: $/.github/workflows/test-windows-trampolines.yml
     with:
       trampoline-build: ${{ needs.plan.outputs.test-windows-trampoline-check-binary }}
 
   build-dev-binaries:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/build-dev-binaries.yml
     with:
@@ -176,13 +197,13 @@ jobs:
       sha: ${{ github.sha }}
 
   build-release-artifacts:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: $/.github/workflows/build-release-binaries.yml
     secrets: inherit
 
   build-docker:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.build-docker == 'true' }}
     uses: $/.github/workflows/build-docker.yml
     with:
@@ -207,7 +228,7 @@ jobs:
       attestations: write
 
   bench:
-    needs: plan
+    needs: [plan, check-vet]
     if: ${{ needs.plan.outputs.run-bench == 'true' }}
     uses: $/.github/workflows/bench.yml
     secrets: inherit
@@ -330,6 +351,7 @@ jobs:
     if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
       - plan
+      - check-vet
       - check-fmt
       - check-lint
       - check-docs
@@ -346,7 +368,7 @@ jobs:
             echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
               to_entries[]
               | select($conditional_jobs[.key] != false)
-              | select(.value.result != "success" and .value.result != "skipped")
+              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet"))
               | "\(.key): \(.value.result)"
             '
           )
