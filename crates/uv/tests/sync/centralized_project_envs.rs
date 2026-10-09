@@ -10,7 +10,7 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 #[cfg(unix)]
 use uv_test::ReadOnlyDirectoryGuard;
-use uv_test::{TestContext, assert_path_missing, uv_snapshot};
+use uv_test::{TestContext, assert_link_target, assert_path_missing, uv_snapshot};
 
 fn write_project(
     context: &TestContext,
@@ -397,10 +397,7 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
         .success();
 
     // Selecting a workspace member still uses the workspace environment.
-    assert_eq!(
-        fs_err::read_link(context.temp_dir.child(".venv").path())?,
-        target
-    );
+    assert_link_target(context.temp_dir.child(".venv"), &target);
     assert_path_missing(member.child(".venv"));
     Ok(())
 }
@@ -449,7 +446,7 @@ fn cache_prune_removes_and_recreates_centralized_environment() -> Result<()> {
 
     context.prune().assert().success();
     assert!(!target.exists());
-    assert_eq!(target, fs_err::read_link(link.path())?);
+    assert_link_target(&link, &target);
 
     // Without the preview, uv replaces the dangling cache link with a local environment.
     context.sync().assert().success();
@@ -462,7 +459,7 @@ fn cache_prune_removes_and_recreates_centralized_environment() -> Result<()> {
         .assert()
         .success();
     // The recreated environment uses the same cache entry.
-    assert_eq!(target, fs_err::read_link(link.path())?);
+    assert_link_target(&link, &target);
     // The dangling target is recreated.
     assert!(target.is_dir());
     Ok(())
@@ -496,7 +493,7 @@ fn sync_recovers_incomplete_centralized_environment() -> Result<()> {
         .assert()
         .success();
 
-    assert_eq!(target, fs_err::read_link(link.path())?);
+    assert_link_target(&link, &target);
     assert!(target.join("pyvenv.cfg").is_file());
     Ok(())
 }
@@ -551,7 +548,7 @@ fn sync_centralized_env_no_cache_uses_dot_venv() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     "#);
-    assert_eq!(fs_err::read_link(environment.path())?, target);
+    assert_link_target(&environment, &target);
     Ok(())
 }
 
@@ -777,7 +774,7 @@ fn sync_centralized_env_link_creation_failure_preserves_cached_target() -> Resul
     Checked in [TIME]
     "#);
 
-    assert_eq!(target, fs_err::read_link(environment.path())?);
+    assert_link_target(&environment, &target);
     assert!(target.join("pyvenv.cfg").is_file());
     Ok(())
 }
@@ -849,7 +846,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
     Checked in [TIME]
     "#);
 
-    assert_eq!(fs_err::read_link(environment.path())?, target.path());
+    assert_link_target(&environment, &target);
     // The link still points to the rebuilt Python 3.12 environment.
     let python = if cfg!(windows) {
         target.join("Scripts/python.exe")
@@ -873,6 +870,6 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
     Resolved 1 package in [TIME]
     Checked in [TIME]
     "#);
-    assert_eq!(fs_err::read_link(environment.path())?, cache_target);
+    assert_link_target(&environment, &cache_target);
     Ok(())
 }

@@ -12,6 +12,8 @@ use assert_fs::{
 use indoc::indoc;
 use predicates::prelude::predicate;
 use tracing::debug;
+#[cfg(unix)]
+use uv_test::assert_link_target;
 use uv_test::{LATEST_PYTHON_3_12, assert_path_missing, uv_snapshot};
 
 use uv_fs::Simplified;
@@ -2213,10 +2215,7 @@ fn python_install_relative_unmanaged_link() -> anyhow::Result<()> {
     warning: Failed to install executable for cpython-3.13.1-[PLATFORM]
       cause: Executable already exists at `[BIN]/python3.13` but is not managed by uv; use `--force` to replace it
     ");
-    assert_eq!(
-        fs_err::read_link(&bin_python)?,
-        Path::new("unmanaged-python")
-    );
+    assert_link_target(&bin_python, "unmanaged-python");
     uv_snapshot!(context.filters(), Command::new(bin_python.path())
         .args(["-I", "-c", "import sys; print('.'.join(map(str, sys.version_info[:2])))"]), @"
     exit_code: 0 (success)
