@@ -705,7 +705,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+      unknown field `unknown`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `require-build-hashes`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `graalpy-install-mirror`, `pyodide-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `minimum-libc-version`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
 
     Resolved in [TIME]
     Checked in [TIME]
@@ -1187,7 +1187,7 @@ fn install_from_dev_stdin() -> Result<()> {
 /// Install a package from a remote `requirements.txt` into a virtual environment.
 #[tokio::test]
 async fn install_remote_requirements_txt() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let username = "user";
     let password = "password";
@@ -3321,6 +3321,63 @@ async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()>
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`
       cause: Git operation failed
       cause: Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://github.com/astral-test/uv-public-pypackage`
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "test-git")]
+async fn install_git_public_github_fast_path_percent_encoded_ref() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [[tool.uv.dependency-metadata]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+    "#})?;
+
+    let server = MockServer::start().await;
+
+    // An unencoded fragment can select an existing branch with a different commit.
+    Mock::given(method("GET"))
+        .and(path("/astral-test/uv-public-pypackage/commits/feature/foo"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string("0dacfd662c64cb4ceb16e6cf65a157a8b715b979"),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(
+            "/astral-test/uv-public-pypackage/commits/feature/foo%23bar%25baz",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string("b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--dry-run")
+        .arg("--no-index")
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@feature/foo%23bar%25baz")
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
     ");
 
     Ok(())
@@ -7492,6 +7549,57 @@ async fn install_package_basic_auth_from_keyring() {
     context.assert_command("import anyio").success();
 }
 
+/// Keyring passwords can end in whitespace; only the emitted line ending should be removed.
+#[tokio::test]
+async fn install_requirements_basic_auth_from_keyring_trailing_whitespace() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .and(basic_auth("public", "heron \t"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--requirement")
+        .arg(format!("http://public@{}/requirements.txt", server.address()))
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .env(
+            EnvVars::KEYRING_TEST_CREDENTIALS,
+            format!(r#"{{"{}": {{"public": "heron \t"}}}}"#, server.address()),
+        )
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Keyring request for public@http://[LOCALHOST]/requirements.txt
+    Keyring request for public@[LOCALHOST]
+    warning: Requirements file `http://****@[LOCALHOST]/requirements.txt` does not contain any dependencies
+    Checked in [TIME]
+    ");
+}
+
 /// Install a package from an index that requires authentication
 /// but the keyring has the wrong password
 #[tokio::test]
@@ -8695,7 +8803,7 @@ async fn registry_wheel_size_is_advisory() -> Result<()> {
 /// reading metadata from the wheel archive.
 #[tokio::test]
 async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = PackageServer::new(&"validation".parse()?).await;
     let wheel_filename = "validation-3.0.0-py3-none-any.whl";
     let wheel_path = context
@@ -8801,7 +8909,7 @@ fn require_hashes() -> Result<()> {
 #[test]
 fn require_hashes_build_dependencies() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -8809,6 +8917,22 @@ fn require_hashes_build_dependencies() -> Result<()> {
         a==1.0.0 \
             --hash=sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5
     "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r").arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--require-build-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `a==1.0.0`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `hatchling`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    ");
 
     uv_snapshot!(context.pip_install()
         .arg("--index-url").arg(server.index_url())
@@ -8829,11 +8953,34 @@ fn require_hashes_build_dependencies() -> Result<()> {
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("hatchling[foo]==1.20.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000")?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--index-url").arg(server.index_url())
         .arg("--no-binary").arg("a")
         .arg("-r").arg("requirements.txt")
         .arg("--require-hashes")
+        .arg("--build-constraint").arg("build_constraints.txt")
+        .arg("--reinstall")
+        .arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `a==1.0.0`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `hatchling==1.20.0`
+      cause: Hash mismatch for `hatchling==1.20.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r").arg("requirements.txt")
+        .arg("--no-require-hashes")
         .arg("--build-constraint").arg("build_constraints.txt")
         .arg("--reinstall")
         .arg("--no-cache"), @"
@@ -8888,7 +9035,7 @@ fn require_hashes_no_deps() -> Result<()> {
 /// Provide the wrong hash with `--require-hashes`.
 #[test]
 fn require_hashes_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -8907,7 +9054,7 @@ fn require_hashes_mismatch() -> Result<()> {
     "})?;
 
     // Raise an error.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
@@ -10034,7 +10181,7 @@ fn verify_hashes_missing_version() -> Result<()> {
 /// Provide the wrong hash with `--verify-hashes`.
 #[test]
 fn verify_hashes_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
@@ -10044,11 +10191,32 @@ fn verify_hashes_mismatch() -> Result<()> {
     "})?;
 
     // Raise an error.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `idna==3.6`
+      cause: Hash mismatch for `idna==3.6`
+
+             Expected:
+               sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
+               sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+
+             Computed:
+               sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+    "
+    );
+
+    // Disabling required hashes must still reject mismatched hashes when provided.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -10229,7 +10397,7 @@ fn verify_hashes_match() -> Result<()> {
     Ok(())
 }
 
-/// Omit a transitive dependency in `--verify-hashes`. This is allowed.
+/// Allow unhashed transitive dependencies with `--no-require-hashes`.
 #[test]
 fn verify_hashes_omit_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10240,11 +10408,34 @@ fn verify_hashes_omit_dependency() -> Result<()> {
         "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
     )?;
 
-    // Install without error when `--require-hashes` is omitted.
+    // Verify the supplied hash without requiring hashes for transitive dependencies.
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    // Verify the supplied hash without requiring hashes for transitive dependencies.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-require-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -11854,11 +12045,11 @@ fn missing_subdirectory_git() -> Result<()> {
 
 #[test]
 fn missing_subdirectory_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -11874,11 +12065,11 @@ fn missing_subdirectory_url() -> Result<()> {
 // (Could be replaced with a checked-in hand-crafted corrupt wheel?)
 #[test]
 fn bad_crc32() -> Result<()> {
-    let context = uv_test::test_context!("3.11");
+    let context = uv_test::test_context!("3.11").with_filtered_http_retries();
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
         .arg("osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"), @"
     exit_code: 1 (failure)
@@ -12041,7 +12232,7 @@ fn static_metadata_source_tree() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/18778>
 #[test]
 fn direct_url_hash_source_tree_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
         [project]
@@ -16460,7 +16651,9 @@ fn config_settings_package() -> Result<()> {
 
 #[test]
 fn reject_invalid_archive_member_names() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-10-07T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-10-07T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheeldiff2==0.0.1"), @"
@@ -16476,7 +16669,9 @@ fn reject_invalid_archive_member_names() {
 
 #[test]
 fn reject_invalid_streaming_zip() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-07-10T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelstreamtest==0.0.1"), @"
@@ -16505,7 +16700,9 @@ fn reject_invalid_streaming_zip() {
 
 #[test]
 fn reject_invalid_double_zip() {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-07-10T00:00:00Z")
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelziptest==0.0.2"), @"
@@ -16521,7 +16718,7 @@ fn reject_invalid_double_zip() {
 
 #[test]
 fn reject_invalid_central_directory_offset() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16538,7 +16735,7 @@ fn reject_invalid_central_directory_offset() {
 
 #[test]
 fn reject_invalid_crc32_mismatch() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16554,7 +16751,7 @@ fn reject_invalid_crc32_mismatch() {
 
 #[test]
 fn reject_invalid_crc32_non_data_descriptor() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16570,7 +16767,7 @@ fn reject_invalid_crc32_non_data_descriptor() {
 
 #[test]
 fn reject_invalid_duplicate_extra_field() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16585,7 +16782,7 @@ fn reject_invalid_duplicate_extra_field() {
 
 #[test]
 fn reject_invalid_short_usize() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16601,7 +16798,7 @@ fn reject_invalid_short_usize() {
 
 #[test]
 fn reject_invalid_chained_extra_field() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @"
@@ -16616,7 +16813,7 @@ fn reject_invalid_chained_extra_field() {
 
 #[test]
 fn reject_invalid_short_usize_zip64() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @"
@@ -18071,7 +18268,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
 
 #[test]
 fn fail_on_bz2_wheel() {
-    let context = uv_test::test_context!("3.14");
+    let context = uv_test::test_context!("3.14").with_filtered_http_retries();
     let vendor = FindLinksServer::vendor();
 
     uv_snapshot!(
@@ -18090,7 +18287,7 @@ fn fail_on_bz2_wheel() {
 
 #[test]
 fn fail_on_lzma_wheel() {
-    let context = uv_test::test_context!("3.14");
+    let context = uv_test::test_context!("3.14").with_filtered_http_retries();
     let vendor = FindLinksServer::vendor();
 
     uv_snapshot!(

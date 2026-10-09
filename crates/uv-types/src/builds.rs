@@ -5,7 +5,7 @@ use papaya::{HashMap, ResizeMode};
 
 use uv_configuration::{BuildKind, NoSources};
 use uv_normalize::PackageName;
-use uv_python::PythonEnvironment;
+use uv_python_interpreter::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.
 #[derive(Debug, Default, Copy, Clone)]

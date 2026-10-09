@@ -7,5 +7,4 @@ pub use workspace::{
 
 pub mod dependency_groups;
 pub mod pyproject;
-pub mod pyproject_mut;
 mod workspace;

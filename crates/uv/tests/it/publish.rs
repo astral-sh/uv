@@ -73,7 +73,9 @@ async fn mock_trusted_publishing(server: &MockServer, runs: u64) {
 
 #[test]
 fn username_password_no_longer_supported() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_sizes()
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("-u")
@@ -96,7 +98,9 @@ fn username_password_no_longer_supported() {
 
 #[test]
 fn invalid_token() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_sizes()
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("-u")
@@ -170,7 +174,9 @@ fn missing_trusted_publishing_permission() {
 /// trusted publishing configuration?
 #[test]
 fn no_credentials() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_sizes()
+        .with_filtered_http_retries();
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("--publish-url")
@@ -284,7 +290,9 @@ async fn publish_wheels_before_sdist_in_filename_order() {
 /// Check that we (don't) use the keyring and warn for missing keyring behaviors correctly.
 #[test]
 fn check_keyring_behaviours() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_sizes()
+        .with_filtered_http_retries();
 
     // Install our keyring plugin
     context
@@ -462,7 +470,9 @@ fn invalid_index() {
 /// <https://github.com/astral-sh/uv/issues/11836#issuecomment-3022735011>
 #[tokio::test]
 async fn read_index_credential_env_vars_for_check_url() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_sizes()
+        .with_filtered_http_retries();
 
     let server = MockServer::start().await;
 
@@ -790,7 +800,9 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
 /// Failure to revoke a token must not change the outcome of publishing.
 #[tokio::test]
 async fn trusted_publishing_burn_failure() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_sizes()
+        .with_filtered_http_retries();
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -1160,7 +1172,9 @@ async fn trusted_publishing_does_not_burn_explicit_token() {
 /// PyPI returns `application/json` errors with a `code` field.
 #[tokio::test]
 async fn upload_error_pypi_json() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_sizes()
+        .with_filtered_http_retries();
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
@@ -1194,7 +1208,9 @@ async fn upload_error_pypi_json() {
 /// Handle `application/problem+json` errors with RFC 9457 Problem Details.
 #[tokio::test]
 async fn upload_error_problem_details() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_sizes()
+        .with_filtered_http_retries();
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))

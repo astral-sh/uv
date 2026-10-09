@@ -4,13 +4,13 @@ use tokio::sync::mpsc::Sender;
 
 use uv_distribution_types::{
     Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
-    ResolvedDistRef,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
 use uv_pep440::Version;
 
 use crate::pubgrub::Range;
+use crate::resolved::ResolvedDistRef;
 use crate::resolver::index::FxRegisteredEntry;
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};

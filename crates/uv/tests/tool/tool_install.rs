@@ -5338,7 +5338,8 @@ async fn tool_install_default_credentials() -> Result<()> {
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_tool_dirs()
+        .with_filtered_http_retries();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -5796,7 +5797,7 @@ fn tool_install_removed_python() {
             fs_err::remove_file(&tool_python).unwrap();
             fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
                 .unwrap();
-        },
+        }
         windows => {
             let pyvenv_cfg = tool_root.child("pyvenv.cfg");
             let broken_home = context.temp_dir.join("missing-python");
@@ -5813,7 +5814,7 @@ fn tool_install_removed_python() {
                 .collect::<Vec<_>>()
                 .join("\n");
             fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
-        },
+        }
     }
 
     // Reinstalling should skip the broken Python install.
@@ -6409,8 +6410,30 @@ fn tool_install_with_build_hashes() -> Result<()> {
             });
         }
 
+        if preview == "--no-preview" {
+            // Requiring hashes rejects an otherwise valid build constraint without one.
+            fs_err::remove_file(project.child("backend-executed"))?;
+            constraints.write_str("build-dependency==1.0.0\n")?;
+            uv_snapshot!(context.filters(), install().arg("--reinstall")
+                .env(EnvVars::UV_REQUIRE_BUILD_HASHES, "true"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+            error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
+              cause: Failed to resolve requirements from `build-system.requires`
+              cause: No solution found when resolving: `build-dependency==1.0.0`
+              cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+            ");
+            project
+                .child("backend-executed")
+                .assert(predicate::path::missing());
+            constraints.write_str(&format!("build-dependency==1.0.0 --hash=sha256:{hash}\n"))?;
+        }
+
         // The supplied hash is checked even when it isn't required.
-        fs_err::remove_file(project.child("backend-executed"))?;
+        if preview != "--no-preview" {
+            fs_err::remove_file(project.child("backend-executed"))?;
+        }
         constraints.write_str(&format!(
             "build-dependency==1.0.0 --hash=sha256:{}\n",
             "0".repeat(64)

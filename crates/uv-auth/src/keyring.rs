@@ -313,8 +313,11 @@ impl KeyringProvider {
                 .ok()?;
 
             let (username, password) = if let Some(username) = username {
-                // We're only expecting a password
-                let password = output.trim_end();
+                // `keyring get` prints the password with a trailing newline.
+                let password = output
+                    .strip_suffix("\r\n")
+                    .or_else(|| output.strip_suffix('\n'))
+                    .unwrap_or(&output);
                 (username, password)
             } else {
                 // We're expecting a username and password

@@ -1,6 +1,6 @@
 [package]
 name = "uv-test"
-version = "0.0.90"
+version = "0.0.91"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -22,6 +22,8 @@ git = []
 tracing-durations-export = []
 
 [dependencies]
+uv-python-types = { workspace = true }
+uv-python-managed = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
@@ -31,14 +33,14 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-preview = { workspace = true, features = ["testing"] }
-uv-python = { workspace = true }
+uv-python-discovery = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
 
 anyhow = { workspace = true }
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 base64 = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

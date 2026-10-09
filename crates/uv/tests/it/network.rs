@@ -415,7 +415,7 @@ async fn find_links_mixed_error() {
 /// Check that a missing direct package URL is classified as a user error.
 #[tokio::test]
 async fn direct_url_http_404() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let server = MockServer::start().await;
     Mock::given(any())
@@ -707,7 +707,7 @@ async fn install_http_retry_low_level() {
 /// Test problem details with a 403 error containing license compliance information
 #[tokio::test]
 async fn rfc9457_problem_details_license_violation() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let server = MockServer::start().await;
 

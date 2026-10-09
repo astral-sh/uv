@@ -350,7 +350,7 @@ class Poetry(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line)
+                Requirement(line.strip())
                 for line in fp
                 if not line.lstrip().startswith("#") and len(line.strip()) > 0
             ]
@@ -376,13 +376,9 @@ class Poetry(Suite):
             pyproject = tomli.load(fp)
 
         # Add the dependencies to the pyproject.toml.
-        for requirement in requirements:
-            version = str(requirement.specifier) if requirement.specifier else "*"
-            if requirement.extras:
-                entry = {"version": version, "extras": sorted(requirement.extras)}
-            else:
-                entry = version
-            pyproject["tool"]["poetry"]["dependencies"][requirement.name] = entry
+        pyproject["project"]["dependencies"] += [
+            str(requirement) for requirement in requirements
+        ]
 
         with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
             tomli_w.dump(pyproject, fp)
@@ -403,10 +399,12 @@ class Poetry(Suite):
                 f"rm -rf {data_dir} &&"
                 f"rm -rf {poetry_lock}"
             ),
+            env={
+                "POETRY_CONFIG_DIR": config_dir,
+                "POETRY_CACHE_DIR": cache_dir,
+                "POETRY_DATA_DIR": data_dir,
+            },
             command=[
-                f"POETRY_CONFIG_DIR={config_dir}",
-                f"POETRY_CACHE_DIR={cache_dir}",
-                f"POETRY_DATA_DIR={data_dir}",
                 self.path,
                 "lock",
                 "--directory",
@@ -425,10 +423,12 @@ class Poetry(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
             prepare=f"rm -f {poetry_lock}",
+            env={
+                "POETRY_CONFIG_DIR": config_dir,
+                "POETRY_CACHE_DIR": cache_dir,
+                "POETRY_DATA_DIR": data_dir,
+            },
             command=[
-                f"POETRY_CONFIG_DIR={config_dir}",
-                f"POETRY_CACHE_DIR={cache_dir}",
-                f"POETRY_DATA_DIR={data_dir}",
                 self.path,
                 "lock",
                 "--directory",
@@ -464,11 +464,7 @@ class Poetry(Suite):
             pyproject = tomli.load(fp)
 
         # Add the dependencies to the pyproject.toml.
-        pyproject["tool"]["poetry"]["dependencies"].update(
-            {
-                INCREMENTAL_REQUIREMENT: "*",
-            }
-        )
+        pyproject["project"]["dependencies"].append(INCREMENTAL_REQUIREMENT)
 
         with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
             tomli_w.dump(pyproject, fp)
@@ -485,13 +481,14 @@ class Poetry(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
             prepare=f"rm {poetry_lock} && cp {baseline} {poetry_lock}",
+            env={
+                "POETRY_CONFIG_DIR": config_dir,
+                "POETRY_CACHE_DIR": cache_dir,
+                "POETRY_DATA_DIR": data_dir,
+            },
             command=[
-                f"POETRY_CONFIG_DIR={config_dir}",
-                f"POETRY_CACHE_DIR={cache_dir}",
-                f"POETRY_DATA_DIR={data_dir}",
                 self.path,
                 "lock",
-                "--no-update",
                 "--directory",
                 cwd,
             ],
@@ -522,13 +519,14 @@ class Poetry(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_NOOP.value})",
             prepare=None,
+            env={
+                "POETRY_CONFIG_DIR": config_dir,
+                "POETRY_CACHE_DIR": cache_dir,
+                "POETRY_DATA_DIR": data_dir,
+            },
             command=[
-                f"POETRY_CONFIG_DIR={config_dir}",
-                f"POETRY_CACHE_DIR={cache_dir}",
-                f"POETRY_DATA_DIR={data_dir}",
                 self.path,
                 "lock",
-                "--no-update",
                 "--directory",
                 cwd,
             ],
@@ -565,11 +563,13 @@ class Poetry(Suite):
                 f"rm -rf {data_dir} &&"
                 f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"
             ),
+            env={
+                "POETRY_CONFIG_DIR": config_dir,
+                "POETRY_CACHE_DIR": cache_dir,
+                "POETRY_DATA_DIR": data_dir,
+                "VIRTUAL_ENV": venv_dir,
+            },
             command=[
-                f"POETRY_CONFIG_DIR={config_dir}",
-                f"POETRY_CACHE_DIR={cache_dir}",
-                f"POETRY_DATA_DIR={data_dir}",
-                f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "install",
                 "--no-root",
@@ -604,11 +604,13 @@ class Poetry(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=f"virtualenv --clear -p {self.python} {venv_dir}",
+            env={
+                "POETRY_CONFIG_DIR": config_dir,
+                "POETRY_CACHE_DIR": cache_dir,
+                "POETRY_DATA_DIR": data_dir,
+                "VIRTUAL_ENV": venv_dir,
+            },
             command=[
-                f"POETRY_CONFIG_DIR={config_dir}",
-                f"POETRY_CACHE_DIR={cache_dir}",
-                f"POETRY_DATA_DIR={data_dir}",
-                f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "install",
                 "--no-root",
@@ -634,7 +636,7 @@ class Pdm(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line)
+                Requirement(line.strip())
                 for line in fp
                 if not line.lstrip().startswith("#") and len(line.strip()) > 0
             ]
@@ -799,8 +801,10 @@ class Pdm(Suite):
                 f"{self.path} config cache_dir {cache_dir} && "
                 f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"
             ),
+            env={
+                "VIRTUAL_ENV": venv_dir,
+            },
             command=[
-                f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "sync",
                 "--project",
@@ -833,8 +837,10 @@ class Pdm(Suite):
                 f"{self.path} config cache_dir {cache_dir} && "
                 f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"
             ),
+            env={
+                "VIRTUAL_ENV": venv_dir,
+            },
             command=[
-                f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "sync",
                 "--project",
@@ -974,8 +980,10 @@ class UvPip(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
             prepare=f"rm -rf {cache_dir} && virtualenv --clear -p {self.python} {venv_dir}",
+            env={
+                "VIRTUAL_ENV": venv_dir,
+            },
             command=[
-                f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "pip",
                 "sync",
@@ -992,8 +1000,10 @@ class UvPip(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=f"virtualenv --clear -p {self.python} {venv_dir}",
+            env={
+                "VIRTUAL_ENV": venv_dir,
+            },
             command=[
-                f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "pip",
                 "sync",
@@ -1031,7 +1041,7 @@ class UvProject(Suite):
         # Parse all dependencies from the requirements file.
         with open(requirements_file) as fp:
             requirements = [
-                Requirement(line)
+                Requirement(line.strip())
                 for line in fp
                 if not line.lstrip().startswith("#") and len(line.strip()) > 0
             ]
@@ -1209,8 +1219,10 @@ class UvProject(Suite):
                 f"rm -rf {cache_dir} && "
                 f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"
             ),
+            env={
+                "VIRTUAL_ENV": venv_dir,
+            },
             command=[
-                f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "sync",
                 "--cache-dir",
@@ -1242,10 +1254,12 @@ class UvProject(Suite):
         venv_dir = os.path.join(cwd, ".venv")
 
         return Command(
-            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=(f"virtualenv --clear -p {self.python} {venv_dir} --no-seed"),
+            env={
+                "VIRTUAL_ENV": venv_dir,
+            },
             command=[
-                f"VIRTUAL_ENV={venv_dir}",
                 self.path,
                 "sync",
                 "--cache-dir",

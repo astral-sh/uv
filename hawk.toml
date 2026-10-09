@@ -87,6 +87,14 @@ reason = "used by Pixi to construct a `VersionMap` from custom distributions"
 [[override]]
 lint = "hawk::unnecessary_public"
 crate = "uv_resolver"
+item = "prioritized_distribution::PrioritizedDist::insert_source"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct a prioritized distribution for its resolver provider"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
 item = "python_requirement::PythonRequirement::from_marker_environment"
 kind = "inherent_method"
 level = "expect"
@@ -135,7 +143,7 @@ reason = "used by Pixi to distinguish packages installed through its uv integrat
 # Keep APIs that are consumed by another platform or by non-Rust components.
 
 [[override]]
-lint = "hawk::dead_public"
+lint = "hawk::unnecessary_public"
 crate = "uv_fs"
 item = "with_retry_sync"
 kind = "function"
@@ -302,7 +310,7 @@ reason = "kept public alongside ResolverOutput::len"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::arch"
 kind = "inherent_method"
 level = "expect"
@@ -310,7 +318,7 @@ reason = "retained as part of the PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::libc"
 kind = "inherent_method"
 level = "expect"
@@ -318,7 +326,7 @@ reason = "retained as part of the PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::unnecessary_public"
-crate = "uv_python"
+crate = "uv_python_discovery"
 item = "installation::PythonInstallation::os"
 kind = "inherent_method"
 level = "expect"
@@ -326,7 +334,7 @@ reason = "kept public alongside the other PythonInstallation platform accessors"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_python"
+crate = "uv_python_interpreter"
 item = "virtualenv::PyVenvConfiguration::is_virtualenv"
 kind = "inherent_method"
 level = "expect"
@@ -334,7 +342,7 @@ reason = "retained as part of the PyVenvConfiguration accessors"
 
 [[override]]
 lint = "hawk::unnecessary_public"
-crate = "uv_python"
+crate = "uv_python_interpreter"
 item = "virtualenv::PyVenvConfiguration::set"
 kind = "inherent_method"
 level = "expect"

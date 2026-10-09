@@ -1,0 +1,70 @@
+[package]
+name = "uv-pip-commands"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
+uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
+uv-client = { workspace = true }
+uv-command-support = { workspace = true }
+uv-configuration = { workspace = true }
+uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-errors = { workspace = true }
+uv-fs = { workspace = true }
+uv-git = { workspace = true }
+uv-install-operations = { workspace = true }
+uv-install-wheel = { workspace = true }
+uv-installer = { workspace = true }
+uv-lock = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-python-discovery = { workspace = true }
+uv-python-managed = { workspace = true }
+uv-requirements = { workspace = true }
+uv-resolve-operations = { workspace = true }
+uv-resolver = { workspace = true }
+uv-settings = { workspace = true }
+uv-static = { workspace = true }
+uv-tool = { workspace = true }
+uv-torch = { workspace = true }
+uv-types = { workspace = true }
+uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
+itertools = { workspace = true }
+owo-colors = { workspace = true }
+petgraph = { workspace = true }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+textwrap = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+unicode-width = { workspace = true }
+url = { workspace = true }

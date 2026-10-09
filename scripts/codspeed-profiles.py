@@ -38,7 +38,7 @@ SOURCE_REPOSITORY = "astral-sh/uv"
 DESTINATION_REPOSITORY = "astral-sh/uv-dev"
 EXECUTORS = {"simulation": "valgrind", "walltime": "walltime"}
 ARTIFACTS = {mode: f"codspeed-profiles-{mode}" for mode in EXECUTORS}
-SOURCE_JOBS = {"bench / simulated", "bench / walltime on aarch64 linux"}
+SOURCE_JOBS = {"bench / simulated", "bench / walltime on x86_64 linux"}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

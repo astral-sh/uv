@@ -1199,7 +1199,7 @@ impl MarkerTree {
     ///
     /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
     /// main conjunction.
-    pub fn top_level_extra(self) -> Option<MarkerExpression> {
+    fn top_level_extra(self) -> Option<MarkerExpression> {
         let mut extra_expression = None;
         for conjunction in self.to_dnf() {
             let found = conjunction.iter().find(|expression| {

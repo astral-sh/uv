@@ -4,9 +4,6 @@ use std::fmt;
 
 use serde::Serialize;
 
-use uv_normalize::PackageName;
-use uv_pep508::uv_pep440::Version;
-
 /// Information about the git repository where uv was built from.
 #[derive(Serialize)]
 pub(crate) struct CommitInfo {
@@ -32,30 +29,6 @@ pub struct SelfVersionInfo {
     target_triple: String,
 }
 
-/// Version information for a project (`uv version`).
-#[derive(Serialize)]
-pub struct ProjectVersionInfo {
-    /// Name of the package.
-    pub package_name: Option<String>,
-    /// Version, such as "0.5.1".
-    version: String,
-    /// Information about the git commit uv was built from.
-    ///
-    /// Always `null` for project versions, kept for backwards compatibility.
-    // TODO(zanieb): Remove this field in a breaking release.
-    commit_info: Option<CommitInfo>,
-}
-
-impl ProjectVersionInfo {
-    pub fn new(package_name: Option<&PackageName>, version: &Version) -> Self {
-        Self {
-            package_name: package_name.map(ToString::to_string),
-            version: version.to_string(),
-            commit_info: None,
-        }
-    }
-}
-
 impl SelfVersionInfo {
     /// Returns just the version string (e.g., "0.5.1"), without commit info or target triple.
     pub fn version(&self) -> &str {
@@ -64,7 +37,7 @@ impl SelfVersionInfo {
 }
 
 impl fmt::Display for SelfVersionInfo {
-    /// Formatted version information: "<version>[+<commits>] ([<commit> <date> ]<target>)"
+    /// Formatted version information: `<version>[+<commits>] ([<commit> <date> ]<target>)`.
     ///
     /// This is intended for consumption by `clap` to provide `uv --version`,
     /// and intentionally omits the name of the package.
@@ -83,12 +56,6 @@ impl fmt::Display for SelfVersionInfo {
             write!(f, " ({})", self.target_triple)?;
         }
         Ok(())
-    }
-}
-
-impl fmt::Display for ProjectVersionInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.version)
     }
 }
 

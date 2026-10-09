@@ -1,0 +1,66 @@
+[package]
+name = "uv-python-discovery"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-cache = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-client = { workspace = true }
+uv-command-support = { workspace = true }
+uv-configuration = { workspace = true }
+uv-dirs = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-errors = { workspace = true }
+uv-fs = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-platform = { workspace = true }
+uv-python-interpreter = { workspace = true }
+uv-python-managed = { workspace = true }
+uv-python-types = { workspace = true }
+uv-scripts = { workspace = true }
+uv-settings = { workspace = true }
+uv-static = { workspace = true }
+uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
+indicatif = { workspace = true }
+itertools = { workspace = true }
+owo-colors = { workspace = true }
+rayon = { workspace = true }
+regex = { workspace = true }
+reqwest-retry = { workspace = true }
+rustc-hash = { workspace = true }
+same-file = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+which = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true }
+windows-registry = { workspace = true }
+
+[dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+uv-state = { workspace = true }
+
+assert_fs = { workspace = true }
+indoc = { workspace = true }
+temp-env = { workspace = true }
+tempfile = { workspace = true }
+test-log = { workspace = true }

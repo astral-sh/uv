@@ -1,6 +1,6 @@
 [package]
 name = "uv-distribution"
-version = "0.0.90"
+version = "0.0.91"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-python-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
@@ -38,7 +39,6 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true }
 uv-redacted = { workspace = true }
 uv-threads = { workspace = true }
 uv-types = { workspace = true }
@@ -56,6 +56,7 @@ reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -63,6 +64,7 @@ tokio-util = { workspace = true, features = ["compat"] }
 toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+version-ranges = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]

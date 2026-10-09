@@ -1,0 +1,34 @@
+[package]
+name = "uv-python-types"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-cache-key = { workspace = true }
+uv-fs = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-platform = { workspace = true }
+uv-static = { workspace = true }
+
+clap = { workspace = true, optional = true }
+ref-cast = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+target-lexicon = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+assert_fs = { workspace = true }

@@ -1,0 +1,178 @@
+on:
+  workflow_call:
+
+permissions: {}
+
+env:
+  UV_LOCKED: 1
+
+jobs:
+  review:
+    name: "code quality review"
+    if: github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: depot-ubuntu-24.04-16
+    environment: automations
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.review.outputs.final-message }}
+    steps:
+      - name: "Checkout caller repository"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+
+      - name: "Prepare review configuration"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          export REVIEW_CONFIG="$RUNNER_TEMP/pull-request-code-quality-review"
+          mkdir -p "$REVIEW_CONFIG/codex" "$RUNNER_TEMP/codex-code-quality-review"
+          printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
+          cp agents/codex/config.toml "$REVIEW_CONFIG/codex/"
+          cp agents/prompts/pull-request-code-quality-review.md "$REVIEW_CONFIG/prompt.md"
+          cp agents/schemas/pull-request-code-quality-review.json "$REVIEW_CONFIG/schema.json"
+          cp agents/scripts/collect-pull-request-review-context.sh "$REVIEW_CONFIG/"
+          cp AGENTS.md CONTRIBUTING.md STYLE.md "$REVIEW_CONFIG/"
+          git rev-parse HEAD > "$REVIEW_CONFIG/configuration-revision.txt"
+
+          export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-code-quality-review-tools"
+          uv sync --locked --only-dev
+          echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
+          git checkout --detach "$HEAD_SHA"
+
+      - name: "Collect pull request context"
+        run: bash "$REVIEW_CONFIG/collect-pull-request-review-context.sh"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      # codex-action configures these only on GitHub-hosted runners.
+      - name: "Enable Linux user namespaces for bubblewrap"
+        run: |
+          current_userns="$(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null || true)"
+          if [ -n "$current_userns" ] && [ "$current_userns" != "1" ]; then
+            sudo sysctl -w kernel.unprivileged_userns_clone=1
+          fi
+
+          current_apparmor="$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true)"
+          if [ -n "$current_apparmor" ] && [ "$current_apparmor" != "0" ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      - name: "Review pull request"
+        id: review
+        uses: openai/codex-action@c385816875cc2fc8e033ed9d1cba96f8c331210e # v1.11 + GitHub API retry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: ${{ runner.temp }}/codex-code-quality-review
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.153.4"
+          codex-home: "${{ env.REVIEW_CONFIG }}/codex"
+          model: gpt-6-astra
+          effort: xhigh
+          permission-profile: "pull-request-review"
+          codex-args: '["--enable", "network_proxy"]'
+          safety-strategy: drop-sudo
+          allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
+          prompt-file: "${{ env.REVIEW_CONFIG }}/prompt.md"
+          output-schema-file: "${{ env.REVIEW_CONFIG }}/schema.json"
+          output-file: "${{ runner.temp }}/pull-request-code-quality-review-result.json"
+
+      - name: "Check reviewed checkout"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
+            echo "The review changed the checked-out revision." >&2
+            exit 1
+          fi
+          git diff --no-ext-diff --no-textconv --exit-code HEAD --
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-pull-request-code-quality-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.REVIEW_CONFIG }}/codex/sessions
+          if-no-files-found: warn
+
+  prepare:
+    needs: review
+    if: needs.review.outputs.result != ''
+    runs-on: github-ubuntu-24.04-x86_64-4
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.comments.outputs.result }}
+    steps:
+      - name: "Checkout review helpers"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: astral-sh/github-actions
+          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          sparse-checkout: pull-request-review
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+
+      - name: "Prepare review findings"
+        id: comments
+        run: bash pull-request-review/scripts/prepare.sh
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_RESULT: ${{ needs.review.outputs.result }}
+
+  report:
+    needs: prepare
+    if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
+    runs-on: github-ubuntu-24.04-x86_64-4
+    environment: automations
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write # for the credential broker
+    steps:
+      - name: "Checkout review helpers"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: astral-sh/github-actions
+          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          sparse-checkout: pull-request-review
+          persist-credentials: false
+
+      - name: "Get repository token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            pull_requests: write
+
+      - name: "Publish review findings"
+        run: bash pull-request-review/scripts/publish.sh
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_RESULT: ${{ needs.prepare.outputs.result }}

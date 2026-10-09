@@ -363,7 +363,7 @@ async fn audit_vulnerability_found() {
 /// Audit a project when OSV returns a malformed vulnerability record.
 #[tokio::test]
 async fn audit_malformed_vulnerability_record() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml
@@ -482,22 +482,22 @@ async fn audit_best_id_selection() {
 
     let server = MockServer::start().await;
 
-    // The primary ID is an OSV ID, but aliases include a PYSEC ID which should be preferred.
+    // Prefer the PYSEC alias over both the primary CVE ID and the earlier GHSA alias.
     Mock::given(method("POST"))
         .and(path("/v1/querybatch"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "results": [{"vulns": [{"id": "OSV-2023-0001"}]}]
+            "results": [{"vulns": [{"id": "CVE-2023-9999"}]}]
         })))
         .mount(&server)
         .await;
 
     Mock::given(method("GET"))
-        .and(path("/v1/vulns/OSV-2023-0001"))
+        .and(path("/v1/vulns/CVE-2023-9999"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "id": "OSV-2023-0001",
+            "id": "CVE-2023-9999",
             "modified": "2026-01-01T00:00:00Z",
             "summary": "A vulnerability with many aliases",
-            "aliases": ["PYSEC-2023-0042", "CVE-2023-9999", "GHSA-xxxx-yyyy-zzzz"]
+            "aliases": ["GHSA-xxxx-yyyy-zzzz", "PYSEC-2023-0042"]
         })))
         .mount(&server)
         .await;
@@ -520,7 +520,7 @@ async fn audit_best_id_selection() {
 
       No fix versions available
 
-      Advisory information: https://osv.dev/vulnerability/OSV-2023-0001
+      Advisory information: https://osv.dev/vulnerability/CVE-2023-9999
 
 
     ----- stderr -----

@@ -1,0 +1,35 @@
+[package]
+name = "uv-project-edit"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-cache-key = { workspace = true }
+uv-configuration = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-workspace = { workspace = true }
+
+itertools = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+insta = { workspace = true }

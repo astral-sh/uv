@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.90"
+version = "0.0.91"
 description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }
@@ -43,11 +43,22 @@ name = "uv_python"
 path = "benches/uv_python.rs"
 harness = false
 
+[[bench]]
+name = "macos_python_install"
+path = "benches/macos_python_install.rs"
+harness = false
+
+[[bench]]
+name = "macos_dylib"
+path = "benches/macos_dylib.rs"
+harness = false
+
 [dev-dependencies]
 uv = { workspace = true }
 uv-cache = { workspace = true }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
+uv-command-support = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
@@ -61,13 +72,15 @@ uv-performance-memory-allocator = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true }
+uv-python-managed = { workspace = true }
+uv-python-interpreter = { workspace = true }
+uv-python-types = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 clap = { workspace = true }
 criterion = { version = "5.0.1", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 fastrand = { workspace = true }

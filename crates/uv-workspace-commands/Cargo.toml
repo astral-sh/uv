@@ -1,0 +1,47 @@
+[package]
+name = "uv-workspace-commands"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+test = false
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
+uv-cache = { workspace = true }
+uv-client = { workspace = true }
+uv-command-support = { workspace = true }
+uv-configuration = { workspace = true }
+uv-dispatch = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-environment-operations = { workspace = true }
+uv-fs = { workspace = true }
+uv-install-operations = { workspace = true }
+uv-installer = { workspace = true }
+uv-lock = { workspace = true }
+uv-lock-operations = { workspace = true }
+uv-normalize = { workspace = true }
+uv-preview = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-python-discovery = { workspace = true }
+uv-resolve-operations = { workspace = true }
+uv-scripts = { workspace = true }
+uv-settings = { workspace = true }
+uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
+
+anstream = { workspace = true }
+anyhow = { workspace = true }
+owo-colors = { workspace = true }
+tracing = { workspace = true }

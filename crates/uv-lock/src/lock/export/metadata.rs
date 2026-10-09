@@ -9,7 +9,8 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, StringVersion};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, HashDigest, ModuleName};
-use uv_python::{Interpreter, LenientImplementationName, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
+use uv_python_types::LenientImplementationName;
 
 use crate::lock::{
     Dependency, DirectSource, Package, PackageId, RegistrySource, Source, SourceDist,

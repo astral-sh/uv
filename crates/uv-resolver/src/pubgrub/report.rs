@@ -14,8 +14,7 @@ use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
-    IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
+    Index, IndexCapabilities, IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -27,6 +26,7 @@ use crate::error::{ErrorTree, PrefixMatch};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::PrereleaseSelection;
+use crate::prioritized_distribution::{IncompatibleDist, IncompatibleSource, IncompatibleWheel};
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{

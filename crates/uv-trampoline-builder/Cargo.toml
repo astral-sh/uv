@@ -1,6 +1,6 @@
 [package]
 name = "uv-trampoline-builder"
-version = "0.0.90"
+version = "0.0.91"
 description = "This is an internal component crate of uv"
 
 edition = { workspace = true }
@@ -32,7 +32,7 @@ goblin = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-async_zip = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
 editpe = { workspace = true }
 futures-lite = { workspace = true }
 windows = { workspace = true }

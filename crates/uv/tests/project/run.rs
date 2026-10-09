@@ -9,7 +9,7 @@ use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::path::Path;
 use uv_fs::copy_dir_all;
-use uv_python::PYTHON_VERSION_FILENAME;
+use uv_python_discovery::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -1853,11 +1853,13 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Switch to a relocatable virtual environment.
+    // Switch to a relocatable virtual environment using the same interpreter.
     context
         .venv()
         .arg("--allow-existing")
         .arg("--relocatable")
+        .arg("--python")
+        .arg(context.venv.path())
         .assert()
         .success();
 

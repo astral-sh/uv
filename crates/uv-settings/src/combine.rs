@@ -4,9 +4,10 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    AnnotationStyle, BuildIsolation, ExcludeNewer, ExcludeNewerPackage, ExportFormat, ForkStrategy,
-    IndexStrategy, KeyringProviderType, NoSources, PrereleaseMode, PrereleasePackage, ProxyUrl,
-    Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedPublishing, Upgrade,
+    AddBoundsKind, AnnotationStyle, BuildIsolation, ExcludeNewer, ExcludeNewerPackage,
+    ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType, NoSources, PrereleaseMode,
+    PrereleasePackage, ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple,
+    TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerValue, ExtraBuildVariables, Index, IndexUrl,
@@ -14,11 +15,10 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python_types::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
-use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{AuditOptions, FilesystemOptions, Options, PipOptions, PreviewOption};
 

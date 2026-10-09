@@ -1,0 +1,56 @@
+[package]
+name = "uv-resolve-operations"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+test = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
+uv-client = { workspace = true }
+uv-command-support = { workspace = true }
+uv-configuration = { workspace = true }
+uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-errors = { workspace = true }
+uv-fs = { workspace = true }
+uv-git = { workspace = true }
+uv-installer = { workspace = true }
+uv-lock = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
+uv-requirements = { workspace = true }
+uv-requirements-txt = { workspace = true }
+uv-resolver = { workspace = true }
+uv-types = { workspace = true }
+uv-warnings = { workspace = true }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+indicatif = { workspace = true }
+itertools = { workspace = true }
+jiff = { workspace = true }
+owo-colors = { workspace = true }
+rkyv = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }

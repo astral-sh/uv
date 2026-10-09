@@ -8,7 +8,7 @@ use uv_test::uv_snapshot;
 
 #[tokio::test]
 async fn invalid_cloud_endpoint_urls() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let proxy = crate::pypi_proxy::start().await;
     let mut filters = context.filters();
     filters.push((r"UV_(S3|GCS|AZURE)_ENDPOINT_URL", "UV_[CLOUD]_ENDPOINT_URL"));
@@ -1046,6 +1046,18 @@ async fn login_text_store() {
     ----- stderr -----
     Stored credentials for testuser@http://localhost/
     ");
+
+    // HTTP should be allowed on IPv6 loopback
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("http://[::1]:1324/simple")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Stored credentials for testuser@http://[::1]:1324/
+    ");
 }
 
 #[test]
@@ -1730,7 +1742,7 @@ fn native_auth_host_fallback() -> Result<()> {
 /// Test credential helper with basic auth credentials
 #[test]
 fn bazel_helper_basic_auth() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Store credentials
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1760,7 +1772,7 @@ fn bazel_helper_basic_auth() {
 /// Test credential helper with token credentials
 #[test]
 fn bazel_helper_token() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Store token
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1821,7 +1833,7 @@ fn bazel_helper_invalid_bearer_token() -> Result<()> {
 /// Test credential helper with no credentials found
 #[test]
 fn bazel_helper_no_credentials() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
     uv_snapshot!(context.filters(), context.auth_helper()
         .arg("--protocol=bazel")
         .arg("get"),
@@ -1840,7 +1852,7 @@ fn bazel_helper_no_credentials() {
 /// Test credential helper with invalid JSON input
 #[test]
 fn bazel_helper_invalid_json() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.auth_helper()
         .arg("--protocol=bazel")
@@ -1859,7 +1871,7 @@ fn bazel_helper_invalid_json() {
 /// Test credential helper with invalid URI
 #[test]
 fn bazel_helper_invalid_uri() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.auth_helper()
         .arg("--protocol=bazel")
@@ -1878,7 +1890,7 @@ fn bazel_helper_invalid_uri() {
 /// Test credential helper with username in URI
 #[test]
 fn bazel_helper_username_in_uri() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Store credentials with specific username
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1909,7 +1921,7 @@ fn bazel_helper_username_in_uri() {
 /// Test credential helper with unknown username in URI
 #[test]
 fn bazel_helper_unknown_username_in_uri() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context_with_versions!(&[]);
 
     // Store credentials with specific username
     uv_snapshot!(context.filters(), context.auth_login()

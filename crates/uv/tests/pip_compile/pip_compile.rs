@@ -39,8 +39,8 @@ use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
 use uv_test::diff_snapshot;
 use uv_test::package_server::PackageServer;
-use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::{ArtifactMetadata, Package, PackageMetadata, Scenario};
+use uv_test::packse::{PackseServer, generate_wheel};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
 
 #[test]
@@ -5556,7 +5556,7 @@ fn generate_hashes_built_distribution_url() -> Result<()> {
 /// Reuse a URL hash while fetching only wheel metadata, then validate it during installation.
 #[tokio::test]
 async fn generate_hashes_url_fragment() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let filename = "ok-1.0.0-py3-none-any.whl";
     let wheel = read(context.workspace_root.join("test/links").join(filename))?;
@@ -5645,7 +5645,7 @@ async fn generate_hashes_url_fragment() -> Result<()> {
 /// A full-wheel metadata fallback must not cache a declared hash as a computed artifact hash.
 #[tokio::test]
 async fn generate_hashes_url_fragment_no_range_requests() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let filename = "ok-1.0.0-py3-none-any.whl";
     let wheel = read(context.workspace_root.join("test/links").join(filename))?;
@@ -5759,7 +5759,7 @@ fn generate_hashes_url_fragment_dependency_metadata() -> Result<()> {
 /// Validate and reuse source URL hashes when reading metadata from a subdirectory.
 #[tokio::test]
 async fn generate_hashes_url_fragment_source_subdirectory() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let mut source = Vec::new();
     write_tar_gz(
@@ -5858,7 +5858,7 @@ async fn generate_hashes_url_fragment_source_subdirectory() -> Result<()> {
 /// URL hashes must be checked before running a source distribution's build backend.
 #[tokio::test]
 async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let name = "source-package".parse()?;
     let server = PackageServer::new(&name).await;
     let filename = "source.tar.gz";
@@ -12538,7 +12538,7 @@ fn metadata_2_2() -> Result<()> {
 /// Resolve a direct URL package with a URL that doesn't exist (i.e., returns a 404).
 #[test]
 fn not_found_direct_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl")?;
 
@@ -15068,6 +15068,17 @@ fn compatible_build_constraint() -> Result<()> {
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools>=40")?;
+
+    uv_snapshot!(context.pip_compile()
+        .arg("requirements.txt")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_REQUIRE_BUILD_HASHES, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: setuptools>=40
+    ");
 
     uv_snapshot!(context.pip_compile()
         .arg("requirements.txt")
@@ -19812,4 +19823,144 @@ async fn compile_missing_python_download_error_warning() {
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     ");
+}
+
+/// Overrides and constraints must retain the extra conditions of optional dependencies.
+#[test]
+fn overrides_preserve_alternative_optional_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    // The host requests the same dependency from either optional extra.
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = generate_wheel(
+        &"extra-host".parse()?,
+        &"1".parse()?,
+        &["extra-leaf==1; extra == 'a' or extra == 'b'".parse()?],
+        &BTreeMap::from([
+            ("a".parse()?, Vec::new()),
+            ("b".parse()?, Vec::new()),
+            ("unrelated".parse()?, Vec::new()),
+        ]),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    wheels.child(filename).write_binary(&wheel)?;
+
+    // The override selects a different version of the optional dependency.
+    let (filename, wheel) = generate_wheel(
+        &"extra-leaf".parse()?,
+        &"2".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    wheels.child(filename).write_binary(&wheel)?;
+
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str("extra-leaf==2")?;
+
+    // Without extras, the optional dependency remains inactive.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("extra-host==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // The first extra selects the overridden dependency.
+    requirements_in.write_str("extra-host[a]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+    extra-leaf==2
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The second extra also selects the overridden dependency.
+    requirements_in.write_str("extra-host[b]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+    extra-leaf==2
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // An unrelated extra leaves the optional dependency inactive.
+    requirements_in.write_str("extra-host[unrelated]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Lookahead must not fetch a constraint for an inactive optional dependency.
+    requirements_in
+        .write_str("extra-host @ file://${PROJECT_ROOT}/wheels/extra_host-1-py3-none-any.whl")?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("extra-leaf @ file://${PROJECT_ROOT}/missing/extra_leaf-2-py3-none-any.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--constraint").arg("constraints.txt")
+        .arg("--no-index")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host @ file://${PROJECT_ROOT}/wheels/extra_host-1-py3-none-any.whl
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
 }

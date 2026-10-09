@@ -199,13 +199,13 @@ jobs:
 
       - name: "Update issue context"
         if: steps.find-thread.outputs.found == 'true'
-        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
+        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.152.0"
+          codex-version: "0.153.4"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "issue-triage"

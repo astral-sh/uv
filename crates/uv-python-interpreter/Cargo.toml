@@ -1,0 +1,53 @@
+[package]
+name = "uv-python-interpreter"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-errors = { workspace = true }
+uv-fs = { workspace = true }
+uv-install-wheel = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-platform = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-python-types = { workspace = true }
+uv-static = { workspace = true }
+uv-trampoline-builder = { workspace = true }
+
+configparser = { workspace = true }
+dunce = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
+owo-colors = { workspace = true }
+rmp-serde = { workspace = true }
+same-file = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+which = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+indoc = { workspace = true }
+tokio = { workspace = true }

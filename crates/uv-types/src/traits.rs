@@ -16,10 +16,10 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
+use crate::{BuildArena, BuildIsolation, HashStrategy, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -85,7 +85,7 @@ impl SourceTreeEditablePolicy {
 ///                    └────────────────┘
 /// ```
 ///
-/// Put in a different way, the types here allow `uv-resolver` to depend on `uv-build` and
+/// Put in a different way, the types here allow `uv-resolver` to depend on `uv-build-frontend` and
 /// `uv-build-frontend` to depend on `uv-resolver` without having actual crate dependencies between
 /// them.
 pub trait BuildContext {
@@ -145,10 +145,16 @@ pub trait BuildContext {
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
-    /// Resolve the given requirements into a ready-to-install set of package versions.
+    /// Resolve build requirements.
+    ///
+    /// Pass `None` for the initial requirements, such as `build-system.requires`. When adding
+    /// requirements returned by a build backend, pass the previous resolution's [`HashStrategy`]
+    /// to preserve the hashes already collected. When build dependency hashes are required,
+    /// backend output cannot add hashes to this set.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        hash_override: Option<&'a HashStrategy>,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
@@ -162,7 +168,7 @@ pub trait BuildContext {
     ) -> impl Future<Output = Result<Vec<CachedDist>, impl IsBuildBackendError>> + 'a;
 
     /// Set up a source distribution build by installing the required dependencies. A wrapper for
-    /// `uv_build::SourceBuild::setup`.
+    /// `uv_build_frontend::SourceBuild::setup`.
     ///
     /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.
     ///
@@ -202,12 +208,12 @@ pub trait BuildContext {
     ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;
 }
 
-/// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
+/// A wrapper for `uv_build_frontend::SourceBuild` to avoid cyclical crate dependencies.
 ///
-/// You can either call only `wheel()` to build the wheel directly, call only `metadata()` to get
-/// the metadata without performing the actual or first call `metadata()` and then `wheel()`.
+/// You can call [`Self::wheel`] to build the wheel directly, call [`Self::metadata`] to get
+/// the metadata without building the wheel, or call [`Self::metadata`] before [`Self::wheel`].
 pub trait SourceBuildTrait {
-    /// A wrapper for `uv_build::SourceBuild::get_metadata_without_build`.
+    /// A wrapper for `uv_build_frontend::SourceBuild::get_metadata_without_build`.
     ///
     /// For PEP 517 builds, this calls `prepare_metadata_for_build_wheel`
     ///
@@ -215,7 +221,7 @@ pub trait SourceBuildTrait {
     /// `prepare_metadata_for_build_wheel` hook exists
     fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>, AnyErrorBuild>>;
 
-    /// A wrapper for `uv_build::SourceBuild::build`.
+    /// A wrapper for `uv_build_frontend::SourceBuild::build`.
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
@@ -259,11 +265,11 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
     }
 }
 
-/// [`anyhow::Error`]-like wrapper type for [`BuildDispatch`] method return values, that also makes
-/// [`IsBuildBackendError`] work as [`thiserror`] `#[source]`.
+/// An [`anyhow::Error`]-like wrapper for [`SourceBuildTrait`] method return values that supports
+/// [`IsBuildBackendError`] as a [`thiserror`] `#[source]`.
 ///
-/// The errors types have the same problem as [`BuildDispatch`] generally: The `uv-resolver`,
-/// `uv-installer` and `uv-build-frontend` error types all reference each other:
+/// The `uv-resolver`, `uv-installer`, and `uv-build-frontend` crates need to propagate each other's
+/// errors without introducing cyclic dependencies.
 /// Resolution and installation may need to build packages, while the build frontend needs to
 /// resolve and install for the PEP 517 build environment.
 ///

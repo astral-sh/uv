@@ -2,7 +2,6 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
@@ -20,14 +19,48 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_pep508::VerbatimUrl;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::PythonEnvironment;
+use uv_python_interpreter::PythonEnvironment;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
 
 use crate::satisfies::{BuildSettings, RequirementSatisfaction};
 use crate::{InstallationStrategy, SitePackages};
+
+/// A failure while determining which distributions to install.
+#[derive(Debug, thiserror::Error)]
+pub enum PlanError {
+    #[error(transparent)]
+    IncompatibleWheel(#[from] Box<IncompatibleWheelError>),
+    #[error("A Git path dependency is incompatible with the current platform: {}", .0.user_display())]
+    IncompatibleGitPath(PathBuf),
+    #[error("A URL dependency points to a wheel which conflicts with `--no-binary`: {0}")]
+    NoBinaryUrl(VerbatimUrl),
+    #[error("A path dependency points to a wheel which conflicts with `--no-binary`: {0}")]
+    NoBinaryPath(VerbatimUrl),
+    #[error("A Git path dependency points to a wheel which conflicts with `--no-binary`: {0}")]
+    NoBinaryGitPath(VerbatimUrl),
+    #[error(transparent)]
+    DistributionTypes(#[from] Error),
+    #[error(transparent)]
+    Distribution(#[from] uv_distribution::Error),
+}
+
+impl uv_errors::Hinted for PlanError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::IncompatibleWheel(error) => error.hints(),
+            Self::Distribution(error) => error.hints(),
+            Self::IncompatibleGitPath(_)
+            | Self::NoBinaryUrl(_)
+            | Self::NoBinaryPath(_)
+            | Self::NoBinaryGitPath(_)
+            | Self::DistributionTypes(_) => uv_errors::Hints::none(),
+        }
+    }
+}
 
 /// A wheel dependency is incompatible with the current platform.
 #[derive(Debug)]
@@ -269,7 +302,7 @@ impl<'a> Planner<'a> {
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
-    ) -> Result<Plan> {
+    ) -> Result<Plan, PlanError> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(
             cache,
@@ -409,21 +442,19 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
-                        return Err(IncompatibleWheelError {
-                            kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
-                            compatibility_hint: generate_wheel_compatibility_hint(
-                                &wheel.filename,
-                                tags,
-                            ),
-                        }
-                        .into());
+                        return Err(PlanError::IncompatibleWheel(Box::new(
+                            IncompatibleWheelError {
+                                kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
+                                compatibility_hint: generate_wheel_compatibility_hint(
+                                    &wheel.filename,
+                                    tags,
+                                ),
+                            },
+                        )));
                     }
 
                     if no_binary {
-                        bail!(
-                            "A URL dependency points to a wheel which conflicts with `--no-binary`: {}",
-                            wheel.url
-                        );
+                        return Err(PlanError::NoBinaryUrl(wheel.url.clone()));
                     }
 
                     // Find the exact wheel from the cache, since we know the filename in
@@ -481,21 +512,19 @@ impl<'a> Planner<'a> {
                     }
 
                     if !wheel.filename.is_compatible(tags) {
-                        return Err(IncompatibleWheelError {
-                            kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
-                            compatibility_hint: generate_wheel_compatibility_hint(
-                                &wheel.filename,
-                                tags,
-                            ),
-                        }
-                        .into());
+                        return Err(PlanError::IncompatibleWheel(Box::new(
+                            IncompatibleWheelError {
+                                kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
+                                compatibility_hint: generate_wheel_compatibility_hint(
+                                    &wheel.filename,
+                                    tags,
+                                ),
+                            },
+                        )));
                     }
 
                     if no_binary {
-                        bail!(
-                            "A path dependency points to a wheel which conflicts with `--no-binary`: {}",
-                            wheel.url
-                        );
+                        return Err(PlanError::NoBinaryPath(wheel.url.clone()));
                     }
 
                     // Find the exact wheel from the cache, since we know the filename in
@@ -551,17 +580,11 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Built(BuiltDist::GitPath(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
-                        bail!(
-                            "A Git path dependency is incompatible with the current platform: {}",
-                            wheel.install_path.user_display()
-                        );
+                        return Err(PlanError::IncompatibleGitPath(wheel.install_path.clone()));
                     }
 
                     if no_binary {
-                        bail!(
-                            "A Git path dependency points to a wheel which conflicts with `--no-binary`: {}",
-                            wheel.url
-                        );
+                        return Err(PlanError::NoBinaryGitPath(wheel.url.clone()));
                     }
 
                     if let Some(git_sha) = wheel.git.precise() {

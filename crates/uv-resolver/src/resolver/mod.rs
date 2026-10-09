@@ -22,11 +22,9 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, DependencyModifiers};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
-    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    RequiresPython, ResolutionRecorder, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
-    implied_markers,
+    BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
+    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
+    ResolutionRecorder, ResolvedDist, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -50,6 +48,10 @@ use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
+use crate::prioritized_distribution::{
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PythonRequirementKind,
+    implied_markers,
+};
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
     PubGrubPython, Range,
@@ -57,6 +59,7 @@ use crate::pubgrub::{
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
+use crate::resolved::ResolvedDistRef;
 pub(crate) use crate::resolver::availability::{
     ResolverVersion, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
     UnavailableVersion, UnsatisfiableRequirement,

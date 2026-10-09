@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
-use uv_python::downloads::ManagedPythonDownloadList;
+use uv_python_managed::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
@@ -35,10 +35,9 @@ use walkdir::WalkDir;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
-use uv_python::managed::ManagedPythonInstallations;
-use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
-};
+use uv_python_discovery::PythonInstallation;
+use uv_python_managed::ManagedPythonInstallations;
+use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest, PythonVersion};
 use uv_static::EnvVars;
 
 // Shared test timestamp for deterministic package availability and relative times.
@@ -245,6 +244,21 @@ impl TestContext {
     #[must_use]
     pub fn with_fast_http_retry(self) -> Self {
         self.with_http_timeout("1").with_http_retries("1")
+    }
+
+    /// Omit incidental HTTP retries from a snapshot that asserts the eventual error.
+    ///
+    /// Keep the final error and its causes. Context filters run before the standard timing filter.
+    #[must_use]
+    pub fn with_filtered_http_retries(self) -> Self {
+        self.with_filter((
+            r"(?m)^  cause: Request failed after [1-9]\d* retr(?:y|ies) in \d+\.\ds\r?\n",
+            "",
+        ))
+        .with_filter((
+            r"(?m)^error: Request failed after [1-9]\d* retr(?:y|ies) in \d+\.\ds\r?\n  cause: ",
+            "error: ",
+        ))
     }
 
     /// Set the "concurrent installs" for all commands in this context.

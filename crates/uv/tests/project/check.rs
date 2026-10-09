@@ -1841,8 +1841,9 @@ async fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"));
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"))
+        .with_filtered_http_retries();
 
     context
         .temp_dir

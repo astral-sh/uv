@@ -35,7 +35,7 @@ use uv_extract::hash::{HashReader, Hasher};
 use uv_install_wheel::{InstallState, Layout, LinkMode};
 use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
 use uv_pypi_types::{HashAlgorithm, Scheme};
-use uv_python::PythonEnvironment;
+use uv_python_interpreter::PythonEnvironment;
 use uv_resolver::Manifest;
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
@@ -253,14 +253,15 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                     create_sdist_extraction_directory(),
                 )
             },
-            |(archive, extracted_sdist)| {
+            |(mut archive, extracted_sdist)| {
                 let (extracted_sdist, files) = runtime
                     .block_on(uv_extract::stream::archive(
-                        archive,
+                        &mut archive,
                         SourceDistExtension::TarGz,
                         extracted_sdist,
                     ))
                     .expect("Failed to unpack sdist");
+                drop(archive);
                 let source_tree = uv_extract::strip_component(extracted_sdist.path())
                     .expect("Failed to strip top-level sdist directory");
                 black_box((files, extracted_sdist, source_tree))
@@ -554,7 +555,7 @@ mod resolver {
     use uv_platform_tags::{Arch, Os, Platform, Tags, TagsOptions};
     use uv_preview::Preview;
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
-    use uv_python::Interpreter;
+    use uv_python_interpreter::Interpreter;
     use uv_resolver::{
         ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement,
         Resolver, ResolverEnvironment, ResolverOutput,

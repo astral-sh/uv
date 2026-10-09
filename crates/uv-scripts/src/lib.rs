@@ -20,6 +20,10 @@ use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{BuildConstraintDependency, ExtraBuildDependency, Sources};
 
+mod discovery;
+
+pub use discovery::{ScriptDiscoveryError, find_scripts};
+
 pub use uv_configuration::ExcludeDependency;
 pub use uv_workspace::pyproject::OverrideDependency;
 

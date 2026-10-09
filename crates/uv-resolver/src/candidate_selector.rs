@@ -7,10 +7,7 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{
-    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, ResolutionRecorder,
-};
-use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
+use uv_distribution_types::{DistributionMetadata, IndexUrl, Name, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -18,6 +15,9 @@ use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
+use crate::prioritized_distribution::{
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
+};
 use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};

@@ -1,0 +1,41 @@
+[package]
+name = "uv-publish-commands"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-auth = { workspace = true }
+uv-cache = { workspace = true }
+uv-client = { workspace = true }
+uv-command-support = { workspace = true }
+uv-configuration = { workspace = true }
+uv-console = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-errors = { workspace = true }
+uv-publish = { workspace = true }
+uv-redacted = { workspace = true }
+uv-settings = { workspace = true }
+uv-warnings = { workspace = true }
+
+anyhow = { workspace = true }
+console = { workspace = true }
+indicatif = { workspace = true }
+owo-colors = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tokio = { workspace = true }

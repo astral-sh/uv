@@ -509,23 +509,23 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
         "build-constraint-dependencies = [\"a>=1\", \"a>=2\", \"a<3\"]",
         "build-constraint-dependencies = [\"a>=2,<3\"]",
     ))?;
-    for preview in [false, true] {
-        let mut command = context.lock();
-        command.arg("--locked").arg("--offline");
-        if preview {
-            command.args(["--preview-features", "lockfile-normalization"]);
-        }
-        insta::allow_duplicates! {
-            uv_snapshot!(context.filters(), command, @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
-            hint: To update the lockfile, run `uv lock`.
-            ");
-        }
-    }
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline")
+        .args(["--preview-features", "lockfile-normalization"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
     Ok(())
 }
 
@@ -2113,7 +2113,8 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filtered_http_retries();
     let server = MockServer::start().await;
     let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
     let archive_url = format!("{}{archive_path}", server.uri());
@@ -2616,7 +2617,7 @@ fn lock_wheel_path_relock_hash_mismatch() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_url_relock_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
@@ -2755,7 +2756,7 @@ async fn lock_sdist_url_relock_hash_mismatch() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_registry_relock_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
@@ -2909,7 +2910,7 @@ async fn lock_sdist_registry_relock_hash_mismatch() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
 
@@ -3112,7 +3113,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_registry_hash_changes_require_upgrade() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
@@ -3220,7 +3221,7 @@ async fn lock_sdist_registry_hash_changes_require_upgrade() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
@@ -3289,7 +3290,7 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
@@ -3351,7 +3352,7 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
@@ -3460,7 +3461,7 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_source_archive_url_equivalent_subdirectory_locked_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
@@ -3680,7 +3681,8 @@ fn lock_sdist_path_rejected_archive_not_cached() -> Result<()> {
 async fn lock_sdist_url_cache_heal_hash_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_file_counts()
-        .with_filtered_sizes_and_units();
+        .with_filtered_sizes_and_units()
+        .with_filtered_http_retries();
     let server = MockServer::start().await;
     let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
     let archive_url = format!("{}{archive_path}", server.uri());
@@ -4693,7 +4695,7 @@ fn lock_project_with_excludes() -> Result<()> {
     ");
 
     // Check the lockfile contains the excludes.
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -11960,7 +11962,7 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
 
     // Check the lockfile - the absolute path should stay absolute, and sniffio
     // should be resolved from the local path rather than PyPI.
-    let lock = fs_err::read_to_string(context.temp_dir.join("project/uv.lock"))?;
+    let lock = context.read("project/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12759,7 +12761,7 @@ fn lock_metadata_free_new_extra_marker() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_invalid_hash() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13064,7 +13066,7 @@ fn lock_mixed_hashes() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_core_metadata_hash() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let index_server = MockServer::start().await;
     let artifact_server = MockServer::start().await;
 
@@ -13332,7 +13334,7 @@ async fn lock_index_hash_algorithm() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_index_hash_algorithm_missing() -> Result<()> {
-    let context = uv_test::test_context!("3.13");
+    let context = uv_test::test_context!("3.13").with_filtered_http_retries();
     let server = PackageServer::new(&"basic-package".parse()?).await;
     let wheel_filename = "basic_package-0.1.0-py3-none-any.whl";
 
@@ -14574,7 +14576,7 @@ fn lock_peer_member() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.child("project").child("uv.lock")).unwrap();
+    let lock = context.read("project/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -14771,7 +14773,7 @@ async fn lock_index_workspace_member() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -15027,7 +15029,9 @@ async fn lock_redact_http() -> Result<()> {
     // which in turns means we don't use the test context cache location.
     // We should probably add a way to configure the `--no-cache` temporary
     // directory location during testing.
-    let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_link_mode_warning()
+        .with_filtered_http_retries();
     let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -15692,7 +15696,7 @@ async fn lock_env_credentials() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // The lockfile should omit the credentials.
     insta::with_settings!({
@@ -22663,7 +22667,7 @@ fn lock_metadata_free_root_extra_project_conflicting_workspace_extra() -> Result
         .arg("--locked")
         .arg("--offline")
         .arg("--no-cache")
-        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+        .env("RUST_LOG", "uv_lock_operations::validated_lock=debug"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Existing `uv.lock` satisfies workspace requirements
@@ -22744,7 +22748,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
         .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url())
-        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+        .env("RUST_LOG", "uv_lock_operations::validated_lock=debug"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Existing `uv.lock` satisfies workspace requirements
@@ -27773,7 +27777,7 @@ fn lock_explicit_index() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -27879,7 +27883,7 @@ fn lock_explicit_default_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -27966,7 +27970,7 @@ fn lock_explicit_default_index() -> Result<()> {
       cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
     "#);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28130,7 +28134,7 @@ async fn lock_named_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28197,7 +28201,7 @@ fn lock_default_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28257,7 +28261,7 @@ fn lock_default_index() -> Result<()> {
       cause: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28332,7 +28336,7 @@ fn lock_named_index_cli() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28618,7 +28622,7 @@ fn lock_repeat_named_index_member() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28705,7 +28709,7 @@ fn lock_unique_named_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28777,7 +28781,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28842,7 +28846,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -28939,7 +28943,7 @@ fn lock_named_index_overlap() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -31408,7 +31412,7 @@ async fn lock_keyring_credentials() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // The lockfile should omit the credentials.
     insta::with_settings!({
@@ -31595,7 +31599,7 @@ async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Resu
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     // The lockfile should omit the credentials.
     insta::with_settings!({
@@ -31656,7 +31660,7 @@ async fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Resu
         .assert()
         .success();
 
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -31894,7 +31898,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -32020,7 +32024,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -32149,7 +32153,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -32245,7 +32249,7 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34469,7 +34473,7 @@ fn lock_dynamic_version() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34505,7 +34509,7 @@ fn lock_dynamic_version() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34574,7 +34578,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34610,7 +34614,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34797,7 +34801,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34864,7 +34868,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34980,7 +34984,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35041,7 +35045,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35139,7 +35143,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35307,7 +35311,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35467,7 +35471,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35508,7 +35512,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35581,7 +35585,7 @@ fn lock_shared_build_dependency() -> Result<()> {
     Resolved 7 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35855,7 +35859,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35908,7 +35912,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     Updated project (dynamic) -> v0.1.0
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -35960,7 +35964,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -36033,7 +36037,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     Updated project v0.1.0 -> (dynamic)
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -36079,7 +36083,7 @@ fn lock_bump_static_version() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -36129,7 +36133,7 @@ fn lock_bump_static_version() -> Result<()> {
     Updated project v0.1.0 -> v0.2.0
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),

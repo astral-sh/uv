@@ -1,0 +1,39 @@
+[package]
+name = "uv-command-support"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+test = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-console = { workspace = true }
+uv-fs = { workspace = true }
+uv-redacted = { workspace = true }
+uv-shell = { workspace = true }
+uv-static = { workspace = true }
+uv-warnings = { workspace = true }
+
+anstream = { workspace = true }
+anyhow = { workspace = true }
+dotenvy = { workspace = true }
+fs-err = { workspace = true }
+indicatif = { workspace = true }
+owo-colors = { workspace = true }
+rustc-hash = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }

@@ -1,0 +1,88 @@
+[package]
+name = "uv-project-commands"
+version = "0.0.91"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-python-types = { workspace = true }
+uv-python-interpreter = { workspace = true }
+uv-audit = { workspace = true }
+uv-audit-operations = { workspace = true }
+uv-auth = { workspace = true }
+uv-bin-install = { workspace = true }
+uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-client = { workspace = true }
+uv-command-support = { workspace = true }
+uv-configuration = { workspace = true }
+uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-environment-operations = { workspace = true }
+uv-errors = { workspace = true }
+uv-fs = { workspace = true }
+uv-git = { workspace = true }
+uv-git-types = { workspace = true }
+uv-install-operations = { workspace = true }
+uv-install-wheel = { workspace = true }
+uv-installer = { workspace = true }
+uv-lock = { workspace = true }
+uv-lock-operations = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-preview = { workspace = true }
+uv-project-edit = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-python-discovery = { workspace = true }
+uv-redacted = { workspace = true }
+uv-requirements = { workspace = true }
+uv-resolve-operations = { workspace = true }
+uv-resolver = { workspace = true }
+uv-scripts = { workspace = true }
+uv-settings = { workspace = true }
+uv-shell = { workspace = true }
+uv-static = { workspace = true }
+uv-trampoline-builder = { workspace = true }
+uv-types = { workspace = true }
+uv-unix = { workspace = true }
+uv-version = { workspace = true }
+uv-virtualenv = { workspace = true }
+uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
+
+anstream = { workspace = true }
+anyhow = { workspace = true }
+async_zip = { workspace = true, features = ["zstd"] }
+clap = { workspace = true }
+ctrlc = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
+indicatif = { workspace = true }
+indoc = { workspace = true }
+itertools = { workspace = true }
+jiff = { workspace = true }
+owo-colors = { workspace = true }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }

@@ -1,7 +1,5 @@
-use std::convert;
 use std::sync::Arc;
 
-use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::sync::oneshot;
 use tracing::{instrument, warn};
@@ -10,8 +8,25 @@ use uv_cache::Cache;
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
-use uv_python::PythonEnvironment;
+use uv_python_interpreter::PythonEnvironment;
 use uv_threads::initialize_rayon_once;
+
+/// A failure while installing wheels into a Python environment.
+#[derive(Debug, thiserror::Error)]
+pub enum InstallError {
+    #[error(
+        "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
+    )]
+    SymlinkWithoutCache,
+    #[error("`install_blocking` task panicked")]
+    WorkerPanicked,
+    #[error("Failed to install: {} ({wheel})", wheel.filename())]
+    Wheel {
+        wheel: Box<CachedDist>,
+        #[source]
+        source: uv_install_wheel::Error,
+    },
+}
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
@@ -84,7 +99,7 @@ impl<'a> Installer<'a> {
 
     /// Install a set of wheels into a Python virtual environment.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
-    pub async fn install(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
+    pub async fn install(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>, InstallError> {
         let Self {
             venv,
             cache,
@@ -97,9 +112,7 @@ impl<'a> Installer<'a> {
 
         if cache.is_some_and(Cache::is_temporary) {
             if link_mode.is_symlink() {
-                return Err(anyhow::anyhow!(
-                    "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
-                ));
+                return Err(InstallError::SymlinkWithoutCache);
             }
         }
 
@@ -125,19 +138,18 @@ impl<'a> Installer<'a> {
             let _ = tx.send(result);
         });
 
-        rx.await
-            .map_err(|_| anyhow::anyhow!("`install_blocking` task panicked"))
-            .and_then(convert::identity)
+        rx.await.map_err(|_| InstallError::WorkerPanicked)?
     }
 
     /// Install a set of wheels into a Python virtual environment synchronously.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
-    pub fn install_blocking(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
+    pub fn install_blocking(
+        self,
+        wheels: Vec<CachedDist>,
+    ) -> Result<Vec<CachedDist>, InstallError> {
         if self.cache.is_some_and(Cache::is_temporary) {
             if self.link_mode.is_symlink() {
-                return Err(anyhow::anyhow!(
-                    "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
-                ));
+                return Err(InstallError::SymlinkWithoutCache);
             }
         }
 
@@ -165,7 +177,7 @@ fn install(
     relocatable: bool,
     installer_metadata: bool,
     preview: Preview,
-) -> Result<Vec<CachedDist>> {
+) -> Result<Vec<CachedDist>, InstallError> {
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
     let state = uv_install_wheel::InstallState::new(preview);
@@ -190,13 +202,16 @@ fn install(
             link_mode,
             &state,
         )
-        .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
+        .map_err(|source| InstallError::Wheel {
+            wheel: Box::new(wheel.clone()),
+            source,
+        })?;
 
         if let Some(reporter) = reporter.as_ref() {
             reporter.on_install_progress(wheel);
         }
 
-        Ok::<(), Error>(())
+        Ok::<(), InstallError>(())
     })?;
     if let Err(err) = state.warn_package_conflicts() {
         warn!("Checking for conflicts between packages failed: {err}");
@@ -217,14 +232,16 @@ pub trait Reporter: Send + Sync {
 mod tests {
     use uv_cache::Cache;
     use uv_preview::Preview;
-    use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+    use uv_python_discovery::find_environment;
+    use uv_python_interpreter::PythonEnvironment;
+    use uv_python_types::{EnvironmentPreference, PythonPreference, PythonRequest};
 
     use super::Installer;
 
     fn environment() -> PythonEnvironment {
         let _preview = uv_preview::test::with_features(&[]);
         let cache = Cache::temp().expect("cache should be available");
-        PythonEnvironment::find(
+        find_environment(
             &PythonRequest::Any,
             EnvironmentPreference::Any,
             PythonPreference::System,
