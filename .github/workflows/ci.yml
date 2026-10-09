@@ -338,6 +338,7 @@ jobs:
       - test
       - test-system
       - build-dev-binaries
+      - build-docker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
       - name: "Check required jobs passed"
