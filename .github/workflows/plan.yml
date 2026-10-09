@@ -24,6 +24,9 @@ on:
       check-crates-policies:
         description: "Whether the crates.io publishing policy check should run"
         value: ${{ jobs.plan.outputs.check-crates-policies }}
+      require-check-release:
+        description: "Whether the release planning check must pass"
+        value: ${{ jobs.plan.outputs.require-check-release }}
       build-release-binaries:
         description: "Whether release binaries should be built"
         value: ${{ jobs.plan.outputs.build-release-binaries }}
@@ -81,6 +84,7 @@ jobs:
       review-security: ${{ steps.plan.outputs.review_security }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
       check-crates-policies: ${{ steps.plan.outputs.check_crates_policies }}
+      require-check-release: ${{ steps.plan.outputs.require_check_release }}
       build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
       run-checks: ${{ steps.plan.outputs.run_checks }}
       test-publish: ${{ steps.plan.outputs.test_publish }}
@@ -226,6 +230,7 @@ jobs:
           [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
           [[ $is_release_pr ]] && check_crates_policies=1
+          [[ $is_release_pr ]] && require_check_release=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
           [[ ! $has_skip_label ]] && run_checks=1
           [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1
@@ -248,6 +253,7 @@ jobs:
             out review_security         "$review_security"
             out check_schema            "$check_schema"
             out check_crates_policies   "$check_crates_policies"
+            out require_check_release   "$require_check_release"
             out build_release_binaries  "$build_release_binaries"
             out run_checks              "$run_checks"
             out test_publish            "$test_publish"
