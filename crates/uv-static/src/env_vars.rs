@@ -142,7 +142,7 @@ impl EnvVars {
     pub const UV_REQUIRE_HASHES: &'static str = "UV_REQUIRE_HASHES";
 
     /// Require hashes for build dependencies across project, build, tool, and pip commands.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.13.0")]
     pub const UV_REQUIRE_BUILD_HASHES: &'static str = "UV_REQUIRE_BUILD_HASHES";
 
     /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
@@ -427,7 +427,7 @@ impl EnvVars {
 
     /// Use the legacy backend to read and write tar archives.
     /// Set to a true value (e.g., `1`) to enable this compatibility fallback.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.13.0")]
     pub const UV_LEGACY_TAR_BACKEND: &'static str = "UV_LEGACY_TAR_BACKEND";
 
     /// Sets the maximum number of in-flight concurrent downloads that uv will
