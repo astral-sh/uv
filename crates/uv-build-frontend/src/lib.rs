@@ -391,7 +391,7 @@ impl SourceBuild {
 
         // Set up the build environment. If build isolation is disabled, we assume the build
         // environment is already set up.
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        let resolved_requirements = if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
             let dependency_sources = if extra_build_dependencies.is_empty() {
@@ -413,9 +413,11 @@ impl SourceBuild {
                 .install(&resolved_requirements, &venv, build_stack)
                 .await
                 .map_err(|err| Error::RequirementsInstall(dependency_sources, err.into()))?;
+            Some(resolved_requirements)
         } else {
             debug!("Proceeding without build isolation");
-        }
+            None
+        };
 
         // Figure out what the modified path should be, and remove the PATH variable from the
         // environment variables if it's there.
@@ -451,7 +453,7 @@ impl SourceBuild {
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already set up.
         let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        if let Some(resolved_requirements) = resolved_requirements {
             debug!("Creating PEP 517 build environment");
 
             let extra_requires = get_pep517_build_requirements(
@@ -493,7 +495,11 @@ impl SourceBuild {
                     .chain(extra_requires)
                     .collect();
                 let resolution = build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(
+                        &requirements,
+                        Some(resolved_requirements.hasher()),
+                        build_stack,
+                    )
                     .await
                     .map_err(|err| {
                         Error::RequirementsResolve(
@@ -627,7 +633,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, None, build_stack)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -652,7 +658,7 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(&requirements, None, build_stack)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },

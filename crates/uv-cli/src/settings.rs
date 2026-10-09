@@ -46,7 +46,7 @@ use uv_settings::{
     IndexOptions, LockCheck, LockedFlag, LockedSource, MalwareCheckSettings, Options, PipOptions,
     PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors, PythonListKinds,
     ResolverInstallerOptions, ResolverInstallerSchema, ResolverInstallerSettings, ResolverOptions,
-    ResolverSettings, resolve_prerelease,
+    ResolverSettings, resolve_build_hash_checking, resolve_prerelease,
 };
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
@@ -3347,6 +3347,7 @@ pub struct PipCompileSettings {
     pub overrides: Vec<RequirementsInput>,
     pub excludes: Vec<RequirementsInput>,
     pub build_constraints: Vec<RequirementsInput>,
+    pub build_hash_checking: HashCheckingMode,
     pub constraints_from_workspace: Vec<Requirement>,
     pub overrides_from_workspace: Vec<Override<Requirement>>,
     pub excludes_from_workspace: Vec<ExcludeDependency>,
@@ -3377,6 +3378,8 @@ impl PipCompileSettings {
             extra,
             all_extras,
             no_all_extras,
+            require_build_hashes,
+            no_require_build_hashes,
             refresh,
             no_deps,
             deps,
@@ -3497,6 +3500,15 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_pip_build_hash_checking(
+                flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?,
+                filesystem.as_ref(),
+                &environment,
+            ),
             overrides: overrides
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -3569,6 +3581,7 @@ pub struct PipSyncSettings {
     pub src_file: Vec<RequirementsInput>,
     pub constraints: Vec<RequirementsInput>,
     pub build_constraints: Vec<RequirementsInput>,
+    pub build_hash_checking: HashCheckingMode,
     pub dry_run: DryRun,
     pub output_format: PipInstallFormat,
     pub refresh: Refresh,
@@ -3586,6 +3599,8 @@ impl PipSyncSettings {
             src_file,
             constraints,
             build_constraints,
+            require_build_hashes,
+            no_require_build_hashes,
             extra,
             all_extras,
             no_all_extras,
@@ -3633,6 +3648,15 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_pip_build_hash_checking(
+                flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?,
+                filesystem.as_ref(),
+                &environment,
+            ),
             dry_run: if check {
                 DryRun::Check
             } else {
@@ -3688,6 +3712,7 @@ pub struct PipInstallSettings {
     pub overrides: Vec<RequirementsInput>,
     pub excludes: Vec<RequirementsInput>,
     pub build_constraints: Vec<RequirementsInput>,
+    pub build_hash_checking: HashCheckingMode,
     pub dry_run: DryRun,
     pub output_format: PipInstallFormat,
     pub constraints_from_workspace: Vec<Requirement>,
@@ -3719,6 +3744,8 @@ impl PipInstallSettings {
                     excludes,
                     build_constraints,
                 },
+            require_build_hashes,
+            no_require_build_hashes,
             extra,
             all_extras,
             no_all_extras,
@@ -3823,6 +3850,15 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_pip_build_hash_checking(
+                flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?,
+                filesystem.as_ref(),
+                &environment,
+            ),
             dry_run: if check {
                 DryRun::Check
             } else {
@@ -4403,6 +4439,26 @@ impl VenvSettings {
     }
 }
 
+/// Resolve the `uv pip` build-hash policy from CLI, environment, and configuration settings.
+fn resolve_pip_build_hash_checking(
+    require_build_hashes: Option<bool>,
+    filesystem: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> HashCheckingMode {
+    let configured = filesystem.and_then(|filesystem| {
+        filesystem
+            .pip
+            .as_ref()
+            .and_then(|pip| pip.require_build_hashes)
+            .or(filesystem.top_level.require_build_hashes)
+    });
+    resolve_build_hash_checking(
+        require_build_hashes
+            .or(environment.require_build_hashes)
+            .or(configured),
+    )
+}
+
 /// Return the indexes from the effective filesystem configuration.
 fn configured_indexes(filesystem: Option<&FilesystemOptions>) -> &[Index] {
     filesystem
@@ -4428,6 +4484,9 @@ fn combine_resolver_settings(
     filesystem: Option<FilesystemOptions>,
     environment: &EnvironmentOptions,
 ) -> ResolverSettings {
+    args.require_build_hashes = args
+        .require_build_hashes
+        .or(environment.require_build_hashes);
     args.no_binary_package = args
         .no_binary_package
         .or(environment.no_binary_package.clone());
@@ -4500,6 +4559,9 @@ fn resolver_installer_options_with_environment(
     mut options: ResolverInstallerOptions,
     environment: &EnvironmentOptions,
 ) -> ResolverInstallerOptions {
+    options.require_build_hashes = options
+        .require_build_hashes
+        .or(environment.require_build_hashes);
     options.no_binary_package = options
         .no_binary_package
         .or(environment.no_binary_package.clone());
@@ -4605,6 +4667,7 @@ impl PipSettings {
             no_binary,
             only_binary,
             no_build_isolation,
+            require_build_hashes: _,
             no_build_isolation_package,
             extra_build_dependencies,
             extra_build_variables,
@@ -4687,6 +4750,7 @@ impl PipSettings {
             no_binary_package: top_level_no_binary_package,
             exclude_newer_package: top_level_exclude_newer_package,
             torch_backend: top_level_torch_backend,
+            require_build_hashes: _,
         } = top_level;
 
         // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
@@ -5170,6 +5234,8 @@ mod tests {
                     index_strategy: None,
                     keyring_provider: None,
                 },
+                require_build_hashes: false,
+                no_require_build_hashes: false,
             },
             None,
             EnvironmentOptions::new()?,

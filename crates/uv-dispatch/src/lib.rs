@@ -18,7 +18,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, DependencyModifiers, IndexStrategy, NoSources, Reinstall,
+    BuildKind, BuildOptions, Constraints, DependencyModifiers, HashCheckingMode, IndexStrategy,
+    NoSources, Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -40,7 +41,7 @@ use uv_resolver::{
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
+    HashStrategy, HashVerification, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -165,7 +166,8 @@ pub struct BuildDispatch<'a> {
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
-    hasher: &'a HashStrategy,
+    base_hasher: &'a HashStrategy,
+    build_hash_checking: HashCheckingMode,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
@@ -219,7 +221,11 @@ impl<'a> BuildDispatch<'a> {
             extra_build_variables,
             link_mode,
             build_options,
-            hasher,
+            base_hasher: hasher,
+            build_hash_checking: match hasher.verification() {
+                HashVerification::Required(_) => HashCheckingMode::Require,
+                HashVerification::None | HashVerification::IfPresent(_) => HashCheckingMode::Verify,
+            },
             exclude_newer,
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
@@ -238,7 +244,7 @@ impl<'a> BuildDispatch<'a> {
     #[must_use]
     pub fn fork<'fork>(&'fork self, hasher: &'fork HashStrategy) -> BuildDispatch<'fork> {
         BuildDispatch {
-            hasher,
+            base_hasher: hasher,
             shared_state: SharedState {
                 build_arena: BuildArena::default(),
                 ..self.shared_state.fork()
@@ -263,6 +269,19 @@ impl<'a> BuildDispatch<'a> {
             .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
             .collect();
         self
+    }
+
+    /// Set the hash-checking mode for build dependencies.
+    ///
+    /// When hashes are required, hashes from backend-generated requirements are not trusted.
+    #[must_use]
+    pub fn with_build_hash_checking(mut self, mode: HashCheckingMode) -> Self {
+        self.build_hash_checking = mode;
+        self
+    }
+
+    fn require_build_hashes(&self) -> bool {
+        self.build_hash_checking.is_require()
     }
 }
 
@@ -337,6 +356,7 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
+        hash_override: Option<&'data HashStrategy>,
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
@@ -344,16 +364,26 @@ impl BuildContext for BuildDispatch<'_> {
         let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
 
+        let active_requirements = requirements.iter().filter(|requirement| {
+            requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
+        });
+        let previous_hasher = hash_override;
+        let hasher = match previous_hasher {
+            Some(hasher) if self.require_build_hashes() => hasher
+                .clone()
+                .augment_with_metadata_requirements(active_requirements),
+            previous_hasher => previous_hasher
+                .unwrap_or(self.base_hasher)
+                .clone()
+                .augment_with_requirements(active_requirements),
+        }
+        .map_err(uv_requirements::Error::from)?;
+
         // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
         // member that depends on another workspace member) are known before the resolver runs
         // its URL allow-list check. This mirrors what the project resolver does in
         // `uv_requirements::LookaheadResolver` and prevents a `DisallowedUrl` error when one
         // `build-system.requires` entry pulls in another URL dependency.
-        let hasher = self
-            .hasher
-            .clone()
-            .augment_with_requirements(requirements.iter())
-            .map_err(uv_requirements::Error::from)?;
         let modifiers = DependencyModifiers::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,

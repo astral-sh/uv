@@ -633,6 +633,8 @@ pub(crate) fn resolver_options(
         no_binary,
         binary,
         no_binary_package,
+        require_build_hashes,
+        no_require_build_hashes,
     } = build_args;
 
     ResolverOptions {
@@ -664,6 +666,11 @@ pub(crate) fn resolver_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,
@@ -701,6 +708,8 @@ pub(crate) fn upgrade_options(
     let UpgradeArgs {
         packages,
         exclude,
+        require_build_hashes,
+        no_require_build_hashes,
         index_args,
         registry_client:
             RegistryClientArgs {
@@ -713,6 +722,11 @@ pub(crate) fn upgrade_options(
         indexes: index_args.resolve(configured_indexes)?,
         index_strategy,
         keyring_provider,
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         ..ResolverOptions::default()
     }
     .relative_to(&env::current_dir()?)?;
@@ -786,6 +800,8 @@ pub(crate) fn resolver_installer_options(
         no_binary,
         binary,
         no_binary_package,
+        require_build_hashes,
+        no_require_build_hashes,
     } = build_args;
 
     ResolverInstallerOptions {
@@ -821,6 +837,11 @@ pub(crate) fn resolver_installer_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,

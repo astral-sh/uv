@@ -5,7 +5,7 @@ use itertools::Itertools;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_command_support::Printer;
-use uv_configuration::{Concurrency, Constraints, GitLfsSetting, HashCheckingMode};
+use uv_configuration::{Concurrency, Constraints, GitLfsSetting};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
@@ -68,6 +68,7 @@ pub(super) async fn resolve_names(
         keyring_provider,
         link_mode,
         build_isolation,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         prerelease: _,
@@ -124,7 +125,7 @@ pub(super) async fn resolve_names(
     let build_hasher = HashStrategy::from_constraints(
         build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        HashCheckingMode::Verify,
+        *build_hash_checking,
     )
     .map_err(uv_requirements::Error::from)?;
     let flat_index = FlatIndex::load(&client, cache, index_locations)
