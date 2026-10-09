@@ -17370,7 +17370,7 @@ async fn sync_deprecated_zstd_wheel() -> Result<()> {
     // Only the ordinary wheel is available.
     Mock::given(method("GET"))
         .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(context.read_bytes(&wheel_path)))
         .expect(1)
         .mount(&server)
         .await;
@@ -17509,7 +17509,7 @@ async fn sync_non_pep625_sdist_with_compatible_wheel() -> Result<()> {
 
     Mock::given(method("GET"))
         .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(context.read_bytes(&wheel_path)))
         .mount(&server)
         .await;
 
@@ -19541,11 +19541,11 @@ async fn project_build_hashes_static_url_dynamic_requirements() -> Result<()> {
     let wheel = context
         .temp_dir
         .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
-    let hash = hex::encode(Sha256::digest(fs_err::read(wheel.path())?));
+    let hash = hex::encode(Sha256::digest(context.read_bytes(wheel.path())));
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/build_dependency-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(wheel.path())?))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(context.read_bytes(wheel.path())))
         .mount(&server)
         .await;
     let url = format!("{}/build_dependency-1.0.0-py3-none-any.whl", server.uri());
@@ -19558,11 +19558,13 @@ async fn project_build_hashes_static_url_dynamic_requirements() -> Result<()> {
             ]
         "#, "0".repeat(64)},
     );
-    let dynamic_hash = hex::encode(Sha256::digest(fs_err::read(
-        context
-            .temp_dir
-            .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl"),
-    )?));
+    let dynamic_hash = hex::encode(Sha256::digest(
+        context.read_bytes(
+            context
+                .temp_dir
+                .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl"),
+        ),
+    ));
     context
         .temp_dir
         .child("pyproject.toml")
@@ -19678,7 +19680,7 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
     let child = context
         .temp_dir
         .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
-    let child_hash = hex::encode(Sha256::digest(fs_err::read(child.path())?));
+    let child_hash = hex::encode(Sha256::digest(context.read_bytes(child.path())));
     let child_url = Url::from_file_path(child.path()).expect("absolute wheel path");
     let (filename, wheel) = generate_wheel(
         &"build-dependency".parse()?,

@@ -2096,12 +2096,16 @@ async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
     let validation_wheel_url = validation_server.file_url(validation_filename);
 
     ok_server
-        .serve(ok_filename, &fs_err::read(links.join(ok_filename))?, None)
+        .serve(
+            ok_filename,
+            &context.read_bytes(links.join(ok_filename)),
+            None,
+        )
         .await;
     validation_server
         .serve(
             validation_filename,
-            &fs_err::read(links.join(validation_filename))?,
+            &context.read_bytes(links.join(validation_filename)),
             None,
         )
         .await;
@@ -4060,7 +4064,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     let dynamic_wheel = context
         .temp_dir
         .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
-    let dynamic_hash = hex::encode(Sha256::digest(fs_err::read(dynamic_wheel.path())?));
+    let dynamic_hash = hex::encode(Sha256::digest(context.read_bytes(dynamic_wheel.path())));
     let context = context.with_filter((dynamic_hash.clone(), "[DYNAMIC_HASH]"));
     let dynamic_url =
         Url::from_file_path(dynamic_wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;

@@ -5230,7 +5230,7 @@ fn generate_hashes_registry_sha512_source() -> Result<()> {
             .join("test/links/basic_package-0.1.0.tar.gz"),
         &sdist,
     )?;
-    let archive = fs_err::read(&sdist)?;
+    let archive = context.read_bytes(&sdist);
     let sha256 = hex::encode(Sha256::digest(&archive));
     let sha512 = hex::encode(Sha512::digest(&archive));
     package.child("index.html").write_str(&format!(

@@ -890,12 +890,12 @@ async fn tool_audit_persisted_index_and_project_status() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_tool_dirs();
     let server = MockServer::start().await;
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
-    let wheel = fs_err::read(
+    let wheel = context.read_bytes(
         context
             .workspace_root
             .join("test/links")
             .join(wheel_filename),
-    )?;
+    );
 
     let simple_index = json!({
         "meta": { "api-version": "1.1" },
