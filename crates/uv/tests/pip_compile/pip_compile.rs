@@ -19682,7 +19682,7 @@ fn compile_missing_python_version_default_fallback() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    warning: The requested Python version 3.99.99 is not available; 3.14.[LATEST] will be used to build dependencies instead.
+    warning: The requested Python version 3.99.99 is not available; 3.15.[LATEST] will be used to build dependencies instead.
     Resolved 3 packages in [TIME]
     ");
 

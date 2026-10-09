@@ -17687,7 +17687,7 @@ fn install_missing_python_with_target() {
         .arg("--target").arg(target_dir.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.14.[LATEST]
+    Using CPython 3.15.[LATEST]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
