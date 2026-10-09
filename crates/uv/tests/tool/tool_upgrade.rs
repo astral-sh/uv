@@ -549,7 +549,6 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     context
@@ -584,7 +583,7 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -970,7 +969,6 @@ fn tool_upgrade_no_binary_package_env_var() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1004,10 +1002,8 @@ fn tool_upgrade_no_binary_package_env_var() {
     Installed 2 executables: black, blackd
     ");
 
-    let receipt: toml::Value = toml::from_str(
-        &fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(),
-    )
-    .unwrap();
+    let receipt: toml::Value =
+        toml::from_str(&context.read("tools/black/uv-receipt.toml")).unwrap();
     assert_snapshot!(
         receipt["tool"]["options"]["no-binary-package"].to_string(),
         @r#"["iniconfig"]"#
@@ -1203,7 +1199,6 @@ fn tool_upgrade_python() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1241,7 +1236,7 @@ fn tool_upgrade_python() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
+        let content = context.read("tools/babel/pyvenv.cfg");
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
@@ -1255,7 +1250,6 @@ fn tool_upgrade_python_with_all() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1312,7 +1306,7 @@ fn tool_upgrade_python_with_all() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
+        let content = context.read("tools/babel/pyvenv.cfg");
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
@@ -1320,7 +1314,7 @@ fn tool_upgrade_python_with_all() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let content = fs_err::read_to_string(tool_dir.join("python-dotenv").join("pyvenv.cfg")).unwrap();
+        let content = context.read("tools/python-dotenv/pyvenv.cfg");
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
@@ -1460,7 +1454,6 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])?;
     let credentials = format!(
@@ -1490,11 +1483,7 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         .assert()
         .success();
 
-    let receipt = fs_err::read_to_string(
-        tool_dir
-            .join("executable-application")
-            .join("uv-receipt.toml"),
-    )?;
+    let receipt = context.read("tools/executable-application/uv-receipt.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -1543,7 +1532,6 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
         .with_filtered_exe_suffix()
         .with_tool_dirs()
         .with_filtered_http_retries();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `executable-application` from an authenticated index using `--index`.
@@ -1567,7 +1555,7 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     }, {
         // Verify the receipt has `authenticate = "always"` (promoted from "auto" because the
         // original URL had embedded credentials).
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/executable-application/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -1795,7 +1783,6 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let local_package = context.temp_dir.child("simple-launcher");
     local_package.create_dir_all()?;
@@ -1838,7 +1825,7 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
         .assert()
         .success();
 
-    let pyvenv = fs_err::read_to_string(tool_dir.join("simple-launcher").join("pyvenv.cfg"))?;
+    let pyvenv = context.read("tools/simple-launcher/pyvenv.cfg");
     let Some(version_info) = pyvenv
         .lines()
         .find(|line| line.starts_with("version_info = "))

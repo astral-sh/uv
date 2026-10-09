@@ -159,7 +159,7 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    let contents = fs_err::read_to_string(sysconfig.path())?;
+    let contents = context.read(sysconfig.path());
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(contents, @r#"
         # system configuration generated and used by the sysconfig module
@@ -3618,7 +3618,7 @@ fn python_install_build_version() {
         platform_key_from_env().unwrap()
     ));
     let build_file_path = cpython_dir.join("BUILD");
-    let build_content = fs_err::read_to_string(&build_file_path).unwrap();
+    let build_content = context.read(&build_file_path);
     assert_eq!(build_content, "20240814");
 
     // We should find the build
@@ -3685,7 +3685,7 @@ fn python_install_build_version_pypy() {
         .child("managed")
         .child(format!("pypy-3.10.16-{}", platform_key_from_env().unwrap()));
     let build_file_path = pypy_dir.join("BUILD");
-    let build_content = fs_err::read_to_string(&build_file_path).unwrap();
+    let build_content = context.read(&build_file_path);
     assert_eq!(build_content, "7.3.19");
 
     // We should find the build
