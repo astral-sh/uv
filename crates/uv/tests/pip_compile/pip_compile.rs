@@ -36,6 +36,8 @@ use uv_pep508::Requirement;
 use uv_static::EnvVars;
 
 use uv_test::archive::{generate_source_archive, write_tar_gz};
+#[cfg(not(windows))]
+use uv_test::assert_link_target;
 #[cfg(feature = "test-universal")]
 use uv_test::diff_snapshot;
 use uv_test::package_server::PackageServer;
@@ -15451,11 +15453,8 @@ fn symlink() -> Result<()> {
     "
     );
 
-    // The symlink should still be a symlink.
-    assert!(symlink.path().symlink_metadata()?.file_type().is_symlink());
-
-    // The destination of the symlink should be the same as the output file.
-    assert_eq!(symlink.path().read_link()?, requirements_txt.path());
+    // The output path still links to the requested file.
+    assert_link_target(symlink, requirements_txt);
 
     Ok(())
 }

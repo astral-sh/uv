@@ -10,7 +10,7 @@ mod path;
 pub mod pypi_proxy;
 mod vendor;
 
-pub use path::assert_path_missing;
+pub use path::{assert_link_target, assert_path_missing};
 
 use std::borrow::BorrowMut;
 use std::ffi::OsString;

@@ -19,7 +19,7 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
-use uv_test::{site_packages_path, uv_snapshot};
+use uv_test::{assert_link_target, site_packages_path, uv_snapshot};
 
 #[test]
 fn create_venv() {
@@ -556,10 +556,7 @@ fn create_centralized_project_environment() -> Result<()> {
         .arg("centralized-project-envs")
         .assert()
         .success();
-    assert_eq!(
-        target,
-        fs_err::read_link(context.temp_dir.child(".venv").path())?
-    );
+    assert_link_target(context.temp_dir.child(".venv"), &target);
     assert!(marker.exists());
 
     // Preserve an existing centralized environment with `--no-clear`.
@@ -577,10 +574,7 @@ fn create_centralized_project_environment() -> Result<()> {
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "#);
 
-    assert_eq!(
-        target,
-        fs_err::read_link(context.temp_dir.child(".venv").path())?
-    );
+    assert_link_target(context.temp_dir.child(".venv"), &target);
     assert!(marker.exists());
 
     let environment = context.temp_dir.child(".venv");
@@ -589,7 +583,7 @@ fn create_centralized_project_environment() -> Result<()> {
 
     // Without the preview, `--allow-existing` operates on the environment through the link.
     context.venv().arg("--allow-existing").assert().success();
-    assert_eq!(target, fs_err::read_link(environment.path())?);
+    assert_link_target(&environment, &target);
     assert!(cache_marker.is_file());
 
     // Without the preview, `.venv` is replaced locally without clearing its cached target.
@@ -609,7 +603,7 @@ fn create_centralized_project_environment() -> Result<()> {
         .assert()
         .success();
 
-    assert_eq!(target, fs_err::read_link(environment.path())?);
+    assert_link_target(&environment, &target);
     assert!(!local_marker.exists());
     assert!(cache_marker.is_file());
 
@@ -624,7 +618,7 @@ fn create_centralized_project_environment() -> Result<()> {
     Activate with: source .venv/[BIN]/activate
     "#);
 
-    assert_eq!(target, fs_err::read_link(environment.path())?);
+    assert_link_target(&environment, &target);
     assert!(!cache_marker.exists());
     Ok(())
 }
@@ -812,10 +806,7 @@ fn create_centralized_project_environment_with_seed_packages() -> Result<()> {
         .assert()
         .success();
 
-    assert_eq!(
-        target,
-        fs_err::read_link(context.temp_dir.child(".venv").path())?
-    );
+    assert_link_target(context.temp_dir.child(".venv"), &target);
     assert!(marker.is_file());
     Ok(())
 }
