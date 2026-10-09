@@ -7,8 +7,37 @@ env:
   UV_LOCKED: 1
 
 jobs:
-  review:
-    name: "code quality review"
+  security:
+    if: github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: depot-ubuntu-24.04-16
+    environment: automations
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.review.outputs.result }}
+    steps:
+      - name: Review pull request
+        id: review
+        uses: astral-sh/github-actions/security-pr-review@4bbab1c799d223c073f70ae98f0efe0d02595232
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          uv-version: "0.12.13"
+          uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          setup-command: |
+            export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-review-tools"
+            uv sync --locked --only-dev
+            echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
+
+  code-quality:
+    name: "code quality"
     if: github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: depot-ubuntu-24.04-16
     environment: automations
@@ -111,8 +140,8 @@ jobs:
           if-no-files-found: warn
 
   prepare:
-    needs: review
-    if: needs.review.outputs.result != ''
+    needs: [security, code-quality]
+    if: ${{ !cancelled() && (needs.security.result != 'skipped' || needs.code-quality.result != 'skipped') }}
     runs-on: github-ubuntu-24.04-x86_64-4
     timeout-minutes: 5
     permissions:
@@ -124,7 +153,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: astral-sh/github-actions
-          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          ref: 4bbab1c799d223c073f70ae98f0efe0d02595232
           sparse-checkout: pull-request-review
           persist-credentials: false
 
@@ -134,16 +163,20 @@ jobs:
           version: "0.12.13"
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
 
-      - name: "Prepare review findings"
+      - name: "Merge and prepare review findings"
         id: comments
         run: bash pull-request-review/scripts/prepare.sh
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REVIEW_RESULT: ${{ needs.review.outputs.result }}
+          REVIEW_RESULTS: >-
+            {
+              "Security": ${{ toJSON(needs.security) }},
+              "Code quality": ${{ toJSON(needs.code-quality) }}
+            }
 
   report:
     needs: prepare
-    if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null }}
     runs-on: github-ubuntu-24.04-x86_64-4
     environment: automations
     timeout-minutes: 5
@@ -155,7 +188,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: astral-sh/github-actions
-          ref: 3c57a5dba8ad854a97e8b9fbf454286a7574e677
+          ref: 4bbab1c799d223c073f70ae98f0efe0d02595232
           sparse-checkout: pull-request-review
           persist-credentials: false
 
@@ -165,7 +198,7 @@ jobs:
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv-dev
+          repository: ${{ github.repository }}
           permissions: |
             pull_requests: write
 
