@@ -29,7 +29,7 @@ There are no breaking changes to the configuration of the [uv build backend](htt
 
   Previously, uv ignored `--require-hashes` in constraints files included with `-c` from a requirements file. Now, uv honors the directive and requires hashes for all requirements in the installation. Installs that previously succeeded can now fail if a requirement is missing a hash.
 
-  Add the missing hashes to your requirements, or remove the `--require-hashes` directive from the included constraints file if hash checking is not intended.
+  You cannot opt out while the directive is present. Add the missing hashes to your requirements, or remove the `--require-hashes` directive from the included constraints file if hash checking is not intended.
 
 - **Prefer native Python on Windows ARM64** ([#22100](https://github.com/astral-sh/uv/pull/22100))
 
@@ -45,7 +45,7 @@ There are no breaking changes to the configuration of the [uv build backend](htt
 
   Previously, uv silently ignored editable (`-e`) requirements in constraints files included with `-c` from a requirements file. Now, uv rejects these requirements with an error, matching [pip's behavior](https://pip.pypa.io/en/stable/user_guide/#constraints-files).
 
-  Move editable requirements to a requirements file passed with `-r`, or pass them directly with `--editable`, instead of including them in a constraints file.
+  You cannot opt out of this behavior. Move editable requirements to a requirements file passed with `-r`, or pass them directly with `--editable`, instead of including them in a constraints file.
 
 - **Omit the distutils startup patch on Python 3.10 and later** ([#22096](https://github.com/astral-sh/uv/pull/22096))
 
@@ -59,7 +59,7 @@ There are no breaking changes to the configuration of the [uv build backend](htt
 
   Previously, uv split values passed to `--constraint`, `--override`, `--exclude`, and `--build-constraint` on spaces, even when quoted. Now, each value is treated as a single path, allowing file paths containing spaces.
 
-  Repeat the option to provide multiple files. For example, replace `-c "a.txt b.txt"` with `-c a.txt -c b.txt`.
+  You cannot opt out of this behavior. Repeat the option to provide multiple files. For example, replace `-c "a.txt b.txt"` with `-c a.txt -c b.txt`.
 
   Space-separated lists in `UV_CONSTRAINT`, `UV_OVERRIDE`, `UV_EXCLUDE`, and `UV_BUILD_CONSTRAINT` remain supported.
 
