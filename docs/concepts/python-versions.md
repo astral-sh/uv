@@ -487,6 +487,10 @@ It's possible to use x86_64 uv on aarch64, and also possible to use an x86_64 Py
 aarch64. Either uv binary can use either Python interpreter, but a Python interpreter needs packages
 for its architecture, either all x86_64 or all aarch64.
 
+To force use of emulated `x86_64` Python, set
+[`UV_PYTHON_ARCH`](../reference/environment.md#uv_python_arch) to `x86_64` or
+[request an explicit architecture](#requesting-a-version), e.g., `cpython-3.14-windows-x86_64`.
+
 ## Registration in the Windows registry
 
 On Windows, installation of managed Python versions will register them with the Windows registry as
