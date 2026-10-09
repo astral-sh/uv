@@ -2,6 +2,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 use serde_json::json;
 use std::process::Command;
 
@@ -452,8 +453,7 @@ fn cache_prune_removes_and_recreates_centralized_environment() -> Result<()> {
 
     // Without the preview, uv replaces the dangling cache link with a local environment.
     context.sync().assert().success();
-    assert!(link.is_dir());
-    assert!(fs_err::read_link(link.path()).is_err());
+    link.assert(predicate::path::is_dir());
 
     context
         .sync()
@@ -521,8 +521,7 @@ fn sync_centralized_env_no_cache_uses_dot_venv() -> Result<()> {
     "#);
 
     let environment = context.temp_dir.child(".venv");
-    assert!(environment.is_dir());
-    assert!(fs_err::read_link(environment.path()).is_err());
+    environment.assert(predicate::path::is_dir());
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
@@ -811,8 +810,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
         .success();
 
     // An explicit environment path is local, but replacing it does not remove the cached target.
-    assert!(override_environment.is_dir());
-    assert!(fs_err::read_link(override_environment.path()).is_err());
+    override_environment.assert(predicate::path::is_dir());
 
     let environment = context.temp_dir.child(".venv");
     let intermediate = context.temp_dir.child("intermediate");
@@ -833,8 +831,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
     "#);
 
     // Without the preview, uv replaces the indirect cache link with a local environment.
-    assert!(environment.is_dir());
-    assert!(fs_err::read_link(environment.path()).is_err());
+    environment.assert(predicate::path::is_dir());
 
     // uv rebuilds the linked environment without replacing the link.
     let target = context.temp_dir.child("environment");

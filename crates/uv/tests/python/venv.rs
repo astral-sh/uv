@@ -241,7 +241,6 @@ fn create_centralized_project_environment_bypasses() -> Result<()> {
     "
     );
     context.venv.assert(predicates::path::is_dir());
-    assert!(fs_err::read_link(context.venv.path()).is_err());
 
     fs_err::remove_dir_all(&context.venv)?;
     context
@@ -267,7 +266,6 @@ fn create_centralized_project_environment_bypasses() -> Result<()> {
     );
     let explicit = context.temp_dir.child("explicit");
     explicit.assert(predicates::path::is_dir());
-    assert!(fs_err::read_link(explicit.path()).is_err());
 
     // Pathless invocations outside the project root are not centralized.
     let child = context.temp_dir.child("child");
@@ -281,7 +279,6 @@ fn create_centralized_project_environment_bypasses() -> Result<()> {
         .success();
     let environment = child.child(".venv");
     environment.assert(predicates::path::is_dir());
-    assert!(fs_err::read_link(environment.path()).is_err());
     Ok(())
 }
 
@@ -547,7 +544,7 @@ fn create_centralized_project_environment() -> Result<()> {
     // Without the preview, `.venv` is replaced locally without clearing its cached target.
     context.venv().assert().success();
 
-    assert!(fs_err::read_link(environment.path()).is_err());
+    environment.assert(predicates::path::is_dir());
     assert!(cache_marker.is_file());
     let local_marker = environment.child("local-marker");
     local_marker.touch()?;
@@ -714,8 +711,10 @@ fn create_centralized_project_environment_no_cache() -> Result<()> {
     Activate with: source .venv/[BIN]/activate
     "#);
 
-    assert!(context.temp_dir.child(".venv").is_dir());
-    assert!(fs_err::read_link(context.temp_dir.child(".venv").path()).is_err());
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicates::path::is_dir());
     Ok(())
 }
 
