@@ -37,6 +37,9 @@ jobs:
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
       - run: uv run --only-group check ruff check .
 
+      - name: "Check release changelog updates"
+        run: uv run --only-group check python -m unittest discover -s scripts/tests
+
   ty:
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}

@@ -55,6 +55,9 @@ jobs:
           git config user.name "astral-automations-bot[bot]"
           git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
 
+      - name: "Save authored release notes"
+        run: cp CHANGELOG.md "$RUNNER_TEMP/changelog-before-release.md"
+
       - name: "Bump version"
         run: |
           if [ -n "$INPUT_VERSION" ]; then
@@ -98,7 +101,8 @@ jobs:
         run: |
           uv run scripts/update-latest-changelog-section.py \
             CHANGELOG.md \
-            "$RUNNER_TEMP/changelog-section.md"
+            "$RUNNER_TEMP/changelog-section.md" \
+            --preserve-breaking-from "$RUNNER_TEMP/changelog-before-release.md"
 
       - name: "Commit changelog rewrite"
         run: |
