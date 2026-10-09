@@ -7,7 +7,13 @@
 
 Released on 2026-10-09.
 
-If your `[build-system]` table includes an upper bound on `uv_build`, update it to allow `uv_build` 0.13, e.g., `uv_build>=0.13.0,<0.14`.
+uv 0.13.0 makes Python 3.15 the default stable Python version. We've also included several breaking changes to improve correctness, performance, and compatibility, described below.
+
+**We expect most users to be able to upgrade without making changes.**
+
+While not a breaking change, this release also updates the format of many of uv's cache entries to improve performance. **uv may download or rebuild dependencies after upgrading**, because some cached entries from earlier versions cannot be reused. Multiple versions of uv can still safely share the same cache directory.
+
+There are no breaking changes to the configuration of the [uv build backend](https://docs.astral.sh/uv/concepts/build-backend/). If your `[build-system]` table includes an upper bound on `uv_build`, update it to allow `uv_build` 0.13, e.g., `uv_build>=0.13.0,<0.14`.
 
 ### Breaking changes
 
@@ -81,8 +87,6 @@ If your `[build-system]` table includes an upper bound on `uv_build`, update it 
 - Reduce allocations when reading cached HTTP responses ([#22136](https://github.com/astral-sh/uv/pull/22136))
 - Reduce cache storage for HTTP policies and package records ([#22135](https://github.com/astral-sh/uv/pull/22135), [#22133](https://github.com/astral-sh/uv/pull/22133))
 - Reduce allocations for cached source distribution revisions ([#22131](https://github.com/astral-sh/uv/pull/22131))
-
-These improvements update several cache bucket versions. uv may download or rebuild dependencies again after upgrading.
 
 ### Bug fixes
 
