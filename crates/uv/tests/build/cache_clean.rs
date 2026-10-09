@@ -1,9 +1,15 @@
 #[cfg(target_os = "macos")]
 use std::fs::Permissions;
+#[cfg(unix)]
+use std::io::{BufRead, BufReader, Read};
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::process::Stdio;
 
 use anyhow::Result;
+#[cfg(unix)]
+use anyhow::{Context, ensure};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
@@ -42,6 +48,97 @@ fn clean_all() -> Result<()> {
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
     ");
+
+    #[cfg(unix)]
+    assert!(!context.cache_dir.exists());
+
+    Ok(())
+}
+
+/// A process waiting on a deleted cache lock must initialize and lock the replacement cache.
+#[cfg(unix)]
+#[tokio::test]
+async fn clean_all_pending_reader() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let cache = Cache::from_path(context.cache_dir.path())
+        .with_exclusive_lock()
+        .await?;
+
+    let venv = context.temp_dir.child("after-clean");
+    let mut reader = context
+        .venv()
+        .arg(venv.path())
+        .arg("--verbose")
+        .env(EnvVars::UV_LOCK_TIMEOUT, "10")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let mut stderr = BufReader::new(reader.stderr.take().context("venv stderr was not piped")?);
+    let mut output = String::new();
+
+    // The contention log proves this uv process has opened the file that cleanup will delete.
+    loop {
+        let start = output.len();
+        ensure!(
+            stderr.read_line(&mut output)? != 0,
+            "venv exited before waiting on the cache lock: {output}"
+        );
+        if output[start..].contains("Waiting to acquire shared lock") {
+            break;
+        }
+    }
+
+    cache.clear(Box::new(SilentCleanReporter))?;
+    stderr.read_to_string(&mut output)?;
+    ensure!(
+        reader.wait()?.success(),
+        "venv failed after cleanup: {output}"
+    );
+    assert!(venv.child("pyvenv.cfg").is_file());
+    assert!(context.cache_dir.child(".lock").is_file());
+    assert!(context.cache_dir.child("CACHEDIR.TAG").is_file());
+
+    Ok(())
+}
+
+#[cfg(unix)]
+struct SilentCleanReporter;
+
+#[cfg(unix)]
+impl uv_cache::CleanReporter for SilentCleanReporter {
+    fn on_clean(&self) {}
+
+    fn on_complete(&self) {}
+}
+
+/// Cleanup follows the configured cache root, but never links contained within it.
+#[cfg(unix)]
+#[test]
+fn clean_symlinked_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units();
+    let cache_link = context.temp_dir.child("cache-link");
+    let victim_dir = context.temp_dir.child("victim");
+    victim_dir.child("payload.txt").write_str("payload")?;
+    fs_err::os::unix::fs::symlink(context.cache_dir.path(), cache_link.path())?;
+    fs_err::os::unix::fs::symlink(victim_dir.path(), context.cache_dir.child("escape"))?;
+    let context = context.with_cache_dir(cache_link.path());
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: cache-link
+    Removed [N] files ([SIZE])
+    ");
+
+    assert!(cache_link.path().is_symlink());
+    assert!(context.cache_dir.child(".lock").is_file());
+    assert!(!context.cache_dir.child("escape").is_symlink());
+    assert_eq!(
+        fs_err::read_to_string(victim_dir.child("payload.txt"))?,
+        "payload"
+    );
 
     Ok(())
 }
@@ -304,6 +401,9 @@ async fn clean_force() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
+    #[cfg(unix)]
+    assert!(!context.cache_dir.exists());
+
     // Install a requirement, to re-populate the cache.
     context
         .pip_sync()
@@ -312,9 +412,9 @@ async fn clean_force() -> Result<()> {
         .success();
 
     // When locked, `--force` should proceed without blocking
-    let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
+    let _cache = Cache::from_path(context.cache_dir.path())
         .with_exclusive_lock()
-        .await;
+        .await?;
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -324,6 +424,15 @@ async fn clean_force() -> Result<()> {
     DEBUG Cache is currently in use, proceeding due to `--force`
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
+    ");
+
+    assert!(context.cache_dir.child(".lock").is_file());
+    assert!(!context.cache_dir.child("CACHEDIR.TAG").exists());
+    uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
+    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
 
     Ok(())
@@ -580,7 +689,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed 2 files (0B)
+    Removed 1 file (0B)
     ");
 
     Ok(())
