@@ -269,8 +269,8 @@ jobs:
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
 
-  integration-test-windows-aarch64-implicit:
-    name: "aarch64 windows implicit"
+  integration-test-windows-aarch64-native:
+    name: "aarch64 python on aarch64 windows"
     timeout-minutes: 10
     runs-on: windows-11-arm
 
@@ -313,10 +313,12 @@ jobs:
           ./uv run python -c ""
           ./uv run -p 3.13 python -c ""
 
-  integration-test-windows-aarch64-explicit:
-    name: "aarch64 windows explicit"
+  integration-test-windows-aarch64-emulated:
+    name: "x86-64 python on aarch64 windows"
     timeout-minutes: 10
     runs-on: windows-11-arm
+    env:
+      UV_PYTHON_ARCH: x86_64
 
     steps:
       - name: "Download binary"
@@ -324,13 +326,13 @@ jobs:
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
-      - name: "Install Python via uv (explicitly select x64)"
+      - name: "Install Python via uv (select x64 from environment)"
         run: |
-          ./uv python install -v cpython-3.13-windows-x86_64-none
+          ./uv python install -v 3.13
 
       - name: "Create a virtual environment (stdlib)"
         run: |
-          & (./uv python find cpython-3.13-windows-x86_64-none) -m venv .venv
+          & (./uv python find 3.13) -m venv .venv
 
       - name: "Check version (stdlib)"
         run: |
@@ -338,7 +340,7 @@ jobs:
 
       - name: "Create a virtual environment (uv)"
         run: |
-          ./uv venv -c -p cpython-3.13-windows-x86_64-none --managed-python
+          ./uv venv -c -p 3.13 --managed-python
 
       - name: "Check version (uv)"
         run: |
@@ -355,7 +357,7 @@ jobs:
       - name: "Check uv run"
         run: |
           ./uv run python -c ""
-          ./uv run -p cpython-3.13-windows-x86_64-none python -c ""
+          ./uv run -p 3.13 python -c ""
 
   integration-test-windows-python-install-manager:
     name: "windows python install manager"
