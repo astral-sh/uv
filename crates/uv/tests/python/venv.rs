@@ -1,4 +1,6 @@
-use std::path::{Path, PathBuf};
+#[cfg(all(target_os = "linux", feature = "test-python-managed"))]
+use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
