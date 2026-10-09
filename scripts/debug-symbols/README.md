@@ -682,22 +682,142 @@ general runtime regression or improvement.
 
 ### Debug levels on the current single-codegen-unit release profile
 
-The next comparison uses main revision `238d6ba651d13f0dfddab0cc1826f963cdf21711`, which includes
-the merged [single-codegen-unit release configuration](https://github.com/astral-sh/uv/pull/22303).
-It measures `line-tables-only`, `limited`, and `full` on Linux x86-64, Linux ARM64, macOS ARM64, and
-Windows x86-64. Every level has its own fresh no-debug baseline, with one codegen unit during both
-instrumented PGO compilation and final compilation. All three level comparisons use the same
-experiment commit, lockfile, toolchain, PGO corpus, and resolver benchmark inputs.
+These comparisons use main revision `238d6ba651d13f0dfddab0cc1826f963cdf21711`, including the merged
+[single-codegen-unit release configuration](https://github.com/astral-sh/uv/pull/22303), with
+experiment commit `eb7920ef2a1c1f62d89a3c68f6f494193f5ca093`. All levels use one codegen unit,
+optimization level 3, fat LTO, Rust 1.99.0, LLVM 23.1.1, and Maturin 1.15.0. Each comparison builds
+a fresh no-debug baseline and its selected symbols mode, training an independent PGO profile for
+each. The source, lockfile, toolchain, PGO corpus, and resolver benchmark inputs match across
+levels. These results form a separate set from October 7 because uv's source and dependencies
+changed.
 
 Runner profiles and Cargo job counts match the earlier experiment: Linux uses the 16-vCPU Depot
-profiles with eight Cargo jobs; macOS uses `namespace-profile-macos-15` with four jobs; Windows uses
-`namespace-profile-windows-2022-x86-64-16x32` with four jobs. Production Linux x86-64 builds now use
-the smaller `depot-ubuntu-latest-4` profile. Keeping the experiment runners fixed supports
-comparisons between debug levels; these native build timings are not measurements of production
-manylinux CI.
+profiles with eight Cargo jobs; macOS uses `namespace-profile-macos-15` with four; Windows uses
+`namespace-profile-windows-2022-x86-64-16x32` with four. Production Linux x86-64 now uses the
+smaller `depot-ubuntu-latest-4` profile. These native timings do not reproduce production manylinux
+CI.
 
-Compare build and training times, executable and wheel sizes, separate symbol sizes, and resolver
-medians against each paired baseline. Source lookup, negative lookup, SBOM, wheel-installation,
-static CRT or signature, and smoke checks remain required. Retain this set of reports separately
-from the October 7 measurements because the uv source and dependencies have also changed. Results
-are pending.
+10 of 12 comparisons have completed and been verified. Pending: Windows x86-64 line tables, Windows
+x86-64 full.
+
+Combined instrumented-build, training, and final-build wall times are no debug → symbols, with
+overhead against each run's own baseline. Setup, symbol processing, verification, and uploads are
+excluded:
+
+| Platform       |               Line tables |                    Limited |                        Full |
+| -------------- | ------------------------: | -------------------------: | --------------------------: |
+| Linux x86-64   | 17m 16s → 19m 5s (+10.6%) |   20m 4s → 18m 51s (-6.1%) |  17m 11s → 25m 18s (+47.3%) |
+| Linux ARM64    |  18m 4s → 19m 29s (+7.9%) |  16m 56s → 18m 20s (+8.3%) |   17m 5s → 24m 50s (+45.4%) |
+| macOS ARM64    | 12m 50s → 14m 9s (+10.3%) | 12m 52s → 14m 21s (+11.6%) | 12m 40s → 32m 39s (+157.8%) |
+| Windows x86-64 |                   Pending |  23m 16s → 25m 25s (+9.3%) |                     Pending |
+
+The negative Linux x86-64 limited total is a timing anomaly, not evidence of a reliable speedup. Its
+no-debug instrumented Cargo build took 13m 24s, compared with 11m 22s for limited and 10m 26s for
+the line-table run's no-debug build. The rest of PGO training took about 44s in each limited mode,
+so the extra baseline time is primarily compilation rather than corpus downloads or training. The
+limited final build was slower than its baseline. The observed total is retained; baselines are
+neither pooled nor substituted, and single observations do not establish recurring overhead.
+
+Instrumented compilation and training, using the same no debug → symbols convention:
+
+| Platform       |               Line tables |                    Limited |                       Full |
+| -------------- | ------------------------: | -------------------------: | -------------------------: |
+| Linux x86-64   | 11m 11s → 12m 13s (+9.3%) |   14m 8s → 12m 8s (-14.1%) |  11m 8s → 15m 43s (+41.1%) |
+| Linux ARM64    | 11m 46s → 12m 31s (+6.3%) |   11m 3s → 11m 46s (+6.5%) | 11m 10s → 15m 18s (+37.0%) |
+| macOS ARM64    |   8m 17s → 8m 56s (+7.9%) |     8m 16s → 9m 4s (+9.7%) |  8m 7s → 22m 49s (+181.5%) |
+| Windows x86-64 |                   Pending | 13m 51s → 15m 31s (+12.0%) |                    Pending |
+
+Final compilation and wheel creation:
+
+| Platform       |              Line tables |                  Limited |                      Full |
+| -------------- | -----------------------: | -----------------------: | ------------------------: |
+| Linux x86-64   |  6m 5s → 6m 52s (+12.8%) | 5m 56s → 6m 42s (+13.1%) |   6m 3s → 9m 35s (+58.5%) |
+| Linux ARM64    | 6m 17s → 6m 58s (+10.9%) | 5m 53s → 6m 34s (+11.7%) |  5m 55s → 9m 33s (+61.3%) |
+| macOS ARM64    | 4m 33s → 5m 13s (+14.4%) | 4m 36s → 5m 17s (+15.0%) | 4m 33s → 9m 50s (+115.6%) |
+| Windows x86-64 |                  Pending |  9m 24s → 9m 54s (+5.3%) |                   Pending |
+
+Separate `uv` symbol sizes are uncompressed decimal MB (1 MB = 1,000,000 bytes), excluded from
+shipped wheels. Reports also retain `uvx` and Windows `uvw` companion sizes:
+
+| Platform       | No debug | Line tables | Limited |    Full |
+| -------------- | -------: | ----------: | ------: | ------: |
+| Linux x86-64   |        0 |       169.6 |   266.4 |   582.5 |
+| Linux ARM64    |        0 |       179.3 |   273.8 |   600.3 |
+| macOS ARM64    |        0 |       188.8 |   300.8 |   580.8 |
+| Windows x86-64 |        0 |     Pending |   120.2 | Pending |
+
+Stripped `uv` executable sizes in decimal MB, no debug → symbols, with the paired size change:
+
+| Platform       |               Line tables |                   Limited |                      Full |
+| -------------- | ------------------------: | ------------------------: | ------------------------: |
+| Linux x86-64   | 39.832 → 39.821 (-0.028%) | 39.835 → 39.828 (-0.018%) | 39.823 → 39.623 (-0.502%) |
+| Linux ARM64    | 33.462 → 33.481 (+0.057%) | 33.464 → 33.469 (+0.015%) | 33.474 → 33.739 (+0.790%) |
+| macOS ARM64    | 29.258 → 29.542 (+0.972%) | 29.258 → 29.542 (+0.973%) | 29.258 → 29.543 (+0.973%) |
+| Windows x86-64 |                   Pending | 33.269 → 33.511 (+0.728%) |                   Pending |
+
+Processed wheel sizes in decimal MB, with the same convention:
+
+| Platform       |               Line tables |                   Limited |                      Full |
+| -------------- | ------------------------: | ------------------------: | ------------------------: |
+| Linux x86-64   | 17.509 → 17.489 (-0.112%) | 17.502 → 17.505 (+0.019%) | 17.500 → 17.404 (-0.548%) |
+| Linux ARM64    | 16.442 → 16.460 (+0.104%) | 16.450 → 16.465 (+0.090%) | 16.455 → 16.595 (+0.853%) |
+| macOS ARM64    | 14.944 → 15.079 (+0.905%) | 14.943 → 15.080 (+0.916%) | 14.945 → 15.078 (+0.890%) |
+| Windows x86-64 |                   Pending | 15.763 → 15.884 (+0.767%) |                   Pending |
+
+These comparisons measure shipped artifacts after companion symbols have been separated; they do not
+guarantee identical executable sizes. Reduced Rust debug levels still enable full native C debug
+information through Cargo's boolean `DEBUG` setting in the pinned native build scripts.
+
+Cached resolver benchmark medians below are no debug → symbols in milliseconds. Each mode has twenty
+timed samples after two warmups, with alternating order and identical resolved outputs. Where
+multiple levels have completed on a platform, their requirements hashes, resolution hashes, Python
+version, Rust version, and Maturin version also match. These short workloads do not establish
+overall runtime equivalence or a general regression from small timing differences.
+
+Jupyter:
+
+| Platform       |             Line tables |                 Limited |                    Full |
+| -------------- | ----------------------: | ----------------------: | ----------------------: |
+| Linux x86-64   | 12.882 → 12.977 (+0.7%) | 12.202 → 12.338 (+1.1%) | 13.469 → 13.442 (-0.2%) |
+| Linux ARM64    | 10.694 → 10.414 (-2.6%) |   9.914 → 9.833 (-0.8%) | 10.533 → 10.467 (-0.6%) |
+| macOS ARM64    | 10.849 → 10.948 (+0.9%) | 11.253 → 11.429 (+1.6%) | 10.912 → 11.085 (+1.6%) |
+| Windows x86-64 |                 Pending | 38.194 → 38.520 (+0.9%) |                 Pending |
+
+Trio:
+
+| Platform       |             Line tables |                 Limited |                    Full |
+| -------------- | ----------------------: | ----------------------: | ----------------------: |
+| Linux x86-64   | 10.410 → 10.306 (-1.0%) |  9.804 → 10.014 (+2.1%) | 10.817 → 10.680 (-1.3%) |
+| Linux ARM64    |   8.148 → 8.036 (-1.4%) |   7.643 → 7.586 (-0.7%) |   8.156 → 8.092 (-0.8%) |
+| macOS ARM64    |   8.986 → 9.133 (+1.6%) |   9.111 → 9.201 (+1.0%) |   9.079 → 9.119 (+0.4%) |
+| Windows x86-64 |                 Pending | 22.545 → 22.520 (-0.1%) |                 Pending |
+
+Every completed job passed Rust source lookups for its executables, AWS-LC and jitterentropy source
+lookups, negative lookups with companion files hidden, SBOM retention, wheel installation, and smoke
+checks. Linux build IDs, macOS UUIDs/signatures, and Windows static CRT checks passed where
+applicable. Downloaded archive digests, artifact/job provenance, executable/profile hashes, wheel
+contents, symbol sizes, and benchmark output hashes were verified. Final compiler invocations were
+checked for the requested optimization, debug, CGU, and PGO flags. Instrumented training inherits
+the same Cargo profile environment; its logs do not print individual compiler invocations.
+
+All completed modes reported zero profile mismatches. Missing-profile warning counts are no debug →
+symbols:
+
+| Platform       | Line tables |     Limited |        Full |
+| -------------- | ----------: | ----------: | ----------: |
+| Linux x86-64   |     18 → 18 |     18 → 18 |     18 → 18 |
+| Linux ARM64    |     18 → 18 |     18 → 18 |     18 → 18 |
+| macOS ARM64    | 3565 → 3567 | 3565 → 3555 | 3565 → 3585 |
+| Windows x86-64 |     Pending |     19 → 19 |     Pending |
+
+The Linux counts are confined to `uvx` and the Windows counts to `uvx`/`uvw`. macOS includes uv
+dependency functions, so its profile coverage caveat still applies. Warning counts alone do not
+measure workload coverage. Windows completed jobs report 16 logical CPUs and 34,359,107,584 bytes of
+physical RAM; peak process memory was not measured.
+
+Reports, prepared outputs, provenance, raw timings, and normalized comparisons are retained under
+`target/debug-symbols-experiment/main-2026-10-09/`. Workflow runs:
+
+- [Line tables](https://github.com/astral-sh/uv/actions/runs/37963882186)
+- [Limited](https://github.com/astral-sh/uv/actions/runs/37963887151)
+- [Full](https://github.com/astral-sh/uv/actions/runs/37963892027)
