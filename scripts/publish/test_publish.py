@@ -111,7 +111,7 @@ requires-python = ">=3.12"
 urls = { "github" = "https://github.com/astral-sh/uv" }
 
 [build-system]
-requires = ["uv_build>=0.12,<0.13"]
+requires = ["uv_build>=0.12,<0.14"]
 build-backend = "uv_build"
 """.lstrip()
 
