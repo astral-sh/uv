@@ -72,3 +72,4 @@ FROM base
 COPY --from=xwin-cache ${HOME}/xwin-cache ${HOME}/xwin-cache
 RUN chmod a+rwX ${HOME}/xwin-cache
 COPY --from=cargo-xwin ${HOME}/.venv/bin/cargo-xwin /usr/local/bin/cargo-xwin
+COPY --from=cargo-xwin /usr/local/bin/uv /usr/local/bin/uv

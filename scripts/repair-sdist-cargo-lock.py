@@ -6,8 +6,8 @@ only contains a subset of workspace crates. This makes `cargo build --locked`
 fail because the lock file references packages not present in the sdist.
 
 This script extracts the sdist, runs `cargo update --workspace` to prune
-the lockfile to only the packages needed by the included crates (without
-changing any pinned versions), and repacks the tarball.
+the lockfile to the packages needed by the included crates, checks that no
+new third-party packages were added, and repacks the tarball.
 
 See: https://github.com/astral-sh/uv/issues/18824
 """
@@ -18,6 +18,22 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
+
+
+def third_party_packages(lockfile: str) -> set[tuple[str, str, str, str | None]]:
+    with open(lockfile, "rb") as file:
+        packages = tomllib.load(file)["package"]
+    return {
+        (
+            package["name"],
+            package["version"],
+            package["source"],
+            package.get("checksum"),
+        )
+        for package in packages
+        if "source" in package
+    }
 
 
 def fix_sdist_lockfile(sdist_path: str) -> None:
@@ -50,15 +66,25 @@ def fix_sdist_lockfile(sdist_path: str) -> None:
             )
             sys.exit(1)
 
+        locked_packages = third_party_packages(cargo_lock)
+
         # Prune Cargo.lock to only packages needed by the included crates.
-        # `cargo update --workspace` removes entries for missing workspace members
-        # while preserving pinned versions for all remaining dependencies.
         print(f"Pruning Cargo.lock in {top_level_name}...")
         subprocess.run(
             ["cargo", "update", "--workspace"],
             cwd=extracted_dir,
             check=True,
         )
+
+        # `cargo update --workspace` can also add dependencies, so verify the
+        # result contains no new third-party packages.
+        added_packages = third_party_packages(cargo_lock) - locked_packages
+        if added_packages:
+            print(
+                f"Error: pruning Cargo.lock added dependencies: {sorted(added_packages)}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
         # Verify it works with --locked
         print("Verifying Cargo.lock with --locked...")
