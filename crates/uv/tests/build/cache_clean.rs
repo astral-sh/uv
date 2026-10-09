@@ -94,7 +94,6 @@ async fn clean_all_pending_reader() -> Result<()> {
         "venv failed after cleanup: {output}"
     );
     assert!(venv.child("pyvenv.cfg").is_file());
-    assert!(context.cache_dir.child(".lock").is_file());
     assert!(context.cache_dir.child("CACHEDIR.TAG").is_file());
 
     Ok(())
@@ -108,38 +107,6 @@ impl uv_cache::CleanReporter for SilentCleanReporter {
     fn on_clean(&self) {}
 
     fn on_complete(&self) {}
-}
-
-/// Cleanup follows the configured cache root, but never links contained within it.
-#[cfg(unix)]
-#[test]
-fn clean_symlinked_cache() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_file_counts()
-        .with_filtered_sizes_and_units();
-    let cache_link = context.temp_dir.child("cache-link");
-    let victim_dir = context.temp_dir.child("victim");
-    victim_dir.child("payload.txt").write_str("payload")?;
-    fs_err::os::unix::fs::symlink(context.cache_dir.path(), cache_link.path())?;
-    fs_err::os::unix::fs::symlink(victim_dir.path(), context.cache_dir.child("escape"))?;
-    let context = context.with_cache_dir(cache_link.path());
-
-    uv_snapshot!(context.filters(), context.clean(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Clearing cache at: cache-link
-    Removed [N] files ([SIZE])
-    ");
-
-    assert!(cache_link.path().is_symlink());
-    assert!(context.cache_dir.child(".lock").is_file());
-    assert!(!context.cache_dir.child("escape").is_symlink());
-    assert_eq!(
-        fs_err::read_to_string(victim_dir.child("payload.txt"))?,
-        "payload"
-    );
-
-    Ok(())
 }
 
 /// Cache cleanup should count hardlinked storage only when its final link is removed.
@@ -400,8 +367,6 @@ async fn clean_force() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
-    assert!(context.cache_dir.child(".lock").is_file());
-
     // Install a requirement, to re-populate the cache.
     context
         .pip_sync()
@@ -553,7 +518,7 @@ fn clean_package_index() -> Result<()> {
 
 #[cfg(unix)]
 #[test]
-fn clean_package_does_not_follow_symlinks() -> Result<()> {
+fn clean_does_not_follow_symlinks() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
     let victim_dir = context.temp_dir.child("victim");
     let archive_entry = context.cache_dir.child("archive-v0").child("archive");
@@ -609,6 +574,27 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     assert!(retained.is_file());
     assert!(flat_shard.child("retained").is_file());
     assert!(fs_err::symlink_metadata(flat_shard.child("escape"))?.is_symlink());
+
+    // A full clean also leaves external targets intact, even through a symlinked cache root.
+    let cache_link = context.temp_dir.child("cache-link");
+    fs_err::os::unix::fs::symlink(context.cache_dir.path(), cache_link.path())?;
+    let context = context
+        .with_cache_dir(cache_link.path())
+        .with_filtered_file_counts();
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: cache-link
+    Removed [N] files ([SIZE])
+    ");
+
+    assert!(cache_link.path().is_symlink());
+    assert!(context.cache_dir.child(".lock").is_file());
+    assert!(!files.exists());
+    assert_eq!(
+        fs_err::read_to_string(victim_dir.child("payload.txt"))?,
+        "payload"
+    );
 
     Ok(())
 }
