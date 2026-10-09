@@ -20,7 +20,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
-use crate::{AuditOptions, FilesystemOptions, Options, PipOptions, PreviewOption};
+use crate::{AuditOptions, EnvFiles, FilesystemOptions, Options, PipOptions, PreviewOption};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.
@@ -133,6 +133,17 @@ impl<T> Combine for Option<Vec<T>> {
                 a.extend(b);
                 Some(a)
             }
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<EnvFiles> {
+    /// Combine two lists of environment variable files by placing the files in `self` after the
+    /// files in `other`, since later files take precedence when they're loaded.
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(EnvFiles(b.0.into_iter().chain(a.0).collect())),
             (a, b) => a.or(b),
         }
     }

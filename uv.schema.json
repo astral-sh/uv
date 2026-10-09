@@ -170,6 +170,13 @@
         "type": "string"
       }
     },
+    "env-file": {
+      "description": "Environment variable files to load when executing `uv run` commands.\n\nRelative paths are resolved against the directory containing the configuration file.\nFiles are loaded in order, so variables in later files take precedence over earlier ones.\nFiles that don't exist are skipped, which allows listing optional files, e.g., for local\noverrides that aren't checked into version control.\n\nWhen multiple configuration files define `env-file`, the files from all of them are\nloaded, with the files from the more specific configuration file (e.g., the project's\n`pyproject.toml` over the user-level `uv.toml`) loaded last, so that they take precedence.\n\nFiles passed via `--env-file` or `UV_ENV_FILE` are loaded after these files and take\nprecedence over them. Variables that are already set in the environment take precedence\nover all environment variable files. `--no-env-file` or `UV_NO_ENV_FILE` disables loading\nthese files.",
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      }
+    },
     "environments": {
       "description": "A list of environment markers, e.g., `python_version >= '3.6'`.",
       "type": ["array", "null"],

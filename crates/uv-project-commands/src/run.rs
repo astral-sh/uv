@@ -172,7 +172,7 @@ pub async fn run(
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
 
-    let env_file_environment = read_env_files(env_file.as_slice())?;
+    let env_file_environment = read_env_files(&env_file.paths())?;
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);

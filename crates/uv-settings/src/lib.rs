@@ -319,6 +319,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         managed,
         package,
         build_backend,
+        env_file: _,
     } = options;
     // The `uv.toml` format is not allowed to include any of the following, which are
     // permitted by the schema since they _can_ be included in `pyproject.toml` files
@@ -478,6 +479,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         managed: _,
         package: _,
         build_backend: _,
+        env_file,
     } = options;
 
     let mut masked_fields = vec![];
@@ -672,6 +674,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if build_constraint_dependencies.is_some() {
         masked_fields.push("build-constraint-dependencies");
+    }
+    if env_file.is_some() {
+        masked_fields.push("env-file");
     }
     if !masked_fields.is_empty() {
         let field_listing = masked_fields.join("\n- ");

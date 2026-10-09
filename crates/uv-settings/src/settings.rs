@@ -149,6 +149,31 @@ pub struct Options {
     )]
     pub cache_keys: Option<Vec<CacheKey>>,
 
+    /// Environment variable files to load when executing `uv run` commands.
+    ///
+    /// Relative paths are resolved against the directory containing the configuration file.
+    /// Files are loaded in order, so variables in later files take precedence over earlier ones.
+    /// Files that don't exist are skipped, which allows listing optional files, e.g., for local
+    /// overrides that aren't checked into version control.
+    ///
+    /// When multiple configuration files define `env-file`, the files from all of them are
+    /// loaded, with the files from the more specific configuration file (e.g., the project's
+    /// `pyproject.toml` over the user-level `uv.toml`) loaded last, so that they take precedence.
+    ///
+    /// Files passed via `--env-file` or `UV_ENV_FILE` are loaded after these files and take
+    /// precedence over them. Variables that are already set in the environment take precedence
+    /// over all environment variable files. `--no-env-file` or `UV_NO_ENV_FILE` disables loading
+    /// these files.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            env-file = [".env", ".env.local"]
+        "#
+    )]
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<Vec<PathBuf>>"))]
+    pub env_file: Option<EnvFiles>,
+
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
@@ -253,6 +278,7 @@ impl Options {
         Ok(Self {
             top_level: self.top_level.relative_to(root_dir)?,
             pip: self.pip.map(|pip| pip.relative_to(root_dir)).transpose()?,
+            env_file: self.env_file.map(|env_file| env_file.relative_to(root_dir)),
             ..self
         })
     }
@@ -2682,6 +2708,7 @@ struct OptionsWire {
     audit: Option<AuditOptions>,
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
+    env_file: Option<EnvFiles>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2795,6 +2822,7 @@ impl TryFrom<OptionsWire> for Options {
             add_bounds: bounds,
             // Used by the build backend
             build_backend,
+            env_file,
         } = value;
 
         Ok(Self {
@@ -2884,6 +2912,7 @@ impl TryFrom<OptionsWire> for Options {
             dependency_groups,
             managed,
             package,
+            env_file,
         })
     }
 }
@@ -3198,5 +3227,32 @@ impl PreviewOption {
             Self::Preview(true) | Self::PreviewFeatures(Toggle(true)) => Preview::all(),
             Self::PreviewFeatures(Features(features)) => Preview::from_feature_names(features),
         }
+    }
+}
+
+/// The environment variable files from the `env-file` setting.
+///
+/// Unlike most lists, which place the values of the higher-precedence configuration file first,
+/// these files are combined with the higher-precedence files last, since later environment
+/// variable files override earlier ones.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(transparent)]
+pub struct EnvFiles(pub(crate) Vec<PathBuf>);
+
+impl EnvFiles {
+    /// Resolve the paths relative to the given root directory.
+    #[must_use]
+    fn relative_to(self, root_dir: &Path) -> Self {
+        Self(
+            self.0
+                .into_iter()
+                .map(|env_file| root_dir.join(env_file))
+                .collect(),
+        )
+    }
+
+    /// Return the paths in the order in which they should be loaded.
+    pub fn into_paths(self) -> Vec<PathBuf> {
+        self.0
     }
 }

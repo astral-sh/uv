@@ -42,7 +42,7 @@ use uv_python_types::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::{
-    Combine, EnvFlag, EnvironmentOptions, FilesystemOptions, FrozenFlag, FrozenSource,
+    Combine, EnvFiles, EnvFlag, EnvironmentOptions, FilesystemOptions, FrozenFlag, FrozenSource,
     IndexOptions, LockCheck, LockedFlag, LockedSource, MalwareCheckSettings, Options, PipOptions,
     PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors, PythonListKinds,
     ResolverInstallerOptions, ResolverInstallerSchema, ResolverInstallerSettings, ResolverOptions,
@@ -807,6 +807,10 @@ impl RunSettings {
         let isolated = isolated || environment.isolated.value == Some(true);
         let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
         let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
+        let settings_env_file = filesystem
+            .as_ref()
+            .and_then(|filesystem| filesystem.env_file.clone())
+            .map(EnvFiles::into_paths);
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
@@ -871,7 +875,7 @@ impl RunSettings {
                 filesystem,
                 &environment,
             )?,
-            env_file: EnvFile::from_args(env_file, no_env_file),
+            env_file: EnvFile::from_args(env_file, no_env_file, settings_env_file),
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),

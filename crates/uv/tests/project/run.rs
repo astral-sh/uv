@@ -5118,6 +5118,285 @@ fn run_with_not_existing_env_file() -> Result<()> {
     Ok(())
 }
 
+/// Files listed in the `env-file` setting are loaded in order, and missing files are skipped.
+#[test]
+fn run_with_env_file_setting() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        env-file = [".env", ".env.local", ".env.missing"]
+        "#
+    })?;
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+       "
+    })?;
+
+    context.temp_dir.child(".env.local").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=darth_vader
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("test.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    darth_vader
+    leia_organa
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Paths in the `env-file` setting are relative to the `pyproject.toml`, not the working
+/// directory.
+#[test]
+fn run_with_env_file_setting_subdirectory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        env-file = [".env"]
+        "#
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+       "
+    })?;
+
+    let subdirectory = context.temp_dir.child("subdirectory");
+    subdirectory.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(&subdirectory)
+        .arg("python")
+        .arg("-c")
+        .arg("import os; print(os.environ.get('THE_EMPIRE_VARIABLE'))"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    palpatine
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Files passed via `--env-file` take precedence over files from the `env-file` setting.
+#[test]
+fn run_with_env_file_setting_and_cli() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        env-file = [".env"]
+        "#
+    })?;
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+       "
+    })?;
+
+    context.temp_dir.child(".file").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=darth_vader
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".file").arg("test.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    darth_vader
+    leia_organa
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_with_env_file_setting_no_env_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        env-file = [".env"]
+        "#
+    })?;
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-env-file").arg("test.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    None
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_with_env_file_setting_uv_toml() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! { r#"
+        env-file = [".env"]
+        "#
+    })?;
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("test.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    palpatine
+    ");
+
+    Ok(())
+}
+
+/// Files from the user-level `uv.toml` and the project's `pyproject.toml` are both loaded, with the
+/// project's files taking precedence.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn run_with_env_file_setting_user_and_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let xdg = context.temp_dir.child("xdg");
+    let uv_toml = xdg.child("uv").child("uv.toml");
+    uv_toml.write_str(indoc! { r#"
+        env-file = ["user.env"]
+        "#
+    })?;
+
+    xdg.child("uv").child("user.env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+       "
+    })?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        env-file = [".env"]
+        "#
+    })?;
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=darth_vader
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("test.py")
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    darth_vader
+    leia_organa
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn run_with_extra_conflict() -> Result<()> {
     let context = uv_test::test_context!("3.12");
