@@ -280,7 +280,7 @@ jobs:
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
-      - name: "Install Python via uv (implicitly select x64)"
+      - name: "Install Python via uv (implicitly select aarch64)"
         run: |
           ./uv python install -v 3.13
 
@@ -300,9 +300,9 @@ jobs:
         run: |
           .venv/Scripts/python --version
 
-      - name: "Check is x64"
+      - name: "Check is aarch64"
         run: |
-          .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' not in sys.version else exit(0)"
+          .venv/Scripts/python -c "import sys; exit(1) if 'ARM64' not in sys.version else exit(0)"
 
       - name: "Check install"
         run: |
@@ -324,13 +324,13 @@ jobs:
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
-      - name: "Install Python via uv (explicitly select aarch64)"
+      - name: "Install Python via uv (explicitly select x64)"
         run: |
-          ./uv python install -v cpython-3.13-windows-aarch64-none
+          ./uv python install -v cpython-3.13-windows-x86_64-none
 
       - name: "Create a virtual environment (stdlib)"
         run: |
-          & (./uv python find 3.13) -m venv .venv
+          & (./uv python find cpython-3.13-windows-x86_64-none) -m venv .venv
 
       - name: "Check version (stdlib)"
         run: |
@@ -338,15 +338,15 @@ jobs:
 
       - name: "Create a virtual environment (uv)"
         run: |
-          ./uv venv -c -p 3.13 --managed-python
+          ./uv venv -c -p cpython-3.13-windows-x86_64-none --managed-python
 
       - name: "Check version (uv)"
         run: |
           .venv/Scripts/python --version
 
-      - name: "Check is NOT x64"
+      - name: "Check is x64"
         run: |
-          .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' in sys.version else exit(0)"
+          .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' not in sys.version else exit(0)"
 
       - name: "Check install"
         run: |
@@ -355,7 +355,7 @@ jobs:
       - name: "Check uv run"
         run: |
           ./uv run python -c ""
-          ./uv run -p 3.13 python -c ""
+          ./uv run -p cpython-3.13-windows-x86_64-none python -c ""
 
   integration-test-windows-python-install-manager:
     name: "windows python install manager"

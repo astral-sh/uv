@@ -1,7 +1,7 @@
 #[cfg(windows)]
 use std::path::PathBuf;
 
-use std::{env, path::Path, process::Command};
+use std::{env, io::ErrorKind, path::Path, process::Command};
 
 use anyhow::Context;
 use assert_cmd::assert::OutputAssertExt;
@@ -159,7 +159,7 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    let contents = fs_err::read_to_string(sysconfig.path())?;
+    let contents = context.read(sysconfig.path());
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(contents, @r#"
         # system configuration generated and used by the sysconfig module
@@ -3360,9 +3360,11 @@ fn uninstall_last_patch_removes_minor_version_link() {
     // not just dangling. We use `symlink_metadata` because `Path::exists` follows
     // symlinks/junctions and would return false for a dangling link, hiding the bug.
     assert!(
-        minor_version_link.path().symlink_metadata().is_err(),
-        "minor version link should be removed after uninstalling the last patch, \
-         but it still exists at: {}",
+        minor_version_link
+            .path()
+            .symlink_metadata()
+            .is_err_and(|error| error.kind() == ErrorKind::NotFound),
+        "minor version link should be absent after uninstalling the last patch: {}",
         minor_version_link.path().display()
     );
 }
@@ -3461,9 +3463,11 @@ fn uninstall_highest_patch_updates_minor_version_link() {
     // `uninstall_last_patch_removes_minor_version_link` for why we use
     // `symlink_metadata` instead of `predicate::path::missing`).
     assert!(
-        minor_version_link.path().symlink_metadata().is_err(),
-        "minor version link should be removed after uninstalling the last patch, \
-         but it still exists at: {}",
+        minor_version_link
+            .path()
+            .symlink_metadata()
+            .is_err_and(|error| error.kind() == ErrorKind::NotFound),
+        "minor version link should be absent after uninstalling the last patch: {}",
         minor_version_link.path().display()
     );
 }
@@ -3627,7 +3631,7 @@ fn python_install_build_version() {
         platform_key_from_env().unwrap()
     ));
     let build_file_path = cpython_dir.join("BUILD");
-    let build_content = fs_err::read_to_string(&build_file_path).unwrap();
+    let build_content = context.read(&build_file_path);
     assert_eq!(build_content, "20240814");
 
     // We should find the build
@@ -3694,7 +3698,7 @@ fn python_install_build_version_pypy() {
         .child("managed")
         .child(format!("pypy-3.10.16-{}", platform_key_from_env().unwrap()));
     let build_file_path = pypy_dir.join("BUILD");
-    let build_content = fs_err::read_to_string(&build_file_path).unwrap();
+    let build_content = context.read(&build_file_path);
     assert_eq!(build_content, "7.3.19");
 
     // We should find the build
