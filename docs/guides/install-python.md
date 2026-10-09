@@ -28,7 +28,7 @@ Once Python is installed, it will be used by `uv` commands automatically. uv als
 version to your `PATH`:
 
 ```console
-$ python3.13
+$ python3.15
 ```
 
 uv only installs a _versioned_ executable by default. To install `python` and `python3` executables,
