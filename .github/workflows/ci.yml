@@ -17,28 +17,53 @@ env:
   UV_LOCKED: 1
 
 jobs:
-  plan:
+  detect-vet-workspaces:
     # CI on main is redundant in the security repository.
     if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
-    uses: $/.github/workflows/plan.yml
-
-  check-fmt:
-    needs: plan
-    uses: $/.github/workflows/check-fmt.yml
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
+    outputs:
+      workspaces: ${{ steps.detect.outputs.workspaces }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.13.4"
+          checksum: "2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f"
+      - name: "Detect Cargo Vet workspaces"
+        id: detect
+        env:
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+        run: uv run --script scripts/cargo-vet-workspaces.py >> "$GITHUB_OUTPUT"
 
   check-vet:
     name: "Cargo Vet"
-    needs: plan
+    needs: detect-vet-workspaces
     uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@c064e17eb42bf9ac71f66d7f5eda694f326d16cd
     with:
       runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-      workspaces: ${{ github.repository_owner == 'astral-sh' && needs.plan.outputs.cargo-vet-workspaces || '[]' }}
+      workspaces: ${{ needs.detect-vet-workspaces.outputs.workspaces }}
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
       uv-version: "0.13.4"
     secrets: inherit
     permissions:
       contents: read
       id-token: write
+
+  plan:
+    needs: check-vet
+    uses: $/.github/workflows/plan.yml
+
+  check-fmt:
+    needs: plan
+    uses: $/.github/workflows/check-fmt.yml
 
   review:
     needs: plan
@@ -373,6 +398,7 @@ jobs:
     needs:
       - plan
       - check-cargo-lock-changes
+      - check-vet
       - check-fmt
       - check-lint
       - check-docs
@@ -394,7 +420,7 @@ jobs:
             echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
               to_entries[]
               | select($conditional_jobs[.key] != false)
-              | select(.value.result != "success" and .value.result != "skipped")
+              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-vet"))
               | "\(.key): \(.value.result)"
             '
           )
