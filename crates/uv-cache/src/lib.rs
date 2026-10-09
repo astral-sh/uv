@@ -806,7 +806,10 @@ impl Cache {
                         }
 
                         // Visit nested build settings shards separately so their metadata survives.
-                        if entry.file_type()?.is_dir() && path.join("metadata.msgpack").exists() {
+                        if entry.file_name() != "src"
+                            && entry.file_type()?.is_dir()
+                            && path.join("metadata.msgpack").exists()
+                        {
                             continue;
                         }
 
@@ -1351,7 +1354,12 @@ impl CacheBucket {
         fn is_match(path: &Path, name: &PackageName) -> bool {
             // The metadata can be in the revision itself or one shard down, if build settings
             // were used.
-            for entry in walkdir::WalkDir::new(path).min_depth(1).max_depth(2) {
+            let walker = walkdir::WalkDir::new(path)
+                .min_depth(1)
+                .max_depth(2)
+                .into_iter();
+            // Unpacked source contents aren't uv cache entries.
+            for entry in walker.filter_entry(|entry| entry.file_name() != "src") {
                 let Ok(entry) = entry else {
                     continue;
                 };
