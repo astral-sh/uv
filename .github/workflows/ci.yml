@@ -333,6 +333,7 @@ jobs:
       - check-fmt
       - check-lint
       - check-docs
+      - check-lock
       - check-crates-policies
       - check-generated-files
       - test
