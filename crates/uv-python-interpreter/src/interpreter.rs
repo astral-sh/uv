@@ -1623,7 +1623,7 @@ mod tests {
     use std::str::FromStr;
     use std::time::{Duration, UNIX_EPOCH};
 
-    use anyhow::Result;
+    use anyhow::{Context, Result};
     use fs_err as fs;
     use indoc::{formatdoc, indoc};
     use serde_json::Value;
@@ -1789,6 +1789,67 @@ mod tests {
             Version::from_str("3.13")?
         );
         assert_eq!(fs::read_to_string(&query_log)?, "queried\nqueried\n");
+        Ok(())
+    }
+
+    /// A v4 entry with a matching executable timestamp can still contain an inferred base symlink.
+    #[tokio::test]
+    async fn test_cache_ignores_legacy_inferred_base_executable() -> Result<()> {
+        let mock_dir = tempdir()?;
+        let mocked_interpreter = mock_dir.path().join("python");
+        let query_count = mock_dir.path().join("queries");
+        let base_executable = mock_dir.path().join("python3.12");
+        let symlinked_base = mock_dir.path().join("python3");
+
+        let mut response = serde_json::from_str::<Value>(mocked_interpreter_response())?;
+        response["sys_executable"] = serde_json::to_value(&mocked_interpreter)?;
+        response["sys_base_executable"] = serde_json::to_value(&base_executable)?;
+        let mut legacy_info = serde_json::from_value::<InterpreterInfo>(response.clone())?;
+        legacy_info.sys_base_executable = Some(symlinked_base);
+
+        fs::write(
+            &mocked_interpreter,
+            formatdoc! {r#"
+                #!/bin/sh
+                printf '.' >> "{}"
+                echo '{}'
+            "#, query_count.display(), serde_json::to_string(&response)?},
+        )?;
+        fs::set_permissions(
+            &mocked_interpreter,
+            std::os::unix::fs::PermissionsExt::from_mode(0o770),
+        )?;
+
+        let cache = Cache::temp()?.init().await?;
+        let absolute = std::path::absolute(&mocked_interpreter)?;
+        let canonical = canonicalize_executable(&absolute)?;
+        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, &cache);
+        let legacy_entry = cache.root().join("interpreter-v4").join(
+            cache_entry
+                .path()
+                .strip_prefix(cache.bucket(CacheBucket::Interpreter))?,
+        );
+        fs::create_dir_all(
+            legacy_entry
+                .parent()
+                .context("Interpreter cache entry has no parent")?,
+        )?;
+        fs::write(
+            &legacy_entry,
+            rmp_serde::to_vec(&CachedByTimestamp {
+                timestamp: Timestamp::from_path(&canonical)?,
+                data: legacy_info,
+            })?,
+        )?;
+
+        let queried = Interpreter::query(&mocked_interpreter, &cache)?;
+        assert_eq!(queried.to_base_python()?, base_executable);
+        assert_eq!(fs::read_to_string(&query_count)?, ".");
+
+        let cached = Interpreter::query(&mocked_interpreter, &cache)?;
+        assert_eq!(cached, queried);
+        assert_eq!(fs::read_to_string(&query_count)?, ".");
+
         Ok(())
     }
 

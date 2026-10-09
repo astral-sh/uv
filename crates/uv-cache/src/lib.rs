@@ -1253,7 +1253,7 @@ pub enum CacheBucket {
     /// without the shim itself changing, we only cache when the path equals `sys.executable`, i.e.
     /// the path we're running is the python executable itself and not a shim.
     ///
-    /// Cache structure: `interpreter-v0/<digest(path)>.msgpack`
+    /// Cache structure: `interpreter-v5/<digest(host)>/<digest(executable)>.msgpack`
     ///
     /// # Example
     ///
@@ -1327,7 +1327,8 @@ impl CacheBucket {
             // in `crates/uv/tests/lock/lock.rs`.
             Self::FlatIndex => "flat-index-v6",
             Self::Git => "git-v1",
-            Self::Interpreter => "interpreter-v4",
+            // v4 can contain inferred base executables that disagree with CPython.
+            Self::Interpreter => "interpreter-v5",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
             Self::Simple => "simple-v26",
