@@ -1941,7 +1941,7 @@ fn relocatable_envs_default_no_relocatable() {
 
 /// Ensure that a nested virtual environment uses the same `home` directory as the parent.
 #[test]
-fn verify_nested_pyvenv_cfg() -> Result<()> {
+fn verify_nested_pyvenv_cfg() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     // Create a virtual environment at `.venv`.
@@ -1959,7 +1959,7 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
     pyvenv_cfg.assert(predicates::path::is_file());
 
     // Extract the "home" line from the pyvenv.cfg file.
-    let contents = fs_err::read_to_string(pyvenv_cfg.path())?;
+    let contents = context.read(".venv/pyvenv.cfg");
     let venv_home = contents
         .lines()
         .find(|line| line.starts_with("home"))
@@ -1976,10 +1976,8 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
         .assert()
         .success();
 
-    let sub_pyvenv_cfg = subvenv.child("pyvenv.cfg");
-
     // Extract the "home" line from the pyvenv.cfg file.
-    let contents = fs_err::read_to_string(sub_pyvenv_cfg.path())?;
+    let contents = context.read(".subvenv/pyvenv.cfg");
     let sub_venv_home = contents
         .lines()
         .find(|line| line.starts_with("home"))
@@ -1987,8 +1985,6 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
 
     // Check that both directories point to the same home.
     assert_eq!(sub_venv_home, venv_home);
-
-    Ok(())
 }
 
 /// See <https://github.com/astral-sh/uv/issues/3280>
