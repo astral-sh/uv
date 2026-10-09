@@ -1,0 +1,37 @@
+{
+  "study_id": "uv-debug-statistics-20261009-v1",
+  "main_source_revision": "238d6ba651d13f0dfddab0cc1826f963cdf21711",
+  "source_fingerprints": {
+    "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+    "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+    ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+    "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+    "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+    "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+    "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+    "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+    "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+    "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+  },
+  "design_seed": 2063209,
+  "treatments": ["none-a", "none-b", "line-tables-only", "limited", "full"],
+  "calibration_blocks": [0, 1],
+  "confirmatory_block_start": 1000,
+  "confirmatory_looks": [20, 40, 80, 160],
+  "later_looks": "double the preceding sample count; no intermediate inferential looks",
+  "family_alpha": 0.05,
+  "look_alpha_rule": "0.05 / 2**(look_index+1), with look_index starting at0",
+  "simultaneous_contrasts": 84,
+  "build_equivalence_margin": 0.05,
+  "runtime_equivalence_margin": 0.03,
+  "effect": "median of within-runner log ratios, transformed to a multiplicative ratio",
+  "interval": "exact binomial/order-statistic confidence interval for the population median; Bonferroni over84 contrasts and alpha spending over looks",
+  "stop_rule": "All72 treatment timing contrasts establish a nonzero median effect or equivalence within the registered margin; all12 A/A control intervals establish equivalence. Correctness/provenance gates must pass.",
+  "prior_data": "Historical pairs and calibration blocks excluded from confirmatory inference.",
+  "targets": [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc"
+  ]
+}

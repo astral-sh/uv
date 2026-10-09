@@ -1,0 +1,131 @@
+name: Debug symbols statistical study
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Debug study {0} block {1}', inputs.phase, inputs.block) || 'Validate debug study harness' }}
+
+on:
+  push:
+    paths:
+      - ".github/workflows/debug-symbols-study.yml"
+      - "scripts/debug-symbols/**"
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Calibration or registered confirmatory sample
+        type: choice
+        options: [calibration, confirmatory]
+        default: calibration
+      block:
+        description: Unique independent runner block number
+        type: string
+        default: "0"
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: debug-study-${{ github.ref }}-${{ inputs.phase }}-${{ inputs.block }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          enable-cache: false
+      - run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_study.py
+  study:
+    if: github.event_name == 'workflow_dispatch'
+    name: ${{ matrix.os }} / block ${{ inputs.block }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      CARGO_BUILD_JOBS: ${{ startsWith(matrix.os, 'Linux') && 8 || 4 }}
+      STUDY_BLOCK: ${{ inputs.block }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - os: Linux
+            runner: depot-ubuntu-24.04-16
+            uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          - os: Linux-ARM64
+            runner: depot-ubuntu-24.04-arm-16
+            uv-checksum: "2eaa5d94f5db7b3a1a092156b9420459e42ab0217d917fe74a876309cef9b5e9"
+          - os: macOS
+            runner: namespace-profile-macos-15
+            uv-checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
+          - os: Windows
+            runner: namespace-profile-windows-2022-x86-64-16x32
+            uv-checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: ""
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.13"
+          checksum: ${{ matrix.uv-checksum }}
+          enable-cache: false
+      - name: Install the repository Rust toolchain
+        run: |
+          rustup toolchain install --profile minimal
+          rustup component add llvm-tools-preview clippy rustfmt
+      - name: Install Linux symbolizer
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y llvm
+      - name: Record Windows build capacity
+        if: runner.os == 'Windows'
+        run: |
+          Get-CimInstance Win32_ComputerSystem | Select-Object NumberOfLogicalProcessors, TotalPhysicalMemory
+          Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, TotalVirtualMemorySize, FreeVirtualMemory
+          Get-CimInstance Win32_PageFileUsage | Select-Object Name, AllocatedBaseSize, CurrentUsage, PeakUsage
+      - name: Check fixture
+        run: |
+          cargo fmt --manifest-path scripts/debug-symbols/Cargo.toml --check
+          cargo clippy --manifest-path scripts/debug-symbols/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Run experiment
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 python scripts/debug-symbols/run.py --debug-level line-tables-only
+      - name: Install cargo-auditable
+        run: cargo install cargo-auditable --locked --version 0.7.6
+      - name: Install NASM
+        if: runner.os == 'Windows'
+        run: |
+          $version = '3.02'
+          $sha256 = '0DDB40310861EB29F4D649FEB9466779982A2D251C0DB2B9CF0D21CF591171F3'
+          $installer = Join-Path $env:RUNNER_TEMP "nasm-${version}-installer-x64.exe"
+          Invoke-WebRequest "https://www.nasm.us/pub/nasm/releasebuilds/$version/win64/nasm-${version}-installer-x64.exe" -OutFile $installer
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $sha256) {
+            throw 'NASM installer checksum mismatch'
+          }
+          $installation = Start-Process $installer -ArgumentList '/S' -Wait -PassThru
+          if ($installation.ExitCode -ne 0) {
+            throw "NASM installation failed: $($installation.ExitCode)"
+          }
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Check statistical harness and resource collection
+        run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_study.py
+      - name: Run randomized block
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/study.py --phase ${{ inputs.phase == 'confirmatory' && 'confirmatory' || 'calibration' }}
+      - name: Retain block outputs and resource samples
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: debug-study-${{ inputs.phase }}-${{ inputs.block }}-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            target/debug-symbols-study
+            !target/debug-symbols-study/**/*.original.whl
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 14

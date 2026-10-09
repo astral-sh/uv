@@ -1,5 +1,10 @@
 # Optimized Rust+C debug symbols experiment
 
+The randomized statistical follow-up is specified in [STUDY.md](STUDY.md). It adds independent
+runner blocks, randomized build order, duplicate no-debug controls, resource sampling, and
+predeclared simultaneous inference. The measurements below remain the exploratory record; they are
+not counted as confirmatory samples in that study.
+
 This independent Cargo workspace tests separate debug symbols for a small Rust executable that calls
 a C function compiled with `cc`. Both functions are kept out of line so source locations can be
 checked under full optimization and fat LTO. The fixture uses uv's pinned Rust toolchain, Maturin

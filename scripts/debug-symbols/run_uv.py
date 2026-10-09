@@ -24,6 +24,7 @@ from run import (
     tool,
     verify_symbols,
 )
+from telemetry import PhaseSampler
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -163,30 +164,33 @@ def save_report(output, report):
     )
 
 
-def train_pgo(temporary, directory, environment, tools, host):
+def train_pgo(temporary, directory, environment, tools, host, *, telemetry=False):
     training = Path(temporary) / "pgo"
     retained = directory / "pgo"
     retained.mkdir()
     started = time.monotonic()
-    try:
-        run(
-            [
-                sys.executable,
-                ROOT / "scripts" / "build_uv_pgo.py",
-                "--target",
-                host,
-                "--target-dir",
-                training,
-                "--llvm-profdata",
-                tools["llvm-profdata"],
-                "--train-only",
-            ],
-            cwd=ROOT,
-            env=environment,
-            log=retained / "training.log",
-        )
-    finally:
-        save_build_script_logs(training / "instrumented", retained)
+    with PhaseSampler(
+        directory / "training-resources.jsonl", enabled=telemetry
+    ) as sampler:
+        try:
+            run(
+                [
+                    sys.executable,
+                    ROOT / "scripts" / "build_uv_pgo.py",
+                    "--target",
+                    host,
+                    "--target-dir",
+                    training,
+                    "--llvm-profdata",
+                    tools["llvm-profdata"],
+                    "--train-only",
+                ],
+                cwd=ROOT,
+                env=environment,
+                log=retained / "training.log",
+            )
+        finally:
+            save_build_script_logs(training / "instrumented", retained)
     seconds = time.monotonic() - started
     profile = retained / "uv.profdata"
     shutil.copyfile(training / "uv.profdata", profile)
@@ -211,6 +215,8 @@ def train_pgo(temporary, directory, environment, tools, host):
         "maximum_internal_block_count": int(maximum_count),
         "total_count": int(total_count),
     }
+    if sampler.summary is not None:
+        measured["resources"] = sampler.summary
     # Only the merged profile is needed by the final build. Remove the instrumented
     # binaries and training corpus before compiling again to limit disk usage.
     shutil.rmtree(training)
@@ -231,13 +237,13 @@ def profile_diagnostics(log):
     }
 
 
-def build(output, report, tools, system, host):
+def build(output, report, tools, system, host, *, modes=("baseline", "symbols")):
     names = ["uv.exe", "uvx.exe", "uvw.exe"] if system == "Windows" else ["uv", "uvx"]
     report["executables"] = names
-    for mode in ("baseline", "symbols"):
+    for mode in modes:
         directory = output / mode
         directory.mkdir()
-        # Separate target directories make both builds cold. Delete intermediates
+        # Separate target directories prevent compiler output reuse. Delete intermediates
         # before symbol lookups and before starting the next build to limit disk use.
         with tempfile.TemporaryDirectory(
             prefix="uv-symbol-build-", dir=output
@@ -308,7 +314,12 @@ def build(output, report, tools, system, host):
             save_report(output, report)
             if report["pgo"]:
                 profile, measured["pgo"] = train_pgo(
-                    temporary, directory, environment, tools, host
+                    temporary,
+                    directory,
+                    environment,
+                    tools,
+                    host,
+                    telemetry=report.get("telemetry", False),
                 )
                 environment["RUSTFLAGS"] += f" -Cprofile-use={profile}"
                 save_report(output, report)
@@ -316,25 +327,31 @@ def build(output, report, tools, system, host):
                 "self-update,windows-gui-bin" if system == "Windows" else "self-update"
             )
             started = time.monotonic()
-            build_log = run(
-                [
-                    "maturin",
-                    "build",
-                    "--release",
-                    "--locked",
-                    "--target",
-                    host,
-                    "--features",
-                    features,
-                    "--strip=false" if mode == "symbols" else "--strip=true",
-                    "--out",
-                    directory,
-                    "--verbose",
-                ],
-                cwd=ROOT,
-                env=environment,
-                log=directory / "build.log",
-            )
+            with PhaseSampler(
+                directory / "final-resources.jsonl",
+                enabled=report.get("telemetry", False),
+            ) as sampler:
+                build_log = run(
+                    [
+                        "maturin",
+                        "build",
+                        "--release",
+                        "--locked",
+                        "--target",
+                        host,
+                        "--features",
+                        features,
+                        "--strip=false" if mode == "symbols" else "--strip=true",
+                        "--out",
+                        directory,
+                        "--verbose",
+                    ],
+                    cwd=ROOT,
+                    env=environment,
+                    log=directory / "build.log",
+                )
+            if sampler.summary is not None:
+                measured["resources"] = sampler.summary
             measured.update(
                 {
                     "seconds": time.monotonic() - started,
@@ -482,12 +499,33 @@ def benchmark_uv(output, report):
             save_report(output, report)
 
 
-def verify(output, report, tools, system, *, benchmark=False):
-    directory = output / "symbols"
+def verify_install(directory, measured, names, system):
+    with tempfile.TemporaryDirectory(prefix="uv-symbol-install-") as temporary:
+        environment = Path(temporary) / "venv"
+        run([sys.executable, "-m", "venv", "--without-pip", environment])
+        executable_directory = environment / (
+            "Scripts" if system == "Windows" else "bin"
+        )
+        python = executable_directory / (
+            "python.exe" if system == "Windows" else "python"
+        )
+        wheel = directory / measured["wheel"]
+        run(["uv", "pip", "install", "--python", python, "--no-index", wheel])
+        for name in names:
+            if digest(executable_directory / name) != digest(directory / name):
+                raise RuntimeError(f"Installed {name} differs from verified executable")
+        smoke_test(executable_directory, names, python)
+        run([python, "-m", "uv", "--help"])
+
+
+def verify(output, report, tools, system, *, benchmark=False, directories=None):
+    if directories is None:
+        directories = {mode: output / mode for mode in report["builds"]}
+    directory = directories["symbols"]
     names = report["executables"]
     for mode, measured in report["builds"].items():
         for name, record in measured["executables"].items():
-            binary = output / mode / name
+            binary = directories[mode] / name
             # Artifact downloads do not retain executable permissions.
             binary.chmod(0o755)
             if sbom_digest(binary, tools, system) != record["sbom_sha256"]:
@@ -525,22 +563,7 @@ def verify(output, report, tools, system, *, benchmark=False):
             run(["codesign", "--verify", binary])
         save_report(output, report)
 
-    with tempfile.TemporaryDirectory(prefix="uv-symbol-install-") as temporary:
-        environment = Path(temporary) / "venv"
-        run([sys.executable, "-m", "venv", "--without-pip", environment])
-        executable_directory = environment / (
-            "Scripts" if system == "Windows" else "bin"
-        )
-        python = executable_directory / (
-            "python.exe" if system == "Windows" else "python"
-        )
-        wheel = directory / report["builds"]["symbols"]["wheel"]
-        run(["uv", "pip", "install", "--python", python, "--no-index", wheel])
-        for name in names:
-            if digest(executable_directory / name) != digest(directory / name):
-                raise RuntimeError(f"Installed {name} differs from verified executable")
-        smoke_test(executable_directory, names, python)
-        run([python, "-m", "uv", "--help"])
+    verify_install(directory, report["builds"]["symbols"], names, system)
     report["verified"] = True
     baseline = report["builds"]["baseline"]
     measured = report["builds"]["symbols"]
@@ -556,6 +579,45 @@ def verify(output, report, tools, system, *, benchmark=False):
         benchmark_uv(output, report)
     save_report(output, report)
     print(json.dumps(report, indent=2))
+
+
+def build_context(pgo):
+    system = platform.system()
+    if system not in {"Linux", "Darwin", "Windows"}:
+        raise RuntimeError(f"Unsupported experiment platform: {system}")
+    compiler_version = run(["rustc", "-vV"], cwd=ROOT)
+    host = next(
+        line.removeprefix("host: ")
+        for line in compiler_version.splitlines()
+        if line.startswith("host: ")
+    )
+    sysroot = Path(run(["rustc", "--print", "sysroot"], cwd=ROOT).strip())
+    required = {
+        "Linux": {
+            "llvm-nm",
+            "llvm-symbolizer",
+            "llvm-readobj",
+            "llvm-objcopy",
+            "llvm-strip",
+        },
+        "Darwin": {"llvm-nm", "llvm-dwarfdump", "llvm-readobj"},
+        "Windows": {"llvm-pdbutil", "llvm-symbolizer", "llvm-readobj"},
+    }
+    tools = {name: tool(name, sysroot, host) for name in required[system]}
+    if pgo:
+        # Profiles must be read by the same LLVM version that wrote them.
+        profiler = (
+            sysroot
+            / "lib"
+            / "rustlib"
+            / host
+            / "bin"
+            / ("llvm-profdata.exe" if system == "Windows" else "llvm-profdata")
+        )
+        if not profiler.is_file():
+            raise RuntimeError("Install llvm-tools-preview for PGO training")
+        tools["llvm-profdata"] = str(profiler)
+    return system, host, compiler_version, tools
 
 
 def main():
@@ -593,41 +655,7 @@ def main():
     )
     args = parser.parse_args()
     output = args.output.resolve()
-    system = platform.system()
-    if system not in {"Linux", "Darwin", "Windows"}:
-        raise RuntimeError(f"Unsupported experiment platform: {system}")
-    compiler_version = run(["rustc", "-vV"], cwd=ROOT)
-    host = next(
-        line.removeprefix("host: ")
-        for line in compiler_version.splitlines()
-        if line.startswith("host: ")
-    )
-    sysroot = Path(run(["rustc", "--print", "sysroot"], cwd=ROOT).strip())
-    required = {
-        "Linux": {
-            "llvm-nm",
-            "llvm-symbolizer",
-            "llvm-readobj",
-            "llvm-objcopy",
-            "llvm-strip",
-        },
-        "Darwin": {"llvm-nm", "llvm-dwarfdump", "llvm-readobj"},
-        "Windows": {"llvm-pdbutil", "llvm-symbolizer", "llvm-readobj"},
-    }
-    tools = {name: tool(name, sysroot, host) for name in required[system]}
-    if args.pgo:
-        # Profiles must be read by the same LLVM version that wrote them.
-        profiler = (
-            sysroot
-            / "lib"
-            / "rustlib"
-            / host
-            / "bin"
-            / ("llvm-profdata.exe" if system == "Windows" else "llvm-profdata")
-        )
-        if not profiler.is_file():
-            raise RuntimeError("Install llvm-tools-preview for PGO training")
-        tools["llvm-profdata"] = str(profiler)
+    system, host, compiler_version, tools = build_context(args.pgo)
     if args.verify_only:
         report = json.loads((output / "report.json").read_text(encoding="utf-8"))
         if report["target"] != host:
