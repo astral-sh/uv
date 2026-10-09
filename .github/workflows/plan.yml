@@ -182,8 +182,7 @@ jobs:
           changed_files="$(git diff --no-ext-diff --no-textconv --name-only "${comparison_base}...HEAD")"
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
-            # Integration tests, fixtures, and test helpers do not affect benchmarks.
-            [[ "$file" =~ \.rs$ && ! "$file" =~ ^(crates/[^/]+/tests/|crates/uv-test/|test/) ]] && rust_code_changed=1
+            [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
             [[ "$file" == "Cargo.toml" || "$file" == "Cargo.lock" || "$file" =~ ^crates/.*/Cargo\.toml$ ]] && rust_deps_changed=1
             [[ "$file" == "rust-toolchain.toml" || "$file" == "crates/uv-build/rust-toolchain.toml" || "$file" =~ ^\.cargo/ ]] && rust_config_changed=1
             [[ "$file" == "pyproject.toml" || "$file" =~ ^crates/.*/pyproject\.toml$ ]] && python_config_changed=1
@@ -210,6 +209,8 @@ jobs:
             [[ "$file" == "scripts/check_system_python.py" || "$file" == "scripts/check_embedded_python.py" ]] && system_test_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ || "$file" =~ ^agents/ || "$file" =~ ^\.claude/ || "$file" =~ ^\.codex/ ]] && continue
             any_code_changed=1
+            [[ "$file" =~ ^(crates/[^/]+/tests/|crates/uv-test/|test/) ]] && continue
+            non_test_code_changed=1
           done <<< "$changed_files"
 
           # Derived groups
@@ -231,7 +232,7 @@ jobs:
           [[ ! $has_skip_label && ($trampoline_code_changed || $trampoline_scripts_changed || $trampoline_workflow_changed || $rust_deps_changed || $has_build_windows_trampoline_label || $on_main_branch) ]] && test_windows_trampoline=1
           [[ ! $has_skip_label && ($trampoline_repro_changed || $trampoline_build_scripts_changed || $has_build_windows_trampoline_label) ]] && test_windows_trampoline_check_binary=1
           [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
-          [[ ! $has_skip_label && ($any_rust_changed || $bench_workflow_changed || $on_main_branch) ]] && run_bench=1
+          [[ ! $has_skip_label && (($any_rust_changed && $non_test_code_changed) || $bench_workflow_changed || $on_main_branch) ]] && run_bench=1
           [[ ! $has_skip_label ]] && test_smoke=1
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
