@@ -12,7 +12,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{Dist, Resolution, ResolvedDist, SourceDist};
 use uv_install_operations::editable::apply_editable_mode;
 use uv_install_operations::loggers::InstallLogger;
-use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan};
+use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan, PrunePolicy};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_lock::Installable;
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -42,6 +42,56 @@ pub async fn sync_from_lock(
     editable: Option<EditableMode>,
     install_options: InstallOptions,
     modifications: Modifications,
+    python_platform: Option<&TargetTriple>,
+    settings: InstallerSettingsRef<'_>,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    logger: Box<dyn InstallLogger>,
+    installer_metadata: bool,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    dry_run: DryRun,
+    printer: Printer,
+    preview: Preview,
+    malware_context: MalwareCheckContext<'_>,
+) -> Result<Changelog, EnvironmentError> {
+    sync_from_lock_with_prune(
+        target,
+        venv,
+        extras,
+        groups,
+        editable,
+        install_options,
+        modifications,
+        None,
+        python_platform,
+        settings,
+        client_builder,
+        state,
+        logger,
+        installer_metadata,
+        concurrency,
+        cache,
+        workspace_cache,
+        dry_run,
+        printer,
+        preview,
+        malware_context,
+    )
+    .await
+}
+
+/// Install selected packages while pruning dependencies removed from the project.
+pub async fn sync_from_lock_with_prune(
+    target: InstallTarget<'_>,
+    venv: &PythonEnvironment,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    editable: Option<EditableMode>,
+    install_options: InstallOptions,
+    modifications: Modifications,
+    prune: Option<PrunePolicy>,
     python_platform: Option<&TargetTriple>,
     settings: InstallerSettingsRef<'_>,
     client_builder: &BaseClientBuilder<'_>,
@@ -229,6 +279,8 @@ pub async fn sync_from_lock(
         &resolution,
         site_packages,
         InstallationStrategy::Strict,
+        modifications,
+        prune,
         reinstall,
         build_options,
         &hasher,
@@ -244,7 +296,7 @@ pub async fn sync_from_lock(
 
     // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
     // installation work to perform.
-    if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
+    if installation_plan.is_noop(bytecode_compilation, dry_run) {
         maybe_check_malware(
             &target,
             &resolution,
@@ -258,7 +310,6 @@ pub async fn sync_from_lock(
 
         return Ok(installation_plan.finish_noop(
             &resolution,
-            modifications,
             bytecode_compilation,
             logger.as_ref(),
             dry_run,
@@ -343,7 +394,6 @@ pub async fn sync_from_lock(
     let changelog = installation_plan
         .execute(
             &resolution,
-            modifications,
             build_options,
             link_mode,
             bytecode_compilation,
