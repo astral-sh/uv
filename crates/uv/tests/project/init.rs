@@ -966,7 +966,7 @@ fn init_script_shebang() -> Result<()> {
 // for the `requires-python` constraint.
 #[cfg(feature = "test-python-patch")]
 #[test]
-fn init_script_picks_latest_stable_version() -> Result<()> {
+fn init_script_picks_latest_stable_version() {
     let managed_versions = &["3.14.0rc2", "3.13", "3.12"];
     // If we do not mark these versions as managed, they would have `PythonSource::SearchPath(First)`, which
     // would mean that pre-releases would be preferred without opt-in (see `PythonSource::allows_prereleases`).
@@ -996,8 +996,6 @@ fn init_script_picks_latest_stable_version() -> Result<()> {
             main()
         "#
     );
-
-    Ok(())
 }
 
 /// Run `uv init --lib` with an existing py.typed file
