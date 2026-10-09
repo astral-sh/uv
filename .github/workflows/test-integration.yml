@@ -357,6 +357,52 @@ jobs:
           ./uv run python -c ""
           ./uv run -p cpython-3.13-windows-x86_64-none python -c ""
 
+  integration-test-windows-aarch64-env:
+    name: "x86-64 python on aarch64 windows (environment)"
+    timeout-minutes: 10
+    runs-on: windows-11-arm
+    env:
+      UV_PYTHON_ARCH: x86_64
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-windows-aarch64-${{ inputs.sha }}
+
+      - name: "Install Python via uv (select x64 from environment)"
+        run: |
+          ./uv python install -v 3.13
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          & (./uv python find 3.13) -m venv .venv
+
+      - name: "Check version (stdlib)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -c -p 3.13 --managed-python
+
+      - name: "Check version (uv)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Check is x64"
+        run: |
+          .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' not in sys.version else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13 python -c ""
+
   integration-test-windows-python-install-manager:
     name: "windows python install manager"
     timeout-minutes: 10
