@@ -570,7 +570,7 @@ def main():
         "--codegen-units",
         type=int,
         choices=(1, 16),
-        default=16,
+        default=1,
         help="Release codegen units for both uv builds and their PGO training",
     )
     parser.add_argument(

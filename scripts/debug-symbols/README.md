@@ -119,14 +119,15 @@ settings. Windows retains the static CRT flags when setting `RUSTFLAGS`, and mac
 C/C++ profile instrumentation in both stages, matching the release workflow.
 
 The uv script accepts `--codegen-units 1` or `--codegen-units 16`; the workflow exposes the same
-`codegen-units` choice. The default is 16, matching the release profile used for the earlier
-measurements below. This sets `CARGO_PROFILE_RELEASE_CODEGEN_UNITS` for both the no-debug and
-symbols builds, including their instrumented PGO builds, and records the value in the report. Other
-optimization settings and Cargo job counts remain unchanged. This permits testing the
-single-codegen-unit setting from [#22303](https://github.com/astral-sh/uv/pull/22303) without
-changing production profiles or runner sizes. Compare debug overhead against the no-debug baseline
-from the same run; comparisons against earlier 16-unit runs also include variation in runner load,
-caches, and training workloads. The small Rust+C fixture does not use this option.
+`codegen-units` choice. The default is 1, matching the current release profile; the earlier
+measurements below identify their codegen-unit setting. This sets
+`CARGO_PROFILE_RELEASE_CODEGEN_UNITS` for both the no-debug and symbols builds, including their
+instrumented PGO builds, and records the value in the report. Other optimization settings and Cargo
+job counts remain unchanged. This permits testing the single-codegen-unit setting from
+[#22303](https://github.com/astral-sh/uv/pull/22303) without changing production profiles or runner
+sizes. Compare debug overhead against the no-debug baseline from the same run; comparisons against
+earlier 16-unit runs also include variation in runner load, caches, and training workloads. The
+small Rust+C fixture does not use this option.
 
 The workflow also supports native Linux ARM64 on the release's 64 GB Depot runner. It uses Rust's
 bundled LLD for the instrumented build's long-range calls and sets jemalloc's page size as in the
@@ -678,3 +679,25 @@ and 16.805/16.983 ms for Trio (+1.1%, 0.178 ms), with identical output hashes. E
 tables measured 26.176/26.121 and 16.976/16.957 ms, and limited repeat measured 31.151/32.331 and
 21.528/21.299 ms. These small cached workloads and differing runner observations do not establish a
 general runtime regression or improvement.
+
+### Debug levels on the current single-codegen-unit release profile
+
+The next comparison uses main revision `238d6ba651d13f0dfddab0cc1826f963cdf21711`, which includes
+the merged [single-codegen-unit release configuration](https://github.com/astral-sh/uv/pull/22303).
+It measures `line-tables-only`, `limited`, and `full` on Linux x86-64, Linux ARM64, macOS ARM64, and
+Windows x86-64. Every level has its own fresh no-debug baseline, with one codegen unit during both
+instrumented PGO compilation and final compilation. All three level comparisons use the same
+experiment commit, lockfile, toolchain, PGO corpus, and resolver benchmark inputs.
+
+Runner profiles and Cargo job counts match the earlier experiment: Linux uses the 16-vCPU Depot
+profiles with eight Cargo jobs; macOS uses `namespace-profile-macos-15` with four jobs; Windows uses
+`namespace-profile-windows-2022-x86-64-16x32` with four jobs. Production Linux x86-64 builds now use
+the smaller `depot-ubuntu-latest-4` profile. Keeping the experiment runners fixed supports
+comparisons between debug levels; these native build timings are not measurements of production
+manylinux CI.
+
+Compare build and training times, executable and wheel sizes, separate symbol sizes, and resolver
+medians against each paired baseline. Source lookup, negative lookup, SBOM, wheel-installation,
+static CRT or signature, and smoke checks remain required. Retain this set of reports separately
+from the October 7 measurements because the uv source and dependencies have also changed. Results
+are pending.
