@@ -805,6 +805,11 @@ impl Cache {
                             continue;
                         }
 
+                        // Visit nested build settings shards separately so their metadata survives.
+                        if entry.file_type()?.is_dir() && path.join("metadata.msgpack").exists() {
+                            continue;
+                        }
+
                         // Retain any built wheel archives.
                         if path
                             .extension()
@@ -1344,13 +1349,26 @@ impl CacheBucket {
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
         /// Returns `true` if the [`Path`] represents a built wheel for the given package.
         fn is_match(path: &Path, name: &PackageName) -> bool {
-            let Ok(metadata) = fs_err::read(path.join("metadata.msgpack")) else {
-                return false;
-            };
-            let Ok(metadata) = rmp_serde::from_slice::<ResolutionMetadata>(&metadata) else {
-                return false;
-            };
-            metadata.name == *name
+            // The metadata can be in the revision itself or one shard down, if build settings
+            // were used.
+            for entry in walkdir::WalkDir::new(path).min_depth(1).max_depth(2) {
+                let Ok(entry) = entry else {
+                    continue;
+                };
+                if entry.file_name() != "metadata.msgpack" {
+                    continue;
+                }
+                let Ok(metadata) = fs_err::read(entry.path()) else {
+                    continue;
+                };
+                let Ok(metadata) = rmp_serde::from_slice::<ResolutionMetadata>(&metadata) else {
+                    continue;
+                };
+                if metadata.name == *name {
+                    return true;
+                }
+            }
+            false
         }
 
         let mut summary = cache.removal();
