@@ -336,8 +336,10 @@ jobs:
       - check-crates-policies
       - check-generated-files
       - test
+      - test-integration
       - test-system
       - build-dev-binaries
+      - build-release-artifacts
       - build-docker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
@@ -360,5 +362,7 @@ jobs:
           # Jobs not listed here are always required.
           CONDITIONAL_JOBS: >-
             {
+              "build-release-artifacts": ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }},
+              "test-integration": ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }},
               "test-system": ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
             }
