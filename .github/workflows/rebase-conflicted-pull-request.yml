@@ -115,7 +115,7 @@ jobs:
           fi
 
       - name: Rebase pull request
-        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
+        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
         env:
           BASE_REF: ${{ inputs.base-ref }}
           BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}

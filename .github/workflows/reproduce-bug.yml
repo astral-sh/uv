@@ -133,7 +133,7 @@ jobs:
 
       - name: "Reproduce issue behavior"
         id: reproduce
-        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
+        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
@@ -303,7 +303,7 @@ jobs:
 
       - name: "Create integration test"
         id: create-test
-        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
+        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INSTA_UPDATE: "no"
