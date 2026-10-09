@@ -7251,7 +7251,7 @@ fn no_install_project_singular_interval_requires_dist() -> Result<()> {
     context.lock().assert().success();
 
     let lock_path = context.temp_dir.join("uv.lock");
-    let lock = fs_err::read_to_string(&lock_path)?;
+    let lock = context.read("uv.lock");
     let lock = lock.replacen(
         r#"requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0,<=2.0.0" }]"#,
         r#"requires-dist = [{ name = "iniconfig", specifier = "<=2.0.0,>=2.0.0" }]"#,
@@ -13427,7 +13427,7 @@ fn sync_build_tag() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.child("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -15164,8 +15164,8 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     // Simulate an incompatible `pyvenv.cfg:version` value created
     // by the venv module.
     let pyvenv_cfg = context.venv.child("pyvenv.cfg");
-    let contents = fs_err::read_to_string(&pyvenv_cfg)
-        .unwrap()
+    let contents = context
+        .read(".venv/pyvenv.cfg")
         .lines()
         .map(|line| {
             if line.trim_start().starts_with("version") {
@@ -15192,7 +15192,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let contents = context.read(".venv/pyvenv.cfg");
         let lines: Vec<&str> = contents.split('\n').collect();
         assert_snapshot!(lines[3], @"version_info = 3.12.[X]");
     });
@@ -15200,8 +15200,8 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     // Simulate an incompatible `pyvenv.cfg:version_info` value created
     // by uv or virtualenv.
     let pyvenv_cfg = context.venv.child("pyvenv.cfg");
-    let contents = fs_err::read_to_string(&pyvenv_cfg)
-        .unwrap()
+    let contents = context
+        .read(".venv/pyvenv.cfg")
         .lines()
         .map(|line| {
             if line.trim_start().starts_with("version") {
@@ -15228,7 +15228,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let contents = context.read(".venv/pyvenv.cfg");
         let lines: Vec<&str> = contents.split('\n').collect();
         assert_snapshot!(lines[3], @"version_info = 3.12.[X]");
     });

@@ -3098,7 +3098,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
 
     // A repository-controlled checkout marker must not truncate an external file; see
     // astral-sh/uv#21857.
-    assert_snapshot!(fs::read_to_string(victim.path())?, @"external contents");
+    assert_snapshot!(context.read("victim"), @"external contents");
 
     Ok(())
 }
@@ -15072,7 +15072,7 @@ fn pep_751_hash_mismatch() -> Result<()> {
     "
     );
 
-    pylock_toml.write_str(&fs::read_to_string(&pylock_toml)?.replace(
+    pylock_toml.write_str(&context.read("pylock.toml").replace(
         "c5185871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374",
         "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374",
     ))?;

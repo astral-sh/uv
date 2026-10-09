@@ -619,7 +619,7 @@ fn sync_recovers_from_centralized_environment_path_file() -> Result<()> {
     // An arbitrary `.venv` file is preserved.
     environment.write_str("user-data")?;
     context.sync().assert().failure();
-    assert_eq!(fs_err::read_to_string(environment.path())?, "user-data");
+    assert_eq!(context.read(".venv"), "user-data");
 
     // A centralized path file can be replaced when returning to a local environment.
     let target = context

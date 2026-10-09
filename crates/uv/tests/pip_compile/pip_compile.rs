@@ -18555,7 +18555,7 @@ fn pep_751_compile_preferences() -> Result<()> {
 
     // Empty hash tables should warn without discarding version preferences.
     let pylock_toml = context.temp_dir.child("pylock.toml");
-    let content = fs_err::read_to_string(&pylock_toml)?;
+    let content = context.read("pylock.toml");
     pylock_toml
         .write_str(&Regex::new(r"hashes = \{[^}]*\}")?.replace_all(&content, "hashes = {}"))?;
 

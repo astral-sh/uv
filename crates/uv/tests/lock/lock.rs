@@ -5269,7 +5269,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     Resolved 8 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8240,7 +8240,7 @@ fn lock_requires_python() -> Result<()> {
     Resolved 17 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8528,7 +8528,7 @@ fn lock_requires_python() -> Result<()> {
     Resolved 13 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8745,7 +8745,7 @@ fn lock_requires_python() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8856,8 +8856,6 @@ fn lock_requires_python() -> Result<()> {
 fn lock_requires_python_upper() -> Result<()> {
     let context = uv_test::test_context!("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     // Require `==3.11.*`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8876,7 +8874,7 @@ fn lock_requires_python_upper() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -8975,8 +8973,6 @@ fn lock_requires_python_upper() -> Result<()> {
 fn lock_requires_python_exact() -> Result<()> {
     let context = uv_test::test_context!("3.13.0");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -8995,7 +8991,7 @@ fn lock_requires_python_exact() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9104,8 +9100,6 @@ fn lock_requires_python_compatible_specifier() -> Result<()> {
 fn lock_requires_python_fork() -> Result<()> {
     let context = uv_test::test_context!("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -9123,7 +9117,7 @@ fn lock_requires_python_fork() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9454,8 +9448,6 @@ fn lock_requires_python_wheels_stable_abi() -> Result<()> {
 fn lock_requires_python_wheels() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     // Require ==3.12.*.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9475,7 +9467,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9554,7 +9546,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9624,8 +9616,6 @@ fn lock_requires_python_wheels() -> Result<()> {
 fn lock_requires_python_star() -> Result<()> {
     let context = uv_test::test_context!("3.11");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -9643,7 +9633,7 @@ fn lock_requires_python_star() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9741,8 +9731,6 @@ fn lock_requires_python_star() -> Result<()> {
 fn lock_requires_python_not_equal() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -9760,7 +9748,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9813,8 +9801,6 @@ fn lock_requires_python_not_equal() -> Result<()> {
 fn lock_requires_python_not_equal_consecutive_wildcards() -> Result<()> {
     let context = uv_test::test_context!("3.13");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -9832,7 +9818,7 @@ fn lock_requires_python_not_equal_consecutive_wildcards() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -9887,8 +9873,6 @@ fn lock_requires_python_not_equal_consecutive_wildcards() -> Result<()> {
 fn lock_requires_python_pre() -> Result<()> {
     let context = uv_test::test_context!("3.11");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -9906,7 +9890,7 @@ fn lock_requires_python_pre() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10003,8 +9987,6 @@ fn lock_requires_python_pre() -> Result<()> {
 fn lock_requires_python_unbounded() -> Result<()> {
     let context = uv_test::test_context!("3.11");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -10023,7 +10005,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10138,8 +10120,6 @@ fn lock_requires_python_disjoint() -> Result<()> {
 fn lock_requires_python_maximum_version() -> Result<()> {
     let context = uv_test::test_context!("3.11");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -10157,7 +10137,7 @@ fn lock_requires_python_maximum_version() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10289,8 +10269,6 @@ fn lock_requires_python_maximum_version() -> Result<()> {
 fn lock_requires_python_fewest_versions() -> Result<()> {
     let context = uv_test::test_context!("3.11");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -10311,7 +10289,7 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -10397,8 +10375,6 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
 fn lock_python_version_marker_complement() -> Result<()> {
     let context = uv_test::test_context!("3.11");
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -10423,7 +10399,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -12102,7 +12078,7 @@ fn lock_index_absolute_path_from_config() -> Result<()> {
     ");
 
     // Check the lockfile - the absolute path should stay absolute.
-    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+    let lock = context.read("project/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -13990,7 +13966,7 @@ fn lock_exclusion() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(child.join("uv.lock")).unwrap();
+    let lock = context.read("child/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -14392,7 +14368,7 @@ fn lock_external_workspace_source() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+    let lock = context.read("project/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -14923,7 +14899,7 @@ fn lock_dev_transitive() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(bar.join("uv.lock")).unwrap();
+    let lock = context.read("bar/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -17019,7 +16995,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -17132,7 +17108,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -17244,7 +17220,7 @@ fn lock_find_links_relative_url() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -17352,7 +17328,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -17632,7 +17608,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -17729,7 +17705,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -17822,7 +17798,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -18676,7 +18652,7 @@ fn lock_mixed_extras() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace1.join("uv.lock")).unwrap();
+    let lock = context.read("workspace1/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -18862,7 +18838,7 @@ fn lock_transitive_extra() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+    let lock = context.read("workspace/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -24830,7 +24806,7 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
-    let pyproject = fs_err::read_to_string(pyproject_toml.path())?;
+    let pyproject = context.read("pyproject.toml");
     pyproject_toml.write_str(&pyproject.replace(
         &format!(
             r#"six = {{ url = "{}" }}
@@ -25527,15 +25503,13 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         "#,
     )?;
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -25633,15 +25607,13 @@ fn lock_narrowed_python_version() -> Result<()> {
         "#,
     )?;
 
-    let lockfile = context.temp_dir.join("uv.lock");
-
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(&lockfile).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -34702,7 +34674,7 @@ fn lock_dynamic_version_no_build() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    let pyproject = fs_err::read_to_string(pyproject_toml.path())?;
+    let pyproject = context.read("pyproject.toml");
     pyproject_toml.write_str(&pyproject.replace(
         "dependencies = []",
         indoc! {r#"
@@ -42876,7 +42848,7 @@ async fn lock_path_dependency_explicit_index() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let lock = lock_without_package_metadata(&fs_err::read_to_string(pkg_b.join("uv.lock"))?)?;
+    let lock = lock_without_package_metadata(&context.read("pkg_b/uv.lock"))?;
     fs_err::write(pkg_b.join("uv.lock"), lock.to_string())?;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -44690,7 +44662,7 @@ fn lock_supported_environment_abi3_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+    let lock = context.read("project/uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),

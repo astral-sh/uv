@@ -2453,7 +2453,7 @@ fn sync_editable() -> Result<()> {
 
     // Modify the `pyproject.toml` file.
     let pyproject_toml = poetry_editable.path().join("pyproject.toml");
-    let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
+    let pyproject_toml_contents = context.read("poetry_editable/pyproject.toml");
     fs_err::write(
         &pyproject_toml,
         pyproject_toml_contents.replace("0.1.0", "0.1.1"),
@@ -2475,7 +2475,7 @@ fn sync_editable() -> Result<()> {
 
     // Modify the `pyproject.toml` file.
     let pyproject_toml = poetry_editable.path().join("pyproject.toml");
-    let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
+    let pyproject_toml_contents = context.read("poetry_editable/pyproject.toml");
     fs_err::write(
         &pyproject_toml,
         pyproject_toml_contents.replace("0.1.0", "0.1.1"),

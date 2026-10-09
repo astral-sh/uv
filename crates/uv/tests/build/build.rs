@@ -1341,7 +1341,7 @@ fn build_dependency_check_constraints_and_extra_build_dependencies() -> Result<(
     ");
     project.child("pyproject.toml").write_str(&format!(
         "{}\n{}",
-        fs_err::read_to_string(project.child("pyproject.toml"))?,
+        context.read("project/pyproject.toml"),
         "[tool.uv.extra-build-dependencies]\nproject = ['extra-build-dependency>=1']\n",
     ))?;
     uv_snapshot!(context.filters(), context.build().args([

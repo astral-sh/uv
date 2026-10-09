@@ -2050,8 +2050,7 @@ impl TestContext {
     ///
     /// This assumes that a lock has already been performed.
     pub fn diff_lock(&self, change: impl Fn(&Self) -> Command) -> String {
-        let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
-        let old_lock = fs_err::read_to_string(&lock_path).unwrap();
+        let old_lock = self.read("uv.lock");
         let (snapshot, output) = run_and_format(
             change(self),
             self.filters(),
@@ -2060,7 +2059,7 @@ impl TestContext {
             None,
         );
         assert!(output.status.success(), "{snapshot}");
-        let new_lock = fs_err::read_to_string(&lock_path).unwrap();
+        let new_lock = self.read("uv.lock");
         diff_snapshot(&old_lock, &new_lock, 10)
     }
 
