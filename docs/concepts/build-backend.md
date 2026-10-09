@@ -31,7 +31,7 @@ To use uv as a build backend in an existing project, add `uv_build` to the
 
 ```toml title="pyproject.toml"
 [build-system]
-requires = ["uv_build>=0.12.24,<0.13"]
+requires = ["uv_build>=0.13.0,<0.14"]
 build-backend = "uv_build"
 ```
 
