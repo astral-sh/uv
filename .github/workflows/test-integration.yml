@@ -314,7 +314,7 @@ jobs:
           ./uv run -p 3.13 python -c ""
 
   integration-test-windows-aarch64-explicit:
-    name: "aarch64 windows explicit"
+    name: "x86-64 python on aarch64 windows (explicit)"
     timeout-minutes: 10
     runs-on: windows-11-arm
 
