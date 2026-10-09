@@ -54,11 +54,15 @@ fn installer_download_url(
     ))
 }
 
-/// Provide a link to the release location actually used for a successful update.
-/// Custom Astral mirrors serve artifacts, not necessarily GitHub tag HTML pages.
-fn update_success_url(target_version: &Pep440Version, astral_mirror_url: Option<&str>) -> String {
-    if let Some(download_url) = installer_download_url(target_version, astral_mirror_url) {
-        format!("{download_url}/{}", installer_filename())
+/// Show the installer URL returned by the downloader for custom mirrors,
+/// while preserving the existing release-page link for default installs.
+fn update_success_url(
+    target_version: &Pep440Version,
+    astral_mirror_url: Option<&str>,
+    used_installer_url: &DisplaySafeUrl,
+) -> String {
+    if custom_astral_mirror_url(astral_mirror_url).is_some() {
+        used_installer_url.to_string()
     } else {
         format!("https://github.com/astral-sh/uv/releases/tag/{target_version}")
     }
@@ -364,7 +368,7 @@ async fn run_official_updater(
     let modify_path = load_receipt_modify_path("uv")
         .context("Failed to determine whether the existing standalone install modified PATH")?;
 
-    download_installer_from_urls(
+    let used_installer_url = download_installer_from_urls(
         &installer_urls,
         &installer_path,
         client_builder,
@@ -386,7 +390,11 @@ async fn run_official_updater(
     } else {
         "Upgraded"
     };
-    let update_url = update_success_url(target_version, custom_astral_mirror.as_deref());
+    let update_url = update_success_url(
+        target_version,
+        custom_astral_mirror.as_deref(),
+        &used_installer_url,
+    );
     writeln!(
         printer.stderr(),
         "{}",
@@ -443,7 +451,7 @@ async fn download_installer_from_urls(
     installer_path: &Path,
     client_builder: BaseClientBuilder<'_>,
     github_token: Option<&str>,
-) -> Result<()> {
+) -> Result<DisplaySafeUrl> {
     let retry_policy = client_builder.retry_policy();
     // Disable the client's built-in retries here because `fetch_with_url_fallback` already owns
     // the retry budget across the mirror-first URL list.
@@ -452,7 +460,8 @@ async fn download_installer_from_urls(
         .build()
         .context("Failed to build HTTP client for self-update")?;
 
-    fetch_with_url_fallback(urls, retry_policy, "official uv installer", |url| async {
+    let used_installer_url =
+        fetch_with_url_fallback(urls, retry_policy, "official uv installer", |url| async {
         let mut request = client.for_host(&url).get(Url::from(url.clone()));
         if let Some(github_token) = installer_download_github_token(&url, github_token) {
             request = request.header("Authorization", format!("Bearer {github_token}"));
@@ -478,7 +487,7 @@ async fn download_installer_from_urls(
             .bytes()
             .await
             .map_err(|source| InstallerDownloadError::Download {
-                url,
+                url: url.clone(),
                 source: source.into(),
             })?;
 
@@ -489,7 +498,7 @@ async fn download_installer_from_urls(
                 source,
             })?;
 
-        Ok::<(), InstallerDownloadError>(())
+        Ok::<DisplaySafeUrl, InstallerDownloadError>(url)
     })
     .await?;
 
@@ -501,7 +510,7 @@ async fn download_installer_from_urls(
         fs_err::tokio::set_permissions(installer_path, Permissions::from_mode(0o744)).await?;
     }
 
-    Ok(())
+    Ok(used_installer_url)
 }
 
 fn installer_download_github_token<'a>(
@@ -1036,12 +1045,13 @@ mod tests {
     #[test]
     fn test_update_success_url_for_default_mirror() {
         let version = Pep440Version::new([1, 2, 3]);
+        let installer = DisplaySafeUrl::parse("https://mirror.example.com/uv-installer.sh").unwrap();
         assert_eq!(
-            update_success_url(&version, None),
+            update_success_url(&version, None, &installer),
             "https://github.com/astral-sh/uv/releases/tag/1.2.3"
         );
         assert_eq!(
-            update_success_url(&version, Some("")),
+            update_success_url(&version, Some(""), &installer),
             "https://github.com/astral-sh/uv/releases/tag/1.2.3"
         );
     }
@@ -1050,12 +1060,11 @@ mod tests {
     fn test_update_success_url_for_custom_mirror() {
         let version = Pep440Version::new([1, 2, 3]);
         let mirror = "https://nexus.example.com/repository/releases.astral.sh/";
+        let used_installer_url =
+            DisplaySafeUrl::parse("https://selected.example.com/cache/uv-installer.sh").unwrap();
         assert_eq!(
-            update_success_url(&version, Some(mirror)),
-            format!(
-                "https://nexus.example.com/repository/releases.astral.sh/github/uv/releases/download/1.2.3/{}",
-                installer_filename()
-            )
+            update_success_url(&version, Some(mirror), &used_installer_url),
+            used_installer_url.to_string()
         );
     }
 
@@ -1121,14 +1130,15 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let installer_path = temp_dir.path().join("installer.sh");
 
-        download_installer_from_urls(
-            &[mirror_url, canonical_url],
+        let used_installer_url = download_installer_from_urls(
+            &[mirror_url, canonical_url.clone()],
             &installer_path,
             BaseClientBuilder::default(),
             None,
         )
         .await
         .expect("404 from mirror should fall back to canonical installer URL");
+        assert_eq!(used_installer_url, canonical_url);
 
         let _ = mirror_shutdown.send(());
         let _ = canonical_shutdown.send(());
