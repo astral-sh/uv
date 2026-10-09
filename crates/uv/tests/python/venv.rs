@@ -14,12 +14,14 @@ use uv_static::EnvVars;
 
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
+#[cfg(all(unix, feature = "test-python-managed"))]
+use serde_json::json;
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
-use uv_test::{assert_link_target, diff_snapshot, site_packages_path, uv_snapshot};
+use uv_test::{assert_link_target, site_packages_path, uv_snapshot};
 
 #[test]
 fn create_venv() {
@@ -113,9 +115,9 @@ fn create_venv_caches_interpreter() -> Result<()> {
         .context("Fresh interpreter cache is locked")?;
     let queried = PythonEnvironment::from_root(&root_path, &fresh_cache)?;
     assert!(startup_marker.is_file());
-    insta::assert_snapshot!(
-        diff_snapshot(&format!("{cached:#?}"), &format!("{queried:#?}"), 3),
-        @""
+    assert_eq!(
+        cached.interpreter().to_base_python()?,
+        queried.interpreter().to_base_python()?
     );
     assert_eq!(cached, queried);
 
@@ -193,10 +195,18 @@ fn create_venv_caches_symlinked_base_interpreter() -> Result<()> {
         .context("Fresh interpreter cache is locked")?;
     let queried = PythonEnvironment::from_root(context.venv.path(), &fresh_cache)?;
     assert!(startup_marker.is_file());
-    insta::assert_snapshot!(
-        diff_snapshot(&format!("{cached:#?}"), &format!("{queried:#?}"), 3),
-        @""
-    );
+    let base_executables = json!({
+        "cached_base_executable": cached.interpreter().to_base_python()?,
+        "queried_base_executable": queried.interpreter().to_base_python()?,
+    });
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(base_executables, @r#"
+        {
+          "cached_base_executable": "[PYTHON_BIN]/python3.12",
+          "queried_base_executable": "[PYTHON_BIN]/python3.12"
+        }
+        "#);
+    });
     assert_eq!(cached, queried);
 
     uv_snapshot!(context.filters(), context.venv()
@@ -235,7 +245,9 @@ fn create_venv_caches_symlinked_base_interpreter() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn create_venv_caches_upgradeable_interpreter() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_managed_python_dirs()
+        .with_filtered_python_keys();
     context.python_install().arg("3.12.9").assert().success();
 
     let output = context.python_find().arg("3.12.9").assert().success();
@@ -281,10 +293,23 @@ fn create_venv_caches_upgradeable_interpreter() -> Result<()> {
     let cached = PythonEnvironment::from_root(context.venv.path(), &cache)?;
     let queried = PythonEnvironment::from_root(context.venv.path(), &fresh_cache)?;
     assert!(startup_marker.is_file());
-    insta::assert_snapshot!(
-        diff_snapshot(&format!("{cached:#?}"), &format!("{queried:#?}"), 3),
-        @""
-    );
+    #[cfg(unix)]
+    {
+        let base_executables = json!({
+            "cached_base_executable": cached.interpreter().to_base_python()?,
+            "queried_base_executable": queried.interpreter().to_base_python()?,
+            "selected_base_executable": python,
+        });
+        insta::with_settings!({ filters => context.filters() }, {
+            insta::assert_json_snapshot!(base_executables, @r#"
+            {
+              "cached_base_executable": "[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12",
+              "queried_base_executable": "[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12",
+              "selected_base_executable": "[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]/bin/python3.12"
+            }
+            "#);
+        });
+    }
     assert_eq!(cached, queried);
 
     Ok(())
