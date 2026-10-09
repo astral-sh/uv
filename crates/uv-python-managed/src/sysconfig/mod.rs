@@ -59,16 +59,21 @@ pub(crate) fn update_sysconfig(
     let contents = fs_err::read_to_string(&sysconfigdata)?;
     let data = SysconfigData::from_str(&contents)?;
     let data = patch_sysconfigdata(data, &real_prefix);
-    let contents = data.to_string_pretty()?;
+    let new_contents = data.to_string_pretty()?;
 
-    // Write the updated `_sysconfigdata_` file.
-    let mut file = fs_err::OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(&sysconfigdata)?;
-    file.write_all(contents.as_bytes())?;
-    file.sync_data()?;
+    // Python processes can import this module while the installation is being patched.
+    if contents != new_contents {
+        let permissions = fs_err::metadata(&sysconfigdata)?.permissions();
+        let mut file = uv_fs::tempfile_in(
+            sysconfigdata
+                .parent()
+                .expect("The sysconfig data file is in the Python lib directory"),
+        )?;
+        file.write_all(new_contents.as_bytes())?;
+        file.as_file().set_permissions(permissions)?;
+        file.as_file().sync_data()?;
+        uv_fs::persist_with_retry_sync(file, &sysconfigdata)?;
+    }
 
     // Find the `pkgconfig` files in the Python installation.
     for pkgconfig in find_pkgconfigs(&real_prefix)? {

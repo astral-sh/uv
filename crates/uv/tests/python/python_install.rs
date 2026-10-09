@@ -1,5 +1,10 @@
 #[cfg(windows)]
 use std::path::PathBuf;
+#[cfg(unix)]
+use std::{
+    io::Read,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+};
 
 use std::{env, path::Path, process::Command};
 
@@ -150,6 +155,9 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
             "OTHER_PREFIX": "/installation"
         }
     "#})?;
+    fs_err::set_permissions(sysconfig.path(), std::fs::Permissions::from_mode(0o640))?;
+    let original = fs_err::read_to_string(sysconfig.path())?;
+    let mut reader = fs_err::File::open(sysconfig.path())?;
 
     context
         .python_install()
@@ -172,6 +180,23 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
         }
         "#);
     });
+
+    // A Python process which already opened the module must see the complete original.
+    let mut previous_contents = String::new();
+    reader.read_to_string(&mut previous_contents)?;
+    assert_eq!(previous_contents, original);
+    let metadata = fs_err::metadata(sysconfig.path())?;
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o640);
+
+    context
+        .python_install()
+        .arg("3.12.9")
+        .arg("--no-bin")
+        .arg("--offline")
+        .assert()
+        .success();
+    // Already-patched sysconfig data does not need a new file.
+    assert_eq!(fs_err::metadata(sysconfig.path())?.ino(), metadata.ino());
 
     Ok(())
 }
