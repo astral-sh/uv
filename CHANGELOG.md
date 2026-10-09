@@ -41,6 +41,8 @@ There are no breaking changes to the configuration of the [uv build backend](htt
 
   You can opt out of this behavior by setting `UV_PYTHON_ARCH=x86_64` or requesting an explicit architecture, e.g., `cpython-3.14-windows-x86_64`.
 
+  In GitHub Actions, you can also set `python-arch: x86_64` with [`astral-sh/setup-uv@main`](https://github.com/astral-sh/setup-uv#python-architecture).
+
 - **Reject editable requirements in included constraints files** ([#22282](https://github.com/astral-sh/uv/pull/22282))
 
   Previously, uv silently ignored editable (`-e`) requirements in constraints files included with `-c` from a requirements file. Now, uv rejects these requirements with an error, matching [pip's behavior](https://pip.pypa.io/en/stable/user_guide/#constraints-files).
