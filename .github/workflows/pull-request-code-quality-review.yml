@@ -40,6 +40,7 @@ jobs:
           mkdir -p "$REVIEW_CONFIG/codex" "$RUNNER_TEMP/codex-code-quality-review"
           printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
           cp agents/codex/config.toml "$REVIEW_CONFIG/codex/"
+          printf '\n[features]\nnetwork_proxy = true\n' >> "$REVIEW_CONFIG/codex/config.toml"
           cp agents/prompts/pull-request-code-quality-review.md "$REVIEW_CONFIG/prompt.md"
           cp agents/schemas/pull-request-code-quality-review.json "$REVIEW_CONFIG/schema.json"
           cp agents/scripts/collect-pull-request-review-context.sh "$REVIEW_CONFIG/"
@@ -74,7 +75,7 @@ jobs:
 
       - name: "Review pull request"
         id: review
-        uses: openai/codex-action@c385816875cc2fc8e033ed9d1cba96f8c331210e # v1.11 + GitHub API retry
+        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}/codex-code-quality-review
@@ -85,7 +86,6 @@ jobs:
           model: gpt-6-astra
           effort: xhigh
           permission-profile: "pull-request-review"
-          codex-args: '["--enable", "network_proxy"]'
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
           prompt-file: "${{ env.REVIEW_CONFIG }}/prompt.md"
