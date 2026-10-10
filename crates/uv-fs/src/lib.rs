@@ -494,6 +494,45 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
     persist_with_retry(temp_file, path.as_ref()).await
 }
 
+/// Atomically write a user-managed file, preserving symlinks and the target's permissions.
+///
+/// Replacement requires write access to the target directory, even if the file itself is
+/// writable. A missing symlink target is created when its parent directory exists.
+#[cfg(feature = "tokio")]
+pub async fn write_atomic_preserve(
+    path: impl AsRef<Path>,
+    data: impl AsRef<[u8]>,
+) -> std::io::Result<()> {
+    let mut path = path.as_ref().to_path_buf();
+    let permissions = loop {
+        match fs_err::tokio::symlink_metadata(&path).await {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                path = match fs_err::tokio::canonicalize(&path).await {
+                    Ok(target) => target,
+                    // Canonicalization resolves live links and catches cycles. For a dangling
+                    // chain, follow its next link and let the OS check the remaining path.
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        let target = fs_err::tokio::read_link(&path).await?;
+                        path.parent()
+                            .expect("Write path must have a parent")
+                            .join(target)
+                    }
+                    Err(err) => return Err(err),
+                };
+            }
+            Ok(metadata) => break Some(metadata.permissions()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => break None,
+            Err(err) => return Err(err),
+        }
+    };
+    let temp_file = tempfile_in(path.parent().expect("Write path must have a parent"))?;
+    fs_err::tokio::write(&temp_file, data).await?;
+    if let Some(permissions) = permissions {
+        temp_file.as_file().set_permissions(permissions)?;
+    }
+    persist_with_retry(temp_file, path).await
+}
+
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
     let mut temp_file = tempfile_in(
