@@ -1,0 +1,48 @@
+{
+  "amendment_id": "build-margin-10pct-20261010",
+  "recorded_at": "2026-10-10T13:59:58.684235+00:00",
+  "study": "uv-debug-statistics-20261009-v1",
+  "original_plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+  "frozen_experiment_commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+  "authorization": "Build-time practical tolerance set to 10% before the first inferential look.",
+  "timing": "Recorded after confirmatory collection started and before any confirmatory inferential look. Original 5% protocol is retained; this is an explicit post-start amendment, not the original preregistration.",
+  "selection_basis": "Practical tolerance specified independently of confirmatory effect estimates and confidence intervals; first look selected from exact interval feasibility and paired collection waves.",
+  "confirmatory_inference_before_amendment": false,
+  "build_equivalence_margin": {
+    "original": 0.05,
+    "amended": 0.1
+  },
+  "runtime_equivalence_margin": {
+    "original": 0.03,
+    "amended": 0.03
+  },
+  "confirmatory_looks": {
+    "original_first": 20,
+    "amended_first": 14,
+    "growth_factor": 2
+  },
+  "unchanged": {
+    "family_alpha": 0.05,
+    "simultaneous_contrasts": 84,
+    "look_alpha_rule": "0.05 / 2**(look_index+1), with look_index starting at0",
+    "stop_rule": "All72 treatment timing contrasts establish a nonzero median effect or equivalence within the registered margin; all12 A/A control intervals establish equivalence. Correctness/provenance gates must pass."
+  },
+  "feasibility": {
+    "first_look_interval_alpha": 0.00029761904761904765,
+    "smallest_finite_interval_sample_size": 13,
+    "two_sided_extreme_tail_at_12": 0.00048828125,
+    "two_sided_extreme_tail_at_13": 0.000244140625,
+    "first_paired_wave_at_or_above_minimum": 14
+  },
+  "interpretation": "10% is the build practical-equivalence margin, not a claim of power or guaranteed precision at 14 observations. Retain runtime margin 3%, all platforms/levels/contrasts, alpha spending, all data and correctness/model-validity gates. If unresolved at 14, continue to 28, 56, and so on.",
+  "collection_snapshot": {
+    "linux": 12,
+    "linux-arm64": 12,
+    "macos": 12,
+    "windows": 10,
+    "registered_blocks": [
+      1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011
+    ]
+  },
+  "original_amendment_file_sha256": "ff9dda6fa922d4f1e095ff39b0418a3719368b25d521e650522529690836e274"
+}

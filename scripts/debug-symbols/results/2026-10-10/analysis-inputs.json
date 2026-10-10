@@ -1,0 +1,4706 @@
+[
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1000,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38011615355",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-mzlh6vdmgr"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1176.6841192309998
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1566.9620334289998
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1073.0382886859998
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1083.7039829659998
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1169.929355188
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010545819000071788,
+          "none-b": 0.010587698000108503,
+          "line-tables-only": 0.010471515000062936,
+          "limited": 0.010472176999883231,
+          "full": 0.010499332500330638
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007987681000486191,
+          "none-b": 0.0079766919998292,
+          "line-tables-only": 0.00792805099990801,
+          "limited": 0.008014844000172161,
+          "full": 0.007916702999864356
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1000,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38011615355",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-fnscf531zl"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1220.409091261
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 818.7622415540002
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 932.391706887
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 820.0269782269997
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 917.45507529
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008618640000349842,
+          "none-b": 0.008638110000447341,
+          "line-tables-only": 0.008609249499841098,
+          "limited": 0.008495220999975572,
+          "full": 0.008563630000026023
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007013408999682724,
+          "none-b": 0.006978888500270841,
+          "line-tables-only": 0.006853991999832942,
+          "limited": 0.006915347999893129,
+          "full": 0.0068662775001939735
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1000,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38011615355",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-ifue7ham78936"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 856.6407297080001
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 762.7936523749999
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1951.7949296249997
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 853.6762481250003
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 756.2197375420001
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011005561999809288,
+          "none-b": 0.011045166500025516,
+          "line-tables-only": 0.011048666500300897,
+          "limited": 0.011002041499978077,
+          "full": 0.010972083499837026
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009253082999748585,
+          "none-b": 0.009262312500140979,
+          "line-tables-only": 0.009284521000608947,
+          "limited": 0.009247500000128639,
+          "full": 0.009248687999843241
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1000,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38011615355",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-ei1u2jvjsk3h0"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1262.374
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1425.9529999999997
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1450.0480000000002
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1286.9530000000004
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2030.2659999999996
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03811809999979232,
+          "none-b": 0.037828649999937625,
+          "line-tables-only": 0.03779255000017656,
+          "limited": 0.03779495000026145,
+          "full": 0.03814215000011245
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.02283285000021351,
+          "none-b": 0.02260610000030283,
+          "line-tables-only": 0.02263265000010506,
+          "limited": 0.022695200000271143,
+          "full": 0.022746399999959976
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1001,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38011623483",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-r5wzkgvpg0"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1065.2812261179997
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1152.9831460850003
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1645.3748535459995
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1166.7698428749995
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1218.2402442079992
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010510189499655098,
+          "none-b": 0.010427752499708731,
+          "line-tables-only": 0.01048369350064604,
+          "limited": 0.010365117999754148,
+          "full": 0.010433038999963173
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.008203788000173518,
+          "none-b": 0.008090973499747633,
+          "line-tables-only": 0.008064254499913659,
+          "limited": 0.008114272000057099,
+          "full": 0.008074096499967709
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1001,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38011623483",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-n1px0dfkk9"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 827.1034026120001
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 828.464424174
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 922.4268022720003
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 926.0214289270002
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1230.4826294130003
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008676874499997211,
+          "none-b": 0.008664238999699592,
+          "line-tables-only": 0.008627108999917255,
+          "limited": 0.008630588999949396,
+          "full": 0.008644308999919303
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007090848000188998,
+          "none-b": 0.007073128499996528,
+          "line-tables-only": 0.00694161699993856,
+          "limited": 0.00694238249980117,
+          "full": 0.006906361999881483
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1001,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38011623483",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-bvddfoeevtr76"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 858.1464651249998
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 771.8341048320001
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 861.6316685409997
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 772.856084
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1987.2670909590001
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011034249999738677,
+          "none-b": 0.011131291500078078,
+          "line-tables-only": 0.011088291500072955,
+          "limited": 0.01117620849981904,
+          "full": 0.011023520500202721
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009315249500104983,
+          "none-b": 0.009255687500171916,
+          "line-tables-only": 0.009294187499563122,
+          "limited": 0.009288061999541242,
+          "full": 0.009349625000140804
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1001,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38011623483",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-72pjomjpnaf4c"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1288.969
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1448.36
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1454.2959999999998
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2055.094
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1273.6400000000003
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03931029999966995,
+          "none-b": 0.03941739999982019,
+          "line-tables-only": 0.039499500000601984,
+          "limited": 0.039314050000029965,
+          "full": 0.039753099999870756
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.023467449999770906,
+          "none-b": 0.023680749999584805,
+          "line-tables-only": 0.02366519999986849,
+          "limited": 0.02344984999990629,
+          "full": 0.02359505000003992
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1002,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38020138214",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-0g3xfhx73c"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1083.842292997
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1555.5863757299999
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1173.6092391649995
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1172.3011696439999
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1076.0742823089995
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010447484999986045,
+          "none-b": 0.010351028500281245,
+          "line-tables-only": 0.010301072499714792,
+          "limited": 0.010345550999772968,
+          "full": 0.01033285649964455
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007995780499641114,
+          "none-b": 0.008042961499995727,
+          "line-tables-only": 0.007937978000427393,
+          "limited": 0.007949502999963443,
+          "full": 0.007989427500433521
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1002,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38020138214",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-t4771hr5b2"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1009.2316545770001
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1117.2989368390001
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1119.886104482
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1004.8140555650002
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1485.434914857
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.012842022000313591,
+          "none-b": 0.012895178000235319,
+          "line-tables-only": 0.012859917000241694,
+          "limited": 0.012771846499617823,
+          "full": 0.012865430999681848
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.010355686500133743,
+          "none-b": 0.01038392250029574,
+          "line-tables-only": 0.010375706000559148,
+          "limited": 0.010397754499990697,
+          "full": 0.010490985999695113
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1002,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38020138214",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-3gpmak3o60g06"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 845.042039874
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 758.627619751
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1961.294460583
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 760.9381348749998
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 847.1996142499993
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011122978999992483,
+          "none-b": 0.01106477100029224,
+          "line-tables-only": 0.011072479500398913,
+          "limited": 0.011044416500226362,
+          "full": 0.011078687499775697
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009308104499723413,
+          "none-b": 0.009239520999926754,
+          "line-tables-only": 0.00928541650000625,
+          "limited": 0.009281999999984691,
+          "full": 0.009252770499642793
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1002,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38020138214",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-qrlmle5tqt800"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2039.813
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1428.812
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1255.1720000000005
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1257.156
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1419.8120000000008
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03768510000008973,
+          "none-b": 0.037692499999593565,
+          "line-tables-only": 0.03766249999989668,
+          "limited": 0.03790399999979854,
+          "full": 0.03782499999988431
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.022677500000099826,
+          "none-b": 0.022514549999868905,
+          "line-tables-only": 0.02254640000001018,
+          "limited": 0.022582149999834655,
+          "full": 0.022665049999886833
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1003,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38020285839",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-2bg7q45hh7"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1116.893077801
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1203.9401711429998
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1568.6385215190003
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1074.342158085
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1160.9847352069992
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010421497999686835,
+          "none-b": 0.010310511499938002,
+          "line-tables-only": 0.010315126999557833,
+          "limited": 0.010247350999634364,
+          "full": 0.010332223499972315
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00798344749955504,
+          "none-b": 0.008005373500054702,
+          "line-tables-only": 0.007889550000527379,
+          "limited": 0.007862485999794444,
+          "full": 0.007906788000127563
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1003,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38020285839",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-0f8w445wnw"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 968.96645124
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 849.824083323
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 954.5335175700002
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1289.127581137
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 854.3652285069993
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.009151766500053782,
+          "none-b": 0.009134026500305481,
+          "line-tables-only": 0.009150431499620026,
+          "limited": 0.009133641000062198,
+          "full": 0.009216182000272966
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.0073797019999801705,
+          "none-b": 0.007384481999906711,
+          "line-tables-only": 0.007266906000040763,
+          "limited": 0.0073022704996219545,
+          "full": 0.007332286500059126
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1003,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38020285839",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-0bbcnrs1jiq5q"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 770.150320667
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 848.9564420000003
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 755.5737832920004
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 857.4615692090001
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1993.3775827080008
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011286687500160042,
+          "none-b": 0.011292291999779991,
+          "line-tables-only": 0.011299853999844345,
+          "limited": 0.011267312499967375,
+          "full": 0.011279666999598703
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009401853999861487,
+          "none-b": 0.009376375000101689,
+          "line-tables-only": 0.009407125000052474,
+          "limited": 0.009316166499957035,
+          "full": 0.009366582999973616
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1003,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38020285839",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-710p5k98hfh9o"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1445.078
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1428.657
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2021.9999999999995
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1270.5629999999992
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1264.4679999999998
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03934380000055171,
+          "none-b": 0.03961410000010801,
+          "line-tables-only": 0.03945519999979297,
+          "limited": 0.03945029999977123,
+          "full": 0.03963249999969776
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.023667349999868748,
+          "none-b": 0.02334294999991471,
+          "line-tables-only": 0.02372925000008763,
+          "limited": 0.023383199999443605,
+          "full": 0.023675599999933183
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1004,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38027797422",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-438gtwfnjf"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1086.767751197
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1574.3874823769997
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1181.7291773749998
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1176.8385417339996
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1105.6252316270002
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010428711499571364,
+          "none-b": 0.01036263450032493,
+          "line-tables-only": 0.010375333500178385,
+          "limited": 0.010325590500087856,
+          "full": 0.010238216500056296
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00800633300013942,
+          "none-b": 0.008044069500101614,
+          "line-tables-only": 0.00794235299963475,
+          "limited": 0.007971006499701616,
+          "full": 0.007905024999672605
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1004,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38027797422",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-d3gl5ndrf8"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 922.324101763
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 822.309122431
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1231.3889290650004
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 923.5753861010003
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 820.7973082819999
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008832646499740804,
+          "none-b": 0.00892875300041851,
+          "line-tables-only": 0.008674325000356475,
+          "limited": 0.008667629999763449,
+          "full": 0.008715665499948955
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007155247499667894,
+          "none-b": 0.007127061999653961,
+          "line-tables-only": 0.0070495110003321315,
+          "limited": 0.006981630499467428,
+          "full": 0.006974205500227981
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1004,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38027797422",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-u59mi34mc2s4a"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 848.8069078750001
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 754.7041933330003
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1949.7095040409997
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 848.6706512089995
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 762.5965977920005
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011011291500381049,
+          "none-b": 0.01093547899972691,
+          "line-tables-only": 0.011100125499979185,
+          "limited": 0.010990708999997878,
+          "full": 0.01103991650052194
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009230353999555518,
+          "none-b": 0.009206479000113177,
+          "line-tables-only": 0.009271166500639083,
+          "limited": 0.009238479000487132,
+          "full": 0.009252229000139778
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1004,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38027797422",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-v7n46d9kdt1tq"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2034.3749999999998
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1430.109
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1261.1100000000001
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1260.5470000000005
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1425.8760000000002
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03830215000016324,
+          "none-b": 0.03824059999988094,
+          "line-tables-only": 0.038157999999839376,
+          "limited": 0.038048349999826314,
+          "full": 0.0379379500000141
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.022684099999878526,
+          "none-b": 0.02264500000001135,
+          "line-tables-only": 0.02261080000016591,
+          "limited": 0.02270059999955265,
+          "full": 0.02278375000014421
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1005,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38027802528",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-s1cpd9rf9n"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1088.355744252
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1088.688399737
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1185.3268901350002
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1570.2848676439999
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1186.8244438030006
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010570515500148758,
+          "none-b": 0.010588111499600927,
+          "line-tables-only": 0.010513133000131347,
+          "limited": 0.010444554499827063,
+          "full": 0.010462599000220507
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.008122256499973446,
+          "none-b": 0.008131806000164943,
+          "line-tables-only": 0.008031878500332823,
+          "limited": 0.00806215649981823,
+          "full": 0.008075402499798656
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1005,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38027802528",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-8d532b7b9d"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 918.377613304
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 922.7350015360001
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1229.5571225830001
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 822.2592753869999
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 822.089876506001
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008787179000137257,
+          "none-b": 0.008723993500098004,
+          "line-tables-only": 0.008629417500287673,
+          "limited": 0.00868676800018875,
+          "full": 0.008707618499556702
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.0071069789996727195,
+          "none-b": 0.007125509000161401,
+          "line-tables-only": 0.00698242799990112,
+          "limited": 0.007023863000085839,
+          "full": 0.00703377800027738
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1005,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38027802528",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-sdupan51v7t16"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 771.099779209
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 852.6363168759999
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1974.621451875
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 755.4660467500007
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 852.2230778739995
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011149833500439854,
+          "none-b": 0.011151125000196771,
+          "line-tables-only": 0.011122604500087618,
+          "limited": 0.011188145500000246,
+          "full": 0.011194666500159656
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00941570800023328,
+          "none-b": 0.009348270500140643,
+          "line-tables-only": 0.009381875000144646,
+          "limited": 0.009387457999764592,
+          "full": 0.009405708499798493
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1005,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38027802528",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-gq3ho02bb9gei"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1263.0
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2034.7799999999997
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1433.8900000000003
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1437.9219999999996
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1267.4679999999998
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03808615000025384,
+          "none-b": 0.037992449999819655,
+          "line-tables-only": 0.03822330000002694,
+          "limited": 0.03782865000039237,
+          "full": 0.03831564999973125
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.02266239999971731,
+          "none-b": 0.022750050000468036,
+          "line-tables-only": 0.022805049999988114,
+          "limited": 0.02261694999970132,
+          "full": 0.022763949999898614
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1006,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38035280730",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-ggdj9ggmsn"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1157.0921209809999
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1056.53137874
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1127.8057499329998
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1035.7566629099997
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1505.378810309
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.01027496050028276,
+          "none-b": 0.010251027500089549,
+          "line-tables-only": 0.01022534399999131,
+          "limited": 0.010213306999503402,
+          "full": 0.010297008499946969
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00790631449990542,
+          "none-b": 0.007854729999962728,
+          "line-tables-only": 0.007785465500091959,
+          "limited": 0.0077585660001204815,
+          "full": 0.007801303499945789
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1006,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38035280730",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-0xrq3lz6bj"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1234.215606003
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 822.4372800950002
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 919.4162276930001
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 823.4842809430002
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 921.8964695509994
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008715125499747955,
+          "none-b": 0.008745295500375505,
+          "line-tables-only": 0.008602759500263346,
+          "limited": 0.00860138000052757,
+          "full": 0.008645164500194369
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007168342499426217,
+          "none-b": 0.007082796999839047,
+          "line-tables-only": 0.00697620150003786,
+          "limited": 0.0070817675000398594,
+          "full": 0.006988761499997054
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1006,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38035280730",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-lmkfk9lb945qm"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 845.700461833
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 852.739883458
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 753.7151791670001
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 758.7015705000003
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1996.1974141670003
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010964041500301391,
+          "none-b": 0.011037791500257299,
+          "line-tables-only": 0.011087687000326696,
+          "limited": 0.011044583499824512,
+          "full": 0.011019417000170506
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00932479199991576,
+          "none-b": 0.009252603999811981,
+          "line-tables-only": 0.009301375000177359,
+          "limited": 0.009248187500361382,
+          "full": 0.009279812499698892
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1006,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38035280730",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-puumvn9l76kq8"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1418.704
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1418.156
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2009.1720000000005
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1252.3279999999995
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1251.531
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03800580000006448,
+          "none-b": 0.03794544999982463,
+          "line-tables-only": 0.03776075000041601,
+          "limited": 0.03792894999969576,
+          "full": 0.037811900000178866
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.022688300000027084,
+          "none-b": 0.022668199999770877,
+          "line-tables-only": 0.022591300000385672,
+          "limited": 0.022537849999935133,
+          "full": 0.022583750000194414
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1007,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38035285543",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-dsq222w44v"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1074.829524569
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1078.8716640569999
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1554.0645487040001
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1168.978567131
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1167.996898591001
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010209668000698002,
+          "none-b": 0.010273346500071057,
+          "line-tables-only": 0.010135706500477681,
+          "limited": 0.010155579999718611,
+          "full": 0.010158683500776533
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00787372549984866,
+          "none-b": 0.007867887000429619,
+          "line-tables-only": 0.007803997500104742,
+          "limited": 0.007844429499982652,
+          "full": 0.007884463499976846
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1007,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38035285543",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-24wc8s4nj1"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 827.6082808770001
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 983.608603402
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1287.3596829459998
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 913.1582246740004
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 814.3274031660003
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.00856513949975124,
+          "none-b": 0.008561305000057473,
+          "line-tables-only": 0.008576370499667973,
+          "limited": 0.008529083999746945,
+          "full": 0.00852403399949253
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00697307649988943,
+          "none-b": 0.006945346000065911,
+          "line-tables-only": 0.006862344500405015,
+          "limited": 0.006863690000045608,
+          "full": 0.006972456499624968
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1007,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38035285543",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-o2907bicsrkr6"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 761.7528053330001
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 759.8244289160002
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1981.686310083
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 855.1181564590001
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 866.4969464159994
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011208041999907437,
+          "none-b": 0.011257103999923856,
+          "line-tables-only": 0.011125937999622693,
+          "limited": 0.011166187500293745,
+          "full": 0.011191291499926592
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00935545899983481,
+          "none-b": 0.009404124999946362,
+          "line-tables-only": 0.009352124499855563,
+          "limited": 0.009323958499862783,
+          "full": 0.009358791499835206
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1007,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38035285543",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-oedisdd68173i"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1275.517
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2070.6099999999997
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1455.7660000000005
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1449.7030000000004
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1282.3429999999998
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03843170000027385,
+          "none-b": 0.03830874999994194,
+          "line-tables-only": 0.03849010000021735,
+          "limited": 0.038328249999722175,
+          "full": 0.03838825000002544
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.02277249999997366,
+          "none-b": 0.022807299999840325,
+          "line-tables-only": 0.022810300000401185,
+          "limited": 0.023015250000298693,
+          "full": 0.02295765000008032
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1008,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38042913234",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-p12lhcv0r9"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1234.1262366659998
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1231.4458243660004
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1119.841581693
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1134.006799839999
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1684.308118076
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011136098999941169,
+          "none-b": 0.011206198999843764,
+          "line-tables-only": 0.011089314500168257,
+          "limited": 0.011051189999307098,
+          "full": 0.011067252999964694
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.008702729000106046,
+          "none-b": 0.008756400000493159,
+          "line-tables-only": 0.008576971500133368,
+          "limited": 0.008593172999553644,
+          "full": 0.008664017999763018
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1008,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38042913234",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-ln8x48ck1r"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1253.4532613850001
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 834.9490823870001
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 933.1925742899998
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 835.1174498999999
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 933.0851931349998
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008911620000162657,
+          "none-b": 0.00894992099938463,
+          "line-tables-only": 0.008794665000095847,
+          "limited": 0.008889745499800483,
+          "full": 0.00885651999988113
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00717431899965959,
+          "none-b": 0.007348740999987058,
+          "line-tables-only": 0.0070685380005670595,
+          "limited": 0.007137943499401445,
+          "full": 0.007135553500120295
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1008,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38042913234",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-ktq85n7pts2kq"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 849.76016575
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 748.7940887910001
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1986.0663895000002
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 840.9895940830002
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 750.633880708001
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011006604000158404,
+          "none-b": 0.01105370799996308,
+          "line-tables-only": 0.01106385399998544,
+          "limited": 0.011067833499964763,
+          "full": 0.011034500000278058
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009256854000341264,
+          "none-b": 0.00916862550047881,
+          "line-tables-only": 0.009233603999746265,
+          "limited": 0.00922654150008384,
+          "full": 0.009176833500077919
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1008,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38042913234",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-6iae7b5mstpgk"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1430.5149999999999
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2028.0469999999998
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1254.7660000000005
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1255.469
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1427.9210000000003
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03768029999991995,
+          "none-b": 0.03807159999951182,
+          "line-tables-only": 0.03767530000004626,
+          "limited": 0.037617949999912526,
+          "full": 0.03780505000031553
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.02259070000036445,
+          "none-b": 0.022624400000040623,
+          "line-tables-only": 0.022626300000410993,
+          "limited": 0.022640400000454974,
+          "full": 0.022723800000221672
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1009,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38042918427",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-3q811bv740"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1240.651362486
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1659.232108225
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1250.7799709949995
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1142.3589662929999
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1143.1259029229996
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.01085161099990728,
+          "none-b": 0.010876734999783366,
+          "line-tables-only": 0.010849527000573289,
+          "limited": 0.010785950999888883,
+          "full": 0.010819173000072624
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.008346488499682891,
+          "none-b": 0.008428870499756158,
+          "line-tables-only": 0.008283845500045572,
+          "limited": 0.008312710000154766,
+          "full": 0.008360949500456627
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1009,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38042918427",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-wdj36n2183"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1248.98441014
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 829.0922919539998
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 931.0722467059995
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 932.6030374690004
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 831.6020732559996
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008894166000118275,
+          "none-b": 0.008980695999980526,
+          "line-tables-only": 0.008878521000042383,
+          "limited": 0.008855780500198307,
+          "full": 0.008869215499998973
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007253583000419894,
+          "none-b": 0.007325303499783331,
+          "line-tables-only": 0.007260833499913133,
+          "limited": 0.007193222500063712,
+          "full": 0.007212837499537272
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1009,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38042918427",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-0l7p4l6gt753m"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 769.251215416
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 843.0634868340002
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 850.9765089590001
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1979.978733249999
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 753.8139727500002
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.01111877050016119,
+          "none-b": 0.011169541499839397,
+          "line-tables-only": 0.01119460399968375,
+          "limited": 0.01119866649969481,
+          "full": 0.011190520499894774
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009359270999993896,
+          "none-b": 0.009311313000125665,
+          "line-tables-only": 0.009225750000041444,
+          "limited": 0.009381458000007115,
+          "full": 0.009342270999695756
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1009,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38042918427",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-en5h0ftdcs6d4"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1443.032
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1273.3899999999999
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2058.0160000000005
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1274.7659999999996
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1450.2179999999998
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.0381049500001609,
+          "none-b": 0.03824589999976524,
+          "line-tables-only": 0.037959549999868614,
+          "limited": 0.03791080000019065,
+          "full": 0.03828895000015109
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.02260054999987915,
+          "none-b": 0.02264214999968317,
+          "line-tables-only": 0.022713299999850278,
+          "limited": 0.0225462499997775,
+          "full": 0.022529250000388856
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1010,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38050557294",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-1m93j9223s"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1193.9407516689998
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1591.9882532980002
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1109.5830494869992
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1208.3418502490003
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1113.8561327919988
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011005611500422674,
+          "none-b": 0.010988326499955292,
+          "line-tables-only": 0.010929961999863735,
+          "limited": 0.011006783000084397,
+          "full": 0.010900868000135233
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.008643157500046073,
+          "none-b": 0.008683512000061455,
+          "line-tables-only": 0.008521220499915216,
+          "limited": 0.00855677800018384,
+          "full": 0.008538638999652903
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1010,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38050557294",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-7tq976kr32"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1221.397428446
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 817.993563519
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 907.1058694030003
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 815.756960705
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 910.784923531
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008596223000040482,
+          "none-b": 0.00854985800015129,
+          "line-tables-only": 0.008483764000175142,
+          "limited": 0.008504844000071898,
+          "full": 0.008538603499800956
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.0069724384998153255,
+          "none-b": 0.006940848500107677,
+          "line-tables-only": 0.006883533999825886,
+          "limited": 0.006868342999950983,
+          "full": 0.0068830179998258245
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1010,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38050557294",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-k68kjudm6qfrc"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 758.5782684589999
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 848.596595
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 849.6241500409999
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1996.1473482499996
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 760.383664041
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011049937000734644,
+          "none-b": 0.01099795849995644,
+          "line-tables-only": 0.011002500499671442,
+          "limited": 0.011010479000105988,
+          "full": 0.01103664550009853
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009186146000047302,
+          "none-b": 0.009242291999726149,
+          "line-tables-only": 0.009175791999950889,
+          "limited": 0.009227333500348323,
+          "full": 0.00925991649955904
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1010,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38050557294",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-5e1e6ipp1l5sc"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1272.953
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1305.532
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1438.9530000000004
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2071.593999999999
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1444.0160000000005
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03825360000018918,
+          "none-b": 0.03794830000015281,
+          "line-tables-only": 0.038231099999848084,
+          "limited": 0.03827124999997977,
+          "full": 0.038364150000234076
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.022650849999990896,
+          "none-b": 0.022688700000344397,
+          "line-tables-only": 0.02271435000011479,
+          "limited": 0.022838449999653676,
+          "full": 0.02272804999984146
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1011,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38050562641",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-bsdw311b7r"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1149.822053331
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1048.1836602820001
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1157.2242012319998
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1084.718023595
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1525.8294711620001
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010418382499665313,
+          "none-b": 0.010472410000147647,
+          "line-tables-only": 0.010402320500361384,
+          "limited": 0.01037051050025184,
+          "full": 0.010413371000140614
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.0080373915002383,
+          "none-b": 0.008046470999943267,
+          "line-tables-only": 0.0079910720000953,
+          "limited": 0.007908587500423891,
+          "full": 0.008048918000440608
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1011,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38050562641",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-swkhxgs3n1"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1224.268458536
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 824.9358228680001
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 917.727950948
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 818.5890995939999
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 917.6414762589998
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008741724000174145,
+          "none-b": 0.008794739499535353,
+          "line-tables-only": 0.008683713500431622,
+          "limited": 0.008622958000159997,
+          "full": 0.008572602499953064
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007111038000402914,
+          "none-b": 0.007140043000163132,
+          "line-tables-only": 0.007041506999939884,
+          "limited": 0.006969866000417824,
+          "full": 0.006977605999963998
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1011,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38050562641",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-hbsr8v48baj2i"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 768.066982458
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 763.5936460419999
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 859.836041
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 855.0038664160002
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1978.334778040999
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011148375000175292,
+          "none-b": 0.011051104499983921,
+          "line-tables-only": 0.011111562499991123,
+          "limited": 0.011201249999885476,
+          "full": 0.011195104500075104
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009178875000088738,
+          "none-b": 0.009226125499935733,
+          "line-tables-only": 0.009290041499752988,
+          "limited": 0.009264145500310406,
+          "full": 0.009173500000088097
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1011,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38050562641",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-dj7jnb37aob1u"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1430.422
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1420.422
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1256.656
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1253.5780000000004
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2025.1260000000002
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03931929999998829,
+          "none-b": 0.039386499999636726,
+          "line-tables-only": 0.03931009999996604,
+          "limited": 0.03914054999995642,
+          "full": 0.03964929999983724
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.023299199999655684,
+          "none-b": 0.023200950000500598,
+          "line-tables-only": 0.023101949999727367,
+          "limited": 0.023173249999672407,
+          "full": 0.023281300000235206
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1012,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38058790789",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-cln6kc5821"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1203.2419473670002
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1198.5923270990002
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1100.2774674510001
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1100.7274900940001
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1593.7998009330004
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.010742957000275055,
+          "none-b": 0.010721243000261893,
+          "line-tables-only": 0.010632375499881164,
+          "limited": 0.010725417999765341,
+          "full": 0.010688097000183916
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.008161941499565728,
+          "none-b": 0.00817179399973611,
+          "line-tables-only": 0.00805368199962686,
+          "limited": 0.008066437999787013,
+          "full": 0.008075927499703539
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1012,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38058790789",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-lngm0kd6z2"
+    },
+    "treatments": {
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 998.572325799
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1317.4526385759998
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 886.7422307259999
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 992.1895757979996
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 896.9986322199993
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.009443374499369384,
+          "none-b": 0.009314372499829915,
+          "line-tables-only": 0.009401978499681718,
+          "limited": 0.009311898000305519,
+          "full": 0.00933339299990621
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00766614899976048,
+          "none-b": 0.007767965999846638,
+          "line-tables-only": 0.007574362999548612,
+          "limited": 0.007560337499853631,
+          "full": 0.007540452500052197
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1012,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38058790789",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-dt54q33i1q7us"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 762.538287625
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1953.0111084989999
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 763.9441561670001
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 851.4337169579999
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 851.5824420409999
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011021646000699548,
+          "none-b": 0.011067770999943605,
+          "line-tables-only": 0.011072416999923007,
+          "limited": 0.010952249499950995,
+          "full": 0.01099641650034755
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.00922747899994647,
+          "none-b": 0.00923516649982048,
+          "line-tables-only": 0.009321187999830727,
+          "limited": 0.009232437499576918,
+          "full": 0.009231208500295907
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1012,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38058790789",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-h7r6ko6entn6i"
+    },
+    "treatments": {
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1245.516
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1244.4839999999997
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2001.7660000000005
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1414.2349999999997
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1412.2810000000009
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.03734385000007023,
+          "none-b": 0.0371712999999545,
+          "line-tables-only": 0.03727355000000898,
+          "limited": 0.03741775000025882,
+          "full": 0.03743949999943652
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.022412050000184536,
+          "none-b": 0.022348999999849184,
+          "line-tables-only": 0.02231019999999262,
+          "limited": 0.022250050000366173,
+          "full": 0.022390300000552088
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "block": 1013,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38058797092",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-9wgvxtwbnt"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1133.284497409
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1239.360180142
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1149.8488785110003
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1244.1917400150005
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1657.3805986050002
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011168843500399817,
+          "none-b": 0.011274376000073971,
+          "line-tables-only": 0.011151668500133383,
+          "limited": 0.011144043000058446,
+          "full": 0.01122516799978257
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.008624505499938095,
+          "none-b": 0.008571396000206732,
+          "line-tables-only": 0.008533413999884942,
+          "limited": 0.008529486000043107,
+          "full": 0.008544671499748802
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "block": 1013,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38058797092",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "depot-c5vvj5cgwc"
+    },
+    "treatments": {
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 923.7884478260002
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 925.694355309
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 825.795809298
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 826.4694838240002
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1235.5783459920003
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.008711991500149452,
+          "none-b": 0.008786917499946867,
+          "line-tables-only": 0.008631965999484237,
+          "limited": 0.00858273050016578,
+          "full": 0.008587310000166326
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.007097075999809022,
+          "none-b": 0.0071288405006271205,
+          "line-tables-only": 0.007015785000476171,
+          "limited": 0.006949148999865429,
+          "full": 0.007034929999917949
+        }
+      }
+    }
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "block": 1013,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38058797092",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-p609o86dlggrq"
+    },
+    "treatments": {
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 765.1378544579999
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 761.510227624
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 852.4280537910001
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 846.3060722079999
+          }
+        }
+      },
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1973.3426639590002
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.011090021499967406,
+          "none-b": 0.01103087499996036,
+          "line-tables-only": 0.011012249500254256,
+          "limited": 0.01102791650009749,
+          "full": 0.011011604499799432
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.009231395499682549,
+          "none-b": 0.0092190830000618,
+          "line-tables-only": 0.00916568750017177,
+          "limited": 0.009230479000052583,
+          "full": 0.009202145500239567
+        }
+      }
+    }
+  },
+  {
+    "target": "x86_64-pc-windows-msvc",
+    "block": 1013,
+    "phase": "confirmatory",
+    "study": "uv-debug-statistics-20261009-v1",
+    "plan_sha256": "ac694fadbfd4dd87dc11cc58aa40209e458142597d541e9c7371e1703c9c918d",
+    "source_fingerprints": {
+      "crates": "0c8e78c7258c46865056f02fcc3388943d7039f4",
+      "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+      ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+      "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+      "Cargo.toml": "4a591b900bb70b17b7aabbf41a9a0f3e87f2dbfda92a71353bcbb14287b5698f",
+      "Cargo.lock": "e6af98fa8b98cc328c12e1c80b9e641f82206ddb5e7040cdad6e9e3e1a7907b9",
+      "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+      "scripts/build_uv_pgo.py": "42d5f2827cb47ab559fc86952b0bd055cb8feef4a26b11b338707e3a2da7d78c",
+      "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+      "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+    },
+    "verified": true,
+    "commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+    "runner": {
+      "GITHUB_RUN_ID": "38058797092",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_JOB": "study",
+      "RUNNER_NAME": "nsc-runner-fef9c47tg8lco"
+    },
+    "treatments": {
+      "full": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 2016.9840000000002
+          }
+        }
+      },
+      "line-tables-only": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1428.328
+          }
+        }
+      },
+      "limited": {
+        "builds": {
+          "symbols": {
+            "total_seconds": 1428.4829999999997
+          }
+        }
+      },
+      "none-a": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1268.7029999999995
+          }
+        }
+      },
+      "none-b": {
+        "builds": {
+          "baseline": {
+            "total_seconds": 1259.9840000000004
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "median_seconds": {
+          "none-a": 0.037741799999366776,
+          "none-b": 0.037790249999943626,
+          "line-tables-only": 0.03770245000032446,
+          "limited": 0.03763764999985142,
+          "full": 0.03836344999990615
+        }
+      },
+      "trio": {
+        "median_seconds": {
+          "none-a": 0.02292295000006561,
+          "none-b": 0.023044799999752286,
+          "line-tables-only": 0.02286195000033331,
+          "limited": 0.022802049999882,
+          "full": 0.023082599999725062
+        }
+      }
+    }
+  }
+]

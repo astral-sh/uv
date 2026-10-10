@@ -1,5 +1,6 @@
 """Focused checks for statistical validity and real resource collection."""
 
+import copy
 import json
 import math
 import subprocess
@@ -167,6 +168,131 @@ class StudyChecks(unittest.TestCase):
                 0,
             )
             self.assertTrue(path.with_suffix(".json").is_file())
+
+
+ROOT = Path(__file__).resolve().parents[2]
+PLAN = json.loads((ROOT / "scripts/debug-symbols/study-plan.json").read_text())
+AMENDMENT = json.loads(
+    Path(__file__)
+    .with_name("results")
+    .joinpath("2026-10-10", "analysis-amendment.json")
+    .read_text()
+)
+
+
+def synthetic_cohort(count):
+    records = []
+    for target in PLAN["targets"]:
+        for block in range(1000, 1000 + count):
+            records.append(
+                {
+                    "target": target,
+                    "block": block,
+                    "phase": "confirmatory",
+                    "study": PLAN["study_id"],
+                    "plan_sha256": plan_fingerprint(PLAN),
+                    "source_fingerprints": PLAN["source_fingerprints"],
+                    "verified": True,
+                    "commit": AMENDMENT["frozen_experiment_commit"],
+                    "runner": {"RUNNER_NAME": f"synthetic-{target}-{block}"},
+                    "treatments": {
+                        treatment: {"builds": {"measured": {"total_seconds": value}}}
+                        for treatment, value in {
+                            "none-a": 100,
+                            "none-b": 108,
+                            "line-tables-only": 112,
+                            "limited": 115,
+                            "full": 160,
+                        }.items()
+                    },
+                    "benchmarks": {
+                        workload: {
+                            "median_seconds": {
+                                "none-a": 1,
+                                "none-b": 1,
+                                "line-tables-only": 1,
+                                "limited": 1,
+                                "full": 1,
+                            }
+                        }
+                        for workload in ("jupyter", "trio")
+                    },
+                }
+            )
+    return records
+
+
+class AmendmentChecks(unittest.TestCase):
+    def test_first_look_retains_family_and_widens_only_build_margin(self):
+        records = synthetic_cohort(14)
+        original = copy.deepcopy(records)
+        result = analyze(records, PLAN, 14, amendment=AMENDMENT)
+        self.assertEqual(records, original)
+        self.assertEqual(len(result["results"]), 84)
+        self.assertEqual(result["look_alpha"], 0.025)
+        self.assertEqual(result["per_interval_alpha"], 0.025 / 84)
+        self.assertTrue(result["resolved"])
+        for row in result["results"]:
+            self.assertEqual(row["margin"], 0.1 if row["metric"] == "build" else 0.03)
+        self.assertEqual(PLAN["build_equivalence_margin"], 0.05)
+        self.assertEqual(
+            result["original_plan_sha256"], AMENDMENT["original_plan_sha256"]
+        )
+
+    def test_later_look_spends_less_alpha(self):
+        result = analyze(synthetic_cohort(28), PLAN, 28, amendment=AMENDMENT)
+        self.assertEqual(result["look_index"], 1)
+        self.assertEqual(result["look_alpha"], 0.0125)
+
+    def test_unscheduled_peeks_fail(self):
+        for count in (12, 13, 15, 20):
+            with (
+                self.subTest(count=count),
+                self.assertRaisesRegex(ValueError, "only permitted"),
+            ):
+                analyze([], PLAN, count, amendment=AMENDMENT)
+
+    def test_original_protocol_still_works_without_amendment(self):
+        result = analyze(synthetic_cohort(20), PLAN, 20)
+        self.assertFalse(result["resolved"])
+        self.assertIsNone(result["analysis_amendment"])
+        with self.assertRaisesRegex(ValueError, "only permitted"):
+            analyze([], PLAN, 14)
+
+    def test_incomplete_or_duplicate_blocks_fail(self):
+        records = synthetic_cohort(14)
+        with self.assertRaisesRegex(ValueError, "Missing predeclared"):
+            analyze(records[:-1], PLAN, 14, amendment=AMENDMENT)
+        with self.assertRaisesRegex(ValueError, "more than once"):
+            analyze([*records, records[0]], PLAN, 14, amendment=AMENDMENT)
+
+    def test_original_fingerprint_and_frozen_commit_are_required(self):
+        records = synthetic_cohort(14)
+        records[0]["plan_sha256"] = "changed"
+        with self.assertRaisesRegex(ValueError, "analysis plan changed"):
+            analyze(records, PLAN, 14, amendment=AMENDMENT)
+        records = synthetic_cohort(14)
+        for record in records:
+            record["commit"] = "different-commit"
+        with self.assertRaisesRegex(ValueError, "frozen experiment commit"):
+            analyze(records, PLAN, 14, amendment=AMENDMENT)
+
+    def test_no_alpha_reset_or_unapproved_margin_change(self):
+        changed = copy.deepcopy(AMENDMENT)
+        changed["confirmatory_inference_before_amendment"] = True
+        with self.assertRaisesRegex(ValueError, "reset alpha"):
+            analyze([], PLAN, 14, amendment=changed)
+        changed = copy.deepcopy(AMENDMENT)
+        changed["runtime_equivalence_margin"]["amended"] = 0.1
+        with self.assertRaisesRegex(ValueError, "Runtime margin"):
+            analyze([], PLAN, 14, amendment=changed)
+
+    def test_exact_first_look_feasibility(self):
+        alpha = 0.025 / 84
+        self.assertEqual(median_interval(list(range(12)), alpha), (-math.inf, math.inf))
+        self.assertEqual(median_interval(list(range(13)), alpha), (0, 12))
+        self.assertEqual(median_interval(list(range(14)), alpha), (0, 13))
+        self.assertLessEqual(2 / 2**14, alpha)
 
 
 if __name__ == "__main__":

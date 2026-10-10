@@ -1,9 +1,50 @@
 # Optimized Rust+C debug symbols experiment
 
-The randomized statistical follow-up is specified in [STUDY.md](STUDY.md). It adds independent
-runner blocks, randomized build order, duplicate no-debug controls, resource sampling, and
-predeclared simultaneous inference. The measurements below remain the exploratory record; they are
-not counted as confirmatory samples in that study.
+The [randomized study results](results/2026-10-10/README.md) use fourteen independent allocations
+per platform, randomized build order, duplicate no-debug controls, resource sampling and
+simultaneous inference. All 56 allocations passed verification. The original protocol is retained in
+[STUDY.md](STUDY.md), together with the dated amendment to a ±10% build margin and a first look at
+fourteen allocations. Resolver equivalence remains ±3%. The exploratory measurements below are
+preserved separately and are not counted as confirmatory samples.
+
+## Randomized comparison
+
+Median instrumented-build/training plus final-build wall times. Each overhead is the median paired
+effect against the two no-debug controls on the same allocation; it is not calculated by dividing
+these table medians. All comparisons use optimized PGO builds with one codegen unit.
+
+| Platform       | No debug A / B    | Line tables      | Limited          | Full              |
+| -------------- | ----------------- | ---------------- | ---------------- | ----------------- |
+| Linux x86-64   | 13m 47s / 13m 44s | 15m 27s (+11.7%) | 15m 24s (+12.0%) | 20m 35s (+49.6%)  |
+| Linux ARM64    | 18m 23s / 18m 06s | 19m 41s (+8.6%)  | 19m 44s (+8.7%)  | 26m 12s (+44.3%)  |
+| macOS ARM64    | 12m 39s / 12m 42s | 14m 09s (+11.7%) | 14m 12s (+11.8%) | 32m 59s (+158.6%) |
+| Windows x86-64 | 21m 03s / 21m 04s | 23m 48s (+13.1%) | 23m 54s (+13.7%) | 33m 52s (+60.8%)  |
+
+All twelve no-debug control comparisons passed equivalence checks. Line tables and limited have
+equivalent build costs within ±10% on every platform; their median paired difference is below 0.5%.
+Full debug is significantly more expensive. Every resolver comparison fits the ±3% runtime margin.
+
+Median separate **uv** companion sizes, in decimal MB; no-debug controls publish none:
+
+| Platform       | No debug | Line tables | Limited | Full  |
+| -------------- | -------- | ----------- | ------- | ----- |
+| Linux x86-64   | 0        | 169.5       | 266.4   | 582.2 |
+| Linux ARM64    | 0        | 179.3       | 273.8   | 600.2 |
+| macOS ARM64    | 0        | 188.8       | 300.8   | 580.9 |
+| Windows x86-64 | 0        | 119.0       | 120.2   | 442.8 |
+
+The [complete report](results/2026-10-10/README.md) includes simultaneous intervals with a 95%
+family confidence guarantee under the stated allocation assumptions, stage times, executable/wheel
+changes, all companion sizes, runtime comparisons, resource evidence and reproducible data. Shipped
+binary sizes vary slightly after stripping; they are not guaranteed identical.
+
+The Linux x86-64 runner label supplied thirteen AMD allocations and one Intel allocation with
+different memory capacity. All observations remain included, and ratios are paired within an
+allocation. These native timings describe the sampled pools, not production manylinux CI or a
+specific physical CPU. The report distinguishes hardware variation, compiler-time variation and
+observed training waits without assigning a definitive cause to the older uninstrumented outliers.
+
+## Rust+C fixture
 
 This independent Cargo workspace tests separate debug symbols for a small Rust executable that calls
 a C function compiled with `cc`. Both functions are kept out of line so source locations can be

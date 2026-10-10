@@ -1,0 +1,28 @@
+{
+  "experiment_commit": "c226dc06577e8e27fd11acdb02cf67998d3f6508",
+  "main_revision": "238d6ba651d13f0dfddab0cc1826f963cdf21711",
+  "independent_allocations_per_platform": 14,
+  "platforms": 4,
+  "builds_per_allocation": 5,
+  "confirmatory_allocations": 56,
+  "timing_contrasts": 84,
+  "resolved": 84,
+  "correctness_failures": 0,
+  "calibration_included": false,
+  "validation": {
+    "focused_tests_passed": 20,
+    "numerical_analysis_reproduced_exactly": true,
+    "analysis_inputs_compared_to_raw_reports": 56,
+    "measurement_exports_compared_to_raw_reports": 56,
+    "ruff_passed": true,
+    "prettier_passed": true,
+    "diff_whitespace_passed": true
+  },
+  "files_sha256": {
+    "README.md": "5b94c62aac305c3b19d04e94e279834877d67bcc92e17c9c087de11c1aa4b8d8",
+    "analysis-amendment.json": "8d511dc6b46d7e5f5c533bfd6eb18912db972a90a50a413250699d29aae82f4b",
+    "analysis-inputs.json": "e750f0e207cdbbd0b27f6f4a5605d31035d53295e34658b6b3f097541e452316",
+    "analysis.json": "018bfbbac91ae8efda5683e46a23a639c375b6657166cba21abb3ed7a2c67c6a",
+    "measurements.json": "cabc9e8352fccb3fa44e9d2ee420c82c1655d3ea0a2e5b2258c3b443915cc221"
+  }
+}

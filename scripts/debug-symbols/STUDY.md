@@ -1,5 +1,13 @@
 # Registered debug-level comparison
 
+The [completed results](results/2026-10-10/README.md) contain fourteen allocations per platform and
+resolve the complete comparison family. The protocol below retains the original registration. A
+[dated analysis amendment](results/2026-10-10/analysis-amendment.json), recorded after collection
+started and before any confirmatory inference, changes the build equivalence margin from ±5% to ±10%
+and the look schedule from 20/40/80/… to 14/28/56/…. Runtime margin, comparison family, confidence
+target, source, build settings and all retained observations are unchanged. The report documents the
+amendment timing and its rationale explicitly.
+
 Study identifier: `uv-debug-statistics-20261009-v1`.
 
 The source is frozen at main revision `238d6ba651d13f0dfddab0cc1826f963cdf21711`. `study-plan.json`

@@ -65,16 +65,50 @@ def classify(lower, upper, margin, *, control=False):
     return "unresolved"
 
 
-def analyze(reports, plan, sample_size):
+def validate_amendment(plan, amendment):
+    if amendment["original_plan_sha256"] != plan_fingerprint(plan):
+        raise ValueError("Amendment does not reference the original plan")
+    if amendment["study"] != plan["study_id"]:
+        raise ValueError("Amendment study identity mismatch")
+    if amendment["confirmatory_inference_before_amendment"] is not False:
+        raise ValueError("Cannot reset alpha spending after an inferential look")
+    for key in ("build_equivalence_margin", "runtime_equivalence_margin"):
+        if amendment[key]["original"] != plan[key]:
+            raise ValueError("Amendment original margin mismatch")
+    if amendment["build_equivalence_margin"]["amended"] != 0.10:
+        raise ValueError("This amendment authorizes a 10% build margin")
     if (
-        sample_size < 20
-        or sample_size % 20
-        or (sample_size // 20) & (sample_size // 20 - 1)
+        amendment["runtime_equivalence_margin"]["amended"]
+        != plan["runtime_equivalence_margin"]
+    ):
+        raise ValueError("Runtime margin must remain unchanged")
+    if amendment["confirmatory_looks"] != {
+        "original_first": plan["confirmatory_looks"][0],
+        "amended_first": 14,
+        "growth_factor": 2,
+    }:
+        raise ValueError("Amended looks must be 14, 28, 56, ...")
+    for key, value in amendment["unchanged"].items():
+        if plan[key] != value:
+            raise ValueError("Amendment changed a protected analysis setting")
+
+
+def analyze(reports, plan, sample_size, *, amendment=None):
+    first_look = plan["confirmatory_looks"][0]
+    build_margin = plan["build_equivalence_margin"]
+    if amendment is not None:
+        validate_amendment(plan, amendment)
+        first_look = amendment["confirmatory_looks"]["amended_first"]
+        build_margin = amendment["build_equivalence_margin"]["amended"]
+    if (
+        sample_size < first_look
+        or sample_size % first_look
+        or (sample_size // first_look) & (sample_size // first_look - 1)
     ):
         raise ValueError(
-            "Inferential looks are only permitted at20,40,80,... blocks per platform"
+            f"Inferential looks are only permitted at {first_look}, {2 * first_look}, ... blocks per platform"
         )
-    look_index = (sample_size // 20).bit_length() - 1
+    look_index = (sample_size // first_look).bit_length() - 1
     look_alpha = plan["family_alpha"] / (2 ** (look_index + 1))
     interval_alpha = look_alpha / plan["simultaneous_contrasts"]
     grouped = {}
@@ -104,6 +138,8 @@ def analyze(reports, plan, sample_size):
         raise ValueError(
             "One frozen experiment commit and all four platforms are required"
         )
+    if amendment is not None and commits != {amendment["frozen_experiment_commit"]}:
+        raise ValueError("Amendment requires the frozen experiment commit")
     expected_blocks = set(
         range(
             plan["confirmatory_block_start"],
@@ -117,7 +153,7 @@ def analyze(reports, plan, sample_size):
             raise ValueError(f"Missing predeclared blocks for {target}")
         for metric in METRICS:
             margin = (
-                plan["build_equivalence_margin"]
+                build_margin
                 if metric == "build"
                 else plan["runtime_equivalence_margin"]
             )
@@ -155,6 +191,8 @@ def analyze(reports, plan, sample_size):
         raise ValueError("Comparison family differs from registration")
     return {
         "study": plan["study_id"],
+        "original_plan_sha256": plan_fingerprint(plan),
+        "analysis_amendment": amendment,
         "independent_blocks_per_platform": sample_size,
         "look_index": look_index,
         "look_alpha": look_alpha,
@@ -169,10 +207,22 @@ def main():
     parser.add_argument("reports", type=Path, nargs="+")
     parser.add_argument("--sample-size", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--plan", type=Path, default=Path(__file__).with_name("study-plan.json")
+    )
+    parser.add_argument("--amendment", type=Path)
     args = parser.parse_args()
-    plan = json.loads(Path(__file__).with_name("study-plan.json").read_text())
-    reports = [json.loads(path.read_text()) for path in args.reports]
-    result = analyze(reports, plan, args.sample_size)
+    plan = json.loads(args.plan.read_text())
+    reports = []
+    for path in args.reports:
+        value = json.loads(path.read_text())
+        reports.extend(value if isinstance(value, list) else [value])
+    amendment = json.loads(args.amendment.read_text()) if args.amendment else None
+    result = analyze(reports, plan, args.sample_size, amendment=amendment)
+    if args.amendment:
+        result["analysis_amendment_file_sha256"] = hashlib.sha256(
+            args.amendment.read_bytes()
+        ).hexdigest()
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
     print(
         json.dumps(
