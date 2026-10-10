@@ -120,3 +120,52 @@ not change margins or comparisons to obtain a result.
 References:
 [NIST randomized blocks](https://www.itl.nist.gov/div898/handbook/pri/section3/pri332.htm) and
 [NIST sample-size considerations](https://www.itl.nist.gov/div898/handbook/prc/section2/prc222.htm).
+
+## Calibration results and collection waves
+
+Eight calibration allocations passed complete artifact, compiler-setting, source-lookup, wheel,
+profile, resolver-output and resource-series checks: two on each target. Linux and Windows used
+commit `3bca383f17658d8bbac34dcce2e828c0be56d7d1`; the successful macOS recovery used
+`098963667c63d65d0cf0feff2108e378d41aa62f`. Source fingerprints, Rust/Maturin versions, and
+benchmark requirements/output hashes match across each platform's successful blocks. These
+observations are excluded from confirmatory inference.
+
+The two no-debug controls within each allocation took the following combined instrumented-build,
+training and final-build wall times. Percentages compare control B with control A, not a debug mode.
+
+| Platform       | Calibration 0: A → B       | Calibration 1: A → B       |
+| -------------- | -------------------------- | -------------------------- |
+| Linux x86-64   | 13m 40s → 13m 39s (-0.11%) | 13m 40s → 13m 42s (+0.26%) |
+| Linux ARM64    | 18m 06s → 17m 48s (-1.65%) | 18m 15s → 18m 02s (-1.18%) |
+| macOS ARM64    | 12m 43s → 13m 39s (+7.24%) | 12m 41s → 12m 37s (-0.53%) |
+| Windows x86-64 | 21m 18s → 21m 12s (-0.40%) | 21m 17s → 21m 06s (-0.91%) |
+
+The +7.24% macOS control difference is retained. Both instrumented Cargo builds reported 7m 17s; the
+`install-sentry` PGO workload took 10.057s in A and 60.641s in B. Training-phase child CPU time was
+875.859s versus 876.939s while training wall time rose from 490.324s to 544.491s. The PGO script
+permits network access for installation; the precise source of the additional wait was not captured.
+This observation illustrates why total pipeline time must be accompanied by stage evidence and why
+one slow baseline cannot establish a compiler regression.
+
+Both Windows full-debug instrumented builds completed on the registered 16-CPU/32-GB profile.
+Minimum available physical memory was 469,774,336 and 565,743,616 bytes; sampled aggregate process
+RSS reached about 31.1–31.2 decimal GB. Aggregate RSS is not exact physical memory use, and low
+available memory alone does not identify paging. Resource sample gaps in all successful calibration
+builds were at most 1.297s.
+
+Two original macOS allocations completed all five builds but failed the `atos` negative lookup check
+after a dSYM rename. Their artifacts, timings, resource traces and failure logs are retained; they
+did not reach resolver benchmarking. Direct inspection of the executable's own DWARF and native
+regression tests validated the corrected check. Only the affected macOS calibrations were repeated.
+
+Calibration runs: [original block 0](https://github.com/astral-sh/uv/actions/runs/37995684362),
+[original block 1](https://github.com/astral-sh/uv/actions/runs/37995692516),
+[macOS recovery 0](https://github.com/astral-sh/uv/actions/runs/38004421285), and
+[macOS recovery 1](https://github.com/astral-sh/uv/actions/runs/38004428068).
+
+Confirmatory collection starts with consecutive blocks 1000–1019 on every platform, in waves of two
+allocations per platform. Runner profiles and Cargo parallelism stay fixed. A new wave starts when
+both preceding blocks have final outcomes; failures are retained and investigated before continuing.
+All confirmatory dispatches use one frozen experiment commit. Order, allocation and wave effects
+remain part of the validity review; distinct runner names alone do not prove distinct physical
+hosts. The registered inference and stopping rules above remain unchanged.
