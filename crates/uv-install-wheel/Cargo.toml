@@ -30,7 +30,7 @@ uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
-configparser = { workspace = true }
+astral-ini = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }

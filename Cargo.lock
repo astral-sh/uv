@@ -288,6 +288,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-ini"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24bfed807c1e54bfc16a9e45e0ed0d349622877055e96c92ba5756e2fab7445a"
+dependencies = [
+ "indexmap",
+ "memchr",
+ "rustc-hash",
+]
+
+[[package]]
 name = "astral-tokio-tar"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1041,12 +1052,6 @@ checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
 ]
-
-[[package]]
-name = "configparser"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b46dec724fd22199ebde05033a0cbae453bc3b1ecff11eb6a6bb3eec4b90c6a4"
 
 [[package]]
 name = "console"
@@ -6935,7 +6940,7 @@ version = "0.0.92"
 dependencies = [
  "anyhow",
  "assert_fs",
- "configparser",
+ "astral-ini",
  "csv",
  "data-encoding",
  "fs-err",
@@ -7654,7 +7659,7 @@ name = "uv-python-interpreter"
 version = "0.0.92"
 dependencies = [
  "anyhow",
- "configparser",
+ "astral-ini",
  "dunce",
  "fs-err",
  "indoc",
@@ -7771,7 +7776,7 @@ name = "uv-requirements"
 version = "0.0.92"
 dependencies = [
  "anyhow",
- "configparser",
+ "astral-ini",
  "console",
  "fs-err",
  "futures",
