@@ -121,6 +121,7 @@ anyhow = { version = "1.0.89", default-features = false, features = ["std"] }
 arcstr = { version = "1.2.0", default-features = false }
 arrayvec = { version = "0.7.6", default-features = false }
 astral-html = { version = "0.0.3", default-features = false }
+astral-mail-headers = { version = "0.0.1", default-features = false }
 astral-tokio-tar = { version = "0.7.0", default-features = false }
 async-channel = { version = "2.3.1", default-features = false, features = ["std"] }
 async-compression = { version = "0.4.12", default-features = false, features = [
@@ -218,7 +219,6 @@ jiff = { version = "0.2.0", default-features = false, features = [
 junction = { version = "2.0.0", default-features = false, features = ["unstable_admin"] }
 libc = { version = "0.2.0", default-features = false, features = ["std"] }
 linux-raw-sys = { version = "0.12.1", default-features = false, features = ["ioctl"] }
-mailparse = { version = "0.16.0", default-features = false }
 md-5 = { version = "0.11.0", default-features = false }
 memchr = { version = "2.7.4", default-features = false, features = ["std"] }
 nix = { version = "0.31.2", default-features = false, features = ["resource", "signal"] }
