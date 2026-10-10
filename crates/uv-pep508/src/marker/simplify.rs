@@ -4,7 +4,7 @@ use std::ops::Bound;
 use arcstr::ArcStr;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use rustc_hash::FxBuildHasher;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
@@ -25,6 +25,13 @@ pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
     collect_dnf(tree, &mut dnf, &mut Vec::new());
     simplify(&mut dnf);
     sort(&mut dnf);
+    dnf
+}
+
+/// Returns a DNF expression for a given marker tree, without simplification.
+pub(crate) fn to_unsimplified_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
+    let mut dnf = Vec::new();
+    collect_dnf(tree, &mut dnf, &mut Vec::new());
     dnf
 }
 
@@ -235,9 +242,167 @@ fn collect_dnf(
 /// level without any truth table expansion. Combined with the normalization applied by decision
 /// trees, this seems to be sufficient in practice.
 ///
-/// Note: This function has quadratic time complexity. However, it is not applied on every marker
-/// operation, only to user facing output, which are typically very simple.
+/// Note: This function is quadratic in the number of clauses. Markers for large conflict sets can
+/// have thousands of clauses, so larger expressions are simplified on bit sets, which removes the
+/// per-term cost of each comparison but not the quadratic number of comparisons.
 fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
+    // Most markers have only a few clauses, where interning costs more than comparing terms.
+    if dnf.len() < 8 {
+        simplify_linear(dnf);
+    } else {
+        simplify_indexed(dnf);
+    }
+}
+
+/// Equivalent to [`simplify_linear`], but compares clauses as bit sets of interned terms.
+fn simplify_indexed(dnf: &mut Vec<Vec<MarkerExpression>>) {
+    let mut terms: FxHashMap<&MarkerExpression, usize> = FxHashMap::default();
+    let mut expressions = Vec::new();
+    let clauses: Vec<Vec<usize>> = dnf
+        .iter()
+        .map(|clause| {
+            clause
+                .iter()
+                .map(|term| {
+                    *terms.entry(term).or_insert_with(|| {
+                        expressions.push(term);
+                        expressions.len() - 1
+                    })
+                })
+                .collect()
+        })
+        .collect();
+
+    let mut sets = BitSets::new(clauses.len(), expressions.len());
+    for (i, clause) in clauses.iter().enumerate() {
+        for &term in clause {
+            // Each path through the decision diagram contains a variable at most once.
+            debug_assert!(!sets.contains(i, term), "repeated term in DNF clause");
+            sets.insert(i, term);
+        }
+    }
+
+    // For each term, the terms that are its negation, i.e., `t` such that `is_negation(t, term)`.
+    let mut negations = vec![Vec::new(); expressions.len()];
+    for (term, expression) in expressions.iter().enumerate() {
+        if let Some(negation) = negate(expression)
+            && let Some(&negated) = terms.get(&negation)
+        {
+            negations[negated].push(term);
+        }
+    }
+    let max_negations = negations.iter().map(Vec::len).max().unwrap_or(0);
+
+    // Find redundant terms. A term is redundant if another clause, without the term, is a subset
+    // of this clause plus negations of the term (see `simplify_linear`).
+    let mut redundant_terms = vec![Vec::new(); clauses.len()];
+    for (i, clause) in clauses.iter().enumerate() {
+        // The other clauses with few enough terms missing from this one to be a subset after
+        // adding negations of a single term, along with those missing terms.
+        let mut candidates: Vec<(usize, Vec<usize>)> = (0..clauses.len())
+            .filter(|&j| j != i)
+            .filter_map(|j| Some((j, sets.difference(j, i, max_negations)?)))
+            .collect();
+
+        for (position, &skipped) in clause.iter().enumerate() {
+            let redundant = candidates.iter().any(|(j, missing)| {
+                !sets.contains(*j, skipped)
+                    && missing.iter().all(|term| negations[skipped].contains(term))
+            });
+            if redundant {
+                redundant_terms[i].push(position);
+                // Once removed, the term can no longer be used to simplify the remaining terms.
+                sets.remove(i, skipped);
+                candidates.retain_mut(|(j, missing)| {
+                    if sets.contains(*j, skipped) {
+                        missing.push(skipped);
+                    }
+                    missing.len() <= max_negations
+                });
+            }
+        }
+    }
+
+    // Find redundant clauses, i.e., clauses that are a superset of another clause.
+    let mut redundant_clauses = vec![false; clauses.len()];
+    for i in 0..clauses.len() {
+        redundant_clauses[i] =
+            (0..clauses.len()).any(|j| i != j && !redundant_clauses[j] && sets.is_subset(j, i));
+    }
+
+    for (clause, positions) in dnf.iter_mut().zip(redundant_terms) {
+        for position in positions.into_iter().rev() {
+            clause.remove(position);
+        }
+    }
+    let mut redundant_clauses = redundant_clauses.into_iter();
+    dnf.retain(|_| redundant_clauses.next() == Some(false));
+}
+
+/// A fixed number of equally sized bit sets in contiguous storage.
+struct BitSets {
+    words: usize,
+    bits: Vec<u64>,
+}
+
+impl BitSets {
+    fn new(sets: usize, bits: usize) -> Self {
+        let words = bits.div_ceil(64);
+        Self {
+            words,
+            bits: vec![0; sets * words],
+        }
+    }
+
+    fn get(&self, set: usize) -> &[u64] {
+        &self.bits[set * self.words..(set + 1) * self.words]
+    }
+
+    fn contains(&self, set: usize, bit: usize) -> bool {
+        self.bits[set * self.words + bit / 64] & (1 << (bit % 64)) != 0
+    }
+
+    fn insert(&mut self, set: usize, bit: usize) {
+        self.bits[set * self.words + bit / 64] |= 1 << (bit % 64);
+    }
+
+    fn remove(&mut self, set: usize, bit: usize) {
+        self.bits[set * self.words + bit / 64] &= !(1 << (bit % 64));
+    }
+
+    /// Returns `true` if every bit in `subset` is also in `superset`.
+    fn is_subset(&self, subset: usize, superset: usize) -> bool {
+        self.get(subset)
+            .iter()
+            .zip(self.get(superset))
+            .all(|(subset, superset)| subset & !superset == 0)
+    }
+
+    /// Returns the bits in `left` that are not in `right`, or `None` if there are more than
+    /// `limit` of them.
+    fn difference(&self, left: usize, right: usize, limit: usize) -> Option<Vec<usize>> {
+        let mut count = 0;
+        for (left, right) in self.get(left).iter().zip(self.get(right)) {
+            count += (left & !right).count_ones() as usize;
+            if count > limit {
+                return None;
+            }
+        }
+
+        let mut difference = Vec::with_capacity(count);
+        for (word, (left, right)) in self.get(left).iter().zip(self.get(right)).enumerate() {
+            let mut bits = left & !right;
+            while bits != 0 {
+                difference.push(word * 64 + bits.trailing_zeros() as usize);
+                bits &= bits - 1;
+            }
+        }
+        Some(difference)
+    }
+}
+
+/// Simplify a DNF expression by comparing every pair of clauses term by term.
+fn simplify_linear(dnf: &mut Vec<Vec<MarkerExpression>>) {
     for i in 0..dnf.len() {
         let clause = &dnf[i];
 
@@ -411,6 +576,46 @@ fn star_range_specifier(range: &Ranges<Version>) -> Option<VersionSpecifier> {
     }
 }
 
+/// Returns the expression `right` for which [`is_negation`] holds for `left`, if any.
+fn negate(left: &MarkerExpression) -> Option<MarkerExpression> {
+    Some(match left {
+        MarkerExpression::Version { key, specifier } => MarkerExpression::Version {
+            key: *key,
+            specifier: VersionSpecifier::from_version(
+                specifier.operator().negate()?,
+                specifier.version().clone(),
+            )
+            .ok()?,
+        },
+        MarkerExpression::VersionIn {
+            key,
+            versions,
+            operator,
+        } => MarkerExpression::VersionIn {
+            key: *key,
+            versions: versions.clone(),
+            operator: operator.negate(),
+        },
+        MarkerExpression::String {
+            key,
+            operator,
+            value,
+        } => MarkerExpression::String {
+            key: *key,
+            operator: operator.negate()?,
+            value: value.clone(),
+        },
+        MarkerExpression::Extra { name, operator } => MarkerExpression::Extra {
+            name: name.clone(),
+            operator: operator.negate(),
+        },
+        MarkerExpression::List { pair, operator } => MarkerExpression::List {
+            pair: pair.clone(),
+            operator: operator.negate(),
+        },
+    })
+}
+
 /// Returns `true` if the LHS is the negation of the RHS, or vice versa.
 fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
     match left {
@@ -488,5 +693,88 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
 
             pair == pair2 && operator != operator2
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{MarkerExpression, Pep508Error};
+
+    use super::{is_negation, negate, simplify_indexed, simplify_linear};
+
+    /// Expressions covering every kind of term, with and without negations.
+    fn expressions() -> Result<Vec<MarkerExpression>, Pep508Error> {
+        let expressions = [
+            "extra == 'a'",
+            "extra != 'a'",
+            "extra == 'b'",
+            "extra != 'b'",
+            "extra == 'c'",
+            "extra != 'c'",
+            "python_full_version == '3.10'",
+            "python_full_version != '3.10'",
+            "python_full_version == '3.10.0'",
+            "python_full_version >= '3.11'",
+            "python_full_version < '3.11'",
+            "python_full_version ~= '3.9'",
+            "python_version in '3.9 3.10'",
+            "python_version not in '3.9 3.10'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+            "'test' in extras",
+            "'test' not in extras",
+        ];
+        let mut parsed = Vec::with_capacity(expressions.len());
+        for expression in expressions {
+            parsed.extend(MarkerExpression::from_str(expression)?);
+        }
+        assert_eq!(parsed.len(), expressions.len());
+        Ok(parsed)
+    }
+
+    #[test]
+    fn negate_matches_is_negation() -> Result<(), Pep508Error> {
+        let expressions = expressions()?;
+        for left in &expressions {
+            for right in &expressions {
+                assert_eq!(
+                    is_negation(left, right),
+                    negate(left).as_ref() == Some(right),
+                    "{left} and {right}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// The indexed and linear simplifications must produce identical lockfile output.
+    #[test]
+    fn indexed_matches_linear() -> Result<(), Pep508Error> {
+        let expressions = expressions()?;
+        // A deterministic linear congruential generator.
+        let mut state = 17usize;
+        let mut next = |bound: usize| {
+            state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            (state >> 16) % bound
+        };
+        for case in 0..2000 {
+            let mut dnf = Vec::new();
+            for _ in 0..8 + next(32) {
+                let mut clause = Vec::new();
+                for _ in 0..=next(6) {
+                    let term = &expressions[next(expressions.len())];
+                    if !clause.contains(term) {
+                        clause.push(term.clone());
+                    }
+                }
+                dnf.push(clause);
+            }
+
+            let mut expected = dnf.clone();
+            simplify_linear(&mut expected);
+            simplify_indexed(&mut dnf);
+            assert_eq!(dnf, expected, "case {case}");
+        }
+        Ok(())
     }
 }
