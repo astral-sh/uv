@@ -1393,6 +1393,12 @@ impl MarkerTree {
         Self(INTERNER.lock().without_extras(self.0))
     }
 
+    /// Remove all `extras` and `dependency_groups` conditions from the given marker
+    #[must_use]
+    pub fn without_selections(self) -> Self {
+        Self(INTERNER.lock().without_selections(self.0))
+    }
+
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
     ///
     /// If the marker did not contain any `extra` expressions, then a marker
@@ -1446,6 +1452,52 @@ impl MarkerTree {
                     } else {
                         f(MarkerOperator::NotEqual, kind.name().extra());
                     }
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
+            }
+        }
+        imp(self, &mut f);
+    }
+
+    /// Calls the provided function on every `extras` or `dependency_groups` in this tree.
+    pub fn visit_selections(self, mut f: impl FnMut(MarkerValueList, &str)) {
+        fn imp(tree: MarkerTree, f: &mut impl FnMut(MarkerValueList, &str)) {
+            match tree.kind() {
+                MarkerTreeKind::True | MarkerTreeKind::False => {}
+                MarkerTreeKind::Version(kind) => {
+                    for (tree, _) in simplify::collect_edges(kind.edges()) {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::VersionString(kind) => {
+                    for (tree, _) in simplify::collect_edges(kind.edges()) {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::String(kind) => {
+                    for (tree, _) in simplify::collect_edges(kind.children()) {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::In(kind) => {
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::Contains(kind) => {
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::Extra(kind) => {
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::List(kind) => {
+                    f(kind.key(), &kind.value());
                     for (_, tree) in kind.children() {
                         imp(tree, f);
                     }
@@ -3648,6 +3700,55 @@ mod test {
     }
 
     #[test]
+    fn without_selections() {
+        assert!(m("'wifi' in extras").without_selections().is_true());
+        assert!(m("'wifi' not in extras").without_selections().is_true());
+        assert!(
+            m("'wifi' in dependency_groups")
+                .without_selections()
+                .is_true()
+        );
+        assert!(
+            m("'wifi' not in dependency_groups")
+                .without_selections()
+                .is_true()
+        );
+        assert_eq!(
+            m("os_name == 'Linux'").without_selections(),
+            m("os_name == 'Linux'"),
+        );
+        assert_eq!(
+            m("os_name == 'Linux' and 'foo' in extras").without_selections(),
+            m("os_name == 'Linux'"),
+        );
+        assert_eq!(
+            m("os_name == 'Linux' and 'foo' in dependency_groups").without_selections(),
+            m("os_name == 'Linux'"),
+        );
+
+        assert!(
+            m("
+                (os_name == 'Linux' and 'foo' in extras)
+                or (os_name != 'Linux' and 'bar' in extras)")
+            .without_selections()
+            .is_true()
+        );
+
+        assert!(
+            m("'extra-project-bar' not in extras and 'extra-project-foo' in extras")
+                .without_selections()
+                .is_true()
+        );
+
+        assert_eq!(
+            m("(os_name == 'Darwin' and 'foo' in extras) \
+               or (sys_platform == 'Linux' and 'foo' not in extras)")
+            .without_selections(),
+            m("os_name == 'Darwin' or sys_platform == 'Linux'"),
+        );
+    }
+
+    #[test]
     fn only_extras() {
         assert!(m("os_name == 'Linux'").only_extras().is_true());
         assert_eq!(m("extra == 'foo'").only_extras(), m("extra == 'foo'"));
@@ -3721,6 +3822,31 @@ mod test {
                     "!=",
                     "extra-27-resolution-markers-for-days-cu124".to_string()
                 ),
+            ]
+        );
+    }
+
+    #[test]
+    fn visit_selections() {
+        let collect = |m: MarkerTree| {
+            let mut collected = vec![];
+            m.visit_selections(|key, val| {
+                collected.push((key, val.to_string()));
+            });
+            collected.sort();
+            collected
+        };
+        assert!(collect(m("os_name == 'Linux'")).is_empty());
+        assert!(collect(m("'baz' not in extras")).is_empty());
+        assert_eq!(
+            collect(m("os_name == 'Linux' and 'foo' in extras")),
+            [(crate::MarkerValueList::Extras, "foo".to_string()),]
+        );
+        assert_eq!(
+            collect(m("'foo' in extras or 'bar' in dependency_groups")),
+            [
+                (crate::MarkerValueList::Extras, "foo".to_string()),
+                (crate::MarkerValueList::DependencyGroups, "bar".to_string())
             ]
         );
     }

@@ -21,17 +21,18 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
-use uv_pep508::{MarkerEnvironment, RequirementOrigin};
+use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerValueList, RequirementOrigin};
 use uv_platform_tags::Tags;
 use uv_pypi_types::Conflicts;
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, UpgradePackages,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, RootSelections,
+    UpgradePackages,
 };
 use uv_types::{BuildContext, HashStrategy};
 
@@ -122,8 +123,10 @@ pub async fn resolve(
     recorder: Option<ResolutionRecorder>,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
+    preserve_selections: bool,
 ) -> Result<(ResolverOutput, HashStrategy), Error> {
     let start = std::time::Instant::now();
+    let mut root_selections = preserve_selections.then(RootSelections::default);
 
     // Resolve the requirements from the provided sources.
     let requirements = {
@@ -159,6 +162,21 @@ pub async fn resolve(
             );
         }
 
+        if let Some(selections) = &mut root_selections {
+            // Treating named requirements with extras/groups markers as selections
+            selections
+                .requirements
+                .extend(requirements.iter().map(|requirement| {
+                    (
+                        Requirement {
+                            marker: requirement.marker.without_selections(),
+                            ..requirement.clone()
+                        },
+                        requirement.marker,
+                    )
+                }));
+        }
+
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
@@ -172,6 +190,7 @@ pub async fn resolve(
                 )
                 .with_recorder(recorder.clone()),
             )
+            .with_selections(preserve_selections)
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter())
             .await?;
@@ -203,11 +222,17 @@ pub async fn resolve(
             }
 
             // Extend the requirements with the resolved source trees.
-            requirements.extend(
-                resolutions
-                    .into_iter()
-                    .flat_map(SourceTreeResolution::into_requirements),
-            );
+            for mut resolution in resolutions {
+                if let Some(selections) = &mut root_selections
+                    && let Some(source_selections) = resolution.take_selections()
+                {
+                    selections.extras.extend(source_selections.extras);
+                    selections
+                        .requirements
+                        .extend(source_selections.requirements);
+                }
+                requirements.extend(resolution.into_requirements());
+            }
         }
 
         for (pyproject_path, groups) in groups {
@@ -248,21 +273,57 @@ pub async fn resolve(
                                     group: group_name.clone(),
                                 }
                             });
-                    requirements.extend(group.iter().cloned().map(|group| Requirement {
-                        scope: scope.clone(),
-                        origin: Some(RequirementOrigin::Group(
-                            pyproject_path.clone(),
-                            metadata.name.clone(),
-                            group_name.clone(),
-                        )),
-                        ..group
-                    }));
+                    let group_requirements = group
+                        .iter()
+                        .cloned()
+                        .map(|group| Requirement {
+                            scope: scope.clone(),
+                            origin: Some(RequirementOrigin::Group(
+                                pyproject_path.clone(),
+                                metadata.name.clone(),
+                                group_name.clone(),
+                            )),
+                            ..group
+                        })
+                        .collect::<Vec<_>>();
+                    if let Some(selections) = &mut root_selections {
+                        selections.groups.insert(group_name.clone());
+                        let marker = format!("'{group_name}' in dependency_groups")
+                            .parse::<MarkerTree>()
+                            .map_err(anyhow::Error::from)?;
+                        selections.requirements.extend(
+                            group_requirements
+                                .iter()
+                                .cloned()
+                                .map(|requirement| (requirement, marker)),
+                        );
+                    }
+                    requirements.extend(group_requirements);
                 }
             }
         }
 
         requirements
     };
+
+    if let Some(selections) = &mut root_selections {
+        // Ensure we get the selections not necessarily from optional-dependencies/
+        // dependency-groups
+        for requirement in &requirements {
+            requirement.marker.visit_selections(|key, val| match key {
+                MarkerValueList::Extras => {
+                    if let Ok(extra) = val.parse::<ExtraName>() {
+                        selections.extras.insert(extra);
+                    }
+                }
+                MarkerValueList::DependencyGroups => {
+                    if let Ok(group) = val.parse::<GroupName>() {
+                        selections.groups.insert(group);
+                    }
+                }
+            });
+        }
+    }
 
     // Incorporate hashes from requirements discovered while resolving source trees and groups.
     let mut hasher = hasher
@@ -396,6 +457,7 @@ pub async fn resolve(
             )
             .with_recorder(recorder.clone()),
         )?
+        .with_root_selections(root_selections)
         .with_reporter(Arc::new(reporter));
 
         resolver.resolve().await?

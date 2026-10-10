@@ -101,6 +101,7 @@ tracing-tree = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
+test-case.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 self-replace = { workspace = true }

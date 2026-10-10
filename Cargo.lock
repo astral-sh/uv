@@ -5821,6 +5821,7 @@ dependencies = [
  "sha2 0.11.0",
  "tar-codec",
  "tempfile",
+ "test-case",
  "textwrap",
  "thiserror",
  "tokio",
