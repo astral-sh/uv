@@ -130,7 +130,7 @@ async-compression = { version = "0.4.12", default-features = false, features = [
 ] }
 async-trait = { version = "0.1.82", default-features = false }
 async_http_range_reader = { version = "0.12.0", package = "astral_async_http_range_reader", default-features = false }
-async_zip = { version = "0.0.21", package = "astral_async_zip", default-features = false, features = [
+async_zip = { version = "0.0.22", package = "astral_async_zip", default-features = false, features = [
   "deflate",
 ] }
 axoupdater = { version = "0.10.0", default-features = false }

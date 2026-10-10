@@ -50,7 +50,7 @@ anyhow = { workspace = true }
 astral-html = { workspace = true }
 async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
-async_zip = { workspace = true, features = ["zstd"] }
+async_zip = { workspace = true, features = ["zstd-read"] }
 bitflags = { workspace = true }
 bytecheck = { workspace = true }
 crc32fast = { workspace = true }
