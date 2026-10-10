@@ -421,9 +421,13 @@ where
 /// On macOS, `clonefile` preserves all file metadata including permissions. On Linux,
 /// `ioctl_ficlone` only clones data blocks, so we implement our own reflink that copies
 /// permissions via `fchmod` on the open file descriptor, avoiding TOCTOU races.
+/// The `rustix` bindings do not expose `ioctl_ficlone` on SPARC.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18181>
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    target_os = "linux",
+    not(any(target_arch = "sparc", target_arch = "sparc64"))
+))]
 fn reflink_with_permissions(from: &Path, to: &Path) -> io::Result<()> {
     use fs_err::os::unix::fs::OpenOptionsExt;
     use std::os::unix::fs::PermissionsExt;
@@ -452,7 +456,11 @@ fn reflink_with_permissions(from: &Path, to: &Path) -> io::Result<()> {
 /// Reflink a file from `from` to `to`, preserving file permissions.
 ///
 /// On macOS, `clonefile` preserves all file metadata including permissions natively.
-#[cfg(not(target_os = "linux"))]
+/// On SPARC, `reflink-copy` reports that reflinks are unsupported, triggering the hardlink fallback.
+#[cfg(not(all(
+    target_os = "linux",
+    not(any(target_arch = "sparc", target_arch = "sparc64"))
+)))]
 fn reflink_with_permissions(from: &Path, to: &Path) -> io::Result<()> {
     reflink_copy::reflink(from, to)
 }
