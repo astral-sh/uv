@@ -10257,14 +10257,17 @@ fn marker_is_unreachable(requires_python: &RequiresPython, marker: MarkerTree) -
         return false;
     }
 
-    environment.to_unsimplified_dnf().into_iter().all(|conjunction| {
-        let marker = conjunction
-            .into_iter()
-            .fold(MarkerTree::TRUE, |marker, expression| {
-                marker.and(MarkerTree::expression(expression))
-            });
-        requires_python.simplify_markers(marker).is_false()
-    })
+    environment
+        .to_unsimplified_dnf()
+        .into_iter()
+        .all(|conjunction| {
+            let marker = conjunction
+                .into_iter()
+                .fold(MarkerTree::TRUE, |marker, expression| {
+                    marker.and(MarkerTree::expression(expression))
+                });
+            requires_python.simplify_markers(marker).is_false()
+        })
 }
 
 /// Simplify an edge marker using the PEP 508 conditions that must already hold to reach its parent
