@@ -13,6 +13,7 @@ mod vendor;
 pub use path::{assert_link_target, assert_path_missing};
 
 use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::ffi::OsString;
 use std::io::Write as _;
 use std::iter::Iterator;
@@ -2315,15 +2316,36 @@ pub enum WindowsFilters {
     Universal,
 }
 
+thread_local! {
+    /// Retain only the last snapshot's filters to avoid accumulating temporary path patterns.
+    static SNAPSHOT_FILTER_CACHE: RefCell<Vec<Regex>> = const { RefCell::new(Vec::new()) };
+}
+
 /// Helper method to apply filters to a string. Useful when `!uv_snapshot` cannot be used.
 pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(T, T)]>) -> String {
-    for (matcher, replacement) in filters.as_ref() {
-        // TODO(konstin): Cache regex compilation
-        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
+    let filters = filters.as_ref();
+    // Release the thread-local borrow before converting the caller's filters.
+    let mut compiled_filters = SNAPSHOT_FILTER_CACHE.take();
+    for (index, (matcher, replacement)) in filters.iter().enumerate() {
+        let matcher = matcher.as_ref();
+        if compiled_filters
+            .get(index)
+            .is_none_or(|filter| filter.as_str() != matcher)
+        {
+            let compiled = Regex::new(matcher).expect("Do you need to regex::escape your filter?");
+            if let Some(filter) = compiled_filters.get_mut(index) {
+                *filter = compiled;
+            } else {
+                compiled_filters.push(compiled);
+            }
+        }
+        let re = &compiled_filters[index];
         if re.is_match(&snapshot) {
             snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
         }
     }
+    compiled_filters.truncate(filters.len());
+    SNAPSHOT_FILTER_CACHE.set(compiled_filters);
     snapshot
 }
 
@@ -2703,6 +2725,69 @@ macro_rules! uv_snapshot {
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
+}
+
+#[cfg(test)]
+mod snapshot_filter_tests {
+    use super::apply_filters;
+
+    #[test]
+    fn cached_matcher_uses_current_replacement() {
+        let first = apply_filters("id=123".to_string(), [(r"id=(\d+)", "first-$1")]);
+        let second = apply_filters("id=123".to_string(), [(r"id=(\d+)", "second-$1")]);
+
+        insta::assert_snapshot!(format!("{first}\n{second}"), @"
+        first-123
+        second-123
+        ");
+    }
+
+    #[test]
+    fn changed_matchers_preserve_filter_order() {
+        let first = apply_filters(
+            "first".to_string(),
+            [("first", "second"), ("second", "third")],
+        );
+        let reordered = apply_filters(
+            "first".to_string(),
+            [("second", "third"), ("first", "second")],
+        );
+        let changed = apply_filters(
+            "second third".to_string(),
+            [("third", "last"), ("second", "changed")],
+        );
+
+        insta::assert_snapshot!(format!("{first}\n{reordered}\n{changed}"), @"
+        third
+        second
+        changed last
+        ");
+    }
+
+    #[test]
+    fn removed_and_nonmatching_filters_leave_text_unchanged() {
+        let first = apply_filters(
+            "alpha beta".to_string(),
+            [("alpha", "one"), ("beta", "two")],
+        );
+        let shortened = apply_filters("alpha beta".to_string(), [("alpha", "three")]);
+        let empty: &[(&str, &str)] = &[];
+        let unfiltered = apply_filters("alpha beta".to_string(), empty);
+        let nonmatching = apply_filters("alpha beta".to_string(), [("gamma", "unused")]);
+
+        insta::assert_snapshot!(format!("{first}\n{shortened}\n{unfiltered}\n{nonmatching}"), @"
+        one two
+        three beta
+        alpha beta
+        alpha beta
+        ");
+    }
+
+    #[test]
+    #[should_panic(expected = "Do you need to regex::escape your filter?")]
+    fn rejects_invalid_filter() {
+        apply_filters(String::new(), [("(", "unused")]);
+    }
 }
 
 #[cfg(all(test, unix))]
