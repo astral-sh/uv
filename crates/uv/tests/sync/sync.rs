@@ -1523,6 +1523,40 @@ fn frozen() -> Result<()> {
     Ok(())
 }
 
+/// Frozen wheel installations do not need `--find-links` indexes for build dependencies.
+#[test]
+fn frozen_wheels_skip_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--find-links")
+        .arg(context.temp_dir.child("missing-wheels").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 /// Frozen sync reads the project lockfile before selecting an environment.
 #[test]
 fn sync_frozen_lockfile_before_environment() -> Result<()> {
@@ -13870,6 +13904,44 @@ fn sync_dry_run_and_frozen() -> Result<()> {
 
     // Running with `--frozen` with `--dry-run` should preview dependencies to be installed.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 3 packages
+    Would install 3 packages
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Previewing a source build does not need `--find-links` indexes for build dependencies.
+#[test]
+fn sync_dry_run_and_frozen_skips_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--dry-run")
+        .arg("--no-binary-package")
+        .arg("anyio")
+        .arg("--find-links")
+        .arg(context.temp_dir.child("missing-wheels").path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv
