@@ -245,6 +245,33 @@ module root alongside the source code.
     `RUST_LOG=uv=debug` or `RUST_LOG=uv=verbose`. When used through uv, the uv build backend shares
     the verbosity level of uv.
 
+### Respecting Git ignore rules
+
+By default, `.gitignore` files do not affect which files are packaged. To exclude files using Git
+ignore patterns, enable
+[`tool.uv.build-backend.respect-ignore`](../reference/settings.md#build-backend_respect-ignore):
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+respect-ignore = true
+```
+
+uv reads `.gitignore` files in the project directory (containing `pyproject.toml`) and its
+subdirectories. In a Git repository, uv also reads ancestor `.gitignore` files up to the repository
+root. Nested patterns and negations follow Git's ignore syntax. Git does not need to be installed,
+and the project does not need to be in a Git repository. Patterns also apply to files tracked by
+Git, since the build backend does not inspect the Git index.
+
+Global Git excludes and `.git/info/exclude` are not used. The `source-exclude`, `wheel-exclude`, and
+default excludes still take precedence over Git ignore negations. If a required package file, such
+as a module's `__init__.py`, the README, or a license file, is ignored, the build fails with an
+error.
+
+Git ignore filtering applies when building both source distributions and wheels, including wheels
+built from source distributions. Source distributions retain the `respect-ignore` setting. If some
+`.gitignore` files are omitted, the remaining rules can select different files when rebuilding a
+wheel from the source distribution.
+
 ### Include and exclude syntax
 
 Includes are anchored, which means that `pyproject.toml` includes only `<root>/pyproject.toml` and

@@ -3,6 +3,7 @@ mod metadata;
 mod serde_verbatim;
 mod settings;
 mod source_dist;
+mod vcs_ignore;
 mod wheel;
 
 pub(crate) use metadata::PyProjectToml;
@@ -28,6 +29,7 @@ use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
 use crate::settings::ModuleName;
+use crate::vcs_ignore::VcsIgnore;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -58,6 +60,10 @@ pub enum Error {
     },
     #[error("`pyproject.toml` must not be excluded from source distribution build")]
     PyprojectTomlExcluded,
+    #[error("Failed to read Git ignore rules")]
+    VcsIgnore(#[source] ignore::Error),
+    #[error("Required package file is excluded by Git ignore rules: {}", _0.user_display())]
+    RequiredFileVcsIgnored(PathBuf),
     #[error("Failed to walk source tree: {}", root.user_display())]
     WalkDir {
         root: PathBuf,
@@ -361,8 +367,20 @@ fn find_roots(
             pyproject_toml.name(),
         )?]
     };
+    let mut vcs_ignore = VcsIgnore::new(
+        source_tree,
+        pyproject_toml
+            .settings()
+            .is_some_and(|settings| settings.respect_ignore),
+    )?;
     for module_relative in &modules_relative {
         debug!("Module path: {}", module_relative.user_display());
+        let stubs = module_relative
+            .components()
+            .next()
+            .is_some_and(|component| component.as_os_str().to_string_lossy().ends_with("-stubs"));
+        let init = if stubs { "__init__.pyi" } else { "__init__.py" };
+        vcs_ignore.require(&relative_module_root.join(module_relative).join(init))?;
     }
     Ok((src_root, modules_relative))
 }
@@ -963,6 +981,465 @@ mod tests {
         built_by_uv-0.1.0.dist-info/METADATA,sha256=m6EkVvKrGmqx43b_VR45LHD37IZxPYC0NI6Qx9_UXLE,474
         built_by_uv-0.1.0.dist-info/RECORD,,
         ");
+    }
+
+    #[test]
+    fn respect_ignore() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let parent = TempDir::new()?;
+        // Without a Git checkout, only rules within the source tree affect a build.
+        fs_err::write(parent.path().join(".gitignore"), "*\n[z-a]\n")?;
+        let source = parent.path().join("project");
+        for directory in [
+            "src/example/nested",
+            "src/example/ignored",
+            "scripts",
+            "tests",
+        ] {
+            fs_err::create_dir_all(source.join(directory))?;
+        }
+        let pyproject = indoc! {r#"
+            [project]
+            name = "example"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=1,<2"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            source-include = ["tests/**"]
+            source-exclude = ["src/example/explicit.json"]
+            data = { scripts = "scripts" }
+        "#};
+        fs_err::write(source.join("pyproject.toml"), pyproject)?;
+        // Other ignore-file formats do not affect package contents.
+        fs_err::write(source.join(".ignore"), "*\n")?;
+        fs_err::write(
+            source.join(".gitignore"),
+            "*.json\nsrc/example/ignored/\nsrc/example/nested/.gitignore\n!src/example/explicit.json\n",
+        )?;
+        fs_err::write(source.join("src/example/.gitignore"), "*.txt\n")?;
+        fs_err::write(source.join("src/example/nested/.gitignore"), "!keep.txt\n")?;
+        fs_err::write(source.join("src/example/ignored/.gitignore"), "!keep.py\n")?;
+        for file in [
+            "src/example/__init__.py",
+            "src/example/debug_dump.json",
+            "src/example/notes.txt",
+            "src/example/nested/keep.txt",
+            "src/example/nested/drop.txt",
+            "src/example/ignored/keep.py",
+            "src/example/explicit.json",
+            "src/example/compiled.pyc",
+            "scripts/run.py",
+            "scripts/session.json",
+            "tests/test_smoke.py",
+            "tests/debug.json",
+        ] {
+            fs_err::write(source.join(file), "")?;
+        }
+
+        let dist = TempDir::new()?;
+        let default = build(&source, dist.path())?;
+        assert_snapshot!(default.wheel_contents.join("\n"), @"
+        example-1.0.0.data/scripts/
+        example-1.0.0.data/scripts/run.py
+        example-1.0.0.data/scripts/session.json
+        example-1.0.0.dist-info/
+        example-1.0.0.dist-info/METADATA
+        example-1.0.0.dist-info/RECORD
+        example-1.0.0.dist-info/WHEEL
+        example/
+        example/.gitignore
+        example/__init__.py
+        example/debug_dump.json
+        example/ignored/
+        example/ignored/.gitignore
+        example/ignored/keep.py
+        example/nested/
+        example/nested/.gitignore
+        example/nested/drop.txt
+        example/nested/keep.txt
+        example/notes.txt
+        ");
+
+        fs_err::write(
+            source.join("pyproject.toml"),
+            format!("{pyproject}\nrespect-ignore = true\n"),
+        )?;
+        let filtered_wheel = build_wheel(&source, dist.path(), None, MOCK_UV_VERSION, false)?;
+        assert_snapshot!(wheel_contents(&dist.path().join(filtered_wheel.to_string())).join("\n"), @"
+        example-1.0.0.data/scripts/
+        example-1.0.0.data/scripts/run.py
+        example-1.0.0.dist-info/
+        example-1.0.0.dist-info/METADATA
+        example-1.0.0.dist-info/RECORD
+        example-1.0.0.dist-info/WHEEL
+        example/
+        example/.gitignore
+        example/__init__.py
+        example/nested/
+        example/nested/keep.txt
+        ");
+        let filtered_source_dist = build_source_dist(&source, dist.path(), MOCK_UV_VERSION, false)?;
+        assert_snapshot!(sdist_contents(&dist.path().join(filtered_source_dist.to_string())).join("\n"), @"
+        example-1.0.0/
+        example-1.0.0/PKG-INFO
+        example-1.0.0/pyproject.toml
+        example-1.0.0/pyproject.toml.orig
+        example-1.0.0/scripts
+        example-1.0.0/scripts/run.py
+        example-1.0.0/src
+        example-1.0.0/src/example
+        example-1.0.0/src/example/.gitignore
+        example-1.0.0/src/example/__init__.py
+        example-1.0.0/src/example/nested
+        example-1.0.0/src/example/nested/keep.txt
+        example-1.0.0/tests
+        example-1.0.0/tests/test_smoke.py
+        ");
+
+        // The ignored nested .gitignore contains the rule that keeps keep.txt. Rebuilding from
+        // the source distribution applies the remaining rules, which exclude keep.txt.
+        let unpacked = TempDir::new()?;
+        unpack_sdist(
+            &dist.path().join(filtered_source_dist.to_string()),
+            unpacked.path(),
+        )?;
+        let source_dist = unpacked.path().join("example-1.0.0");
+        assert_snapshot!(fs_err::read_to_string(source_dist.join("pyproject.toml"))?, @r#"
+        [project]
+        name = "example"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=1,<2"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        source-include = ["tests/**"]
+        source-exclude = ["src/example/explicit.json"]
+        respect-ignore = true
+
+        [tool.uv.build-backend.data]
+        scripts = "scripts"
+        "#);
+        assert_eq!(
+            fs_err::read_to_string(source_dist.join("pyproject.toml.orig"))?,
+            fs_err::read_to_string(source.join("pyproject.toml"))?
+        );
+
+        let rebuilt = build_wheel(&source_dist, dist.path(), None, MOCK_UV_VERSION, false)?;
+        assert_snapshot!(wheel_contents(&dist.path().join(rebuilt.to_string())).join("\n"), @"
+        example-1.0.0.data/scripts/
+        example-1.0.0.data/scripts/run.py
+        example-1.0.0.dist-info/
+        example-1.0.0.dist-info/METADATA
+        example-1.0.0.dist-info/RECORD
+        example-1.0.0.dist-info/WHEEL
+        example/
+        example/.gitignore
+        example/__init__.py
+        ");
+
+        let editable = build_editable(&source, dist.path(), None, MOCK_UV_VERSION, false)?;
+        assert_snapshot!(wheel_contents(&dist.path().join(editable.to_string())).join("\n"), @"
+        example-1.0.0.data/scripts/
+        example-1.0.0.data/scripts/run.py
+        example-1.0.0.dist-info/
+        example-1.0.0.dist-info/METADATA
+        example-1.0.0.dist-info/RECORD
+        example-1.0.0.dist-info/WHEEL
+        example.pth
+        ");
+        Ok(())
+    }
+
+    #[test]
+    fn respect_ignore_ancestors() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let parent = TempDir::new()?;
+        // Ignore rules stop at the repository root.
+        fs_err::write(parent.path().join(".gitignore"), "*\n[z-a]\n")?;
+        let repository = parent.path().join("repository");
+        let source = repository.join("packages/project");
+        fs_err::create_dir_all(repository.join(".git"))?;
+        fs_err::create_dir_all(source.join("src/example"))?;
+        fs_err::write(
+            repository.join(".gitignore"),
+            "*.json\n/packages/project/src/example/root.txt\n/src/example/keep.txt\n",
+        )?;
+        fs_err::write(
+            repository.join("packages/.gitignore"),
+            "/project/src/example/intermediate.txt\n/src/example/keep.txt\n",
+        )?;
+        fs_err::write(source.join(".gitignore"), "!src/example/keep.json\n")?;
+        fs_err::write(
+            source.join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "example"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=1,<2"]
+                build-backend = "uv_build"
+
+                [tool.uv.build-backend]
+                respect-ignore = true
+            "#},
+        )?;
+        for file in [
+            "__init__.py",
+            "ignored.json",
+            "keep.json",
+            "root.txt",
+            "intermediate.txt",
+            "keep.txt",
+        ] {
+            fs_err::write(source.join("src/example").join(file), "")?;
+        }
+
+        let dist = TempDir::new()?;
+        let result = build(&source, dist.path())?;
+        assert_snapshot!(result.wheel_contents.join("\n"), @"
+        example-1.0.0.dist-info/
+        example-1.0.0.dist-info/METADATA
+        example-1.0.0.dist-info/RECORD
+        example-1.0.0.dist-info/WHEEL
+        example/
+        example/__init__.py
+        example/keep.json
+        example/keep.txt
+        ");
+        assert_snapshot!(result.source_dist_contents.join("\n"), @"
+        example-1.0.0/
+        example-1.0.0/PKG-INFO
+        example-1.0.0/pyproject.toml
+        example-1.0.0/pyproject.toml.orig
+        example-1.0.0/src
+        example-1.0.0/src/example
+        example-1.0.0/src/example/__init__.py
+        example-1.0.0/src/example/keep.json
+        example-1.0.0/src/example/keep.txt
+        ");
+        Ok(())
+    }
+
+    #[test]
+    fn respect_ignore_ancestor_required_files() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let repository = TempDir::new()?;
+        let source = repository.path().join("project");
+        // A linked worktree uses a file instead of a directory as its Git marker.
+        fs_err::write(
+            repository.path().join(".git"),
+            "gitdir: ../main/.git/worktrees/project\n",
+        )?;
+        fs_err::create_dir_all(source.join("src/example"))?;
+        for file in ["src/example/__init__.py", "README.md", "LICENSE.txt"] {
+            fs_err::write(source.join(file), "")?;
+        }
+        fs_err::write(
+            source.join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "example"
+                version = "1.0.0"
+                readme = "README.md"
+                license-files = ["LICENSE.txt"]
+
+                [build-system]
+                requires = ["uv_build>=1,<2"]
+                build-backend = "uv_build"
+
+                [tool.uv.build-backend]
+                respect-ignore = true
+            "#},
+        )?;
+        let mut errors = Vec::new();
+        for file in [
+            "pyproject.toml",
+            "README.md",
+            "LICENSE.txt",
+            "src/example/__init__.py",
+        ] {
+            fs_err::write(
+                repository.path().join(".gitignore"),
+                format!("/project/{file}\n"),
+            )?;
+            errors.push(build_err(&source));
+        }
+        assert_snapshot!(errors.join("\n"), @"
+        Required package file is excluded by Git ignore rules: pyproject.toml
+
+        Required package file is excluded by Git ignore rules: README.md
+
+        Required package file is excluded by Git ignore rules: LICENSE.txt
+
+        Required package file is excluded by Git ignore rules: src/example/__init__.py
+        ");
+
+        // A negation inside an ignored project cannot re-include its files.
+        fs_err::write(repository.path().join(".gitignore"), "/project/\n")?;
+        fs_err::write(source.join(".gitignore"), "!src/example/__init__.py\n")?;
+        assert_snapshot!(build_err(&source), @"Required package file is excluded by Git ignore rules: src/example/__init__.py");
+        Ok(())
+    }
+
+    #[test]
+    fn respect_ignore_ignored_module_root() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let source = TempDir::new()?;
+        fs_err::create_dir_all(source.path().join("src/example"))?;
+        fs_err::write(source.path().join("src/example/__init__.py"), "")?;
+        fs_err::write(
+            source.path().join("src/example/.gitignore"),
+            "!__init__.py\n",
+        )?;
+        fs_err::write(source.path().join(".gitignore"), "src/\n")?;
+        fs_err::write(
+            source.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "example"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=1,<2"]
+                build-backend = "uv_build"
+
+                [tool.uv.build-backend]
+                respect-ignore = true
+            "#},
+        )?;
+        assert_snapshot!(build_err(source.path()), @"Required package file is excluded by Git ignore rules: src/example/__init__.py");
+        Ok(())
+    }
+
+    #[test]
+    fn respect_ignore_required_files() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let source = TempDir::new()?;
+        fs_err::create_dir_all(source.path().join("src/example"))?;
+        for file in ["src/example/__init__.py", "README.md", "LICENSE.txt"] {
+            fs_err::write(source.path().join(file), "")?;
+        }
+        fs_err::write(
+            source.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "example"
+                version = "1.0.0"
+                readme = "README.md"
+                license-files = ["LICENSE.txt"]
+
+                [build-system]
+                requires = ["uv_build>=1,<2"]
+                build-backend = "uv_build"
+
+                [tool.uv.build-backend]
+                respect-ignore = true
+            "#},
+        )?;
+        let mut errors = Vec::new();
+        for file in [
+            "pyproject.toml",
+            "README.md",
+            "LICENSE.txt",
+            "src/example/__init__.py",
+        ] {
+            fs_err::write(source.path().join(".gitignore"), format!("{file}\n"))?;
+            errors.push(build_err(source.path()));
+        }
+        assert_snapshot!(errors.join("\n"), @"
+        Required package file is excluded by Git ignore rules: pyproject.toml
+
+        Required package file is excluded by Git ignore rules: README.md
+
+        Required package file is excluded by Git ignore rules: LICENSE.txt
+
+        Required package file is excluded by Git ignore rules: src/example/__init__.py
+        ");
+
+        fs_err::write(source.path().join(".gitignore"), "[z-a]\n")?;
+        assert_snapshot!(build_err(source.path()), @"
+        Failed to read Git ignore rules
+          Caused by: [TEMP_PATH]/.gitignore: line 1: error parsing glob '[z-a]': invalid range; 'z' > 'a'
+        ");
+        Ok(())
+    }
+
+    #[test]
+    fn respect_ignore_empty_directories() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let source = TempDir::new()?;
+        fs_err::create_dir_all(source.path().join("src/example"))?;
+        fs_err::create_dir_all(source.path().join("artifacts/scripts"))?;
+        fs_err::write(source.path().join("src/example/__init__.py"), "")?;
+        fs_err::write(source.path().join("artifacts/scripts/run.py"), "")?;
+        fs_err::write(
+            source.path().join("artifacts/scripts/.gitignore"),
+            "!run.py\n",
+        )?;
+        fs_err::write(source.path().join(".gitignore"), "artifacts/\n")?;
+        fs_err::write(
+            source.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "example"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=1,<2"]
+                build-backend = "uv_build"
+
+                [tool.uv.build-backend]
+                respect-ignore = true
+                data = { scripts = "artifacts/scripts" }
+            "#},
+        )?;
+        let dist = TempDir::new()?;
+        let result = build(source.path(), dist.path())?;
+        assert_snapshot!(result.source_dist_contents.join("\n"), @"
+        example-1.0.0/
+        example-1.0.0/PKG-INFO
+        example-1.0.0/artifacts
+        example-1.0.0/artifacts/scripts
+        example-1.0.0/pyproject.toml
+        example-1.0.0/pyproject.toml.orig
+        example-1.0.0/src
+        example-1.0.0/src/example
+        example-1.0.0/src/example/__init__.py
+        ");
+        assert_snapshot!(result.wheel_contents.join("\n"), @"
+        example-1.0.0.dist-info/
+        example-1.0.0.dist-info/METADATA
+        example-1.0.0.dist-info/RECORD
+        example-1.0.0.dist-info/WHEEL
+        example/
+        example/__init__.py
+        ");
+
+        // A missing namespace root must still fail instead of producing an empty wheel.
+        let pyproject = source.path().join("pyproject.toml");
+        fs_err::write(
+            &pyproject,
+            format!(
+                "{}\nnamespace = true\n",
+                fs_err::read_to_string(&pyproject)?
+            ),
+        )?;
+        fs_err::remove_dir_all(source.path().join("src/example"))?;
+        let error = build(source.path(), dist.path()).expect_err("missing namespace root");
+        let Error::WalkDir { err: error, .. } = error else {
+            return Err(error);
+        };
+        assert_eq!(
+            error.io_error().map(io::Error::kind),
+            Some(io::ErrorKind::NotFound)
+        );
+        Ok(())
     }
 
     /// Test that `license = { file = "LICENSE" }` is supported.
