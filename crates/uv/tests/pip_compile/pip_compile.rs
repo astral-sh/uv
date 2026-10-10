@@ -14423,6 +14423,66 @@ fn python_platform() -> Result<()> {
     Ok(())
 }
 
+/// An explicit macOS target has an empty release, which compares as version zero.
+#[test]
+fn python_platform_empty_release() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    for name in ["equal", "unequal"] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &"1".parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(indoc! {r"
+            equal==1 ; platform_release == '0'
+            unequal==1 ; platform_release != '24'
+            excluded ; platform_release >= '24'
+        "})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform").arg("macos")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    equal==1
+    unequal==1
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform").arg("linux")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    unequal==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Resolve a specific source distribution via a Git HTTPS dependency.
 #[test]
 #[cfg(feature = "test-git")]
