@@ -24,4 +24,4 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "cargo publish dry-run"
-        run: cargo publish --workspace --dry-run
+        run: cargo publish --locked --workspace --dry-run
