@@ -45,8 +45,8 @@ uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
-cyclonedx-bom = { workspace = true }
 either = { workspace = true }
+fluent-uri = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 itertools = { workspace = true }
@@ -66,6 +66,7 @@ toml_parser = { workspace = true }
 toml_writer = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 insta = { workspace = true }

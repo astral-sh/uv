@@ -9186,6 +9186,123 @@ fn cyclonedx_export_relative_path() -> Result<()> {
     Ok(())
 }
 
+/// Workspace paths are normalized as XML strings in CycloneDX JSON property values.
+#[cfg(all(unix, feature = "test-universal"))]
+#[test]
+fn cyclonedx_export_normalized_workspace_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child\r\nwith\rwhitespace\ncharacters\t"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("child\r\nwith\rwhitespace\ncharacters\t")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            "#,
+        )?;
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [manifest]
+        members = ["child", "project"]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child\r\nwith\rwhitespace\ncharacters\t" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "child" }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--frozen"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child with whitespace characters "
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-2@0.1.0"
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "child-2@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
