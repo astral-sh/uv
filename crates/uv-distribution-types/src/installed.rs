@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use fs_err as fs;
+use serde::Deserialize;
 use thiserror::Error;
 use tracing::warn;
 use url::Url;
@@ -15,8 +16,8 @@ use uv_fs::Simplified;
 use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{DirectUrl, MetadataError};
-use uv_redacted::DisplaySafeUrl;
+use uv_pypi_types::{ArchiveInfo, DirInfo, DirectUrl, MetadataError, VcsInfo};
+use uv_redacted::{DisplaySafeUrl, PersistSafeUrl};
 
 use crate::{
     BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
@@ -387,9 +388,14 @@ impl InstalledDist {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let direct_url =
-            serde_json::from_reader::<BufReader<fs_err::File>, DirectUrl>(BufReader::new(file))?;
-        Ok(Some(direct_url))
+        let direct_url: DirectUrlMetadata = serde_json::from_reader(BufReader::new(file))?;
+        match direct_url.into_direct_url() {
+            Ok(direct_url) => Ok(Some(direct_url)),
+            Err(err) => {
+                warn!("Failed to parse direct URL: {err}");
+                Ok(None)
+            }
+        }
     }
 
     /// Read the `uv_cache.json` file from a `.dist-info` directory.
@@ -523,6 +529,54 @@ impl InstalledDist {
             InstalledDistKind::EggInfoDirectory(_) => false,
             InstalledDistKind::LegacyEditable(_) => true,
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct DirectUrlMetadata {
+    url: String,
+    subdirectory: Option<Box<Path>>,
+    #[serde(flatten)]
+    kind: DirectUrlMetadataKind,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum DirectUrlMetadataKind {
+    LocalDirectory {
+        dir_info: DirInfo,
+    },
+    ArchiveUrl {
+        archive_info: ArchiveInfo,
+    },
+    VcsUrl {
+        vcs_info: VcsInfo,
+        path: Option<PathBuf>,
+    },
+}
+
+impl DirectUrlMetadata {
+    fn into_direct_url(self) -> Result<DirectUrl, url::ParseError> {
+        let url = PersistSafeUrl::from(DisplaySafeUrl::from_url(Url::parse(&self.url)?));
+        let subdirectory = self.subdirectory;
+        Ok(match self.kind {
+            DirectUrlMetadataKind::LocalDirectory { dir_info } => DirectUrl::LocalDirectory {
+                url,
+                dir_info,
+                subdirectory,
+            },
+            DirectUrlMetadataKind::ArchiveUrl { archive_info } => DirectUrl::ArchiveUrl {
+                url,
+                archive_info,
+                subdirectory,
+            },
+            DirectUrlMetadataKind::VcsUrl { vcs_info, path } => DirectUrl::VcsUrl {
+                url,
+                vcs_info,
+                subdirectory,
+                path,
+            },
+        })
     }
 }
 

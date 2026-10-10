@@ -77,6 +77,39 @@ fn list_editable_non_file_url() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-python")]
+fn list_malformed_direct_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist_info = ChildPath::new(context.site_packages()).child("project-1.0.0.dist-info");
+    dist_info.create_dir_all()?;
+    dist_info
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    dist_info
+        .child("direct_url.json")
+        .write_str(r#"{"url":"not-a-url","archive_info":{}}"#)?;
+
+    uv_snapshot!(context.pip_freeze(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project==1.0.0
+    ");
+
+    dist_info
+        .child("direct_url.json")
+        .write_str(r#"{"url":"not-a-url","archive_info":{"hashes":[]}}"#)?;
+
+    uv_snapshot!(context.filters(), context.pip_list(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read metadata from: [SITE_PACKAGES]/project-1.0.0.dist-info
+      cause: data did not match any variant of untagged enum DirectUrlMetadataKind at line 1 column 48
+    ");
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "test-pypi")]
 fn list_single_no_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
