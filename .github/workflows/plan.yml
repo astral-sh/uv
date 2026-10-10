@@ -184,6 +184,16 @@ jobs:
           # a `git diff` failure. A command substitution in the loop's here-string
           # would hide the exit status, allowing required jobs to be skipped.
           changed_files="$(git diff --no-ext-diff --no-textconv --name-only "${comparison_base}...HEAD")"
+          if [[ "$GH_REPOSITORY" == astral-sh/* && $is_pull_request && ! $is_same_repository ]]; then
+            lockfile_diff_status=0
+            git diff --quiet --no-ext-diff --no-textconv "${comparison_base}...HEAD" -- Cargo.lock ':(glob)crates/**/Cargo.lock' || lockfile_diff_status=$?
+            if (( lockfile_diff_status > 1 )); then
+              exit "$lockfile_diff_status"
+            elif (( lockfile_diff_status == 1 )); then
+              echo "::error::Cargo.lock changes in pull requests from forks must be submitted from a $GH_REPOSITORY branch."
+              exit 1
+            fi
+          fi
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
