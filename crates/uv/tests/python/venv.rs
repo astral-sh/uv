@@ -2090,16 +2090,16 @@ fn path_with_trailing_space_gives_proper_error() {
     // Windows translates error messages, for example i get:
     // ": Das System kann den angegebenen Pfad nicht finden. (os error 3)"
     let context = context.with_filter((
-        r"CACHEDIR.TAG`: .* \(os error 3\)",
-        "CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)",
+        r"\.lock`: .* \(os error 3\)",
+        ".lock`: The system cannot find the path specified. (os error 3)",
     ));
     uv_snapshot!(context.filters(), std::process::Command::new(uv_test::get_bin!())
         .arg("venv")
         .env(EnvVars::UV_CACHE_DIR, path_with_trailing_slash), @r###"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to initialize cache at `[CACHE_DIR]/ `
-      cause: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
+    error: Could not acquire lock
+      cause: failed to open file `[CACHE_DIR]/ /.lock`: The system cannot find the path specified. (os error 3)
     "###
     );
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.

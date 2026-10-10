@@ -45,6 +45,8 @@ fn clean_all() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
+    assert!(context.cache_dir.child(".lock").is_file());
+
     Ok(())
 }
 
@@ -314,9 +316,9 @@ async fn clean_force() -> Result<()> {
         .success();
 
     // When locked, `--force` should proceed without blocking
-    let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
+    let _cache = Cache::from_path(context.cache_dir.path())
         .with_exclusive_lock()
-        .await;
+        .await?;
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -327,6 +329,8 @@ async fn clean_force() -> Result<()> {
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
     ");
+
+    assert!(context.cache_dir.child(".lock").is_file());
 
     Ok(())
 }
@@ -448,7 +452,7 @@ fn clean_package_index() -> Result<()> {
 
 #[cfg(unix)]
 #[test]
-fn clean_package_does_not_follow_symlinks() -> Result<()> {
+fn clean_does_not_follow_symlinks() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
     let victim_dir = context.temp_dir.child("victim");
     let archive_entry = context.cache_dir.child("archive-v0").child("archive");
@@ -504,6 +508,23 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     assert!(retained.is_file());
     assert!(flat_shard.child("retained").is_file());
     assert!(fs_err::symlink_metadata(flat_shard.child("escape"))?.is_symlink());
+
+    // A full clean also leaves external targets intact, even through a symlinked cache root.
+    let cache_link = context.temp_dir.child("cache-link");
+    fs_err::os::unix::fs::symlink(context.cache_dir.path(), cache_link.path())?;
+    let context = context
+        .with_cache_dir(cache_link.path())
+        .with_filtered_file_counts();
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: cache-link
+    Removed [N] files ([SIZE])
+    ");
+
+    assert!(cache_link.path().is_symlink());
+    assert!(!files.exists());
+    assert!(victim_dir.child("payload.txt").is_file());
 
     Ok(())
 }
@@ -582,7 +603,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed 2 files (0B)
+    Removed 1 file (0B)
     ");
 
     Ok(())

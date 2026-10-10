@@ -192,7 +192,7 @@ impl Removal {
 
             let entry = entry?;
 
-            // Remove the exclusive lock last.
+            // Keep the root lock in place for other uv processes.
             if skip_locked_file
                 && entry.file_name() == ".lock"
                 && entry
@@ -217,7 +217,7 @@ impl Removal {
                 self.num_files += 1;
                 remove_dir(entry.path())?;
             } else if entry.file_type().is_dir() {
-                // Remove the directory with the exclusive lock last.
+                // Keep the root directory containing the lock, too.
                 if skip_locked_file && entry.path() == path.as_ref() {
                     continue;
                 }
