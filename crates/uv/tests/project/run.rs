@@ -4,7 +4,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
-use insta::assert_snapshot;
+use insta::{allow_duplicates, assert_snapshot};
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::path::Path;
@@ -2546,7 +2546,9 @@ fn run_locked() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-locked`.
     ");
 
     // Lock the initial requirements.
@@ -2705,7 +2707,9 @@ fn run_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-frozen`.
     ");
 
     context.lock().assert().success();
@@ -2739,6 +2743,185 @@ fn run_frozen() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     ");
+
+    Ok(())
+}
+
+#[test]
+fn run_missing_lockfile_hint_overrides_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_FROZEN, "1")
+        .arg("python")
+        .arg("--version"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-frozen`.
+    ");
+
+    // The suggested lock command creates the lockfile despite the environment setting.
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_FROZEN, "1")
+        .arg("--no-frozen"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_FROZEN, "1")
+        .arg("python")
+        .arg("--version"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Checked in [TIME]
+    ");
+
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_LOCKED, "1")
+        .arg("python")
+        .arg("--version"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `UV_LOCKED=1` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-locked`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_LOCKED, "1")
+        .arg("--no-locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_LOCKED, "1")
+        .arg("python")
+        .arg("--version"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_missing_lockfile_hint_project_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "unrelated"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let project = context.temp_dir.child("selected project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "selected"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    project.child("main.py").write_str(indoc! {r#"
+        import sys
+
+        print(f"Python {sys.version.split()[0]}")
+    "#})?;
+    context
+        .venv()
+        .arg(project.child(".venv").path())
+        .assert()
+        .success();
+
+    // Explicit project selection, a working-directory change, and script discovery all
+    // need to identify the project when suggesting a standalone lock command.
+    let invocations = [
+        (
+            vec!["--project", "selected project", "python", "--version"],
+            None,
+        ),
+        (
+            vec!["--directory", "selected project", "python", "--version"],
+            None,
+        ),
+        (vec!["selected project/main.py"], None),
+        (vec!["python", "--version"], Some(EnvVars::UV_PROJECT)),
+        (vec!["python", "--version"], Some(EnvVars::UV_WORKING_DIR)),
+    ];
+    for (invocation, environment) in invocations {
+        allow_duplicates! {
+            let mut run = context.run();
+            run.env_remove(EnvVars::VIRTUAL_ENV)
+                .arg("--frozen")
+                .args(invocation);
+            let mut lock = context.lock();
+            lock.env_remove(EnvVars::VIRTUAL_ENV)
+                .arg("--project")
+                .arg(project.path())
+                .arg("--no-frozen");
+            if let Some(environment) = environment {
+                run.env(environment, "selected project");
+                lock.env(environment, "selected project");
+            }
+
+            uv_snapshot!(context.filters(), &mut run, @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+            hint: To create a lockfile, run `uv lock --no-frozen` with `--project` set to `[TEMP_DIR]/selected project`.
+            ");
+
+            uv_snapshot!(context.filters(), &mut lock, @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            ");
+            assert!(project.child("uv.lock").exists());
+            assert!(!context.temp_dir.child("uv.lock").exists());
+
+            uv_snapshot!(context.filters(), &mut run, @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            Python 3.12.[X]
+
+            ----- stderr -----
+            Checked in [TIME]
+            ");
+        }
+
+        fs_err::remove_file(project.child("uv.lock"))?;
+    }
 
     Ok(())
 }

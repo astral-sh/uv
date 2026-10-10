@@ -148,6 +148,9 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             std::env::var_os(EnvVars::UV_WORKING_DIRECTORY).map(std::path::PathBuf::from)
         });
 
+    // Recovery commands are run from the caller's directory, before `--directory` is applied.
+    let invocation_dir = std::env::current_dir().ok();
+
     // Switch directories as early as possible.
     if let Some(directory) = directory.as_ref() {
         std::env::set_current_dir(directory)?;
@@ -1459,6 +1462,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             Box::pin(run_project(
                 project,
                 &project_dir,
+                invocation_dir.as_deref(),
                 run_command,
                 script,
                 globals,
@@ -2254,6 +2258,7 @@ fn required_version_error(
 async fn run_project(
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
+    invocation_dir: Option<&Path>,
     command: Option<RunCommand>,
     script: Option<Pep723Item>,
     globals: GlobalSettings,
@@ -2360,6 +2365,7 @@ async fn run_project(
 
             Box::pin(commands::run(
                 project_dir,
+                invocation_dir,
                 script,
                 command,
                 requirements,

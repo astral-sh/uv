@@ -13073,7 +13073,9 @@ fn frozen_lockfile_nested_project() -> Result<()> {
         .current_dir(nested.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv export --no-frozen`.
     ");
 
     // Remove the ancestor manifest to ensure the nested project still takes precedence.
@@ -13082,7 +13084,9 @@ fn frozen_lockfile_nested_project() -> Result<()> {
         .current_dir(nested.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv export --no-frozen`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().current_dir(nested.path()).arg("--offline"), @"
@@ -13188,7 +13192,9 @@ fn frozen_lockfile_workspace_root_without_lock() -> Result<()> {
     uv_snapshot!(context.filters(), frozen_export(&context).current_dir(member.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv export --no-frozen`.
     ");
 
     // An intervening workspace root must also stop discovery from a member directory.
@@ -13208,7 +13214,9 @@ fn frozen_lockfile_workspace_root_without_lock() -> Result<()> {
     uv_snapshot!(context.filters(), frozen_export(&context).current_dir(member.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv export --no-frozen`.
     ");
 
     Ok(())
@@ -13263,7 +13271,9 @@ fn frozen_lockfile_member_inside_project() -> Result<()> {
     uv_snapshot!(context.filters(), frozen_export(&context).arg("--project").arg("nested/member"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv export --no-frozen`.
     ");
 
     // The intervening project remains a boundary when the workspace manifest is absent.
@@ -13271,7 +13281,9 @@ fn frozen_lockfile_member_inside_project() -> Result<()> {
     uv_snapshot!(context.filters(), frozen_export(&context).arg("--project").arg("nested/member"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv export --no-frozen`.
     ");
 
     // With the boundary removed, the remaining member manifest belongs to the frozen workspace.

@@ -9,7 +9,7 @@ mod validated_lock;
 
 pub use discovery::DiscoveredProject;
 pub use error::{LockError, LockValidationError, MissingLockfileSource};
-pub use lock::{LockMode, LockOperation, LockResult};
+pub use lock::{LockCommand, LockMode, LockOperation, LockResult};
 pub use lock_target::LockTarget;
 pub use lockfile::FrozenWorkspace;
 pub use validated_lock::ValidatedLock;

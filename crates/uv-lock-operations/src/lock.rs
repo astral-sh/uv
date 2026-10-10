@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
@@ -37,6 +38,44 @@ use uv_workspace::WorkspaceCache;
 
 use crate::lock_target::find_lock_format_error;
 use crate::{LockError, LockTarget, LockValidationError, MissingLockfileSource, ValidatedLock};
+
+/// The command to suggest when a lockfile is missing.
+#[derive(Debug, Clone)]
+pub enum LockCommand {
+    Add,
+    Audit,
+    Check,
+    Export,
+    Lock,
+    /// Lock a project outside the invocation's working directory.
+    LockProject(PathBuf),
+    Remove,
+    Run,
+    Sync,
+    Tree,
+    Upgrade,
+    Version,
+    WorkspaceMetadata,
+}
+
+impl std::fmt::Display for LockCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Add => "add",
+            Self::Audit => "audit",
+            Self::Check => "check",
+            Self::Export => "export",
+            Self::Lock | Self::LockProject(_) => "lock",
+            Self::Remove => "remove",
+            Self::Run => "run",
+            Self::Sync => "sync",
+            Self::Tree => "tree",
+            Self::Upgrade => "upgrade",
+            Self::Version => "version",
+            Self::WorkspaceMetadata => "workspace metadata",
+        })
+    }
+}
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -81,6 +120,7 @@ pub enum LockMode<'env> {
 
 /// A lock operation.
 pub struct LockOperation<'env> {
+    command: LockCommand,
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
     first_party_exclusions: BTreeSet<PackageName>,
@@ -100,6 +140,7 @@ pub struct LockOperation<'env> {
 impl<'env> LockOperation<'env> {
     /// Initialize a [`LockOperation`].
     pub fn new(
+        command: LockCommand,
         mode: LockMode<'env>,
         settings: &'env ResolverSettings,
         client_builder: &'env BaseClientBuilder<'env>,
@@ -112,6 +153,7 @@ impl<'env> LockOperation<'env> {
         preview: Preview,
     ) -> Self {
         Self {
+            command,
             mode,
             constraints: vec![],
             first_party_exclusions: BTreeSet::new(),
@@ -166,7 +208,9 @@ impl<'env> LockOperation<'env> {
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
-                Ok(LockResult::Unchanged(target.read_frozen(source).await?))
+                Ok(LockResult::Unchanged(
+                    target.read_frozen(source, self.command).await?,
+                ))
             }
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
@@ -175,6 +219,7 @@ impl<'env> LockOperation<'env> {
                     return Err(LockError::MissingLockfile(
                         lock_source.into(),
                         lock_filename,
+                        self.command,
                     ));
                 };
 

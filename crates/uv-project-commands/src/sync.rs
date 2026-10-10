@@ -31,8 +31,8 @@ use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_install_operations::report::{PackageChangesReport, SchemaReport};
 use uv_lock::{Installable, Lock, PythonReport};
 use uv_lock_operations::{
-    DiscoveredProject, FrozenWorkspace, LockError, LockMode, LockOperation, LockResult, LockTarget,
-    MissingLockfileSource,
+    DiscoveredProject, FrozenWorkspace, LockCommand, LockError, LockMode, LockOperation,
+    LockResult, LockTarget, MissingLockfileSource,
 };
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeature};
@@ -154,7 +154,7 @@ pub async fn sync(
     {
         Some(
             LockTarget::from(*manifest)
-                .read_frozen(MissingLockfileSource::from(source))
+                .read_frozen(MissingLockfileSource::from(source), LockCommand::Sync)
                 .await
                 .map_err(|err| match (err, *manifest) {
                     (LockError::MissingLockfile(..), SyncManifest::Script(script)) => anyhow::anyhow!(
@@ -457,6 +457,7 @@ pub async fn sync(
             } else {
                 Box::pin(
                     LockOperation::new(
+                        LockCommand::Sync,
                         mode,
                         &settings.resolver,
                         &client_builder,
