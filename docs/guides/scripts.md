@@ -386,7 +386,8 @@ PS> uv run --with PyQt5 example_pyqt.pyw
 
 ![Run Result](../assets/uv_gui_script_hello_world_pyqt.png){: style="height:50px;width:150px"}
 
-To avoid opening a console window when launching GUI scripts on Windows, use the companion `uvw` executable instead of `uv`:
+To avoid opening a console window when launching GUI scripts on Windows, use the companion `uvw`
+executable instead of `uv`:
 
 ```console
 PS> uvw run example.pyw
