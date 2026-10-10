@@ -1,5 +1,5 @@
 use ref_cast::RefCast;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
@@ -37,6 +37,16 @@ pub enum DisplaySafeUrlError {
 /// secrets by default when the URL is displayed or logged. This helps prevent accidental
 /// exposure of sensitive information in logs and debug output.
 ///
+/// To serialize a URL, choose either [`PersistSafeUrl`] or
+/// [`CredentialPersistingUrl`] according to the required persistence policy.
+///
+/// ```compile_fail
+/// use uv_redacted::DisplaySafeUrl;
+///
+/// fn require_serialize<T: serde::Serialize>() {}
+/// require_serialize::<DisplaySafeUrl>();
+/// ```
+///
 /// # Examples
 ///
 /// ```
@@ -64,7 +74,7 @@ pub enum DisplaySafeUrlError {
 /// assert_eq!(url.username(), "");
 /// assert_eq!(url.password(), None);
 /// ```
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Serialize, Deserialize, RefCast)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Deserialize, RefCast)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[repr(transparent)]
