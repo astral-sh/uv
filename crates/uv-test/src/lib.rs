@@ -1002,14 +1002,25 @@ impl TestContext {
             .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
             .to_path_buf();
 
-        let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+        let download_list = if python_versions.is_empty() {
+            None
+        } else {
+            Some(
+                ManagedPythonDownloadList::new_only_embedded()
+                    .expect("Failed to load embedded Python downloads"),
+            )
+        };
 
         let python_versions: Vec<_> = python_versions
             .iter()
             .map(|version| PythonVersion::from_str(version).unwrap())
             .zip(
-                python_installations_for_versions(&temp_dir, python_versions, &download_list)
-                    .expect("Failed to find test Python versions"),
+                python_installations_for_versions(
+                    &temp_dir,
+                    python_versions,
+                    download_list.as_ref(),
+                )
+                .expect("Failed to find test Python versions"),
             )
             .collect();
 
@@ -2263,9 +2274,13 @@ pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    let download_list = ManagedPythonDownloadList::new_only_embedded().unwrap();
+    let download_list = if python_versions.is_empty() {
+        None
+    } else {
+        Some(ManagedPythonDownloadList::new_only_embedded()?)
+    };
     Ok(env::join_paths(
-        python_installations_for_versions(temp_dir, python_versions, &download_list)?
+        python_installations_for_versions(temp_dir, python_versions, download_list.as_ref())?
             .into_iter()
             .map(|path| path.parent().unwrap().to_path_buf()),
     )?)
@@ -2277,12 +2292,15 @@ pub fn python_path_with_versions(
 fn python_installations_for_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
-    download_list: &ManagedPythonDownloadList,
+    download_list: Option<&ManagedPythonDownloadList>,
 ) -> anyhow::Result<Vec<PathBuf>> {
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())
         .init_no_wait()?
         .expect("No cache contention when setting up Python in tests");
     let _preview = uv_preview::test::with_features(&[]);
+    let Some(download_list) = download_list else {
+        return Ok(Vec::new());
+    };
     let selected_pythons = python_versions
         .iter()
         .map(|python_version| {
