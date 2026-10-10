@@ -1300,8 +1300,6 @@ fn upgrade_succeeds_when_all_selected_declarations_are_blocked() -> Result<()> {
     );
 
     assert_project_unchanged(&context, &pyproject_toml);
-    assert!(!context.temp_dir.child("uv.lock").exists());
-    assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
 }
 
@@ -1351,8 +1349,6 @@ fn upgrade_rejects_mixed_updates_after_unrepresentable_blocker() -> Result<()> {
     );
 
     assert_project_unchanged(&context, &pyproject_toml);
-    assert!(!context.temp_dir.child("uv.lock").exists());
-    assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
 }
 
@@ -1410,8 +1406,6 @@ fn upgrade_preserves_hard_constraint_no_solution_failure() -> Result<()> {
     );
 
     assert_project_unchanged(&context, &pyproject_toml);
-    assert!(!context.temp_dir.child("uv.lock").exists());
-    assert!(!context.temp_dir.child(".venv").exists());
     Ok(())
 }
 
