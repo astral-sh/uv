@@ -6344,6 +6344,7 @@ dependencies = [
  "uv-fastid",
  "uv-fs",
  "uv-git",
+ "uv-macros",
  "uv-metadata",
  "uv-normalize",
  "uv-pep440",
@@ -6751,6 +6752,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uv-distribution-filename",
+ "uv-macros",
  "uv-pypi-types",
  "uv-static",
  "uv-threads",
@@ -7037,6 +7039,7 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-git-types",
+ "uv-macros",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -7313,6 +7316,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror",
+ "uv-macros",
  "uv-small-str",
 ]
 

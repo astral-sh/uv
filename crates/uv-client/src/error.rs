@@ -18,6 +18,7 @@ use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
 use uv_errors::{Hinted, Hints};
 use uv_git::GitError;
+use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pypi_types::HashDigest;
 use uv_redacted::DisplaySafeUrl;
@@ -437,7 +438,7 @@ impl From<ErrorKind> for Error {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(DebugNoInline, thiserror::Error)]
 pub enum ErrorKind {
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
