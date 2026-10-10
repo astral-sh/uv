@@ -669,8 +669,8 @@ fn missing_find_links_from_requirements_file() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid URL in `requirements/requirements.txt` at position 0: ./missing
-      cause: relative URL without a base
+    error: Failed to read `--find-links` directory: [TEMP_DIR]/requirements/missing
+      cause: [OS ERROR 2]
     "
     );
 
@@ -8823,8 +8823,8 @@ fn find_links_relative_to_working_directory() -> Result<()> {
         .arg("requirements/requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid URL in `requirements/requirements.txt` at position 11: ./links
-      cause: relative URL without a base
+    error: Failed to read `--find-links` directory: [TEMP_DIR]/requirements/links
+      cause: [OS ERROR 2]
     "
     );
 

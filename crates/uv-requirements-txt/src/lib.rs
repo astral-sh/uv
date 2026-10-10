@@ -829,25 +829,15 @@ fn parse_entry(
                 })?
             }
             Ok(RequirementsInput::Local(path)) => {
-                if let Some(path) = std::path::absolute(path).ok().filter(|path| path.exists()) {
-                    VerbatimUrl::from_absolute_path(path).map_err(|err| {
-                        RequirementsTxtParserError::VerbatimUrl {
-                            source: err,
-                            url: given.to_string(),
-                            start,
-                            end: s.cursor(),
-                        }
-                    })?
-                } else {
-                    VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
-                        RequirementsTxtParserError::Url {
-                            source: err,
-                            url: given.to_string(),
-                            start,
-                            end: s.cursor(),
-                        }
-                    })?
-                }
+                let path = std::path::absolute(path).map_err(RequirementsTxtParserError::Io)?;
+                VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                    RequirementsTxtParserError::VerbatimUrl {
+                        source: err,
+                        url: given.to_string(),
+                        start,
+                        end: s.cursor(),
+                    }
+                })?
             }
             Ok(RequirementsInput::Remote(url)) => VerbatimUrl::from_url(url),
             Err(source) => {
