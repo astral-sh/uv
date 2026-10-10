@@ -1001,7 +1001,7 @@ impl MarkerTree {
     }
 
     /// Returns a simplified DNF expression for this marker tree.
-    pub fn to_dnf(self) -> Vec<Vec<MarkerExpression>> {
+    fn to_dnf(self) -> Vec<Vec<MarkerExpression>> {
         simplify::to_dnf(self)
     }
 
