@@ -10257,7 +10257,7 @@ fn marker_is_unreachable(requires_python: &RequiresPython, marker: MarkerTree) -
         return false;
     }
 
-    environment.to_dnf().into_iter().all(|conjunction| {
+    environment.to_unsimplified_dnf().into_iter().all(|conjunction| {
         let marker = conjunction
             .into_iter()
             .fold(MarkerTree::TRUE, |marker, expression| {

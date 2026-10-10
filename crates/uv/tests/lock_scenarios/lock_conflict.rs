@@ -11743,6 +11743,186 @@ fn many_conflicts_with_requested_dependency_extra() -> Result<()> {
 }
 
 /// An environment-dependent edge gets a marker with a clause for each pair of conflicting extras.
+/// Five extras produce enough clauses to use the indexed simplification when writing the lockfile.
+#[test]
+fn conflicting_extras_with_environment_dependent_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["shared-package"]
+
+        [project.optional-dependencies]
+        x0 = ["extra-package"]
+        x1 = ["extra-package"]
+        x2 = ["extra-package"]
+        x3 = ["extra-package"]
+        x4 = ["extra-package"]
+
+        [tool.uv.sources]
+        shared-package = { path = "shared-package" }
+        extra-package = { path = "extra-package" }
+
+        [tool.uv]
+        conflicts = [[
+            { extra = "x0" },
+            { extra = "x1" },
+            { extra = "x2" },
+            { extra = "x3" },
+            { extra = "x4" },
+        ]]
+        "#,
+    )?;
+
+    let shared_pyproject_toml = context
+        .temp_dir
+        .child("shared-package")
+        .child("pyproject.toml");
+    shared_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "shared-package"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["leaf-package ; python_full_version < '3.11'"]
+
+        [tool.uv.sources]
+        leaf-package = { path = "../leaf-package" }
+        "#,
+    )?;
+
+    let leaf_pyproject_toml = context
+        .temp_dir
+        .child("leaf-package")
+        .child("pyproject.toml");
+    leaf_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "leaf-package"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        "#,
+    )?;
+
+    let extra_pyproject_toml = context
+        .temp_dir
+        .child("extra-package")
+        .child("pyproject.toml");
+    extra_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "extra-package"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.10"
+        conflicts = [[
+            { package = "project", extra = "x0" },
+            { package = "project", extra = "x1" },
+            { package = "project", extra = "x2" },
+            { package = "project", extra = "x3" },
+            { package = "project", extra = "x4" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "extra-package"
+        version = "0.1.0"
+        source = { directory = "extra-package" }
+
+        [[package]]
+        name = "leaf-package"
+        version = "0.1.0"
+        source = { directory = "leaf-package" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "shared-package" },
+        ]
+
+        [package.optional-dependencies]
+        x0 = [
+            { name = "extra-package" },
+        ]
+        x1 = [
+            { name = "extra-package" },
+        ]
+        x2 = [
+            { name = "extra-package" },
+        ]
+        x3 = [
+            { name = "extra-package" },
+        ]
+        x4 = [
+            { name = "extra-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "extra-package", marker = "extra == 'x0'", directory = "extra-package" },
+            { name = "extra-package", marker = "extra == 'x1'", directory = "extra-package" },
+            { name = "extra-package", marker = "extra == 'x2'", directory = "extra-package" },
+            { name = "extra-package", marker = "extra == 'x3'", directory = "extra-package" },
+            { name = "extra-package", marker = "extra == 'x4'", directory = "extra-package" },
+            { name = "shared-package", directory = "shared-package" },
+        ]
+        provides-extras = ["x0", "x1", "x2", "x3", "x4"]
+
+        [[package]]
+        name = "shared-package"
+        version = "0.1.0"
+        source = { directory = "shared-package" }
+        dependencies = [
+            { name = "leaf-package", marker = "python_full_version < '3.11' or (extra == 'extra-7-project-x0' and extra == 'extra-7-project-x1') or (extra == 'extra-7-project-x0' and extra == 'extra-7-project-x2') or (extra == 'extra-7-project-x0' and extra == 'extra-7-project-x3') or (extra == 'extra-7-project-x0' and extra == 'extra-7-project-x4') or (extra == 'extra-7-project-x1' and extra == 'extra-7-project-x2') or (extra == 'extra-7-project-x1' and extra == 'extra-7-project-x3') or (extra == 'extra-7-project-x1' and extra == 'extra-7-project-x4') or (extra == 'extra-7-project-x2' and extra == 'extra-7-project-x3') or (extra == 'extra-7-project-x2' and extra == 'extra-7-project-x4') or (extra == 'extra-7-project-x3' and extra == 'extra-7-project-x4')" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "leaf-package", marker = "python_full_version < '3.11'", directory = "leaf-package" }]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// An environment-dependent edge gets a marker with a clause for each pair of conflicting extras.
 /// The extras are non-empty so that each one forks the resolution.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/21954>

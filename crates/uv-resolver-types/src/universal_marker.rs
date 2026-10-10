@@ -440,7 +440,7 @@ impl UniversalMarker {
     pub fn conflict_for_environment(self, env: &MarkerEnvironment) -> ConflictMarker {
         let mut remaining = MarkerTree::FALSE;
 
-        'conjunctions: for conjunction in self.marker.to_dnf() {
+        'conjunctions: for conjunction in self.marker.to_unsimplified_dnf() {
             let mut conflict = MarkerTree::TRUE;
             for expression in conjunction {
                 match expression {
@@ -822,7 +822,7 @@ pub fn resolve_activated_extras(
     let mut transformed = MarkerTree::FALSE;
 
     // Convert the marker to DNF, then re-build it.
-    for dnf in marker.to_dnf() {
+    for dnf in marker.to_unsimplified_dnf() {
         let mut or = MarkerTree::TRUE;
 
         for marker in dnf {

@@ -616,6 +616,14 @@ impl ContainerOperator {
             _ => None,
         }
     }
+
+    /// Negates this operator.
+    pub(crate) fn negate(self) -> Self {
+        match self {
+            Self::In => Self::NotIn,
+            Self::NotIn => Self::In,
+        }
+    }
 }
 
 impl Display for ContainerOperator {
@@ -995,6 +1003,15 @@ impl MarkerTree {
     /// Returns a simplified DNF expression for this marker tree.
     pub fn to_dnf(self) -> Vec<Vec<MarkerExpression>> {
         simplify::to_dnf(self)
+    }
+
+    /// Returns a DNF expression for this marker tree without simplifying it.
+    ///
+    /// Each clause is a path through the decision diagram, so clauses can contain redundant terms.
+    /// This is cheaper than [`MarkerTree::to_dnf`] for large markers and is equivalent for callers
+    /// that only depend on what the expression matches, not how it is written.
+    pub fn to_unsimplified_dnf(self) -> Vec<Vec<MarkerExpression>> {
+        simplify::to_unsimplified_dnf(self)
     }
 
     /// Does this marker apply in the given environment?
