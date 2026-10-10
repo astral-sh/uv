@@ -14,6 +14,7 @@ pub use path::{assert_link_target, assert_path_missing};
 
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::Write as _;
 use std::iter::Iterator;
@@ -2317,8 +2318,8 @@ pub enum WindowsFilters {
 }
 
 thread_local! {
-    /// Retain only the last snapshot's filters to avoid accumulating temporary path patterns.
-    static SNAPSHOT_FILTER_CACHE: RefCell<Vec<Regex>> = const { RefCell::new(Vec::new()) };
+    /// Reuse compiled patterns across snapshots and contexts on the same test thread.
+    static SNAPSHOT_FILTER_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
 }
 
 /// Helper method to apply filters to a string. Useful when `!uv_snapshot` cannot be used.
@@ -2326,25 +2327,19 @@ pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(
     let filters = filters.as_ref();
     // Release the thread-local borrow before converting the caller's filters.
     let mut compiled_filters = SNAPSHOT_FILTER_CACHE.take();
-    for (index, (matcher, replacement)) in filters.iter().enumerate() {
+    for (matcher, replacement) in filters {
         let matcher = matcher.as_ref();
-        if compiled_filters
-            .get(index)
-            .is_none_or(|filter| filter.as_str() != matcher)
-        {
-            let compiled = Regex::new(matcher).expect("Do you need to regex::escape your filter?");
-            if let Some(filter) = compiled_filters.get_mut(index) {
-                *filter = compiled;
-            } else {
-                compiled_filters.push(compiled);
-            }
+        if !compiled_filters.contains_key(matcher) {
+            compiled_filters.insert(
+                matcher.to_owned(),
+                Regex::new(matcher).expect("Do you need to regex::escape your filter?"),
+            );
         }
-        let re = &compiled_filters[index];
+        let re = &compiled_filters[matcher];
         if re.is_match(&snapshot) {
             snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
         }
     }
-    compiled_filters.truncate(filters.len());
     SNAPSHOT_FILTER_CACHE.set(compiled_filters);
     snapshot
 }
@@ -2729,7 +2724,40 @@ macro_rules! uv_snapshot {
 
 #[cfg(test)]
 mod snapshot_filter_tests {
-    use super::apply_filters;
+    use std::ptr;
+
+    use super::{SNAPSHOT_FILTER_CACHE, apply_filters};
+
+    #[test]
+    fn reuses_patterns_across_filter_lists() {
+        let first = apply_filters("alpha".to_string(), [("alpha", "one")]);
+        // Keep the compiled pattern alive so a new allocation cannot reuse its address.
+        let compiled = SNAPSHOT_FILTER_CACHE.with(|cache| {
+            cache
+                .borrow()
+                .get("alpha")
+                .expect("Filter should be cached")
+                .clone()
+        });
+
+        let second = apply_filters("beta".to_string(), [("beta", "two")]);
+        let repeated = apply_filters(
+            "alpha".to_string(),
+            [("alpha", "alpha!"), ("alpha", "done")],
+        );
+
+        SNAPSHOT_FILTER_CACHE.with(|cache| {
+            let cache = cache.borrow();
+            assert!(cache.contains_key("beta"));
+            assert!(ptr::eq(compiled.as_str(), cache["alpha"].as_str()));
+        });
+
+        insta::assert_snapshot!(format!("{first}\n{second}\n{repeated}"), @"
+        one
+        two
+        done!
+        ");
+    }
 
     #[test]
     fn cached_matcher_uses_current_replacement() {
