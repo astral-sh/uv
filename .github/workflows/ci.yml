@@ -29,7 +29,7 @@ jobs:
   review:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
-    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@3c57a5dba8ad854a97e8b9fbf454286a7574e677
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@0b59aaac6f9fc02982ff9604e0bc4d2d4a14a8ac
     with:
       runner: depot-ubuntu-24.04-16
       helper-runner: github-ubuntu-24.04-x86_64-4
