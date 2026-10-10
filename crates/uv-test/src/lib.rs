@@ -13,6 +13,8 @@ mod vendor;
 pub use path::{assert_link_target, assert_path_missing};
 
 use std::borrow::BorrowMut;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::Write as _;
 use std::iter::Iterator;
@@ -2333,15 +2335,30 @@ pub enum WindowsFilters {
     Universal,
 }
 
+thread_local! {
+    /// Reuse compiled patterns across snapshots and contexts on the same test thread.
+    static SNAPSHOT_FILTER_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
+}
+
 /// Helper method to apply filters to a string. Useful when `!uv_snapshot` cannot be used.
 pub fn apply_filters<T: AsRef<str>>(mut snapshot: String, filters: impl AsRef<[(T, T)]>) -> String {
-    for (matcher, replacement) in filters.as_ref() {
-        // TODO(konstin): Cache regex compilation
-        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
+    let filters = filters.as_ref();
+    // Release the thread-local borrow before converting the caller's filters.
+    let mut compiled_filters = SNAPSHOT_FILTER_CACHE.take();
+    for (matcher, replacement) in filters {
+        let matcher = matcher.as_ref();
+        if !compiled_filters.contains_key(matcher) {
+            compiled_filters.insert(
+                matcher.to_owned(),
+                Regex::new(matcher).expect("Do you need to regex::escape your filter?"),
+            );
+        }
+        let re = &compiled_filters[matcher];
         if re.is_match(&snapshot) {
             snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
         }
     }
+    SNAPSHOT_FILTER_CACHE.set(compiled_filters);
     snapshot
 }
 
