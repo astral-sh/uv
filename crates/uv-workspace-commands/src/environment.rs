@@ -10,7 +10,7 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions, Modifications, Reinstall,
 };
 use uv_dispatch::UniversalState;
-use uv_distribution_types::{Dist, Name, ResolvedDist};
+use uv_distribution_types::{Dist, InstalledDist, Name, ResolvedDist};
 use uv_environment_operations::install_target::InstallTarget;
 use uv_environment_operations::malware::MalwareCheckContext;
 use uv_environment_operations::sync_from_lock;
@@ -26,13 +26,21 @@ use uv_resolve_operations::{resolution_markers, resolution_tags};
 use uv_settings::{InstallerSettingsRef, MalwareCheckSettings, ResolverSettings};
 use uv_workspace::WorkspaceCache;
 
-/// Map importable modules to package IDs, optionally syncing all locked extras and groups first.
+/// Installed distributions and their module ownership.
+pub(super) struct CollectedEnvironment {
+    /// All installed distributions, including unmanaged packages.
+    pub(super) packages: SitePackages,
+    /// Unmanaged distributions with discoverable modules.
+    pub(super) unmanaged_distributions: Vec<InstalledDist>,
+    /// Maps importable module names to the IDs of their owning distributions.
+    pub(super) module_owners: BTreeMap<ModuleName, Vec<String>>,
+}
+
+/// Collect installed distributions and module ownership, optionally synchronizing first.
 ///
-/// By default, synchronization is sufficient (inexact), so required distributions are available
-/// to inspect without removing unrelated packages from an existing environment. Exact
-/// synchronization removes those unrelated packages instead. Only distributions in the selected
-/// resolution are assigned package IDs.
-pub(super) async fn collect_module_owners(
+/// Synchronization includes all locked extras and groups. By default, it retains unmanaged packages
+/// outside the selected resolution; exact synchronization removes them.
+pub(super) async fn collect_environment(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     settings: &ResolverSettings,
@@ -44,14 +52,16 @@ pub(super) async fn collect_module_owners(
     preview: Preview,
     malware_settings: &MalwareCheckSettings,
     sync: Option<Modifications>,
-) -> Result<BTreeMap<ModuleName, Vec<String>>> {
+) -> Result<CollectedEnvironment> {
     let (extras, groups) = target_selection(target);
     let package_ids = selected_package_ids(target, venv, &extras, &groups, settings)?;
-    if package_ids.is_none() && !matches!(sync, Some(Modifications::Exact)) {
-        return Ok(BTreeMap::new());
-    }
 
-    if let Some(modifications) = sync {
+    if let Some(modifications) = sync
+        && match modifications {
+            Modifications::Sufficient => package_ids.is_some(),
+            Modifications::Exact => true,
+        }
+    {
         let reinstall = Reinstall::None;
         let installer_settings = InstallerSettingsRef {
             index_locations: &settings.index_locations,
@@ -97,11 +107,7 @@ pub(super) async fn collect_module_owners(
         .await?;
     }
 
-    let Some(package_ids) = package_ids else {
-        return Ok(BTreeMap::new());
-    };
-
-    find_module_owners_in_environment(venv, &package_ids)
+    inspect_environment(venv, &package_ids.unwrap_or_default())
 }
 
 /// Select the package IDs that can own modules in the target resolution.
@@ -138,27 +144,53 @@ fn selected_package_ids(
     Ok(Some(package_ids))
 }
 
-/// Map modules in an existing environment to their selected package IDs.
-fn find_module_owners_in_environment(
+/// Collect installed distributions and associate their modules with selected or unmanaged package IDs.
+fn inspect_environment(
     venv: &PythonEnvironment,
     package_ids: &BTreeMap<PackageName, String>,
-) -> Result<BTreeMap<ModuleName, Vec<String>>> {
+) -> Result<CollectedEnvironment> {
+    let packages = SitePackages::from_environment(venv)?;
+    let mut unmanaged_distributions = Vec::new();
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
-    for dist in SitePackages::from_environment(venv)?.iter() {
-        let Some(package_id) = package_ids.get(dist.name()) else {
-            continue;
-        };
+    for dist in packages.iter() {
+        let selected_package_id = package_ids.get(dist.name());
         // TODO: Editable installs often only record a `.pth` file; we'll
         // need to handle them specially.
-        for module in dist.read_modules(venv.interpreter().extension_suffixes())? {
+        let modules = match dist.read_modules(venv.interpreter().extension_suffixes()) {
+            Ok(modules) => modules,
+            Err(err) if selected_package_id.is_none() => {
+                // Incomplete module metadata in an unmanaged package should not prevent
+                // inventory collection or module discovery for other packages.
+                tracing::warn!(
+                    "Failed to discover modules for unmanaged package `{}`: {err}",
+                    dist.name()
+                );
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        };
+        if modules.is_empty() {
+            continue;
+        }
+        let package_id = if let Some(package_id) = selected_package_id {
+            package_id.clone()
+        } else {
+            unmanaged_distributions.push(dist.clone());
+            Metadata::unmanaged_package_node_id(dist)
+        };
+        for module in modules {
             owners.entry(module).or_default().insert(package_id.clone());
         }
     }
 
-    Ok(owners
-        .into_iter()
-        .map(|(module, owners)| (module, owners.into_iter().collect()))
-        .collect())
+    Ok(CollectedEnvironment {
+        packages,
+        unmanaged_distributions,
+        module_owners: owners
+            .into_iter()
+            .map(|(module, owners)| (module, owners.into_iter().collect()))
+            .collect(),
+    })
 }
 
 fn target_selection(

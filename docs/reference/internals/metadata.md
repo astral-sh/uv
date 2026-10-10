@@ -49,10 +49,43 @@ dependency groups are just lists of things you might want when working on the pa
 If the workspace root defines dependency groups but is not itself a package, its `"workspace"` node
 provides the corresponding group node ids through `dependency_groups`.
 
+## Installed packages
+
+When an environment exists, `environment.packages` lists its installed distributions, including
+those absent from the lockfile. Each entry contains the installed name, version, metadata path, and
+editable status. Entries are keyed by opaque identifiers for their metadata paths, so multiple
+installations with the same name appear separately. The installed version may differ from the locked
+version.
+
+`module_owners` maps importable module names to package nodes in `resolution` or
+`unmanaged_distributions`. An installed distribution is matched by name to a non-virtual package in
+the selected resolution, even when their versions differ. The inventory reports the installed
+version separately.
+
+### Unmanaged packages
+
+An installed distribution is _unmanaged_ if it has no matching non-virtual package in the selected
+resolution. This includes packages that remain installed after their declarations are removed.
+
+Unmanaged distributions with discoverable modules have package nodes in the top-level
+`unmanaged_distributions` map, separate from the dependency graph in `resolution`. Each node
+contains the installed name and version and uses `source.unmanaged` to identify the distribution's
+metadata path, such as its `.dist-info` directory. The `unmanaged_distributions` field is omitted
+when there are no such nodes.
+
+To look up a `module_owners` entry, find its `package_id` in `resolution` or
+`unmanaged_distributions`. Unmanaged nodes let consumers identify imports provided by packages
+outside the selected resolution. The package node IDs used by `module_owners` are distinct from the
+inventory IDs in `environment.packages`.
+
+Unmanaged distributions without discoverable modules appear only in the inventory. These include
+packages with missing or unreadable module records, stub-only packages, and editable installs whose
+modules are exposed through `.pth` files.
+
 ## Handling multiple versions of a package
 
-Two versions of a package cannot be installed into a python environment, but the dependency graph
-may still include multiple versions of a package. This can happen for two different reasons.
+A resolution selects one version of each package for a Python environment, but the locked graph can
+contain multiple versions of the same package for two reasons.
 
 The first way is for
 [different platforms](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers)
@@ -183,6 +216,15 @@ Here is a human-readable annotated example:
       "version": "3.12.12",
       // The Python implementation name
       "implementation": "cpython"
+    },
+    // Installed distributions, keyed by opaque identifiers
+    "packages": {
+      "installed+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info": {
+        "name": "idna",
+        "version": "3.10",
+        "path": "/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info",
+        "editable": false
+      }
     }
   },
   // Information about the script target, only present with `--script`.
@@ -204,6 +246,27 @@ Here is a human-readable annotated example:
   //
   // `marker` fields all have this as an implicit constraint that is omitted for cleanliness
   "requires_python": ">=3.12",
+  // Module owners refer to package nodes in either `resolution` or `unmanaged_distributions`.
+  "module_owners": {
+    "idna": [
+      {
+        "package_id": "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info"
+      }
+    ]
+  },
+  // Unmanaged packages provide modules but are outside the selected resolution.
+  // This map is omitted when no unmanaged package nodes exist.
+  "unmanaged_distributions": {
+    "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info": {
+      "name": "idna",
+      "version": "3.10",
+      "source": {
+        "unmanaged": "/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info"
+      },
+      "kind": "package",
+      "dependencies": []
+    }
+  },
   // A list of workspace members
   "members": [
     {

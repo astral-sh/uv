@@ -32,7 +32,7 @@ use uv_settings::{
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, WorkspaceCache};
 
-use super::module_owners::collect_module_owners;
+use super::environment::collect_environment;
 
 /// The input used to obtain metadata and its locked resolution.
 enum MetadataSource<'a> {
@@ -295,7 +295,7 @@ pub async fn metadata(
                 tracing::warn!("Failed to acquire environment lock: {err}");
             })
             .ok();
-        let module_owners = collect_module_owners(
+        let collected = collect_environment(
             install_target,
             &environment,
             &settings,
@@ -309,10 +309,11 @@ pub async fn metadata(
             sync,
         )
         .await
-        .context("Failed to collect module owners")?;
+        .context("Failed to inspect environment")?;
         export = export
-            .with_environment(&environment)
-            .with_module_owners(module_owners);
+            .with_environment(&environment, collected.packages.iter())
+            .with_unmanaged_distributions(collected.unmanaged_distributions.iter())
+            .with_module_owners(collected.module_owners);
     }
 
     print_metadata(&export, printer)
