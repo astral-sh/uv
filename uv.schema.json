@@ -908,6 +908,14 @@
       },
       "required": ["preview", "preview-features"]
     },
+    "CredentialPersistingUrl": {
+      "description": "A URL that retains credentials when serialized.\n\nThe full parsed URL is retained in memory. Display and debug output use\n[`DisplaySafeUrl`]'s redaction. Serialization preserves the entire normalized\nURL, including its username, password, and query. Deserialization uses [`Url`]\nparsing without the ambiguity checks applied to human input.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/DisplaySafeUrl"
+        }
+      ]
+    },
     "DefaultGroups": {
       "description": "Either the literal \"all\" or a list of groups",
       "oneOf": [
@@ -2087,7 +2095,7 @@
               "description": "The repository URL (without the `git+` prefix).",
               "allOf": [
                 {
-                  "$ref": "#/definitions/DisplaySafeUrl"
+                  "$ref": "#/definitions/CredentialPersistingUrl"
                 }
               ]
             },
@@ -2179,7 +2187,7 @@
               ]
             },
             "url": {
-              "$ref": "#/definitions/DisplaySafeUrl"
+              "$ref": "#/definitions/CredentialPersistingUrl"
             }
           },
           "additionalProperties": false,

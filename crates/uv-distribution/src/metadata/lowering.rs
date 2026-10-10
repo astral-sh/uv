@@ -195,7 +195,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                git,
+                                git.into_url(),
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -211,8 +211,11 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            let source =
-                                url_source(requirement, url, subdirectory.map(Box::<Path>::from))?;
+                            let source = url_source(
+                                requirement,
+                                url.into_url(),
+                                subdirectory.map(Box::<Path>::from),
+                            )?;
                             (source, marker)
                         }
                         Source::Path {
@@ -392,7 +395,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                git,
+                                git.into_url(),
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -408,8 +411,11 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            let source =
-                                url_source(requirement, url, subdirectory.map(Box::<Path>::from))?;
+                            let source = url_source(
+                                requirement,
+                                url.into_url(),
+                                subdirectory.map(Box::<Path>::from),
+                            )?;
                             (source, marker)
                         }
                         Source::Path {
