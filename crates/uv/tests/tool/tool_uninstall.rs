@@ -25,6 +25,8 @@ fn tool_uninstall() {
     Uninstalled 2 executables: black, blackd
     ");
 
+    assert!(context.temp_dir.child("tools/.lock").is_file());
+
     // After uninstalling the tool, it shouldn't be listed.
     uv_snapshot!(context.filters(), context.tool_list(), @"
     exit_code: 0 (success)
