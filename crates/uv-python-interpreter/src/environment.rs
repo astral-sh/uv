@@ -387,12 +387,21 @@ impl PythonEnvironment {
             return Ok(());
         }
 
+        // CPython can resolve executable symlinks differently inside a venv. Query its actual
+        // metadata instead of inferring the base executable from the selected interpreter.
+        let base_python = self.interpreter().to_base_python()?;
+        if cfg!(unix) && fs_err::symlink_metadata(&base_python)?.is_symlink() {
+            // Skip cache warming for symlinked base executables and clear any existing
+            // entry for this venv. Recreation can change the reported base path while
+            // leaving the cache key and underlying binary's timestamp unchanged.
+            Interpreter::clear_cache(self.interpreter().sys_executable(), cache)?;
+            return Ok(());
+        }
+
         // An upgradeable venv can use a minor-version link instead of the selected base
         // interpreter. Python may report different base paths when started through that link.
         if let Some(home) = self.cfg()?.home
-            && self
-                .interpreter()
-                .to_base_python()?
+            && base_python
                 .parent()
                 .is_some_and(|base| base.simplified() != home.simplified())
         {
