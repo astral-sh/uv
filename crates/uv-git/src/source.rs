@@ -10,7 +10,7 @@ use anyhow::Result;
 use tracing::{debug, instrument};
 
 use uv_cache_key::cache_digest;
-use uv_git_types::{GitOid, GitReference, GitUrl};
+use uv_git_types::{GitOid, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::credentials::GIT_STORE;
@@ -95,28 +95,6 @@ impl GitSource {
                         rev,
                         None,
                     ));
-                }
-            }
-
-            // If the revision isn't locked, but it looks like it might be an exact commit hash,
-            // and we do have a pre-existing database, then check whether it is, in fact, a commit
-            // hash. If so, treat it like it's locked.
-            // When requested, we also check if LFS artifacts have been fetched and validated.
-            if let Some(db) = &maybe_db {
-                if let GitReference::BranchOrTagOrCommit(maybe_commit) = self.git.reference() {
-                    if let Ok(oid) = maybe_commit.parse::<GitOid>() {
-                        if db.contains(oid) && (!lfs_requested || db.contains_lfs_artifacts(oid)) {
-                            // This reference is an exact commit. Treat it like it's locked.
-                            debug!("Using existing Git source `{}`", self.git.url());
-                            return Ok((
-                                maybe_db
-                                    .unwrap()
-                                    .with_lfs_ready(lfs_requested.then_some(true)),
-                                oid,
-                                None,
-                            ));
-                        }
-                    }
                 }
             }
 

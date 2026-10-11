@@ -25,7 +25,6 @@ use uv_distribution_types::{
     Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
 };
 use uv_fs::{PortablePathBuf, try_relative_to_if};
-use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
@@ -1923,16 +1922,9 @@ impl Source {
                 git, subdirectory, ..
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
-                    let rev = match git.reference() {
-                        GitReference::Branch(rev) => Some(rev),
-                        GitReference::Tag(rev) => Some(rev),
-                        GitReference::BranchOrTag(rev) => Some(rev),
-                        GitReference::BranchOrTagOrCommit(rev) => Some(rev),
-                        GitReference::NamedRef(rev) => Some(rev),
-                        GitReference::DefaultBranch => None,
-                    };
+                    let rev = git.reference().as_str().map(str::to_owned);
                     Self::Git {
-                        rev: rev.cloned(),
+                        rev,
                         tag,
                         branch,
                         lfs: lfs.into(),
@@ -1962,16 +1954,9 @@ impl Source {
                 git, install_path, ..
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
-                    let rev = match git.reference() {
-                        GitReference::Branch(rev) => Some(rev),
-                        GitReference::Tag(rev) => Some(rev),
-                        GitReference::BranchOrTag(rev) => Some(rev),
-                        GitReference::BranchOrTagOrCommit(rev) => Some(rev),
-                        GitReference::NamedRef(rev) => Some(rev),
-                        GitReference::DefaultBranch => None,
-                    };
+                    let rev = git.reference().as_str().map(str::to_owned);
                     Self::Git {
-                        rev: rev.cloned(),
+                        rev,
                         tag,
                         branch,
                         lfs: lfs.into(),

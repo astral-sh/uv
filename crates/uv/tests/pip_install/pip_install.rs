@@ -3258,6 +3258,95 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
     Ok(())
 }
 
+/// A full commit revision must not identify an annotated tag object, even in the Git cache.
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_full_commit_rejects_tag_object() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    let repository = context.temp_dir.child("repository");
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "Commit",
+        ])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "tag",
+            "-a",
+            "v1",
+            "-m",
+            "Tag",
+        ])
+        .assert()
+        .success();
+
+    let commit = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    assert!(commit.status.success());
+    let commit = String::from_utf8(commit.stdout)?;
+    let commit = commit.trim();
+    let tag = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "refs/tags/v1"])
+        .output()?;
+    assert!(tag.status.success());
+    let tag = String::from_utf8(tag.stdout)?;
+    let tag = tag.trim();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let repository_url = repository_url.as_str().trim_end_matches('/');
+    let mut filters = context.filters();
+    filters.push((tag, "[TAG]"));
+    filters.push((commit, "[COMMIT]"));
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg(format!("example @ git+{repository_url}@{tag}")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `example @ git+file://[TEMP_DIR]/repository@[TAG]`
+      cause: Git operation failed
+      cause: Exact Git revision `[TAG]` does not match precise commit `[COMMIT]` for `file://[TEMP_DIR]/repository`
+    ");
+
+    // The fetched tag object must not become an accepted commit on a subsequent run.
+    uv_snapshot!(filters, context.pip_install()
+        .arg(format!("example @ git+{repository_url}@{tag}")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `example @ git+file://[TEMP_DIR]/repository@[TAG]`
+      cause: Git operation failed
+      cause: Exact Git revision `[TAG]` does not match precise commit `[COMMIT]` for `file://[TEMP_DIR]/repository`
+    ");
+
+    Ok(())
+}
+
 /// Install a package from a public GitHub repository, omitting the `git+` prefix
 #[test]
 #[cfg(feature = "test-git")]
@@ -3448,7 +3537,7 @@ fn install_git_public_https_missing_branch_or_tag() {
 
 #[tokio::test]
 #[cfg(feature = "test-git")]
-async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()> {
+async fn install_git_full_commit_skips_github_api() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context
         .temp_dir
@@ -3473,7 +3562,7 @@ async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()>
             "/astral-test/uv-public-pypackage/commits/{requested_revision}"
         )))
         .respond_with(ResponseTemplate::new(200).set_body_string(precise))
-        .expect(1)
+        .expect(0)
         .mount(&server)
         .await;
 
@@ -3485,11 +3574,12 @@ async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()>
             "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@{requested_revision}"
         ))
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`
-      cause: Git operation failed
-      cause: Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://github.com/astral-test/uv-public-pypackage`
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979
     ");
 
     Ok(())

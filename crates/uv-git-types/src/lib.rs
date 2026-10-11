@@ -104,7 +104,8 @@ pub struct GitUrl {
     repository: RepositoryUrl,
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
-    /// The precise commit to use, if known.
+    /// The resolved commit for a named or ambiguous reference, if known. Exact commit references
+    /// store their commit in [`GitReference::Commit`] instead.
     precise: Option<GitOid>,
     /// Git LFS configuration for this repository.
     lfs: GitLfs,
@@ -162,18 +163,19 @@ impl GitUrl {
 
     /// Set the precise [`GitOid`] to use for this Git URL.
     pub fn with_precise(mut self, precise: GitOid) -> Result<Self, GitUrlParseError> {
-        if let GitReference::BranchOrTagOrCommit(revision) = &self.reference
-            && revision.parse::<GitOid>().is_ok()
-            && !revision.eq_ignore_ascii_case(precise.as_str())
-        {
-            return Err(GitUrlParseError::MismatchedRevision {
-                revision: revision.clone(),
-                precise,
-                url: Box::new(self.url.clone()),
-            });
+        match self.reference.as_commit() {
+            Some(commit) => {
+                if commit != precise {
+                    return Err(GitUrlParseError::MismatchedRevision {
+                        revision: commit.to_string(),
+                        precise,
+                        url: Box::new(self.url.clone()),
+                    });
+                }
+            }
+            None => self.precise = Some(precise),
         }
 
-        self.precise = Some(precise);
         Ok(self)
     }
 
@@ -202,9 +204,9 @@ impl GitUrl {
         &self.reference
     }
 
-    /// Return the precise commit, if known.
+    /// Return the precise commit, whether requested directly or resolved from a named reference.
     pub fn precise(&self) -> Option<GitOid> {
-        self.precise
+        self.reference.as_commit().or(self.precise)
     }
 
     /// Return the Git LFS configuration.
@@ -289,26 +291,16 @@ impl TryFrom<DisplaySafeUrl> for GitUrl {
 
 impl From<GitUrl> for DisplaySafeUrl {
     fn from(git: GitUrl) -> Self {
+        let precise = git.precise();
         let mut url = git.url;
 
         // If we have a precise commit, add `@` and the commit hash to the URL.
-        if let Some(precise) = git.precise {
+        if let Some(precise) = precise {
             let path = format!("{}@{}", url.path(), precise);
             url.set_path(&path);
-        } else {
-            // Otherwise, add the branch or tag name.
-            match git.reference {
-                GitReference::Branch(rev)
-                | GitReference::Tag(rev)
-                | GitReference::BranchOrTag(rev)
-                | GitReference::NamedRef(rev)
-                | GitReference::BranchOrTagOrCommit(rev) => {
-                    let rev = GitReference::encode_rev(&rev);
-                    let path = format!("{}@{}", url.path(), rev);
-                    url.set_path(&path);
-                }
-                GitReference::DefaultBranch => {}
-            }
+        } else if let Some(rev) = git.reference.as_url_rev() {
+            let path = format!("{}@{}", url.path(), rev);
+            url.set_path(&path);
         }
 
         url
@@ -359,6 +351,33 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "Ambiguous Git URL `https://example.com/pkg.git@dev@1.2.3`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn full_commit_reference() -> Result<(), Box<dyn std::error::Error>> {
+        let commit = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979".parse::<GitOid>()?;
+        let git = GitUrl::try_from(DisplaySafeUrl::parse(
+            "https://example.com/pkg.git@0DACFD662C64CB4CEB16E6CF65A157A8B715B979",
+        )?)?;
+
+        assert_eq!(git.reference(), &GitReference::Commit(commit));
+        assert_eq!(git.precise(), Some(commit));
+        assert_eq!(git, git.clone().with_precise(commit)?);
+
+        // Explicit branches and tags can have names that look like full commit hashes.
+        assert_eq!(
+            git.clone()
+                .with_reference(GitReference::Branch(commit.to_string()))
+                .precise(),
+            None
+        );
+        assert_eq!(
+            git.with_reference(GitReference::Tag(commit.to_string()))
+                .precise(),
+            None
         );
 
         Ok(())
@@ -435,11 +454,12 @@ mod tests {
             git.clone().with_reference(reference).precise(),
             Some(precise)
         );
+        let commit = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389".parse::<GitOid>()?;
+        let git = git.with_reference(GitReference::from_rev(commit.to_string()));
+        assert_eq!(git.precise(), Some(commit));
         assert_eq!(
-            git.with_reference(GitReference::from_rev(
-                "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389".to_string()
-            ))
-            .precise(),
+            git.with_reference(GitReference::Branch("main".to_string()))
+                .precise(),
             None
         );
 

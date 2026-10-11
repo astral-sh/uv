@@ -8351,8 +8351,8 @@ impl GitSource {
         // A full commit requested as `rev` is already precise and must not resolve to another
         // commit through the lockfile fragment.
         if let GitSourceKind::Rev(revision) = &kind
-            && GitOid::from_str(revision).is_ok()
-            && !revision.eq_ignore_ascii_case(precise.as_str())
+            && let Some(commit) = GitReference::from_rev(revision.clone()).as_commit()
+            && commit != precise
         {
             return Err(GitSourceError::RevisionMismatch {
                 revision: revision.clone(),
@@ -8714,6 +8714,7 @@ impl SourceDist {
 impl From<GitReference> for GitSourceKind {
     fn from(value: GitReference) -> Self {
         match value {
+            GitReference::Commit(commit) => Self::Rev(commit.to_string()),
             GitReference::Branch(branch) => Self::Branch(branch),
             GitReference::Tag(tag) => Self::Tag(tag),
             GitReference::BranchOrTag(rev) => Self::Rev(rev),
@@ -8776,6 +8777,9 @@ fn locked_git_url(
 
     // Put the requested reference in the query.
     match git.reference() {
+        GitReference::Commit(commit) => {
+            url.query_pairs_mut().append_pair("rev", commit.as_str());
+        }
         GitReference::Branch(branch) => {
             url.query_pairs_mut().append_pair("branch", branch.as_str());
         }

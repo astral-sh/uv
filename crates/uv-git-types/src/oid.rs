@@ -6,7 +6,7 @@ use thiserror::Error;
 /// Unique identity of any Git object (commit, tree, blob, tag).
 ///
 /// This type's `FromStr` implementation validates that it's exactly 40 hex characters, i.e. a
-/// full-length git commit.
+/// full-length git commit, and normalizes the object ID to lowercase.
 ///
 /// If Git's SHA-256 support becomes more widespread in the future (in particular if GitHub ever
 /// adds support), we might need to make this an enum.
@@ -66,6 +66,7 @@ impl FromStr for GitOid {
 
         let mut bytes = [0; 40];
         bytes.copy_from_slice(s.as_bytes());
+        bytes.make_ascii_lowercase();
         Ok(Self { bytes })
     }
 }
@@ -115,9 +116,11 @@ mod tests {
     use super::{GitOid, OidParseError};
 
     #[test]
-    fn git_oid() {
-        GitOid::from_str("4a23745badf5bf5ef7928f1e346e9986bd696d82").unwrap();
-        GitOid::from_str("4A23745BADF5BF5EF7928F1E346E9986BD696D82").unwrap();
+    fn git_oid() -> Result<(), OidParseError> {
+        assert_eq!(
+            GitOid::from_str("4a23745badf5bf5ef7928f1e346e9986bd696d82")?,
+            GitOid::from_str("4A23745BADF5BF5EF7928F1E346E9986BD696D82")?
+        );
 
         assert_eq!(GitOid::from_str(""), Err(OidParseError::Empty));
         assert_eq!(
@@ -132,5 +135,7 @@ mod tests {
             GitOid::from_str(&str::repeat("x", 40)),
             Err(OidParseError::NotHex)
         );
+
+        Ok(())
     }
 }

@@ -2272,19 +2272,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // If the reference appears to be a commit, and we've already checked it out, avoid taking
-        // the GitHub fast path.
-        let cache_shard = resource
-            .git
-            .reference()
-            .as_str()
-            .and_then(|reference| GitOid::from_str(reference).ok())
-            .map(|oid| {
-                self.build_context.cache().shard(
-                    CacheBucket::SourceDistributions,
-                    WheelCache::Git(resource.url, oid.as_short_str()).root(),
-                )
-            });
+        // If the commit is known and we've already checked it out, avoid taking the GitHub fast path.
+        let cache_shard = resource.git.precise().map(|oid| {
+            self.build_context.cache().shard(
+                CacheBucket::SourceDistributions,
+                WheelCache::Git(resource.url, oid.as_short_str()).root(),
+            )
+        });
         if cache_shard
             .as_ref()
             .is_some_and(|cache_shard| cache_shard.is_dir())
