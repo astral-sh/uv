@@ -3230,6 +3230,15 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
 
     context.assert_installed("example", "0.1.0");
 
+    // Full commit hashes identify the same installed commit regardless of hexadecimal case.
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg(format!("example @ git+{repository_url}@{}", trusted_commit.to_ascii_uppercase())), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+
     // Short hexadecimal references remain ambiguous and can legitimately name a branch.
     uv_snapshot!(filters, context
         .pip_install()
@@ -3662,7 +3671,6 @@ fn install_git_public_https_exact_commit() {
         , @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
     ");
 }
@@ -8498,7 +8506,6 @@ fn already_installed_remote_url() {
     uv_snapshot!(context.filters(), context.pip_install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
     ");
 
