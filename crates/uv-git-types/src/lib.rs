@@ -106,7 +106,7 @@ pub struct GitUrl {
     reference: GitReference,
     /// The resolved commit for a named or ambiguous reference, if known. Exact commit references
     /// store their commit in [`GitReference::Commit`] instead.
-    precise: Option<GitOid>,
+    resolved: Option<GitOid>,
     /// Git LFS configuration for this repository.
     lfs: GitLfs,
 }
@@ -152,7 +152,7 @@ impl GitUrl {
             repository: RepositoryUrl::new(url.clone()),
             url,
             reference,
-            precise: None,
+            resolved: None,
             lfs,
         };
         match precise {
@@ -173,17 +173,17 @@ impl GitUrl {
                     });
                 }
             }
-            None => self.precise = Some(precise),
+            None => self.resolved = Some(precise),
         }
 
         Ok(self)
     }
 
-    /// Set the [`GitReference`] to use for this Git URL, clearing any precise commit if it changes.
+    /// Set the [`GitReference`] to use for this Git URL, clearing any resolved commit if it changes.
     #[must_use]
     pub fn with_reference(mut self, reference: GitReference) -> Self {
         if self.reference != reference {
-            self.precise = None;
+            self.resolved = None;
             self.reference = reference;
         }
         self
@@ -206,7 +206,7 @@ impl GitUrl {
 
     /// Return the precise commit, whether requested directly or resolved from a named reference.
     pub fn precise(&self) -> Option<GitOid> {
-        self.reference.as_commit().or(self.precise)
+        self.reference.as_commit().or(self.resolved)
     }
 
     /// Return the Git LFS configuration.
@@ -226,7 +226,7 @@ impl PartialEq for GitUrl {
     fn eq(&self, other: &Self) -> bool {
         self.repository == other.repository
             && self.reference == other.reference
-            && self.precise == other.precise
+            && self.resolved == other.resolved
             && self.lfs == other.lfs
     }
 }
@@ -244,7 +244,7 @@ impl Ord for GitUrl {
         self.repository
             .cmp(&other.repository)
             .then_with(|| self.reference.cmp(&other.reference))
-            .then_with(|| self.precise.cmp(&other.precise))
+            .then_with(|| self.resolved.cmp(&other.resolved))
             .then_with(|| self.lfs.cmp(&other.lfs))
     }
 }
@@ -253,7 +253,7 @@ impl std::hash::Hash for GitUrl {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.repository.hash(state);
         self.reference.hash(state);
-        self.precise.hash(state);
+        self.resolved.hash(state);
         self.lfs.hash(state);
     }
 }
