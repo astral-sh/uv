@@ -1,8 +1,9 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -34,9 +35,8 @@ use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_settings::{
     FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
 };
-use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::{
-    DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceError,
+    DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace, WorkspaceCache, WorkspaceError,
     WorkspaceErrorKind,
 };
 
@@ -75,11 +75,12 @@ impl std::fmt::Display for ProjectVersionInfo {
 #[expect(clippy::fn_params_excessive_bools)]
 pub async fn project_version(
     value: Option<String>,
-    mut bump: Vec<VersionBumpSpec>,
+    bump: Vec<VersionBumpSpec>,
     short: bool,
     output_format: VersionFormat,
     project_dir: &Path,
-    package: Option<PackageName>,
+    packages: Vec<PackageName>,
+    all_packages: bool,
     explicit_project: bool,
     dry_run: bool,
     lock_check: LockCheck,
@@ -102,81 +103,209 @@ pub async fn project_version(
     preview: Preview,
     malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
+    // Report a list with `--all-packages` or more than one distinct `--package`. `--all-packages`
+    // always reports a list, so its output shape doesn't depend on the number of workspace members.
+    let multiple = all_packages || packages.iter().unique().count() > 1;
+
+    // `--short` prints bare versions, which can't be attributed to packages when there are several.
+    if short && multiple {
+        return Err(anyhow!(
+            "`--short` cannot be used with multiple packages; use `--output-format json` to show the version of each package"
+        ));
+    }
+
     // Read the metadata
-    let project = find_target(
+    let targets = find_targets(
         project_dir,
-        package.as_ref(),
+        &packages,
+        all_packages,
         explicit_project,
         cache,
         workspace_cache,
     )
     .await?;
 
-    let pyproject_path = project.root().join("pyproject.toml");
-    let Some(name) = project.project_name().cloned() else {
-        return Err(anyhow!(
-            "Missing `project.name` field in: {}",
-            pyproject_path.user_display()
-        ));
-    };
-
     // Short-circuit early for a frozen read
     let is_read_only = value.is_none() && bump.is_empty();
     if let Some(frozen_source) = frozen {
         if is_read_only {
-            return print_frozen_version(
-                project,
-                &name,
+            return print_frozen_versions(
+                targets,
                 frozen_source,
                 short,
                 output_format,
+                multiple,
                 printer,
             )
             .await;
         }
     }
 
-    let mut toml = PyProjectTomlMut::from_toml(
-        project.pyproject_toml().raw.as_ref(),
-        DependencyTarget::PyProjectToml,
-    )?;
+    // Validate the requested change once, since it doesn't depend on any package.
+    let update = VersionUpdate::from_args(value, bump)?;
 
-    let old_version = toml.version().map_err(|err| match err {
-        Error::MalformedWorkspace => {
-            if toml.has_dynamic_version() {
-                anyhow!(
-                    "We cannot get or set dynamic project versions in: {}",
-                    pyproject_path.user_display()
-                )
-            } else {
-                anyhow!(
-                    "There is no 'project.version' field in: {}",
-                    pyproject_path.user_display()
-                )
+    // Compute the new version of every target before writing anything, so that an invalid
+    // version for one member doesn't leave the others updated.
+    let mut edits = Vec::with_capacity(targets.len());
+    for target in &targets {
+        let mut toml = PyProjectTomlMut::from_toml(
+            target.project.pyproject_toml().raw.as_ref(),
+            DependencyTarget::PyProjectToml,
+        )?;
+
+        let old_version = toml.version().map_err(|err| match err {
+            Error::MalformedWorkspace => {
+                if toml.has_dynamic_version() {
+                    anyhow!(
+                        "We cannot get or set dynamic project versions in: {}",
+                        target.pyproject_path.user_display()
+                    )
+                } else {
+                    anyhow!(
+                        "There is no 'project.version' field in: {}",
+                        target.pyproject_path.user_display()
+                    )
+                }
+            }
+            err => {
+                anyhow!("{err}: {}", target.pyproject_path.user_display())
+            }
+        })?;
+
+        let new_version = update
+            .as_ref()
+            .map(|update| update.apply(&old_version))
+            .transpose();
+        // With a single package, the package is implied by the invocation.
+        let new_version = if multiple {
+            new_version
+                .with_context(|| format!("Failed to update the version of `{}`", target.name))?
+        } else {
+            new_version?
+        };
+        edits.push((toml, old_version, new_version));
+    }
+
+    // Update the tomls and lock
+    let status = if dry_run || is_read_only {
+        if is_read_only {
+            debug!("No changes to version; skipping update");
+        }
+        ExitStatus::Success
+    } else if let Some(first_target) = targets.first() {
+        let edit = ProjectEdit::new(
+            targets
+                .iter()
+                .map(|target| target.pyproject_path.clone())
+                .chain(
+                    frozen
+                        .is_none()
+                        .then(|| LockTarget::from(first_target.project.workspace()).lock_path()),
+                ),
+        )?;
+        for (target, (toml, _, new_version)) in targets.iter().zip(&mut edits) {
+            if let Some(new_version) = new_version {
+                toml.set_version(new_version)?;
+                fs_err::write(&target.pyproject_path, toml.to_string())?;
             }
         }
-        err => {
-            anyhow!("{err}: {}", pyproject_path.user_display())
-        }
-    })?;
 
-    // Figure out new metadata
-    let new_version = if let Some(value) = value {
-        match Version::from_str(&value) {
-            Ok(version) => Some(version),
-            Err(err) => match &*value {
-                "major" | "minor" | "patch" | "alpha" | "beta" | "rc" | "dev" | "post"
-                | "stable" => {
-                    return Err(anyhow!(
+        // Rediscover the workspace to pick up the updated `pyproject.toml` files.
+        let project = find_target(
+            project_dir,
+            Some(&first_target.name),
+            explicit_project,
+            cache,
+            &WorkspaceCache::default(),
+        )
+        .await?;
+        let names = targets
+            .iter()
+            .map(|target| target.name.clone())
+            .collect::<Vec<_>>();
+        let status = Box::pin(lock_and_sync(
+            project,
+            &names,
+            project_dir,
+            lock_check,
+            frozen,
+            active,
+            no_sync,
+            python,
+            install_mirrors,
+            &settings,
+            client_builder,
+            python_preference,
+            python_arch,
+            python_downloads,
+            installer_metadata,
+            &concurrency,
+            config_discovery,
+            cache,
+            printer,
+            preview,
+            &malware_settings,
+        ))
+        .await?;
+        edit.commit();
+        status
+    } else {
+        ExitStatus::Success
+    };
+
+    // Report the results
+    let versions = targets
+        .iter()
+        .zip(edits)
+        .map(|(target, (_, old_version, new_version))| {
+            (
+                ProjectVersionInfo::new(Some(&target.name), &old_version),
+                new_version.map(|version| ProjectVersionInfo::new(Some(&target.name), &version)),
+            )
+        })
+        .collect();
+    print_versions(versions, short, output_format, multiple, printer)?;
+
+    Ok(status)
+}
+
+/// A package whose version is read or updated by `uv version`.
+struct VersionTarget {
+    project: VirtualProject,
+    name: PackageName,
+    pyproject_path: PathBuf,
+}
+
+/// The version change requested by the `VALUE` or `--bump` arguments.
+enum VersionUpdate {
+    /// Set the version to the given value.
+    Set(Version),
+    /// Apply the given bumps, in the order they're applied.
+    Bump(Vec<VersionBumpSpec>),
+}
+
+impl VersionUpdate {
+    /// Parse and validate the `VALUE` or `--bump` arguments.
+    ///
+    /// Returns `None` if no change was requested.
+    fn from_args(value: Option<String>, mut bump: Vec<VersionBumpSpec>) -> Result<Option<Self>> {
+        if let Some(value) = value {
+            return match Version::from_str(&value) {
+                Ok(version) => Ok(Some(Self::Set(version))),
+                Err(err) => match &*value {
+                    "major" | "minor" | "patch" | "alpha" | "beta" | "rc" | "dev" | "post"
+                    | "stable" => Err(anyhow!(
                         "Invalid version `{value}`, did you mean to pass `--bump {value}`?"
-                    ));
-                }
-                _ => {
-                    return Err(err)?;
-                }
-            },
+                    )),
+                    _ => Err(err)?,
+                },
+            };
         }
-    } else if !bump.is_empty() {
+
+        if bump.is_empty() {
+            return Ok(None);
+        }
+
         // While we can rationalize many of these combinations of operations together,
         // we want to conservatively refuse to support any of them until users demand it.
         //
@@ -270,10 +399,20 @@ pub async fn project_version(
         // the ordering of `--bump minor --bump beta` (only one ordering is ever useful)
         bump.sort();
 
+        Ok(Some(Self::Bump(bump)))
+    }
+
+    /// Determine the new version of a package with the given current version.
+    fn apply(&self, old_version: &Version) -> Result<Version> {
+        let bump = match self {
+            Self::Set(version) => return Ok(version.clone()),
+            Self::Bump(bump) => bump,
+        };
+
         // Apply all the bumps
         let mut new_version = old_version.clone();
 
-        for spec in &bump {
+        for spec in bump {
             match spec.bump {
                 VersionBump::Major => new_version.bump(BumpCommand::BumpRelease {
                     index: 0,
@@ -305,7 +444,7 @@ pub async fn project_version(
             }
         }
 
-        if new_version <= old_version {
+        if new_version <= *old_version {
             if old_version.is_stable() && new_version.is_pre() {
                 return Err(anyhow!(
                     "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
@@ -321,65 +460,8 @@ pub async fn project_version(
             ));
         }
 
-        Some(new_version)
-    } else {
-        None
-    };
-
-    // Update the toml and lock
-    let status = if dry_run {
-        ExitStatus::Success
-    } else if let Some(new_version) = &new_version {
-        let edit = ProjectEdit::new(
-            [pyproject_path.clone()].into_iter().chain(
-                frozen
-                    .is_none()
-                    .then(|| LockTarget::from(project.workspace()).lock_path()),
-            ),
-        )?;
-        let project = update_project(
-            project,
-            new_version,
-            &mut toml,
-            &pyproject_path,
-            workspace_cache,
-        )?;
-        let status = Box::pin(lock_and_sync(
-            project,
-            project_dir,
-            lock_check,
-            frozen,
-            active,
-            no_sync,
-            python,
-            install_mirrors,
-            &settings,
-            client_builder,
-            python_preference,
-            python_arch,
-            python_downloads,
-            installer_metadata,
-            &concurrency,
-            config_discovery,
-            cache,
-            printer,
-            preview,
-            &malware_settings,
-        ))
-        .await?;
-        edit.commit();
-        status
-    } else {
-        debug!("No changes to version; skipping update");
-        ExitStatus::Success
-    };
-
-    // Report the results
-    let old_version = ProjectVersionInfo::new(Some(&name), &old_version);
-    let new_version = new_version.map(|version| ProjectVersionInfo::new(Some(&name), &version));
-    print_version(old_version, new_version, short, output_format, printer)?;
-
-    Ok(status)
+        Ok(new_version)
+    }
 }
 
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
@@ -431,72 +513,114 @@ async fn find_target(
     Ok(project)
 }
 
-/// Update the pyproject.toml on-disk and in-memory with a new version
-fn update_project(
-    project: VirtualProject,
-    new_version: &Version,
-    toml: &mut PyProjectTomlMut,
-    pyproject_path: &Path,
+/// Find the packages whose versions are read or updated.
+async fn find_targets(
+    project_dir: &Path,
+    packages: &[PackageName],
+    all_packages: bool,
+    explicit_project: bool,
+    cache: &Cache,
     workspace_cache: &WorkspaceCache,
-) -> Result<VirtualProject> {
-    // Save to disk
-    toml.set_version(new_version)?;
-    let content = toml.to_string();
-    fs_err::write(pyproject_path, &content)?;
-
-    // Update the `pyproject.toml` in-memory.
-    let project = project
-        .update_member(
-            PyProjectToml::from_string(content, pyproject_path)
-                .map_err(ProjectError::PyprojectTomlParse)?,
+) -> Result<Vec<VersionTarget>, ProjectError> {
+    let names: Vec<Option<PackageName>> = if all_packages {
+        let workspace = Workspace::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
             workspace_cache,
-        )?
-        .ok_or(ProjectError::PyprojectTomlUpdate)?;
+        )
+        .await
+        .map_err(|err| hint_uv_self_version(err, explicit_project))?;
+        if workspace.packages().is_empty() {
+            return Err(anyhow!(
+                "The workspace at `{}` does not have any members",
+                workspace.install_path().user_display()
+            )
+            .into());
+        }
+        workspace.packages().keys().cloned().map(Some).collect()
+    } else if packages.is_empty() {
+        vec![None]
+    } else {
+        // Drop repeated packages, so each member is only updated once.
+        packages.iter().unique().cloned().map(Some).collect()
+    };
 
-    Ok(project)
+    let mut targets = Vec::with_capacity(names.len());
+    for package in names {
+        let project = find_target(
+            project_dir,
+            package.as_ref(),
+            explicit_project,
+            cache,
+            workspace_cache,
+        )
+        .await?;
+
+        let pyproject_path = project.root().join("pyproject.toml");
+        let Some(name) = project.project_name().cloned() else {
+            return Err(anyhow!(
+                "Missing `project.name` field in: {}",
+                pyproject_path.user_display()
+            )
+            .into());
+        };
+        targets.push(VersionTarget {
+            project,
+            name,
+            pyproject_path,
+        });
+    }
+    Ok(targets)
 }
 
-/// Print the project's version from its existing lockfile.
-async fn print_frozen_version(
-    project: VirtualProject,
-    name: &PackageName,
+/// Print the projects' versions from the existing lockfile.
+async fn print_frozen_versions(
+    targets: Vec<VersionTarget>,
     frozen_source: FrozenSource,
     short: bool,
     output_format: VersionFormat,
+    multiple: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let target = LockTarget::Workspace(project.workspace());
-    let lock = target
+    // All targets belong to the same workspace, and so share a lockfile.
+    let Some(first_target) = targets.first() else {
+        return Ok(ExitStatus::Success);
+    };
+    let lock = LockTarget::Workspace(first_target.project.workspace())
         .read_frozen(frozen_source.into())
         .await
         .map_err(UvError::from)?;
 
-    // Try to find the package of interest in the lock
-    let Some(package) = lock
-        .packages()
-        .iter()
-        .find(|package| package.name() == name)
-    else {
-        return Err(anyhow!(
-            "Failed to find the {name}'s version in the frozen lockfile"
-        ));
-    };
-    let Some(version) = package.version() else {
-        return Err(anyhow!(
-            "Failed to find the {name}'s version in the frozen lockfile"
-        ));
-    };
+    let mut versions = Vec::with_capacity(targets.len());
+    for target in &targets {
+        let name = &target.name;
+
+        // Try to find the package of interest in the lock
+        let Some(version) = lock
+            .packages()
+            .iter()
+            .find(|package| package.name() == name)
+            .and_then(|package| package.version())
+        else {
+            return Err(anyhow!(
+                "Failed to find the {name}'s version in the frozen lockfile"
+            ));
+        };
+
+        versions.push((ProjectVersionInfo::new(Some(name), version), None));
+    }
 
     // Finally, print!
-    let old_version = ProjectVersionInfo::new(Some(name), version);
-    print_version(old_version, None, short, output_format, printer)?;
+    print_versions(versions, short, output_format, multiple, printer)?;
 
     Ok(ExitStatus::Success)
 }
 
-/// Re-lock and re-sync the project after a series of edits.
+/// Re-lock the project after a series of edits, and re-sync the edited packages.
 async fn lock_and_sync(
     project: VirtualProject,
+    packages: &[PackageName],
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
@@ -523,7 +647,7 @@ async fn lock_and_sync(
     }
 
     // Determine the groups and extras that should be enabled.
-    let default_groups = project.default_groups()?;
+    let default_groups = project.default_groups_for_packages(packages)?;
     let default_extras = DefaultExtras::default();
     let groups = DependencyGroups::default().with_defaults(default_groups);
     let extras = ExtrasSpecification::default().with_defaults(default_extras);
@@ -627,7 +751,7 @@ async fn lock_and_sync(
     let target = InstallTarget::from_project(
         &project,
         &lock,
-        PackageSelection::from_args(false, &[], project.project_name()),
+        PackageSelection::from_args(false, packages, project.project_name()),
     );
 
     let state = state.fork();
@@ -663,38 +787,49 @@ async fn lock_and_sync(
     Ok(ExitStatus::Success)
 }
 
-fn print_version(
-    old_version: ProjectVersionInfo,
-    new_version: Option<ProjectVersionInfo>,
+fn print_versions(
+    versions: Vec<(ProjectVersionInfo, Option<ProjectVersionInfo>)>,
     short: bool,
     output_format: VersionFormat,
+    multiple: bool,
     printer: Printer,
 ) -> Result<()> {
     match output_format {
         VersionFormat::Text => {
-            if let Some(name) = &old_version.package_name {
-                if !short {
-                    write!(printer.stdout(), "{name} ")?;
+            for (old_version, new_version) in versions {
+                if let Some(name) = &old_version.package_name {
+                    if !short {
+                        write!(printer.stdout(), "{name} ")?;
+                    }
                 }
-            }
-            if let Some(new_version) = new_version {
-                if short {
-                    writeln!(printer.stdout(), "{}", new_version.cyan())?;
+                if let Some(new_version) = new_version {
+                    if short {
+                        writeln!(printer.stdout(), "{}", new_version.cyan())?;
+                    } else {
+                        writeln!(
+                            printer.stdout(),
+                            "{} => {}",
+                            old_version.cyan(),
+                            new_version.cyan()
+                        )?;
+                    }
                 } else {
-                    writeln!(
-                        printer.stdout(),
-                        "{} => {}",
-                        old_version.cyan(),
-                        new_version.cyan()
-                    )?;
+                    writeln!(printer.stdout(), "{}", old_version.cyan())?;
                 }
-            } else {
-                writeln!(printer.stdout(), "{}", old_version.cyan())?;
             }
         }
         VersionFormat::Json => {
-            let final_version = new_version.unwrap_or(old_version);
-            let string = serde_json::to_string_pretty(&final_version)?;
+            let mut final_versions = versions
+                .into_iter()
+                .map(|(old_version, new_version)| new_version.unwrap_or(old_version))
+                .collect::<Vec<_>>();
+            let string = if multiple {
+                serde_json::to_string_pretty(&final_versions)?
+            } else if let Some(final_version) = final_versions.pop() {
+                serde_json::to_string_pretty(&final_version)?
+            } else {
+                return Ok(());
+            };
             writeln!(printer.stdout_important(), "{string}")?;
         }
     }

@@ -2756,6 +2756,7 @@ async fn run_project(
                 args.output_format,
                 project_dir,
                 args.package,
+                args.all_packages,
                 explicit_project,
                 args.dry_run,
                 args.lock_check,
