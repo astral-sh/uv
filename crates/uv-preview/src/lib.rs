@@ -460,6 +460,13 @@ pub enum PreviewFeature {
     /// project resolution, and installation. See [project build dependency
     /// hashes](./projects/build.md#project-build-dependency-hashes) for configuration and exceptions.
     BuildDependencyHashes,
+    /// uv removes unreferenced archives from the [cache](./cache.md) at most once a day, when no
+    /// other uv process is using the cache. Commands run with `uv run` and `uvx` don't block cache
+    /// removal while they run; instead, `uv cache prune` and automatic pruning retain the cache
+    /// entries they use, and `uv cache clean` waits for them to exit. Older uv versions sharing the
+    /// cache don't respect this, and virtual environments outside the cache that were installed
+    /// with `--link-mode=symlink` aren't protected.
+    CacheAutoprune,
 }
 
 impl Display for PreviewFeature {

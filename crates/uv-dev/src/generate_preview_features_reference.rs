@@ -160,6 +160,15 @@ mod tests {
         reduce the work performed by imports during a build, but can also change import-time side
         effects in third-party build backends.
 
+        ### `cache-autoprune` {#cache-autoprune}
+
+        uv removes unreferenced archives from the [cache](./cache.md) at most once a day, when no
+        other uv process is using the cache. Commands run with `uv run` and `uvx` don't block cache
+        removal while they run; instead, `uv cache prune` and automatic pruning retain the cache
+        entries they use, and `uv cache clean` waits for them to exit. Older uv versions sharing the
+        cache don't respect this, and virtual environments outside the cache that were installed
+        with `--link-mode=symlink` aren't protected.
+
         ### `cache-physical-space` {#cache-physical-space}
 
         Cache cleanup reports the physical disk space reclaimed, accounting for hardlinks and

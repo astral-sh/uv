@@ -1277,6 +1277,16 @@ pub async fn run(
         })?;
     }
 
+    // Mark the cache entries the command runs from as in use, then release the cache lock, so that
+    // a long-running command doesn't block cache removal operations.
+    let _in_use = cache.claim_in_use_and_release_lock(
+        ephemeral_env
+            .iter()
+            .chain(requirements_env.iter())
+            .map(PythonEnvironment::root)
+            .chain([interpreter.sys_prefix(), base_interpreter.sys_prefix()]),
+    );
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found

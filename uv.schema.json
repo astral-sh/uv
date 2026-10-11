@@ -1904,7 +1904,8 @@
             "minimum-libc-version",
             "build-dependency-check",
             "build-lazy-imports",
-            "build-dependency-hashes"
+            "build-dependency-hashes",
+            "cache-autoprune"
           ]
         },
         {
