@@ -2002,7 +2002,9 @@ mod tests {
 
     use crate::ArchiveId;
 
-    use super::{Cache, CacheBucket, Link};
+    #[cfg(unix)]
+    use super::CacheBucket;
+    use super::{Cache, Link};
 
     #[test]
     fn test_link_round_trip() {

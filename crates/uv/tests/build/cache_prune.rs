@@ -2,6 +2,7 @@
 use std::io::{BufRead, BufReader, Write};
 #[cfg(unix)]
 use std::process::Stdio;
+use std::time::{Duration, SystemTime};
 
 #[cfg(unix)]
 use anyhow::Context;
@@ -650,7 +651,8 @@ fn autoprune() -> Result<()> {
         .success();
     unreferenced.assert(predicate::path::exists());
 
-    filetime::set_file_mtime(&marker, FileTime::zero())?;
+    let yesterday = SystemTime::now() - Duration::from_hours(25);
+    filetime::set_file_mtime(&marker, FileTime::from_system_time(yesterday))?;
     context
         .pip_sync()
         .arg("requirements.txt")
