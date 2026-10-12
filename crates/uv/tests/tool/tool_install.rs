@@ -6404,7 +6404,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
             error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
               cause: Failed to resolve requirements from `build-system.requires`
               cause: No solution found when resolving: `build-dependency==1.0.0`
-              cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+              cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
             ");
             project
                 .child("backend-executed")
