@@ -1,7 +1,9 @@
 use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use serde_json::json;
 use uv_static::EnvVars;
+use uv_test::archive::generate_source_archive;
 use uv_test::uv_snapshot;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -115,6 +117,58 @@ fn ordinary_wheels_are_selected_over_variants() -> Result<()> {
      + ok==1.0.0
     "
     );
+    Ok(())
+}
+
+/// A variant wheel cannot provide metadata for an sdist, even when it is the only wheel.
+#[tokio::test]
+async fn sdist_metadata_ignores_variant_wheels() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    let sdist = generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", None)?;
+
+    let simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "ok",
+        "files": [
+            {
+                "filename": "ok-1.0.0.tar.gz",
+                "url": format!("{}/files/ok-1.0.0.tar.gz", server.uri()),
+                "hashes": {},
+            },
+            {
+                "filename": "ok-1.0.0-py3-none-any-cpu.whl",
+                "url": format!("{}/files/ok-1.0.0-py3-none-any-cpu.whl", server.uri()),
+                "hashes": {},
+            },
+        ],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0.tar.gz"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(sdist))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
     Ok(())
 }
 

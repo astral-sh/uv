@@ -493,15 +493,17 @@ impl PrioritizedDist {
             // using the wheel is faster.
             //
             // (If the incompatible wheel should actually be ignored entirely, fall through to
-            // using the source distribution.)
+            // using the source distribution. Variant wheels are not supported yet.)
             (
                 Some((wheel, compatibility @ WheelCompatibility::Incompatible(_))),
                 Some((sdist, SourceDistCompatibility::Compatible(_))),
-            ) if !compatibility.is_excluded() => Some(CompatibleDist::IncompatibleWheel {
-                sdist,
-                wheel,
-                prioritized: self,
-            }),
+            ) if !compatibility.is_excluded() && wheel.filename.variant().is_none() => {
+                Some(CompatibleDist::IncompatibleWheel {
+                    sdist,
+                    wheel,
+                    prioritized: self,
+                })
+            }
             // Otherwise, if we have a source distribution, return it.
             (.., Some((sdist, SourceDistCompatibility::Compatible(_)))) => {
                 Some(CompatibleDist::SourceDist {
