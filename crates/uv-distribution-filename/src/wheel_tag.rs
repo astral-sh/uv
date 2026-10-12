@@ -142,13 +142,13 @@ impl Display for WheelTagSmall {
 pub(crate) struct WheelTagLarge {
     /// The optional build tag, e.g., `73` in `1.2.3-73-py3-none-any`.
     pub(crate) build_tag: Option<BuildTag>,
-    /// The Python tag(s), e.g., `py3` in `1.2.3-73-py3-none-any`.
+    /// The Python tag(s), e.g., `py3` in `1.2.3-py3-none-any`.
     pub(crate) python_tag: TagSet<LanguageTag>,
-    /// The ABI tag(s), e.g., `none` in `1.2.3-73-py3-none-any`.
+    /// The ABI tag(s), e.g., `none` in `1.2.3-py3-none-any`.
     pub(crate) abi_tag: TagSet<AbiTag>,
-    /// The platform tag(s), e.g., `none` in `1.2.3-73-py3-none-any`.
+    /// The platform tag(s), e.g., `none` in `1.2.3-py3-none-any`.
     pub(crate) platform_tag: TagSet<PlatformTag>,
-    /// The optional variant label.
+    /// The optional variant label, e.g., `cuda130` in `1.2.3-py3-none-any-cuda130`.
     pub(crate) variant: Option<VariantLabel>,
     /// The string representation of the tag.
     ///
