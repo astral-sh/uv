@@ -679,6 +679,61 @@ fn autoprune() -> Result<()> {
     Ok(())
 }
 
+/// With the `cache-autoprune` preview feature, uv removes cached environments that haven't been
+/// used for a week.
+#[test]
+fn autoprune_unused_cached_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let run_with = || {
+        let mut command = context.run();
+        command
+            .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+            .arg("--no-project")
+            .arg("--with")
+            .arg("iniconfig")
+            .arg("python")
+            .arg("-c")
+            .arg("import iniconfig");
+        command
+    };
+    let cached_environments = || -> Result<usize> {
+        let environments = context.cache_dir.child("environments-v2");
+        Ok(walkdir::WalkDir::new(&environments)
+            .min_depth(2)
+            .max_depth(2)
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .len())
+    };
+
+    run_with().assert().success();
+    assert_eq!(cached_environments()?, 1);
+
+    // Backdate the cached environment's archive and in-use lock, and the last prune.
+    let long_ago = FileTime::from_system_time(SystemTime::now() - Duration::from_hours(24 * 8));
+    for bucket in ["archive-v0", "in-use-v0/archive-v0"] {
+        for entry in fs_err::read_dir(context.cache_dir.child(bucket).path())? {
+            filetime::set_file_mtime(entry?.path(), long_ago)?;
+        }
+    }
+    filetime::set_file_mtime(context.cache_dir.child(".autoprune"), long_ago)?;
+
+    // The next invocation removes the cached environment.
+    context
+        .pip_list()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .assert()
+        .success();
+    assert_eq!(cached_environments()?, 0);
+
+    // It's recreated when next needed.
+    run_with().assert().success();
+    assert_eq!(cached_environments()?, 1);
+
+    Ok(())
+}
+
 /// With the `cache-autoprune` preview feature, a command started by `uv run` doesn't block cache
 /// removal operations, which retain the cache entries it runs from instead.
 #[cfg(unix)]
