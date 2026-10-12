@@ -1,8 +1,9 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
-use crate::BuildTag;
 use uv_platform_tags::{AbiTag, CompressedTags, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_small_str::SmallString;
+
+use crate::{BuildTag, VariantLabel};
 
 /// A [`SmallVec`] type for storing tags.
 ///
@@ -11,14 +12,14 @@ use uv_small_str::SmallString;
 pub(crate) type TagSet<T> = smallvec::SmallVec<[T; 3]>;
 
 /// The portion of the wheel filename following the name and version: the optional build tag, along
-/// with the Python tag(s), ABI tag(s), and platform tag(s).
+/// with the Python tag(s), ABI tag(s), platform tag(s), and optional variant label.
 ///
 /// Most wheels consist of a single Python, ABI, and platform tag (and no build tag). We represent
 /// such wheels with [`WheelTagSmall`], a variant with a smaller memory footprint and (generally)
 /// zero allocations. The [`WheelTagLarge`] variant is used for wheels with multiple tags, a build
-/// tag, or an unsupported tag (i.e., a tag that can't be represented by [`LanguageTag`],
-/// [`AbiTag`], or [`PlatformTag`]). (Unsupported tags are filtered out, but retained in the display
-/// representation of [`WheelTagLarge`].)
+/// tag, a variant label, or an unsupported tag (i.e., a tag that can't be represented by
+/// [`LanguageTag`], [`AbiTag`], or [`PlatformTag`]). Unsupported tags are filtered out, but retained
+/// in the display representation of [`WheelTagLarge`].
 #[derive(
     Debug,
     Clone,
@@ -135,31 +136,39 @@ impl Display for WheelTagSmall {
 }
 
 #[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
 pub(crate) struct WheelTagLarge {
     /// The optional build tag, e.g., `73` in `1.2.3-73-py3-none-any`.
     pub(crate) build_tag: Option<BuildTag>,
-    /// The Python tag(s), e.g., `py3` in `1.2.3-73-py3-none-any`.
+    /// The Python tag(s), e.g., `py3` in `1.2.3-py3-none-any`.
     pub(crate) python_tag: TagSet<LanguageTag>,
-    /// The ABI tag(s), e.g., `none` in `1.2.3-73-py3-none-any`.
+    /// The ABI tag(s), e.g., `none` in `1.2.3-py3-none-any`.
     pub(crate) abi_tag: TagSet<AbiTag>,
-    /// The platform tag(s), e.g., `none` in `1.2.3-73-py3-none-any`.
+    /// The platform tag(s), e.g., `none` in `1.2.3-py3-none-any`.
     pub(crate) platform_tag: TagSet<PlatformTag>,
+    /// The optional variant label, e.g., `cuda130` in `1.2.3-py3-none-any-cuda130`.
+    pub(crate) variant: Option<VariantLabel>,
     /// The string representation of the tag.
     ///
     /// Preserves any unsupported tags that were filtered out when parsing the wheel filename.
     pub(crate) repr: SmallString,
+}
+
+impl Debug for WheelTagLarge {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut debug = f.debug_struct("WheelTagLarge");
+        debug.field("build_tag", &self.build_tag);
+        debug.field("python_tag", &self.python_tag);
+        debug.field("abi_tag", &self.abi_tag);
+        debug.field("platform_tag", &self.platform_tag);
+        if let Some(variant) = &self.variant {
+            debug.field("variant", variant);
+        }
+        debug.field("repr", &self.repr);
+        debug.finish()
+    }
 }
 
 impl Display for WheelTagLarge {
