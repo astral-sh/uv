@@ -9,6 +9,8 @@ use crate::{Arch, BinaryFormat};
 
 /// Opaque release-and-architecture suffix used by [`PlatformTag`] variants that preserve a native
 /// platform-specific suffix.
+///
+/// ASCII letters are normalized to lowercase for case-insensitive tag comparisons.
 #[derive(
     Debug,
     Clone,
@@ -31,7 +33,7 @@ impl FromStr for ReleaseArch {
         if s.bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
         {
-            Ok(Self(SmallString::from(s)))
+            Ok(Self(SmallString::from(s.to_ascii_lowercase())))
         } else {
             Err(ParseReleaseArchError)
         }

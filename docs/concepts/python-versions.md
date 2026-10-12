@@ -47,6 +47,11 @@ Additionally, a specific system Python interpreter can be requested with:
 - `<executable-name>` (e.g., `mypython3`)
 - `<install-dir>` (e.g., `/some/environment/`)
 
+Use [`UV_PYTHON_ARCH`](../reference/environment.md#uv_python_arch) to select an architecture
+independently of the Python version. For example, setting `UV_PYTHON_ARCH=x86_64` makes `uv sync`
+use an `x86_64` interpreter while honoring the project's Python version request. A request that
+includes an architecture or names an interpreter executable takes precedence.
+
 By default, uv will automatically download Python versions if they cannot be found on the system.
 This behavior can be
 [disabled with the `python-downloads` option](#disabling-automatic-python-downloads).
@@ -481,6 +486,10 @@ This is called [Rosetta 2](https://support.apple.com/en-gb/102527) or
 It's possible to use x86_64 uv on aarch64, and also possible to use an x86_64 Python interpreter on
 aarch64. Either uv binary can use either Python interpreter, but a Python interpreter needs packages
 for its architecture, either all x86_64 or all aarch64.
+
+To force use of emulated `x86_64` Python, set
+[`UV_PYTHON_ARCH`](../reference/environment.md#uv_python_arch) to `x86_64` or
+[request an explicit architecture](#requesting-a-version), e.g., `cpython-3.14-windows-x86_64`.
 
 ## Registration in the Windows registry
 

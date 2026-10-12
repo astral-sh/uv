@@ -642,10 +642,10 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
         // wsp*
         cursor.eat_whitespace();
         // ('or' marker_and) or ('and' marker_or)
-        let (start, len) = cursor.peek_while(|c| !c.is_whitespace());
+        let (start, len) = cursor.peek_while(|c| !c.is_whitespace() && c != '(');
         match cursor.slice(start, len) {
             value if value == op => {
-                cursor.take_while(|c| !c.is_whitespace());
+                cursor.take_while(|c| !c.is_whitespace() && c != '(');
 
                 if let Some(expression) = parse_inner(cursor, reporter)? {
                     tree = Some(match tree {

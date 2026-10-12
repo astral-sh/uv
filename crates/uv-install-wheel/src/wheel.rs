@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -264,7 +264,7 @@ impl<'script> ValidatedScript<'script> {
             &layout.scheme.scripts,
         ) else {
             return Err(Error::InvalidWheel(format!(
-                "Script path must resolve to a file within the scripts directory: `{}`",
+                "Script path must resolve to a file within the scripts directory: {}",
                 script.name
             )));
         };
@@ -403,7 +403,7 @@ impl WheelFile {
             .and_then(|wheel_version| wheel_version.split_once('.'))
             .ok_or_else(|| {
                 Error::InvalidWheel(format!(
-                    "Invalid Wheel-Version in WHEEL file: {wheel_version:?}"
+                    "Invalid Wheel-Version in `WHEEL` file: {wheel_version:?}"
                 ))
             })?;
         // pip has some test wheels that use that ancient version,
@@ -551,7 +551,7 @@ fn install_script(
         })?;
 
     let path = file.path();
-    let mut script = File::open(&path)?;
+    let mut script = BufReader::new(File::open(&path)?);
 
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
     // > In wheel, scripts are packaged in {distribution}-{version}.data/scripts/.
@@ -578,7 +578,13 @@ fn install_script(
         loop {
             match script.read_exact(&mut byte) {
                 Ok(()) => {
-                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                    if byte[0] == b'\n' {
+                        break;
+                    }
+                    if byte[0] == b'\r' {
+                        if script.fill_buf()?.first() == Some(&b'\n') {
+                            script.consume(1);
+                        }
                         break;
                     }
 
@@ -648,7 +654,7 @@ fn install_script(
                 // If we have to modify the permissions, copy the file, since we might not own it,
                 // and we may not be allowed to change permissions on an unowned moved file.
                 warn!(
-                    "Copying script from {} to {} (permissions: {:o})",
+                    "Copying script from `{}` to `{}` (permissions: {:o})",
                     path.simplified_display(),
                     script_absolute.simplified_display(),
                     permissions.mode()
@@ -665,20 +671,20 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            // Here, two wrappers over rename are clashing: We want to retry for security software
-            // blocking the file, but we also need the copy fallback is the problem was trying to
-            // move a file cross-drive.
+            // Retry when security software temporarily blocks the file.
             match uv_fs::with_retry_sync(&path, &script_absolute, "renaming", || {
                 fs_err::rename(&path, &script_absolute)
             }) {
                 Ok(()) => (),
-                Err(err) => {
+                Err(err) if err.kind() == io::ErrorKind::CrossesDevices => {
+                    // Fall back to copy only when the rename crosses devices.
                     debug!("Failed to rename, falling back to copy: {err}");
                     uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
                         fs_err::copy(&path, &script_absolute)?;
                         Ok(())
                     })?;
                 }
+                Err(err) => return Err(Error::Io(err)),
             }
         }
 
@@ -729,7 +735,7 @@ pub(crate) fn install_data(
             Some("data") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/data to {}",
+                    "Installing data/data to `{}`",
                     layout.scheme.data.user_display()
                 );
                 // Move the content of the folder to the root of the venv
@@ -744,7 +750,7 @@ pub(crate) fn install_data(
             Some("scripts") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/scripts to {}",
+                    "Installing data/scripts to `{}`",
                     layout.scheme.scripts.user_display()
                 );
                 let mut rename_or_copy = RenameOrCopy::default();
@@ -788,7 +794,7 @@ pub(crate) fn install_data(
                 let target_path = layout.scheme.include.join(dist_name.as_str());
                 trace!(
                     ?dist_name,
-                    "Installing data/headers to {}",
+                    "Installing data/headers to `{}`",
                     target_path.user_display()
                 );
                 move_folder_recorded(
@@ -802,7 +808,7 @@ pub(crate) fn install_data(
             Some("purelib") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/purelib to {}",
+                    "Installing data/purelib to `{}`",
                     layout.scheme.purelib.user_display()
                 );
                 move_folder_recorded(
@@ -816,7 +822,7 @@ pub(crate) fn install_data(
             Some("platlib") => {
                 trace!(
                     ?dist_name,
-                    "Installing data/platlib to {}",
+                    "Installing data/platlib to `{}`",
                     layout.scheme.platlib.user_display()
                 );
                 move_folder_recorded(
@@ -1028,8 +1034,7 @@ pub fn validate_and_heal_record<'a>(
     // that weren't removed from files.
     if !extra_record_entries.is_empty() {
         debug!(
-            "RECORD contains files not in wheel archive for {}: `{}`",
-            dist,
+            "Files `{}` are listed in `RECORD` but missing from the wheel archive for `{dist}`",
             extra_record_entries
                 .iter()
                 .map(Simplified::simplified_display)
@@ -1038,8 +1043,7 @@ pub fn validate_and_heal_record<'a>(
     }
     if !files.is_empty() {
         debug!(
-            "Wheel archive contains files not in RECORD for {}: `{}`",
-            dist,
+            "Files `{}` are in the wheel archive for `{dist}` but missing from `RECORD`",
             files
                 .keys()
                 .map(Simplified::simplified_display)
@@ -1048,7 +1052,7 @@ pub fn validate_and_heal_record<'a>(
     }
     let healed = !extra_record_entries.is_empty() || !files.is_empty();
     if healed {
-        debug!("Rewriting RECORD to match actual wheel contents for {dist}");
+        debug!("Rewriting `RECORD` to match actual wheel contents for {dist}");
         // We already removed RECORD entries with no matching unpacked file, now add files that
         // were unpacked but not listed in the archive.
         for (path, size) in files {
@@ -1081,7 +1085,7 @@ fn parse_email_message_file(
 
     let headers = parse_headers(content.as_slice())
         .map_err(|err| {
-            Error::InvalidWheel(format!("Failed to parse {debug_filename} file: {err}"))
+            Error::InvalidWheel(format!("Failed to parse `{debug_filename}` file: {err}"))
         })?
         .0;
 

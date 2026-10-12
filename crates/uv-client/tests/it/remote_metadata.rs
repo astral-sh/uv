@@ -93,7 +93,7 @@ async fn remote_metadata_requires_range_requests() -> Result<()> {
 
     insta::assert_snapshot!(
         error.to_string().replace(&server.uri(), "[HOST]"),
-        @"Wheel metadata range requests are required, but not supported for: `[HOST]/ok-1.0.0-py3-none-any.whl`"
+        @"Wheel metadata range requests are required, but not supported for: [HOST]/ok-1.0.0-py3-none-any.whl"
     );
 
     Ok(())

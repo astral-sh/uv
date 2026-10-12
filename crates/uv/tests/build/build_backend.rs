@@ -262,8 +262,6 @@ fn preserve_executable_bit() -> Result<()> {
 
     context
         .build_backend()
-        .arg("--preview-features")
-        .arg("tar-codec")
         .arg("build-sdist")
         .arg(context.temp_dir.path())
         .current_dir(&project_dir)
@@ -545,8 +543,8 @@ fn build_module_name_normalization() -> Result<()> {
 #[test]
 fn build_sdist_with_long_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let legacy_dir = TempDir::new()?;
     let default_dir = TempDir::new()?;
-    let temp_dir = TempDir::new()?;
 
     context
         .temp_dir
@@ -576,8 +574,9 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     uv_snapshot!(context
         .build_backend()
+        .env(EnvVars::UV_LEGACY_TAR_BACKEND, "1")
         .arg("build-sdist")
-        .arg(default_dir.path()), @"
+        .arg(legacy_dir.path()), @"
     exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0.tar.gz
@@ -599,7 +598,7 @@ fn build_sdist_with_long_path() -> Result<()> {
                 assert all(not member.pax_headers for member in members)
                 print(f"GNU members: {len(members)}")
         "#})
-        .arg(default_dir.path().join("foo-1.0.0.tar.gz")), @"
+        .arg(legacy_dir.path().join("foo-1.0.0.tar.gz")), @"
     exit_code: 0 (success)
     ----- stdout -----
     GNU members: 10
@@ -607,9 +606,9 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     uv_snapshot!(context
         .build_backend()
-        .env(EnvVars::UV_PREVIEW_FEATURES, "tar-codec")
+        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
         .arg("build-sdist")
-        .arg(temp_dir.path()), @"
+        .arg(default_dir.path()), @"
     exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0.tar.gz
@@ -644,7 +643,7 @@ fn build_sdist_with_long_path() -> Result<()> {
                 print(f"Long path bytes: {len(long_member.name.encode())}")
                 print(f"Streamed bytes: {streamed}")
         "#})
-        .arg(temp_dir.path().join("foo-1.0.0.tar.gz"))
+        .arg(default_dir.path().join("foo-1.0.0.tar.gz"))
         .arg(format!("foo-1.0.0/{long_path}"))
         .arg(format!("foo-1.0.0/{large_path}")), @"
     exit_code: 0 (success)
@@ -978,7 +977,7 @@ fn symlinked_file() -> Result<()> {
             .file_type()
             .is_file()
     );
-    let license = fs_err::read_to_string(&installed_license)?;
+    let license = context.read(&installed_license);
     assert_eq!(license, license_text);
 
     Ok(())
@@ -1487,12 +1486,12 @@ fn build_with_all_metadata() -> Result<()> {
         .assert()
         .success();
 
-    let metadata = fs_err::read_to_string(
+    let metadata = context.read(
         context
             .site_packages()
             .join("foo-1.0.0.dist-info")
             .join("METADATA"),
-    )?;
+    );
     assert_snapshot!(metadata, @"
     Metadata-Version: 2.4
     Name: foo
@@ -1519,12 +1518,12 @@ fn build_with_all_metadata() -> Result<()> {
 
     Hello World!
     ");
-    let metadata_json = fs_err::read_to_string(
+    let metadata_json = context.read(
         context
             .site_packages()
             .join("foo-1.0.0.dist-info")
             .join("METADATA.json"),
-    )?;
+    );
     let metadata_json: serde_json::Value = serde_json::from_str(&metadata_json)?;
     assert_json_snapshot!(metadata_json, @r#"
     {
@@ -1578,12 +1577,12 @@ fn build_with_all_metadata() -> Result<()> {
       "version": "1.0.0"
     }
     "#);
-    let wheel = fs_err::read_to_string(
+    let wheel = context.read(
         context
             .site_packages()
             .join("foo-1.0.0.dist-info")
             .join("WHEEL"),
-    )?;
+    );
     let wheel = wheel.replace(uv_version::version(), "[VERSION]");
     assert_snapshot!(wheel, @"
     Wheel-Version: 1.0
@@ -1591,12 +1590,12 @@ fn build_with_all_metadata() -> Result<()> {
     Root-Is-Purelib: true
     Tag: py3-none-any
     ");
-    let wheel_json = fs_err::read_to_string(
+    let wheel_json = context.read(
         context
             .site_packages()
             .join("foo-1.0.0.dist-info")
             .join("WHEEL.json"),
-    )?;
+    );
     let wheel_json = wheel_json.replace(uv_version::version(), "[VERSION]");
     let wheel_json: serde_json::Value = serde_json::from_str(&wheel_json)?;
     assert_json_snapshot!(wheel_json, @r#"

@@ -1,10 +1,10 @@
 pub use workspace::{
     DefaultGroupsError, DiscoveryOptions, Editability, MemberDiscovery,
-    ProjectEnvironmentSelection, ProjectWorkspace, RequiresPythonSources, VirtualProject,
-    Workspace, WorkspaceCache, WorkspaceError, WorkspaceErrorKind, WorkspaceMember,
+    ProjectEnvironmentSelection, ProjectWorkspace, RequiresPythonDeclaration,
+    RequiresPythonSources, VirtualProject, Workspace, WorkspaceCache, WorkspaceError,
+    WorkspaceErrorKind, WorkspaceMember,
 };
 
 pub mod dependency_groups;
 pub mod pyproject;
-pub mod pyproject_mut;
 mod workspace;

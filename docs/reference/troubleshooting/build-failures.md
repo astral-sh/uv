@@ -191,7 +191,7 @@ For example, installing `pygraphviz` requires Graphviz to be installed:
   compilation terminated.
   error: command '/usr/bin/gcc' failed with exit code 1
 
-  hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz@1.14`
+  hint: This error likely indicates that you need to install a library that provides `graphviz/cgraph.h` for `pygraphviz@1.14`
 ```
 
 To resolve this error on Debian, you'd install the `libgraphviz-dev` package:

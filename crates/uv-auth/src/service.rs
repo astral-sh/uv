@@ -32,7 +32,7 @@ impl Service {
     fn check_scheme(url: &Url) -> Result<(), ServiceParseError> {
         match url.scheme() {
             "https" => Ok(()),
-            "http" if matches!(url.host_str(), Some("localhost" | "127.0.0.1")) => Ok(()),
+            "http" if matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")) => Ok(()),
             "http" => Err(ServiceParseError::HttpsRequired),
             value => Err(ServiceParseError::UnsupportedScheme(value.to_string())),
         }

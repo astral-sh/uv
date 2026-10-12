@@ -29,7 +29,30 @@ jobs:
   review:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
-    uses: $/.github/workflows/pull-request-security-review.yml
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@3c57a5dba8ad854a97e8b9fbf454286a7574e677
+    with:
+      runner: depot-ubuntu-24.04-16
+      helper-runner: github-ubuntu-24.04-x86_64-4
+      # renovate: datasource=github-release-attachments depName=astral-sh/uv
+      uv-version: "0.12.13"
+      uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+      # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
+      # Keep the environment outside the checkout when switching to the PR head.
+      setup-command: |
+        export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-review-tools"
+        uv sync --locked --only-dev
+        echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+      issues: read
+      pull-requests: read
+
+  review-code-quality:
+    needs: plan
+    if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.run-checks == 'true' }}
+    uses: $/.github/workflows/pull-request-code-quality-review.yml
     secrets: inherit
     permissions:
       contents: read
@@ -65,7 +88,7 @@ jobs:
 
   check-release:
     needs: plan
-    if: ${{ needs.plan.outputs.run-checks == 'true' }}
+    if: ${{ needs.plan.outputs.run-checks == 'true' || needs.plan.outputs.require-check-release == 'true' }}
     uses: $/.github/workflows/check-release.yml
 
   check-crates-policies:
@@ -292,7 +315,7 @@ jobs:
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
         run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
         env:
-          RUST_LOG: uv=debug,uv_publish=trace
+          UV_TEST_PUBLISH_RUST_LOG: uv=debug,uv_publish=trace
           UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
           UV_TEST_PUBLISH_PASSWORD: ${{ secrets.UV_TEST_PUBLISH_PASSWORD }}
           UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
@@ -310,11 +333,16 @@ jobs:
       - check-fmt
       - check-lint
       - check-docs
+      - check-lock
       - check-crates-policies
+      - check-release
       - check-generated-files
       - test
+      - test-integration
       - test-system
       - build-dev-binaries
+      - build-release-artifacts
+      - build-docker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
       - name: "Check required jobs passed"
@@ -336,5 +364,8 @@ jobs:
           # Jobs not listed here are always required.
           CONDITIONAL_JOBS: >-
             {
+              "build-release-artifacts": ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }},
+              "check-release": ${{ needs.plan.outputs.require-check-release == 'true' }},
+              "test-integration": ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }},
               "test-system": ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
             }

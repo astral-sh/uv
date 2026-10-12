@@ -144,12 +144,9 @@ impl Vulnerability {
     /// For our purposes we prefer PYSEC IDs, then GHSA, then CVE, then whatever
     /// primary ID the vulnerability came with.
     pub fn best_id(&self) -> &VulnerabilityID {
-        self.ids()
-            .find(|id| {
-                id.as_str().starts_with("PYSEC-")
-                    || id.as_str().starts_with("GHSA-")
-                    || id.as_str().starts_with("CVE-")
-            })
+        ["PYSEC-", "GHSA-", "CVE-"]
+            .into_iter()
+            .find_map(|prefix| self.ids().find(|id| id.as_str().starts_with(prefix)))
             .unwrap_or(&self.id)
     }
 }

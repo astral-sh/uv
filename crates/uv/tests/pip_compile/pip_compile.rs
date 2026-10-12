@@ -7,10 +7,14 @@ use std::process::Command;
 use std::str::FromStr;
 
 use anyhow::Result;
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+use anyhow::{Context, anyhow};
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use fs_err::{File, read};
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+use fs_err::{read_to_string, remove_file, write};
 #[cfg(feature = "test-python-managed")]
 use http::StatusCode;
 #[cfg(feature = "test-universal")]
@@ -23,17 +27,22 @@ use url::Url;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+use uv_cache::CacheBucket;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::Requirement;
 use uv_static::EnvVars;
 
-use uv_test::archive::write_tar_gz;
+use uv_test::archive::{generate_source_archive, write_tar_gz};
+#[cfg(not(windows))]
+use uv_test::assert_link_target;
 #[cfg(feature = "test-universal")]
 use uv_test::diff_snapshot;
-use uv_test::packse::PackseServer;
+use uv_test::package_server::PackageServer;
 use uv_test::packse::scenario::{ArtifactMetadata, Package, PackageMetadata, Scenario};
+use uv_test::packse::{PackseServer, generate_wheel};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
 
 #[test]
@@ -127,7 +136,7 @@ fn missing_requirements_in() {
             .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.in`
+    error: File not found: requirements.in
     "
     );
 
@@ -1019,7 +1028,7 @@ build-backend = "poetry.core.masonry.api"
             .arg("pyproject.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 13, column 1
                 |
              13 | [project.dependencies]
@@ -1221,7 +1230,7 @@ dependencies = [
             .arg("pyproject.toml"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 6, column 8
                |
              6 | name = "!project"
@@ -4428,7 +4437,7 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
       werkzeug=2.3.0
               ^^^^^^
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 10, column 7
                 |
              10 |       "werkzeug=2.3.0"
@@ -5223,7 +5232,7 @@ fn generate_hashes_registry_sha512_source() -> Result<()> {
             .join("test/links/basic_package-0.1.0.tar.gz"),
         &sdist,
     )?;
-    let archive = fs_err::read(&sdist)?;
+    let archive = context.read_bytes(&sdist);
     let sha256 = hex::encode(Sha256::digest(&archive));
     let sha512 = hex::encode(Sha512::digest(&archive));
     package.child("index.html").write_str(&format!(
@@ -5549,7 +5558,7 @@ fn generate_hashes_built_distribution_url() -> Result<()> {
 /// Reuse a URL hash while fetching only wheel metadata, then validate it during installation.
 #[tokio::test]
 async fn generate_hashes_url_fragment() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let filename = "ok-1.0.0-py3-none-any.whl";
     let wheel = read(context.workspace_root.join("test/links").join(filename))?;
@@ -5638,7 +5647,7 @@ async fn generate_hashes_url_fragment() -> Result<()> {
 /// A full-wheel metadata fallback must not cache a declared hash as a computed artifact hash.
 #[tokio::test]
 async fn generate_hashes_url_fragment_no_range_requests() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let filename = "ok-1.0.0-py3-none-any.whl";
     let wheel = read(context.workspace_root.join("test/links").join(filename))?;
@@ -5752,7 +5761,7 @@ fn generate_hashes_url_fragment_dependency_metadata() -> Result<()> {
 /// Validate and reuse source URL hashes when reading metadata from a subdirectory.
 #[tokio::test]
 async fn generate_hashes_url_fragment_source_subdirectory() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let server = MockServer::start().await;
     let mut source = Vec::new();
     write_tar_gz(
@@ -5851,59 +5860,27 @@ async fn generate_hashes_url_fragment_source_subdirectory() -> Result<()> {
 /// URL hashes must be checked before running a source distribution's build backend.
 #[tokio::test]
 async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
+    let name = "source-package".parse()?;
+    let server = PackageServer::new(&name).await;
+    let filename = "source.tar.gz";
+    let source_url = server.file_url(filename);
     let sentinel = context.temp_dir.child("backend-executed");
-    let mut source = Vec::new();
-    write_tar_gz(
-        &mut source,
-        &[
-            (
-                "source_package-1.0.0/pyproject.toml",
-                indoc! {r#"
-                    [build-system]
-                    requires = []
-                    build-backend = "backend"
-                    backend-path = ["."]
-                "#},
-            ),
-            (
-                "source_package-1.0.0/backend.py",
-                indoc! {r#"
-                    import os
-                    from pathlib import Path
-
-                    Path(os.environ["UV_TEST_SENTINEL"]).write_text("executed\n")
-
-                    def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
-                        dist_info = Path(metadata_directory) / "source_package-1.0.0.dist-info"
-                        dist_info.mkdir()
-                        (dist_info / "METADATA").write_text(
-                            "Metadata-Version: 2.2\nName: source-package\nVersion: 1.0.0\n"
-                        )
-                        return dist_info.name
-                "#},
-            ),
-        ],
-    )?;
-    Mock::given(method("GET"))
-        .and(path("/source.tar.gz"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(source))
-        .mount(&server)
-        .await;
+    let source = generate_source_archive(&name, &"1.0.0".parse()?, "", Some(sentinel.path()))?;
+    let source_hash = hex::encode(Sha256::digest(&source));
+    let context = context.with_filter((source_hash, "[SOURCE_HASH]"));
+    server.serve(filename, &source, None).await;
     context
         .temp_dir
         .child("requirements.in")
         .write_str(&format!(
-            "source-package @ {}/source.tar.gz#sha256={}",
-            server.uri(),
+            "source-package @ {source_url}#sha256={}",
             "0".repeat(64),
         ))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--generate-hashes")
-        .env("UV_TEST_SENTINEL", sentinel.path()), @"
+        .arg("--generate-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `source-package @ http://[LOCALHOST]/source.tar.gz#sha256=0000000000000000000000000000000000000000000000000000000000000000`
@@ -5913,7 +5890,7 @@ async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
                sha256:0000000000000000000000000000000000000000000000000000000000000000
 
              Computed:
-               sha256:0278d222c8f122de338efc402d719a27f81cb59a73dc2980460f310da098e35c
+               sha256:[SOURCE_HASH]
     ");
     assert!(!sentinel.exists(), "the build backend was executed");
 
@@ -5921,15 +5898,10 @@ async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
     context
         .temp_dir
         .child("requirements.in")
-        .write_str(&format!(
-            "{}/source.tar.gz#sha256={}",
-            server.uri(),
-            "0".repeat(64),
-        ))?;
+        .write_str(&format!("{source_url}#sha256={}", "0".repeat(64)))?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--generate-hashes")
-        .env("UV_TEST_SENTINEL", sentinel.path()), @"
+        .arg("--generate-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Hash mismatch for `http://[LOCALHOST]/source.tar.gz#sha256=0000000000000000000000000000000000000000000000000000000000000000`
@@ -5938,7 +5910,7 @@ async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
       sha256:0000000000000000000000000000000000000000000000000000000000000000
 
     Computed:
-      sha256:0278d222c8f122de338efc402d719a27f81cb59a73dc2980460f310da098e35c
+      sha256:[SOURCE_HASH]
     ");
     assert!(!sentinel.exists(), "the build backend was executed");
 
@@ -5946,17 +5918,16 @@ async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
     context
         .temp_dir
         .child("requirements.in")
-        .write_str(&format!("{}/source.tar.gz", server.uri()))?;
+        .write_str(&source_url)?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--generate-hashes")
-        .env("UV_TEST_SENTINEL", sentinel.path()), @r"
+        .arg("--generate-hashes"), @r"
     exit_code: 0 (success)
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --generate-hashes
     source-package @ http://[LOCALHOST]/source.tar.gz \
-        --hash=sha256:0278d222c8f122de338efc402d719a27f81cb59a73dc2980460f310da098e35c
+        --hash=sha256:[SOURCE_HASH]
         # via -r requirements.in
 
     ----- stderr -----
@@ -7847,7 +7818,7 @@ fn offline_direct_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
     "
     );
 
@@ -8329,7 +8300,7 @@ fn unsupported_scheme() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
-      cause: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio` (Bazaar is not supported)
+      cause: Unsupported URL prefix `bzr` in URL `bzr+https://example.com/anyio` (Bazaar is not supported)
              anyio @ bzr+https://example.com/anyio
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
@@ -12569,7 +12540,7 @@ fn metadata_2_2() -> Result<()> {
 /// Resolve a direct URL package with a URL that doesn't exist (i.e., returns a 404).
 #[test]
 fn not_found_direct_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_http_retries();
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl")?;
 
@@ -12578,7 +12549,7 @@ fn not_found_direct_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
-      cause: Failed to fetch: `https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Failed to fetch: https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl
       cause: HTTP status client error (404 Not Found) for url (https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl)
     "
     );
@@ -13192,6 +13163,73 @@ fn dynamic_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Build metadata can change when the config settings change, even in the same source revision.
+#[test]
+fn dynamic_dependencies_config_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("./project")?;
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dynamic = ["dependencies"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build"
+    "#})?;
+    project.child("build.py").write_str(indoc! {r#"
+        from pathlib import Path
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "project-0.1.0.dist-info"
+            dist_info.mkdir()
+            dependency = config_settings.get("dependency", "idna==3.6")
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n"
+                f"Requires-Dist: {dependency}\n"
+            )
+            return dist_info.name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("-C=dependency=sniffio==1.3.1"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./project
+        # via -r requirements.in
+    sniffio==1.3.1
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("-C=dependency=idna==3.6"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6
+        # via project
+    ./project
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
@@ -14628,13 +14666,96 @@ fn git_source_missing_tag() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
       cause: failed to fetch tag `missing`
       cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
              --- stderr
              fatal: couldn't find remote ref refs/tags/missing
     ");
 
+    Ok(())
+}
+
+/// Checkout readiness must not overwrite a repository's own `.ok` file.
+#[test]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+fn git_source_checkout_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"@[0-9a-f]{40}", "@[COMMIT]"));
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+    "#})?;
+    repository.child(".ok").write_str("repository content\n")?;
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let repository_url = repository_url.as_str().trim_end_matches('/');
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("example @ git+{repository_url}"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-header").arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    example @ git+file://[TEMP_DIR]/repository@[COMMIT]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let tracked_file = context
+        .cache_files(CacheBucket::Git)?
+        .into_iter()
+        .find(|path| path.file_name().is_some_and(|name| name == ".ok"))
+        .context("missing tracked .ok file")?;
+    assert_eq!(read_to_string(&tracked_file)?, "repository content\n");
+    let checkout = tracked_file
+        .parent()
+        .context("missing checkout directory")?;
+    let marker = checkout.with_extension("ok");
+    assert!(marker.is_file());
+
+    let sentinel = checkout.join("sentinel");
+    write(&sentinel, "")?;
+    let mut compile = context.pip_compile();
+    compile.arg("requirements.in").arg("--refresh");
+    compile.assert().success();
+    assert!(sentinel.exists());
+
+    // An incomplete checkout must be recreated even when it contains a tracked `.ok` file.
+    remove_file(&marker)?;
+    compile.assert().success();
+    assert!(!sentinel.exists());
+    assert!(marker.is_file());
+    assert_eq!(read_to_string(&tracked_file)?, "repository content\n");
     Ok(())
 }
 
@@ -15020,6 +15141,17 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.txt")
         .arg("--build-constraint")
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_REQUIRE_BUILD_HASHES, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: setuptools>=40
+    ");
+
+    uv_snapshot!(context.pip_compile()
+        .arg("requirements.txt")
+        .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -15388,11 +15520,8 @@ fn symlink() -> Result<()> {
     "
     );
 
-    // The symlink should still be a symlink.
-    assert!(symlink.path().symlink_metadata()?.file_type().is_symlink());
-
-    // The destination of the symlink should be the same as the output file.
-    assert_eq!(symlink.path().read_link()?, requirements_txt.path());
+    // The output path still links to the requested file.
+    assert_link_target(symlink, requirements_txt);
 
     Ok(())
 }
@@ -17100,7 +17229,7 @@ fn invalid_group() -> Result<()> {
         .arg("--group").arg("./:foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: ./
+    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: ./
 
     For more information, try '--help'.
     ");
@@ -17110,7 +17239,7 @@ fn invalid_group() -> Result<()> {
         .arg("--group").arg("subdir/:foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: subdir/
+    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: subdir/
 
     For more information, try '--help'.
     ");
@@ -17473,7 +17602,7 @@ fn group_target_does_not_exist() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read dependency groups from: does/not/exist/pyproject.toml
-      cause: No pyproject.toml found at: does/not/exist/pyproject.toml
+      cause: No `pyproject.toml` found at: does/not/exist/pyproject.toml
     ");
 
     Ok(())
@@ -18492,7 +18621,7 @@ fn pep_751_compile_preferences() -> Result<()> {
 
     // Empty hash tables should warn without discarding version preferences.
     let pylock_toml = context.temp_dir.child("pylock.toml");
-    let content = fs_err::read_to_string(&pylock_toml)?;
+    let content = context.read("pylock.toml");
     pylock_toml
         .write_str(&Regex::new(r"hashes = \{[^}]*\}")?.replace_all(&content, "hashes = {}"))?;
 
@@ -19619,7 +19748,7 @@ fn compile_missing_python_version_default_fallback() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    warning: The requested Python version 3.99.99 is not available; 3.14.[LATEST] will be used to build dependencies instead.
+    warning: The requested Python version 3.99.99 is not available; 3.15.[LATEST] will be used to build dependencies instead.
     Resolved 3 packages in [TIME]
     ");
 
@@ -19662,7 +19791,7 @@ async fn compile_missing_python_download_error_warning() {
         .without_python_download_cache()
         .with_managed_python_dirs()
         .with_filter((
-            r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"
+            r"(https://github\.com/astral-sh/python-build-standalone/releases/download/)[^`\n]*"
                 .to_string(),
             "$1[FILE-PATH]".to_string(),
         ));
@@ -19689,12 +19818,12 @@ async fn compile_missing_python_download_error_warning() {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it.
-      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]`
       cause: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+    error: Failed to fetch: https://pypi.org/simple/anyio/
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
@@ -19711,7 +19840,7 @@ async fn compile_missing_python_download_error_warning() {
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+    error: Failed to fetch: https://pypi.org/simple/anyio/
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
@@ -19728,12 +19857,12 @@ async fn compile_missing_python_download_error_warning() {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it.
-      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]`
       cause: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     warning: The requested Python version 3.10.99 is not available; 3.12.[X] will be used to build dependencies instead.
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+    error: Failed to fetch: https://pypi.org/simple/anyio/
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
@@ -19750,14 +19879,154 @@ async fn compile_missing_python_download_error_warning() {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: A managed Python download is available for Python 3.10.19, but an error occurred when attempting to download it.
-      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]`
       cause: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     warning: The requested Python version 3.10.19 is not available; 3.12.[X] will be used to build dependencies instead.
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+    error: Failed to fetch: https://pypi.org/simple/anyio/
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     ");
+}
+
+/// Overrides and constraints must retain the extra conditions of optional dependencies.
+#[test]
+fn overrides_preserve_alternative_optional_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    // The host requests the same dependency from either optional extra.
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = generate_wheel(
+        &"extra-host".parse()?,
+        &"1".parse()?,
+        &["extra-leaf==1; extra == 'a' or extra == 'b'".parse()?],
+        &BTreeMap::from([
+            ("a".parse()?, Vec::new()),
+            ("b".parse()?, Vec::new()),
+            ("unrelated".parse()?, Vec::new()),
+        ]),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    wheels.child(filename).write_binary(&wheel)?;
+
+    // The override selects a different version of the optional dependency.
+    let (filename, wheel) = generate_wheel(
+        &"extra-leaf".parse()?,
+        &"2".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    wheels.child(filename).write_binary(&wheel)?;
+
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str("extra-leaf==2")?;
+
+    // Without extras, the optional dependency remains inactive.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("extra-host==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // The first extra selects the overridden dependency.
+    requirements_in.write_str("extra-host[a]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+    extra-leaf==2
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The second extra also selects the overridden dependency.
+    requirements_in.write_str("extra-host[b]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+    extra-leaf==2
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // An unrelated extra leaves the optional dependency inactive.
+    requirements_in.write_str("extra-host[unrelated]==1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--no-index")
+        .arg("--find-links").arg("wheels")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host==1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Lookahead must not fetch a constraint for an inactive optional dependency.
+    requirements_in
+        .write_str("extra-host @ file://${PROJECT_ROOT}/wheels/extra_host-1-py3-none-any.whl")?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("extra-leaf @ file://${PROJECT_ROOT}/missing/extra_leaf-2-py3-none-any.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("overrides.txt")
+        .arg("--constraint").arg("constraints.txt")
+        .arg("--no-index")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    extra-host @ file://${PROJECT_ROOT}/wheels/extra_host-1-py3-none-any.whl
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
 }

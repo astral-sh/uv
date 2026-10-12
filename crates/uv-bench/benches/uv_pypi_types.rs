@@ -74,14 +74,14 @@ fn deserialize_simple_api(criterion: &mut Criterion<WallTime>) {
     group.finish();
 }
 
-fn digest_size<const BYTES: usize>(group: &mut BenchmarkGroup<'_, WallTime>) {
+fn digest_size<const BYTES: usize>(group: &mut BenchmarkGroup<'_, WallTime>, batch_size: usize) {
     const PATTERN: [u8; 8] = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef];
 
     let bytes = std::array::from_fn(|index| PATTERN[index % PATTERN.len()]);
     let digest = Digest::<BYTES>::from_bytes(bytes);
     let uppercase = digest.as_str().to_ascii_uppercase();
 
-    group.throughput(Throughput::Bytes((BYTES * 2) as u64));
+    group.throughput(Throughput::Bytes((BYTES * 2 * batch_size) as u64));
     for (case, hex) in [
         ("lowercase", digest.as_str()),
         ("uppercase", uppercase.as_str()),
@@ -91,39 +91,53 @@ fn digest_size<const BYTES: usize>(group: &mut BenchmarkGroup<'_, WallTime>) {
             hex,
             |benchmark, hex| {
                 benchmark.iter(|| {
-                    Digest::<BYTES>::from_hex(black_box(hex))
-                        .expect("benchmark input should be valid")
+                    for _ in 0..batch_size {
+                        black_box(
+                            Digest::<BYTES>::from_hex(black_box(hex))
+                                .expect("benchmark input should be valid"),
+                        );
+                    }
                 });
             },
         );
     }
 
-    group.throughput(Throughput::Bytes(BYTES as u64));
+    group.throughput(Throughput::Bytes((BYTES * batch_size) as u64));
     group.bench_with_input(
         BenchmarkId::new("from_bytes", BYTES),
         &bytes,
         |benchmark, bytes| {
-            benchmark.iter(|| Digest::from_bytes(black_box(*bytes)));
+            benchmark.iter(|| {
+                for _ in 0..batch_size {
+                    black_box(Digest::from_bytes(black_box(*bytes)));
+                }
+            });
         },
     );
 
-    group.throughput(Throughput::Bytes((BYTES * 2) as u64));
+    group.throughput(Throughput::Bytes((BYTES * 2 * batch_size) as u64));
     group.bench_with_input(
         BenchmarkId::new("decode", BYTES),
         &digest,
         |benchmark, digest| {
-            benchmark.iter(|| black_box(digest).decode());
+            benchmark.iter(|| {
+                for _ in 0..batch_size {
+                    black_box(black_box(digest).decode());
+                }
+            });
         },
     );
 }
 
 fn digest(criterion: &mut Criterion<WallTime>) {
-    let mut group = criterion.benchmark_group("digest");
+    // Batch these short operations to amortize fixed per-measurement costs.
+    let batch_size = 500;
+    let mut group = criterion.benchmark_group(format!("digest_batch_{batch_size}"));
 
-    digest_size::<16>(&mut group);
-    digest_size::<32>(&mut group);
-    digest_size::<48>(&mut group);
-    digest_size::<64>(&mut group);
+    digest_size::<16>(&mut group, batch_size);
+    digest_size::<32>(&mut group, batch_size);
+    digest_size::<48>(&mut group, batch_size);
+    digest_size::<64>(&mut group, batch_size);
 
     group.finish();
 }

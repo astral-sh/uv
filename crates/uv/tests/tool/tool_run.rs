@@ -1192,7 +1192,7 @@ fn tool_run_requirements_txt_arguments() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2881,7 +2881,7 @@ fn tool_run_with_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2893,7 +2893,7 @@ fn tool_run_with_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
@@ -2913,7 +2913,7 @@ fn tool_run_with_from_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2927,7 +2927,7 @@ fn tool_run_with_from_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
@@ -2988,6 +2988,54 @@ fn tool_run_verbose_hint() {
     error: No solution found when resolving tool dependencies
       cause: Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
     ");
+}
+
+/// Include the invocation hint when resolution succeeds but building the tool fails.
+#[test]
+fn tool_run_verbose_hint_install_failure() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+
+    // Create a tool whose metadata can be resolved without running the build backend.
+    let project = context.temp_dir.child("broken-tool");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "broken-tool"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+
+    // Fail when installation tries to build the tool's wheel.
+    project.child("backend.py").write_str(indoc! {r"
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            raise SystemExit(1)
+    "})?;
+
+    // Include the invocation hint even though the failure occurs after resolution.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("--from")
+        .arg("./broken-tool")
+        .arg("broken-tool")
+        .arg("--verbose"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to run tool
+      cause: Failed to build `broken-tool @ file://[TEMP_DIR]/broken-tool`
+      cause: The build backend returned an error
+      cause: Call to `backend.build_wheel` failed (exit status: 1)
+
+    hint: Build failures usually indicate a problem with the package or the build environment
+
+    hint: You provided `--verbose` to `broken-tool`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose broken-tool`
+    ");
+
+    Ok(())
 }
 
 #[test]

@@ -181,6 +181,15 @@ pub enum DefaultGroups {
     List(Vec<GroupName>),
 }
 
+impl DefaultGroups {
+    /// Create a sorted, deduplicated list of default dependency groups.
+    pub fn from_groups(mut groups: Vec<GroupName>) -> Self {
+        groups.sort_unstable();
+        groups.dedup();
+        Self::List(groups)
+    }
+}
+
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for DefaultGroups {
     fn schema_name() -> Cow<'static, str> {
@@ -262,7 +271,7 @@ impl<'de> serde::Deserialize<'de> for DefaultGroups {
                     groups.push(elem);
                 }
 
-                Ok(DefaultGroups::List(groups))
+                Ok(DefaultGroups::from_groups(groups))
             }
         }
 

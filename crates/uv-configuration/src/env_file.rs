@@ -44,9 +44,9 @@ impl EnvFile {
         Self(paths)
     }
 
-    /// Iterate over the paths in the env file.
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &PathBuf> {
-        self.0.iter()
+    /// Return the paths to the environment files in their configured order.
+    pub fn as_slice(&self) -> &[PathBuf] {
+        &self.0
     }
 }
 
@@ -124,12 +124,9 @@ mod tests {
     }
 
     #[test]
-    fn test_iter() {
+    fn test_as_slice() {
         let env_file = EnvFile(vec![PathBuf::from("path1"), PathBuf::from("path2")]);
-        let paths: Vec<_> = env_file.iter().collect();
-        assert_eq!(
-            paths,
-            vec![&PathBuf::from("path1"), &PathBuf::from("path2")]
-        );
+        let paths = env_file.as_slice();
+        assert_eq!(paths, [PathBuf::from("path1"), PathBuf::from("path2")]);
     }
 }

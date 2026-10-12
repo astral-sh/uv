@@ -8,10 +8,11 @@ use tracing::{debug, trace};
 use uv_resolver_types::PackageNodeKind;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::prioritized_distribution::CompatibleDist;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::requests::{MetadataRequest, MetadataRequests};
 use crate::{PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse};
-use uv_distribution_types::{CompatibleDist, IndexCapabilities, IndexMetadata};
+use uv_distribution_types::{IndexCapabilities, IndexMetadata};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;

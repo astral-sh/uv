@@ -152,11 +152,14 @@ impl GitResolver {
         }
 
         // Determine the Git reference.
-        let rev = url.reference().as_rev();
+        let reference = url
+            .reference()
+            .as_url_rev()
+            .unwrap_or_else(|| "HEAD".into());
 
         let github_api_base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
             .unwrap_or("https://api.github.com/repos".to_owned());
-        let github_api_url = format!("{github_api_base_url}/{owner}/{repo}/commits/{rev}");
+        let github_api_url = format!("{github_api_base_url}/{owner}/{repo}/commits/{reference}");
 
         debug!("Querying GitHub for commit at: {github_api_url}");
         let mut request = client.get(&github_api_url);

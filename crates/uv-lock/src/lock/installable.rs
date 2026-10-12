@@ -504,12 +504,24 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
                 // Add the package to the graph.
                 let package_index = self.lock().by_id[&dist.id];
-                let index = petgraph.add_node(if groups.prod() {
-                    self.package_to_node(dist, tags, build_options, install_options, marker_env)?
-                } else {
-                    self.non_installable_node(dist, tags, marker_env)?
-                });
-                inverse[package_index.0] = Some(index);
+                let index = match inverse[package_index.0] {
+                    None => {
+                        let index = petgraph.add_node(if groups.prod() {
+                            self.package_to_node(
+                                dist,
+                                tags,
+                                build_options,
+                                install_options,
+                                marker_env,
+                            )?
+                        } else {
+                            self.non_installable_node(dist, tags, marker_env)?
+                        });
+                        inverse[package_index.0] = Some(index);
+                        index
+                    }
+                    Some(index) => index,
+                };
 
                 // Add the edge.
                 petgraph.add_edge(root, index, Edge::Prod);

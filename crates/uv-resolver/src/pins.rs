@@ -2,12 +2,13 @@ use std::collections::hash_map::Entry;
 
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, ResolvedDist};
+use uv_distribution_types::{DistributionId, Identifier, ResolvedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
 use crate::ResolveError;
 use crate::candidate_selector::Candidate;
+use crate::prioritized_distribution::CompatibleDist;
 use crate::resolver::RegisteredMetadata;
 
 #[derive(Clone, Debug)]

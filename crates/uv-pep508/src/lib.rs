@@ -477,7 +477,7 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
         return Err(Pep508Error {
             message: Pep508ErrorSource::String("Empty field is not allowed for PEP508".to_string()),
             start: 0,
-            len: 1,
+            len: cursor.clone().at(0).peek_char().map_or(1, char::len_utf8),
             input: cursor.to_string(),
         });
     }
@@ -1496,7 +1496,7 @@ mod tests {
 
     #[test]
     fn test_marker_parsing() {
-        let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
+        let marker = r#"python_version == "2.7" and(sys_platform == "win32" or(os_name == "linux" and implementation_name == 'cpython'))"#;
         let actual = parse::parse_markers_cursor::<VerbatimUrl>(
             &mut Cursor::new(marker),
             &mut TracingReporter,

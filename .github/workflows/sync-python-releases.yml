@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
@@ -35,7 +35,7 @@ jobs:
           save-if: false
       - name: Sync Python Releases
         run: uv run --locked --python 3.12 --no-build --script fetch-download-metadata.py
-        working-directory: ./crates/uv-python
+        working-directory: ./crates/uv-python-managed
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -67,9 +67,9 @@ jobs:
           committer: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
           author: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
           add-paths: |
-            crates/uv-python/download-metadata.json
+            crates/uv-python-managed/download-metadata.json
             crates/uv-dev/src/generate_sysconfig_mappings.rs
-            crates/uv-python/src/sysconfig/generated_mappings.rs
+            crates/uv-python-managed/src/sysconfig/generated_mappings.rs
             crates/uv-test/src/lib.rs
           branch: "sync-python-releases"
           title: "Sync latest Python releases"

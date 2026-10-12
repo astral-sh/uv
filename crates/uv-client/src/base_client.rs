@@ -1075,7 +1075,7 @@ fn request_into_redirect(
     std::mem::swap(req.headers_mut(), &mut headers);
     *req.url_mut() = Url::from(redirect_url);
     debug!(
-        "Received HTTP {status}. Redirecting to {}",
+        "Received HTTP {status}. Redirecting to `{}`",
         DisplaySafeUrl::ref_cast(req.url())
     );
     Ok(Some(req))
@@ -1209,7 +1209,7 @@ where
                 Err(err) => {
                     if !is_last && err.should_try_next_url() {
                         warn!(
-                            "Failed to fetch {subject} from {url} ({err}); falling back to {}",
+                            "Failed to fetch {subject} from `{url}` ({err}); falling back to `{}`",
                             urls[i + 1]
                         );
                         continue;

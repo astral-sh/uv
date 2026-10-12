@@ -95,7 +95,7 @@ fn tool_install() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -114,7 +114,7 @@ fn tool_install() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -164,7 +164,7 @@ fn tool_install() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(bin_dir.join("flask")).unwrap(), @r#"
+        assert_snapshot!(context.read("bin/flask"), @r#"
         #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -189,7 +189,7 @@ fn tool_install() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/flask/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "flask" }]
         entrypoints = [
@@ -207,7 +207,6 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     context
@@ -227,7 +226,7 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
@@ -248,7 +247,6 @@ fn tool_install_prerelease_package_receipt_preserves_policy() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     context
@@ -265,7 +263,7 @@ fn tool_install_prerelease_package_receipt_preserves_policy() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -289,7 +287,7 @@ fn tool_install_prerelease_package_receipt_preserves_policy() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -1520,7 +1518,7 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -1678,7 +1676,7 @@ fn tool_install_version() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -1697,7 +1695,7 @@ fn tool_install_version() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
@@ -1756,7 +1754,7 @@ fn tool_install_editable() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r#"
+        assert_snapshot!(context.read(&executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -1775,7 +1773,7 @@ fn tool_install_editable() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/test/packages/black_editable" }]
         entrypoints = [
@@ -1808,7 +1806,7 @@ fn tool_install_editable() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -1846,7 +1844,7 @@ fn tool_install_editable() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
@@ -2193,7 +2191,6 @@ fn tool_install_remove_on_empty() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Request `black`. It should reinstall from the registry.
@@ -2218,7 +2215,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -2301,7 +2298,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -2357,7 +2354,7 @@ fn tool_install_editable_from() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r#"
+        assert_snapshot!(context.read(&executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -2376,7 +2373,7 @@ fn tool_install_editable_from() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/test/packages/black_editable" }]
         entrypoints = [
@@ -2489,7 +2486,7 @@ fn tool_install_already_installed() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -2507,7 +2504,7 @@ fn tool_install_already_installed() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -2538,7 +2535,7 @@ fn tool_install_already_installed() {
         filters => context.filters(),
     }, {
         // We should not have an additional tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -2648,7 +2645,7 @@ fn tool_install_force() {
         filters => context.filters(),
     }, {
         // Nor should we change the `black` entry point that exists
-        assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @"");
+        assert_snapshot!(context.read(&executable), @"");
 
     });
 
@@ -2682,7 +2679,7 @@ fn tool_install_force() {
         filters => context.filters(),
     }, {
         // Nor should we change the `black` entry point that exists
-        assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @"");
+        assert_snapshot!(context.read(&executable), @"");
 
     });
 
@@ -2789,7 +2786,7 @@ fn tool_install_force() {
         filters => context.filters(),
     }, {
         // We write a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -2808,7 +2805,7 @@ fn tool_install_force() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -2827,7 +2824,7 @@ fn tool_install_force() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -3077,7 +3074,6 @@ fn tool_install_no_binary_package_env_var() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -3096,10 +3092,8 @@ fn tool_install_no_binary_package_env_var() {
     Installed 2 executables: py.test, pytest
     ");
 
-    let receipt: toml::Value = toml::from_str(
-        &fs_err::read_to_string(tool_dir.join("pytest").join("uv-receipt.toml")).unwrap(),
-    )
-    .unwrap();
+    let receipt: toml::Value =
+        toml::from_str(&context.read("tools/pytest/uv-receipt.toml")).unwrap();
     assert_snapshot!(
         receipt["tool"]["options"]["no-binary-package"].to_string(),
         @r#"["iniconfig"]"#
@@ -3203,7 +3197,7 @@ fn tool_install_unnamed_package() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -3222,7 +3216,7 @@ fn tool_install_unnamed_package() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
@@ -3449,7 +3443,7 @@ fn tool_install_git_lfs() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("test-lfs-repo").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/test-lfs-repo/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=e282f5be233e3f1d44934164895a043fc534b8aa" }]
         entrypoints = [
@@ -3614,7 +3608,7 @@ fn tool_install_unnamed_from() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -3633,7 +3627,7 @@ fn tool_install_unnamed_from() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
@@ -3699,7 +3693,7 @@ fn tool_install_unnamed_with() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -3718,7 +3712,7 @@ fn tool_install_unnamed_with() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -3748,7 +3742,6 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let script = context.temp_dir.child("script.py");
@@ -3790,7 +3783,7 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -3838,7 +3831,7 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -3865,7 +3858,6 @@ fn tool_install_requirements_txt() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -3896,7 +3888,7 @@ fn tool_install_requirements_txt() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -3936,7 +3928,7 @@ fn tool_install_requirements_txt() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -3959,7 +3951,6 @@ fn tool_install_requirements_txt_arguments() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -3979,7 +3970,7 @@ fn tool_install_requirements_txt_arguments() {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
@@ -3997,7 +3988,7 @@ fn tool_install_requirements_txt_arguments() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -4075,7 +4066,6 @@ fn tool_install_upgrade() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`.
@@ -4100,7 +4090,7 @@ fn tool_install_upgrade() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
@@ -4129,7 +4119,7 @@ fn tool_install_upgrade() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -4161,7 +4151,7 @@ fn tool_install_upgrade() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -4199,7 +4189,7 @@ fn tool_install_upgrade() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -4570,7 +4560,7 @@ fn tool_install_malformed_dist_info() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/executable-application/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -4589,7 +4579,7 @@ fn tool_install_malformed_dist_info() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/executable-application/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -4646,7 +4636,7 @@ fn tool_install_settings() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -4665,7 +4655,7 @@ fn tool_install_settings() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/flask/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
@@ -4693,7 +4683,7 @@ fn tool_install_settings() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/flask/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
@@ -4728,7 +4718,7 @@ fn tool_install_settings() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/flask/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
@@ -4749,7 +4739,6 @@ fn tool_install_at_version() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black` at `24.1.0`.
@@ -4773,7 +4762,7 @@ fn tool_install_at_version() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.0" }]
         entrypoints = [
@@ -4806,7 +4795,6 @@ fn tool_install_at_latest() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black` at latest.
@@ -4830,7 +4818,7 @@ fn tool_install_at_latest() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -4852,7 +4840,6 @@ fn tool_install_from_at_latest() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -4872,7 +4859,7 @@ fn tool_install_from_at_latest() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/executable-application/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -4893,7 +4880,6 @@ fn tool_install_from_at_version() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -4913,7 +4899,7 @@ fn tool_install_from_at_version() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/executable-application/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "executable-application", specifier = "==0.2.0" }]
         entrypoints = [
@@ -4933,7 +4919,6 @@ fn tool_install_at_latest_upgrade() {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`.
@@ -4958,7 +4943,7 @@ fn tool_install_at_latest_upgrade() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
@@ -4987,7 +4972,7 @@ fn tool_install_at_latest_upgrade() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -5019,7 +5004,7 @@ fn tool_install_at_latest_upgrade() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -5040,7 +5025,6 @@ fn tool_install_constraints() -> Result<()> {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
@@ -5073,7 +5057,7 @@ fn tool_install_constraints() -> Result<()> {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         constraints = [
@@ -5133,7 +5117,6 @@ fn tool_install_overrides() -> Result<()> {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let overrides_txt = context.temp_dir.child("overrides.txt");
@@ -5166,7 +5149,7 @@ fn tool_install_overrides() -> Result<()> {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/black/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "black" }]
         overrides = [
@@ -5297,7 +5280,7 @@ async fn tool_install_credentials() {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/executable-application/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -5316,7 +5299,7 @@ async fn tool_install_credentials() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/executable-application/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -5338,7 +5321,8 @@ async fn tool_install_default_credentials() -> Result<()> {
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_tool_dirs()
+        .with_filtered_http_retries();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -5386,7 +5370,7 @@ async fn tool_install_default_credentials() -> Result<()> {
         filters => context.filters(),
     }, {
         // Should run black in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/executable-application/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -5404,7 +5388,7 @@ async fn tool_install_default_credentials() -> Result<()> {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(context.read("tools/executable-application/uv-receipt.toml"), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -5424,8 +5408,8 @@ async fn tool_install_default_credentials() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade executable-application
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
-      cause: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Missing credentials for: http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     // Attempt to upgrade.
@@ -5474,7 +5458,6 @@ fn tool_install_with_executables_from() -> Result<()> {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
@@ -5497,7 +5480,7 @@ fn tool_install_with_executables_from() -> Result<()> {
     Installed 1 executable: main
     ");
 
-    let receipt = fs_err::read_to_string(tool_dir.join("main-tool").join("uv-receipt.toml"))?;
+    let receipt = context.read("tools/main-tool/uv-receipt.toml");
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -5669,7 +5652,7 @@ fn tool_install_find_links() {
         filters => context.filters(),
     }, {
         // Should run basic-app in the virtual environment
-        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        assert_snapshot!(context.read(executable), @r#"
         #![TEMP_DIR]/tools/basic-app/bin/python
         # -*- coding: utf-8 -*-
         import sys
@@ -5796,11 +5779,11 @@ fn tool_install_removed_python() {
             fs_err::remove_file(&tool_python).unwrap();
             fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
                 .unwrap();
-        },
+        }
         windows => {
             let pyvenv_cfg = tool_root.child("pyvenv.cfg");
             let broken_home = context.temp_dir.join("missing-python");
-            let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+            let contents = context.read(&pyvenv_cfg);
             let contents = contents
                 .lines()
                 .map(|line| {
@@ -5813,7 +5796,7 @@ fn tool_install_removed_python() {
                 .collect::<Vec<_>>()
                 .join("\n");
             fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
-        },
+        }
     }
 
     // Reinstalling should skip the broken Python install.
@@ -5870,7 +5853,7 @@ fn tool_install_locks_are_preview() {
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -5888,6 +5871,33 @@ fn tool_install_locks_are_preview() {
         ]
         "#);
     });
+}
+
+#[test]
+fn tool_install_lock_repeated_requirements() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+
+    uv_snapshot!(context.filters(), context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok>=1", "--with", "ok>=2"])
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + ok==2.0.0
+     + simple-launcher==0.1.0
+    Installed 1 executable: simple_launcher
+    ");
 }
 
 #[test]
@@ -5911,7 +5921,7 @@ fn tool_install_lock_supports_local_wheel() {
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -5949,7 +5959,7 @@ fn tool_install_lock_verifies_hashes() -> Result<()> {
         .success();
 
     let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
-    let lock = fs_err::read_to_string(&lock_path)?;
+    let lock = context.read(&lock_path);
     lock_path.write_str(&lock.replace(
         "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
         "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -6134,6 +6144,149 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
     Ok(())
 }
 
+/// Tool locks prune individual constraints before combining their remaining bounds.
+#[test]
+fn tool_install_lock_resolution_inputs_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+    let constraints = context.temp_dir.child("constraints.txt");
+
+    // Both constraints are compatible with the stable version selected for the tool.
+    constraints.write_str(indoc! {r"
+        ok>=1a1
+        ok<3
+    "})?;
+
+    context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok"])
+        .arg("--constraints")
+        .arg(constraints.as_os_str())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,resolution-inputs,lockfile-normalization",
+        )
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock = context.read("tools/simple-launcher/uv.lock");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [
+            { name = "ok" },
+            { name = "simple-launcher" },
+        ]
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" },
+        ]
+        "#);
+    });
+
+    // Changing the omitted bound leaves the tool lock unchanged.
+    constraints.write_str(indoc! {r"
+        ok>=1a1
+        ok<4
+    "})?;
+
+    context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok"])
+        .arg("--constraints")
+        .arg(constraints.as_os_str())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,resolution-inputs,lockfile-normalization",
+        )
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    assert_eq!(context.read("tools/simple-launcher/uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Equivalent requirements reuse a tool lock and record the requested receipt inputs.
+#[test]
+fn tool_install_lock_reuses_equivalent_requirements() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+
+    context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok>=1", "--with", "ok>=2"])
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    let original_lock = context.read("tools/simple-launcher/uv.lock");
+
+    context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok>=2"])
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    assert_eq!(context.read("tools/simple-launcher/uv.lock"), original_lock);
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [
+            { name = "simple-launcher" },
+            { name = "ok", specifier = ">=2" },
+        ]
+        entrypoints = [
+            { name = "simple_launcher", install-path = "[TEMP_DIR]/bin/simple_launcher", from = "simple-launcher" },
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = ["file://[WORKSPACE]/test/links"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+}
+
 #[test]
 fn tool_install_with_build_hashes() -> Result<()> {
     for preview in ["--no-preview", "--preview-features=tool-install-locks"] {
@@ -6239,8 +6392,30 @@ fn tool_install_with_build_hashes() -> Result<()> {
             });
         }
 
+        if preview == "--no-preview" {
+            // Requiring hashes rejects an otherwise valid build constraint without one.
+            fs_err::remove_file(project.child("backend-executed"))?;
+            constraints.write_str("build-dependency==1.0.0\n")?;
+            uv_snapshot!(context.filters(), install().arg("--reinstall")
+                .env(EnvVars::UV_REQUIRE_BUILD_HASHES, "true"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+            error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
+              cause: Failed to resolve requirements from `build-system.requires`
+              cause: No solution found when resolving: `build-dependency==1.0.0`
+              cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+            ");
+            project
+                .child("backend-executed")
+                .assert(predicate::path::missing());
+            constraints.write_str(&format!("build-dependency==1.0.0 --hash=sha256:{hash}\n"))?;
+        }
+
         // The supplied hash is checked even when it isn't required.
-        fs_err::remove_file(project.child("backend-executed"))?;
+        if preview != "--no-preview" {
+            fs_err::remove_file(project.child("backend-executed"))?;
+        }
         constraints.write_str(&format!(
             "build-dependency==1.0.0 --hash=sha256:{}\n",
             "0".repeat(64)

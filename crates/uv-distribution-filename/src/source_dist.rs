@@ -162,7 +162,7 @@ impl Display for SourceDistFilenameError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Failed to parse source distribution filename {}: {}",
+            "Failed to parse source distribution filename `{}`: {}",
             self.filename, self.kind
         )
     }

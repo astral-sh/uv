@@ -49,7 +49,7 @@ fn missing_requirements_txt() {
         .arg("requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.txt`
+    error: File not found: requirements.txt
     "
     );
 }
@@ -422,7 +422,7 @@ Version: 0.22.0
 
     // The entry in `easy-install.pth` should be removed.
     assert_eq!(
-        fs_err::read_to_string(site_packages.child("easy-install.pth"))?,
+        context.read(site_packages.child("easy-install.pth")),
         "something\nanother thing\n",
         "easy-install.pth should not contain the path to the uninstalled package"
     );
@@ -537,7 +537,7 @@ fn uninstall_record_path_traversal() -> Result<()> {
     let record_file = context
         .site_packages()
         .join("evilpkg-0.1.0.dist-info/RECORD");
-    let record = fs_err::read_to_string(&record_file)?;
+    let record = context.read(&record_file);
     let record = format!("{}\n{},,0\n", record.trim(), traversal_record);
     fs_err::write(record_file, &record)?;
 
@@ -549,7 +549,7 @@ fn uninstall_record_path_traversal() -> Result<()> {
         .arg("evilpkg"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: [..]/traversal_target.txt
+    warning: Invalid `RECORD` entry in `evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)` that escapes the Python environment, skipping: [..]/traversal_target.txt
     Uninstalled 1 package in [TIME]
      - evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)
     ");

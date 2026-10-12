@@ -82,15 +82,14 @@ pub use crate::index::*;
 pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
-pub use crate::known_platform::*;
 pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
-pub use crate::prioritized_distribution::*;
 pub use crate::requested::*;
 pub use crate::requirement::*;
 pub use crate::requires_python::*;
 pub use crate::resolution::*;
+pub use crate::resolution_recorder::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
 pub use crate::status_code_strategy::*;
@@ -116,15 +115,14 @@ mod index_name;
 mod index_url;
 mod installed;
 mod installed_modules;
-mod known_platform;
 mod minimum_libc_version;
 mod origin;
 mod pip_index;
-mod prioritized_distribution;
 mod requested;
 mod requirement;
 mod requires_python;
 mod resolution;
+mod resolution_recorder;
 mod resolved;
 mod specified_requirement;
 mod status_code_strategy;
@@ -1026,28 +1024,6 @@ impl Name for Dist {
         match self {
             Self::Built(dist) => dist.name(),
             Self::Source(dist) => dist.name(),
-        }
-    }
-}
-
-impl Name for CompatibleDist<'_> {
-    fn name(&self) -> &PackageName {
-        match self {
-            Self::InstalledDist(dist) => dist.name(),
-            Self::SourceDist {
-                sdist,
-                prioritized: _,
-            } => sdist.name(),
-            Self::CompatibleWheel {
-                wheel,
-                priority: _,
-                prioritized: _,
-            } => wheel.name(),
-            Self::IncompatibleWheel {
-                sdist,
-                wheel: _,
-                prioritized: _,
-            } => sdist.name(),
         }
     }
 }

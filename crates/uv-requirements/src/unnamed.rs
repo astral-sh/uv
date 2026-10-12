@@ -151,7 +151,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         .and_then(|contents| Metadata10::parse_pkg_info(&contents).ok())
                 {
                     debug!(
-                        "Found PKG-INFO metadata for {path} ({name})",
+                        "Found `PKG-INFO` metadata for `{path}` ({name})",
                         path = parsed_directory_url.install_path.display(),
                         name = metadata.name
                     );
@@ -176,7 +176,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     // Read PEP 621 metadata from the `pyproject.toml`.
                     if let Some(project) = pyproject.project {
                         debug!(
-                            "Found PEP 621 metadata for {path} in `pyproject.toml` ({name})",
+                            "Found PEP 621 metadata for `{path}` in `pyproject.toml` ({name})",
                             path = parsed_directory_url.install_path.display(),
                             name = project.name
                         );
@@ -195,7 +195,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         && let Some(name) = poetry.name
                     {
                         debug!(
-                            "Found Poetry metadata for {path} in `pyproject.toml` ({name})",
+                            "Found Poetry metadata for `{path}` in `pyproject.toml` ({name})",
                             path = parsed_directory_url.install_path.display(),
                             name = name
                         );
@@ -224,7 +224,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         && let Ok(name) = PackageName::from_str(name)
                     {
                         debug!(
-                            "Found setuptools metadata for {path} in `setup.cfg` ({name})",
+                            "Found setuptools metadata for `{path}` in `setup.cfg` ({name})",
                             path = parsed_directory_url.install_path.display(),
                             name = name
                         );

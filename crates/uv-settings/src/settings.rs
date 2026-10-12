@@ -1,15 +1,21 @@
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
-use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
+use std::{
+    fmt::{self, Debug},
+    num::NonZeroUsize,
+    path::Path,
+    path::PathBuf,
+};
 
-use serde::{Deserialize, Serialize};
+use serde::de::{Error, SeqAccess, Visitor, value::SeqAccessDeserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage, ForkStrategy,
-    IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode, PrereleasePackage,
-    ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedHost,
-    TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
+    AddBoundsKind, AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage,
+    ForkStrategy, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode,
+    PrereleasePackage, ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple,
+    TrustedHost, TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
@@ -22,13 +28,12 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python_types::{PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::{
     BuildConstraintDependency, ExtraBuildDependencies, OverrideDependency,
 };
-use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{EnvironmentOptions, FilesystemOptions};
 
@@ -667,6 +672,7 @@ pub struct ResolverOptions {
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
+    pub require_build_hashes: Option<bool>,
     pub build_isolation: Option<BuildIsolation>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
@@ -700,6 +706,7 @@ pub struct ResolverInstallerOptions {
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
+    pub require_build_hashes: Option<bool>,
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
@@ -743,6 +750,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            require_build_hashes,
             no_build_isolation,
             no_build_isolation_package,
             extra_build_dependencies,
@@ -780,6 +788,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            require_build_hashes,
             build_isolation: BuildIsolation::from_args(
                 no_build_isolation,
                 no_build_isolation_package.into_iter().flatten().collect(),
@@ -1074,6 +1083,26 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+
+    /// Require hashes for all build dependencies.
+    ///
+    /// uv checks hashes provided in `build-constraint-dependencies` when downloading build
+    /// dependencies. Enable this setting to require a hash for every build dependency, including
+    /// transitive dependencies. You can also provide hashes as URL fragments in
+    /// `build-system.requires`. Hashes returned by a build backend do not count.
+    ///
+    /// Hashes are not required for the `uv_build` backend bundled in uv. When build isolation is
+    /// disabled, build dependencies must already be installed and their hashes are not checked.
+    /// Already-installed packages and previously built wheels are not checked.
+    ///
+    /// This setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = "require-build-hashes = true"
+    )]
+    pub require_build_hashes: Option<bool>,
+
     /// Disable isolation when building source distributions for a specific package.
     ///
     /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -1358,6 +1387,38 @@ pub struct PythonInstallMirrors {
         "#
     )]
     pub pypy_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed GraalPy installations.
+    ///
+    /// By default, managed GraalPy installations are downloaded from [GitHub](https://github.com/oracle/graalpython/releases).
+    /// This variable can be set to a mirror URL to use a different source for GraalPy installations.
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g., `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            graalpy-install-mirror = "https://github.com/oracle/graalpython/releases/download"
+        "#
+    )]
+    pub graalpy_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed Pyodide installations.
+    ///
+    /// By default, managed Pyodide installations are downloaded from [GitHub](https://github.com/pyodide/pyodide/releases).
+    /// This variable can be set to a mirror URL to use a different source for Pyodide installations.
+    /// The provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in, e.g., `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            pyodide-install-mirror = "https://github.com/pyodide/pyodide/releases/download"
+        "#
+    )]
+    pub pyodide_install_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     #[option(
@@ -1372,11 +1433,23 @@ pub struct PythonInstallMirrors {
 }
 
 impl PythonInstallMirrors {
+    /// Return the mirrors to use for managed Python downloads.
+    pub fn mirrors(&self) -> PythonDownloadMirrors<'_> {
+        PythonDownloadMirrors {
+            cpython: self.python_install_mirror.as_deref(),
+            pypy: self.pypy_install_mirror.as_deref(),
+            graalpy: self.graalpy_install_mirror.as_deref(),
+            pyodide: self.pyodide_install_mirror.as_deref(),
+        }
+    }
+
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
         Self {
             python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
             pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            graalpy_install_mirror: self.graalpy_install_mirror.or(other.graalpy_install_mirror),
+            pyodide_install_mirror: self.pyodide_install_mirror.or(other.pyodide_install_mirror),
             python_downloads_json_url: self
                 .python_downloads_json_url
                 .or(other.python_downloads_json_url),
@@ -1615,6 +1688,18 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+    /// Require hashes for all build dependencies in `uv pip` commands.
+    ///
+    /// Overrides `require-build-hashes` in `[tool.uv]`. This does not require hashes for runtime
+    /// dependencies; use `require-hashes` for those.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            require-build-hashes = true
+        "#
+    )]
+    pub require_build_hashes: Option<bool>,
     /// Disable isolation when building source distributions for a specific package.
     ///
     /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -2233,6 +2318,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
+            require_build_hashes: value.require_build_hashes,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
@@ -2320,6 +2406,7 @@ pub struct ToolOptions {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     build_isolation: Option<BuildIsolation>,
+    require_build_hashes: Option<bool>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2354,6 +2441,7 @@ pub struct ToolOptionsWire {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     build_isolation: Option<BuildIsolation>,
+    require_build_hashes: Option<bool>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2394,6 +2482,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -2445,6 +2534,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
@@ -2494,6 +2584,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
@@ -2532,6 +2623,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -2593,6 +2685,7 @@ struct OptionsWire {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     no_build_isolation: Option<bool>,
+    require_build_hashes: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
@@ -2616,6 +2709,8 @@ struct OptionsWire {
     // install_mirror: PythonInstallMirrors,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    graalpy_install_mirror: Option<String>,
+    pyodide_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
 
     // #[serde(flatten)]
@@ -2677,6 +2772,8 @@ impl TryFrom<OptionsWire> for Options {
             python_downloads,
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
+            pyodide_install_mirror,
             python_downloads_json_url,
             concurrent_downloads,
             concurrent_builds,
@@ -2700,6 +2797,7 @@ impl TryFrom<OptionsWire> for Options {
             config_settings,
             config_settings_package,
             no_build_isolation,
+            require_build_hashes,
             no_build_isolation_package,
             exclude_newer,
             exclude_newer_package,
@@ -2780,6 +2878,7 @@ impl TryFrom<OptionsWire> for Options {
                 config_settings,
                 config_settings_package,
                 no_build_isolation,
+                require_build_hashes,
                 no_build_isolation_package,
                 extra_build_dependencies,
                 extra_build_variables,
@@ -2812,6 +2911,8 @@ impl TryFrom<OptionsWire> for Options {
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
+                graalpy_install_mirror,
+                pyodide_install_mirror,
                 python_downloads_json_url,
             },
             conflicts,
@@ -3001,18 +3102,37 @@ pub enum PreviewFeaturesOption {
     Features(Vec<MaybePreviewFeature>),
 }
 
-// A derived `#[serde(untagged)]` implementation collapses detailed type and element errors into
-// "data did not match any variant", so use a type-directed visitor to preserve useful diagnostics.
+// Dispatch by input type so invalid list elements retain their detailed diagnostics.
+struct PreviewFeaturesVisitor;
+
+impl<'de> Visitor<'de> for PreviewFeaturesVisitor {
+    type Value = PreviewFeaturesOption;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a boolean or a list of preview feature names")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(PreviewFeaturesOption::Toggle(value))
+    }
+
+    fn visit_seq<S>(self, sequence: S) -> Result<Self::Value, S::Error>
+    where
+        S: SeqAccess<'de>,
+    {
+        Vec::deserialize(SeqAccessDeserializer::new(sequence)).map(PreviewFeaturesOption::Features)
+    }
+}
+
 impl<'de> Deserialize<'de> for PreviewFeaturesOption {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .expecting("a boolean or a list of preview feature names")
-            .bool(|value| Ok(Self::Toggle(value)))
-            .seq(|sequence| sequence.deserialize().map(Self::Features))
-            .deserialize(deserializer)
+        deserializer.deserialize_any(PreviewFeaturesVisitor)
     }
 }
 

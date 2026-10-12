@@ -8,9 +8,8 @@ use crate::{
 
 /// A set of packages pinned at specific versions.
 ///
-/// This is similar to [`ResolverOutput`], but represents a resolution for a subset of all
-/// marker environments. For example, the resolution is guaranteed to contain at most one version
-/// for a given package.
+/// This represents a resolution for a subset of marker environments and contains at most one
+/// version of each package.
 #[derive(Debug, Default, Clone)]
 pub struct Resolution {
     graph: petgraph::graph::DiGraph<Node, Edge>,
@@ -31,7 +30,7 @@ impl Resolution {
         &self.graph
     }
 
-    /// Add [`Diagnostics`] to the resolution.
+    /// Add [`ResolutionDiagnostic`]s to the resolution.
     #[must_use]
     pub fn with_diagnostics(mut self, diagnostics: Vec<ResolutionDiagnostic>) -> Self {
         self.diagnostics.extend(diagnostics);

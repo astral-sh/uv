@@ -4,10 +4,10 @@ use anstream::stream::IsTerminal;
 use anyhow::Result;
 use diskus::DiskUsage;
 
-use crate::commands::{ExitStatus, human_readable_bytes};
-use crate::printer::Printer;
+use crate::commands::human_readable_bytes;
 use uv_cache::Cache;
 use uv_cli::CacheSizeOutputFormat;
+use uv_command_support::{ExitStatus, Printer};
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 

@@ -285,11 +285,11 @@ impl HashStrategy {
 
     /// Collect hashes from [`UnresolvedRequirement`] entries and constraints.
     ///
-    /// For duplicate registry pins and local files, the last nonempty constraint hash list wins.
-    /// Remote archive URLs combine hashes across algorithms and reject conflicting digests for
-    /// the same algorithm. Registry pins accept any allowed digest; direct URLs must match all
-    /// supplied digests. When requirements and constraints both supply hashes, only their shared
-    /// hashes are allowed, except for remote archive URLs, whose hashes are combined instead.
+    /// For duplicate registry pins and local files, the last nonempty hash list wins. Remote
+    /// archive URLs combine hashes across algorithms and reject conflicting digests for the same
+    /// algorithm. Registry pins accept any allowed digest; direct references must match all
+    /// supplied digests. When requirements and constraints both supply hashes, registry pins
+    /// permit only shared hashes; direct references must match hashes from both sources.
     ///
     /// When the environment is not given, this treats all marker expressions
     /// that reference the environment as true. In other words, it does
@@ -393,13 +393,19 @@ impl HashStrategy {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
             }
 
-            let digests = if let Some(constraint) = constraint_hashes.remove(&id) {
-                combine_constraint_hashes(&id, digests, &constraint, requirement, mode)?
+            let digests = if let Some(constraint) = constraint_hashes.get(&id) {
+                // A hashless duplicate must not replace earlier requirement hashes with the
+                // constraint's hashes.
+                if digests.is_empty() && requirement_hashes.contains_key(&id) {
+                    continue;
+                }
+                combine_constraint_hashes(&id, digests, constraint, requirement, mode)?
             } else {
                 digests
             };
 
-            // Under `--require-hashes`, every requirement must include a hash.
+            // Under `--require-hashes`, every requirement needs a hash from the requirement or a
+            // constraint.
             if digests.is_empty() {
                 if mode.is_require() {
                     if has_md5 {
@@ -420,8 +426,7 @@ impl HashStrategy {
             merge_hashes(&mut requirement_hashes, id, digests, requirement)?;
         }
 
-        // Merge the hashes, preferring requirements over constraints, since overlapping
-        // requirements were already merged.
+        // Requirements take precedence because each matching constraint is already applied.
         let hashes: FxHashMap<VersionId, Vec<HashDigest>> = constraint_hashes
             .into_iter()
             .chain(requirement_hashes)
@@ -598,14 +603,7 @@ fn combine_constraint_hashes(
         return Ok(constraint.to_vec());
     }
     match id {
-        VersionId::ArchiveUrl { .. } => {
-            merge_digests(&mut digests, constraint, requirement)?;
-        }
-        VersionId::NameVersion(..)
-        | VersionId::Git { .. }
-        | VersionId::Path(..)
-        | VersionId::Directory(..)
-        | VersionId::Unknown(..) => {
+        VersionId::NameVersion(..) => {
             // If there are constraint and requirement hashes, take the intersection.
             digests.retain(|digest| constraint.contains(digest));
             if digests.is_empty() {
@@ -614,6 +612,13 @@ fn combine_constraint_hashes(
                     mode,
                 ));
             }
+        }
+        VersionId::ArchiveUrl { .. }
+        | VersionId::Git { .. }
+        | VersionId::Path(..)
+        | VersionId::Directory(..)
+        | VersionId::Unknown(..) => {
+            merge_digests(&mut digests, constraint, requirement)?;
         }
     }
     Ok(digests)

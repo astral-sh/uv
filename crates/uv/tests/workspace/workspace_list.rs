@@ -27,10 +27,10 @@ fn workspace_list_reuses_settings_discovery() -> Result<()> {
     member
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `packages/member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: packages/member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/packages/member
     ");
 
     uv_snapshot!(context.filters(), context.workspace_list()
@@ -41,14 +41,14 @@ fn workspace_list_reuses_settings_discovery() -> Result<()> {
     member
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `packages/member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `packages/member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: packages/member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/packages/member
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: packages/member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/packages/member
     ");
 
     Ok(())

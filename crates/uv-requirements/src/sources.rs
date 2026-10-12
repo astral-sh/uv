@@ -52,7 +52,7 @@ impl RequirementsSource {
                     "pyproject.toml" | "setup.py" | "setup.cfg"
                 ) {
                     return Err(anyhow::anyhow!(
-                        "Remote `{filename}` inputs are not supported: `{url}`"
+                        "Remote `{filename}` inputs are not supported: {url}"
                     ));
                 }
 

@@ -94,13 +94,27 @@ pub struct PyProjectToml {
 }
 
 impl PyProjectToml {
+    /// Return whether this manifest explicitly defines a workspace root.
+    pub fn is_workspace_root(&self) -> bool {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .is_some_and(|uv| uv.workspace.is_some())
+    }
+
+    /// Return explicitly configured default groups without validating the group names.
+    ///
+    /// `None` means the setting is absent, so uv uses `dev`; an empty list disables defaults.
+    pub fn configured_default_groups(&self) -> Option<&DefaultGroups> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.default_groups.as_ref())
+    }
+
     /// Return the default dependency groups, validating explicitly configured group names.
     pub(crate) fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
-        if let Some(defaults) = self
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
-        {
+        if let Some(defaults) = self.configured_default_groups() {
             if let DefaultGroups::List(defaults) = defaults {
                 for group in defaults {
                     if !self
@@ -114,7 +128,7 @@ impl PyProjectToml {
             }
             Ok(defaults.clone())
         } else {
-            Ok(DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()]))
+            Ok(DefaultGroups::from_groups(vec![DEV_DEPENDENCIES.clone()]))
         }
     }
 
@@ -667,7 +681,7 @@ pub struct ToolUv {
 
     /// A list of required platforms, for packages that lack source distributions.
     ///
-    /// When a package does not have a source distribution, it's availability will be limited to
+    /// When a package does not have a source distribution, its availability will be limited to
     /// the platforms supported by its built distributions (wheels). For example, if a package only
     /// publishes wheels for Linux, then it won't be installable on macOS or Windows.
     ///
@@ -1725,7 +1739,7 @@ pub enum SourceError {
     UnusedEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
-    #[error("Path contains invalid characters: `{}`", _0.display())]
+    #[error("Path contains invalid characters: {}", _0.display())]
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.")]
     OverlappingMarkers(String, String, String),

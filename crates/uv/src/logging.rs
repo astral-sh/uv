@@ -12,7 +12,7 @@ use tracing_subscriber::{EnvFilter, Layer, Registry};
 use tracing_tree::HierarchicalLayer;
 use tracing_tree::time::Uptime;
 
-use uv_cli::ColorChoice;
+use uv_configuration::ColorChoice;
 use uv_logging::{UvFormat, uv_fields};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
