@@ -17,6 +17,8 @@ use std::io::Read;
 use encoding_rs_io::DecodeReaderBytes;
 #[cfg(target_os = "linux")]
 use rustix::fs::{AtFlags, CWD as RUSTIX_CWD, StatxFlags, statx};
+#[cfg(feature = "tokio")]
+use tokio::io::AsyncWriteExt;
 use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Foundation::HANDLE;
@@ -24,6 +26,8 @@ use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
 
 pub use crate::locked_file::*;
+#[cfg(feature = "tokio")]
+use crate::named_temp_file::tempfile_in_with_permissions;
 pub use crate::named_temp_file::{NamedTempFile, PersistError, tempfile_in};
 pub use crate::path::*;
 pub use crate::read::ValidatedReader;
@@ -498,7 +502,7 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 ///
 /// Replacement requires write access to the target directory, even if the file itself is
 /// writable. A missing symlink target is created when its parent directory exists.
-/// Existing targets must be regular files.
+/// Existing targets must be writable regular files.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic_preserve(
     path: impl AsRef<Path>,
@@ -521,7 +525,14 @@ pub async fn write_atomic_preserve(
                     Err(err) => return Err(err),
                 };
             }
-            Ok(metadata) if metadata.is_file() => break Some(metadata.permissions()),
+            Ok(metadata) if metadata.is_file() => {
+                // Require write access to the file as well as its parent directory.
+                fs_err::tokio::OpenOptions::new()
+                    .write(true)
+                    .open(&path)
+                    .await?;
+                break Some(metadata.permissions());
+            }
             Ok(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -535,8 +546,15 @@ pub async fn write_atomic_preserve(
             Err(err) => return Err(err),
         }
     };
-    let temp_file = tempfile_in(path.parent().expect("Write path must have a parent"))?;
-    fs_err::tokio::write(&temp_file, data).await?;
+    let parent = path.parent().expect("Write path must have a parent");
+    let temp_file = tempfile_in_with_permissions(parent, permissions.clone())?;
+    // Write through the open handle: the umask may prevent reopening the temporary file.
+    let mut file = fs_err::tokio::File::from_std(fs_err::File::from_parts(
+        temp_file.as_file().try_clone()?,
+        temp_file.as_ref(),
+    ));
+    file.write_all(data.as_ref()).await?;
+    file.flush().await?;
     if let Some(permissions) = permissions {
         temp_file.as_file().set_permissions(permissions)?;
     }
