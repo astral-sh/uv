@@ -874,16 +874,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "charset"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1f927b07c74ba84c7e5fe4db2baeb3e996ab2688992e39ac68ce3220a677c7e"
-dependencies = [
- "base64 0.22.1",
- "encoding_rs",
-]
-
-[[package]]
 name = "ciborium"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1470,7 +1460,7 @@ checksum = "2e2b94854e8576378ccda7c8de8a66ed8b4e8acbd2c50ec3418ea6c8aaf4b567"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -2853,17 +2843,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
-name = "mailparse"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60819a97ddcb831a5614eb3b0174f3620e793e97e09195a395bfa948fd68ed2f"
-dependencies = [
- "charset",
- "data-encoding",
- "quoted_printable",
-]
-
-[[package]]
 name = "manyhow"
 version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3916,12 +3895,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "quoted_printable"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "640c9bd8497b02465aeef5375144c26062e0dcd5939dfcbb0f5db76cb8c17c73"
-
-[[package]]
 name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4466,7 +4439,7 @@ dependencies = [
  "quote",
  "regex",
  "ruff_python_trivia",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -4477,7 +4450,7 @@ checksum = "7739179c404793f47296e14397478ea03dc07cf3cf6632b3f7afeee80bca10f4"
 dependencies = [
  "aho-corasick",
  "arrayvec",
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "char_str",
  "compact_str",
  "get-size2",
@@ -4510,7 +4483,7 @@ version = "0.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6146cbd42f7dd229765b2d97410da14dfb708a7b73a514f6b47db7b4e845a4fc"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "icu_properties",
  "itertools 0.15.0",
  "ruff_python_ast",
@@ -4522,7 +4495,7 @@ version = "0.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e8801707fbf7f737fb8c924cf7c47c32d6bea0f5cb6aabdef70db9cd4ee05cb"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "bstr",
  "drop_bomb",
  "get-size2",
@@ -4909,9 +4882,9 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 
 [[package]]
 name = "serc"
-version = "0.1.2"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa78fd7a77784d9a2e880d83c1f9a7946720c0aaaa27418fe028a10df9ef6200"
+checksum = "688a26523068c528b0a8798a43b4de4813c033918312cfbf2bc8d7d1360e6203"
 dependencies = [
  "encoding_rs",
  "hashbrown 0.17.1",
@@ -6899,6 +6872,7 @@ dependencies = [
  "uv-preview",
  "uv-pypi-types",
  "uv-python-discovery",
+ "uv-python-interpreter",
  "uv-python-types",
  "uv-settings",
  "uv-static",

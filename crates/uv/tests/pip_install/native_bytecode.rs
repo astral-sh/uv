@@ -265,7 +265,7 @@ fn native_bytecode_recompile() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-    Bytecode compiled 3 files in [TIME]
+    Bytecode compiled 2 files in [TIME]
      + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
     ");
 
