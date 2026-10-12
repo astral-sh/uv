@@ -420,9 +420,18 @@ impl PrioritizedDist {
         if !compatibility.is_excluded() {
             self.0.hashes.extend(hashes);
         }
-        // Track the highest-priority wheel.
-        if let Some((.., existing_compatibility)) = self.best_wheel() {
-            if compatibility.is_more_compatible(existing_compatibility) {
+        // Track the highest-priority wheel. Variant wheels cannot provide metadata, so prefer
+        // ordinary wheels even when they cannot be installed (e.g., with `--no-binary`).
+        if let Some((existing_wheel, existing_compatibility)) = self.best_wheel() {
+            let is_more_compatible =
+                match (dist.filename.variant(), existing_wheel.filename.variant()) {
+                    (None, Some(_)) => true,
+                    (Some(_), None) => false,
+                    (None, None) | (Some(_), Some(_)) => {
+                        compatibility.is_more_compatible(existing_compatibility)
+                    }
+                };
+            if is_more_compatible {
                 self.0.best_wheel_index = Some(self.0.wheels.len());
             }
         } else {
