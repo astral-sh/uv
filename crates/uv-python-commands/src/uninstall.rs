@@ -60,17 +60,8 @@ pub async fn uninstall(
                 Err(err) => return Err(err.into()),
             }
 
-            // Skip non-empty parents before attempting removal: Windows may report a sharing
-            // violation instead of `DirectoryNotEmpty` when the parent is the working directory.
-            if uv_fs::entries(top_level)?.next().is_none() {
-                // Protect files created after the emptiness check by using non-recursive removal.
-                match fs_err::tokio::remove_dir(top_level).await {
-                    Ok(()) => {}
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                    Err(err) if err.kind() == io::ErrorKind::DirectoryNotEmpty => {}
-                    Err(err) => return Err(err.into()),
-                }
-            }
+            // Best-effort cleanup: the parent may contain user files or be in use.
+            let _ = fs_err::tokio::remove_dir(top_level).await;
         }
     }
 

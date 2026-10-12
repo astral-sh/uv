@@ -42,15 +42,9 @@ pub async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitS
         fs_err::tokio::remove_dir_all(&installed_tools.root())
             .await
             .ignore_currently_being_deleted()?;
-        // Skip non-empty parents before attempting removal: Windows may report a sharing
-        // violation instead of `DirectoryNotEmpty` when the parent is the working directory.
-        if let Some(parent) = installed_tools.root().parent()
-            && uv_fs::entries(parent)?.next().is_none()
-        {
-            // Protect files created after the emptiness check by using non-recursive removal.
-            fs_err::tokio::remove_dir(parent)
-                .await
-                .ignore_currently_being_deleted()?;
+        if let Some(parent) = installed_tools.root().parent() {
+            // Best-effort cleanup: the parent may contain user files or be in use.
+            let _ = fs_err::tokio::remove_dir(parent).await;
         }
     }
 
@@ -89,7 +83,6 @@ impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
     fn ignore_currently_being_deleted(self) -> Self {
         match self {
             Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
             Err(err) if err.is_in_process_of_being_deleted() => Ok(()),
             Err(err) => Err(err),
