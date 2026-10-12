@@ -43,11 +43,10 @@ pub async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitS
             .await
             .ignore_currently_being_deleted()?;
         if let Some(parent) = installed_tools.root().parent() {
-            if uv_fs::directories(parent)?.all(|path| uv_fs::is_temporary(&path)) {
-                fs_err::tokio::remove_dir_all(parent)
-                    .await
-                    .ignore_currently_being_deleted()?;
-            }
+            // The parent may contain user files, including `uv.toml` on Windows.
+            fs_err::tokio::remove_dir(parent)
+                .await
+                .ignore_currently_being_deleted()?;
         }
     }
 
@@ -86,6 +85,7 @@ impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
     fn ignore_currently_being_deleted(self) -> Self {
         match self {
             Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
             Err(err) if err.is_in_process_of_being_deleted() => Ok(()),
             Err(err) => Err(err),
