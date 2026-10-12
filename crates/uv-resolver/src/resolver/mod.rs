@@ -923,8 +923,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             resolution.trace_resolution();
         }
 
-        // Dropping requirements-to-original-marker here as that information is now within the
-        // requirements themselves.
+        // Requirements/Marker map is now within root edges so we no longer need to carry them
+        // forward. Names are used for export
         let selection_names = root_selections.map(|selections| SelectionNames {
             extras: selections.extras,
             groups: selections.groups,

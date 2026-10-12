@@ -147,9 +147,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             RequirementOrigin::Project(source_tree.path().to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
-        //
-        // NOTE: Not an exhaustive list of extras, inline extras like `extra == 'bar'` AREN'T
-        // included.
         let extras = self
             .extras
             .extra_names(metadata.provides_extra.iter())
@@ -164,7 +161,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             selections.extras.extend(extras.iter().cloned());
             for requirement in &flattened {
                 let base_marker = requirement.marker.simplify_not_extras_with(|_| true);
-                if !base_marker.is_false() {
+                if requirement.marker.is_false() || !base_marker.is_false() {
                     selections.requirements.push((
                         Requirement {
                             marker: base_marker,

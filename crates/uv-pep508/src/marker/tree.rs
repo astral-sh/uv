@@ -1393,12 +1393,6 @@ impl MarkerTree {
         Self(INTERNER.lock().without_extras(self.0))
     }
 
-    /// Remove all `extras` and `dependency_groups` conditions from the given marker
-    #[must_use]
-    pub fn without_selections(self) -> Self {
-        Self(INTERNER.lock().without_selections(self.0))
-    }
-
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
     ///
     /// If the marker did not contain any `extra` expressions, then a marker
@@ -3700,55 +3694,6 @@ mod test {
     }
 
     #[test]
-    fn without_selections() {
-        assert!(m("'wifi' in extras").without_selections().is_true());
-        assert!(m("'wifi' not in extras").without_selections().is_true());
-        assert!(
-            m("'wifi' in dependency_groups")
-                .without_selections()
-                .is_true()
-        );
-        assert!(
-            m("'wifi' not in dependency_groups")
-                .without_selections()
-                .is_true()
-        );
-        assert_eq!(
-            m("os_name == 'Linux'").without_selections(),
-            m("os_name == 'Linux'"),
-        );
-        assert_eq!(
-            m("os_name == 'Linux' and 'foo' in extras").without_selections(),
-            m("os_name == 'Linux'"),
-        );
-        assert_eq!(
-            m("os_name == 'Linux' and 'foo' in dependency_groups").without_selections(),
-            m("os_name == 'Linux'"),
-        );
-
-        assert!(
-            m("
-                (os_name == 'Linux' and 'foo' in extras)
-                or (os_name != 'Linux' and 'bar' in extras)")
-            .without_selections()
-            .is_true()
-        );
-
-        assert!(
-            m("'extra-project-bar' not in extras and 'extra-project-foo' in extras")
-                .without_selections()
-                .is_true()
-        );
-
-        assert_eq!(
-            m("(os_name == 'Darwin' and 'foo' in extras) \
-               or (sys_platform == 'Linux' and 'foo' not in extras)")
-            .without_selections(),
-            m("os_name == 'Darwin' or sys_platform == 'Linux'"),
-        );
-    }
-
-    #[test]
     fn only_extras() {
         assert!(m("os_name == 'Linux'").only_extras().is_true());
         assert_eq!(m("extra == 'foo'").only_extras(), m("extra == 'foo'"));
@@ -3837,7 +3782,10 @@ mod test {
             collected
         };
         assert!(collect(m("os_name == 'Linux'")).is_empty());
-        assert!(collect(m("'baz' not in extras")).is_empty());
+        assert_eq!(
+            collect(m("'baz' not in extras")),
+            [(crate::MarkerValueList::Extras, "baz".to_string()),]
+        );
         assert_eq!(
             collect(m("os_name == 'Linux' and 'foo' in extras")),
             [(crate::MarkerValueList::Extras, "foo".to_string()),]
@@ -3847,6 +3795,20 @@ mod test {
             [
                 (crate::MarkerValueList::Extras, "foo".to_string()),
                 (crate::MarkerValueList::DependencyGroups, "bar".to_string())
+            ]
+        );
+        assert_eq!(
+            collect(m("'foo' not in extras or 'bar' not in dependency_groups")),
+            [
+                (crate::MarkerValueList::Extras, "foo".to_string()),
+                (crate::MarkerValueList::DependencyGroups, "bar".to_string())
+            ]
+        );
+        assert_eq!(
+            collect(m("'foo' in extras or 'bar' not in extras")),
+            [
+                (crate::MarkerValueList::Extras, "bar".to_string()),
+                (crate::MarkerValueList::Extras, "foo".to_string()),
             ]
         );
     }
