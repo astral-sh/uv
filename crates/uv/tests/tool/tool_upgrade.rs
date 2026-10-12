@@ -598,6 +598,54 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     });
 }
 
+/// An explicit settings override must be saved even when no packages need upgrading.
+#[test]
+fn tool_upgrade_noop_updates_options() {
+    let index = old_tool_index();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + python-dotenv==0.10.2.post2
+    Installed 1 executable: dotenv
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("python-dotenv")
+        .arg("--exclude-newer")
+        .arg("false")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/python-dotenv/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "python-dotenv" }]
+        entrypoints = [
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv", from = "python-dotenv" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
+        exclude-newer = false
+        "#);
+    });
+}
+
 #[test]
 fn tool_upgrade_multiple_names() {
     let old_index = old_tool_index();
