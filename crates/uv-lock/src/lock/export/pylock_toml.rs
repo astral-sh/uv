@@ -35,7 +35,7 @@ use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
+use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerValueList, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
@@ -466,16 +466,16 @@ impl<'lock> PylockToml {
         // Use the `requires-python` from the target lockfile.
         let requires_python = resolution.requires_python.clone();
 
-        // List of extras used when creating this pylock
-        let extras = resolution
+        // List of extras supported by this pylock
+        let mut extras = resolution
             .selection_names
             .as_ref()
             .map_or_else(Vec::new, |selections| {
                 selections.extras.iter().cloned().collect()
             });
 
-        // List of groups used when creating this pylock
-        let dependency_groups = resolution
+        // List of dependency-groups supported by this pylock
+        let mut dependency_groups = resolution
             .selection_names
             .as_ref()
             .map_or_else(Vec::new, |selections| {
@@ -691,6 +691,27 @@ impl<'lock> PylockToml {
 
             // Add the package to the list of packages.
             packages.push(package);
+        }
+
+        if resolution.selection_names.is_some() {
+            for package in &packages {
+                package.marker.visit_selections(|key, val| match key {
+                    MarkerValueList::Extras => {
+                        if let Ok(extra) = val.parse::<ExtraName>() {
+                            extras.push(extra);
+                        }
+                    }
+                    MarkerValueList::DependencyGroups => {
+                        if let Ok(group) = val.parse::<GroupName>() {
+                            dependency_groups.push(group);
+                        }
+                    }
+                });
+            }
+            extras.sort_unstable();
+            extras.dedup();
+            dependency_groups.sort_unstable();
+            dependency_groups.dedup();
         }
 
         // Sort the packages by name, then version.
@@ -1189,7 +1210,7 @@ impl<'lock> PylockToml {
                 )),
             );
         }
-        // Need to explicitly set this to an empty array or accurate dependencies per
+        // Need to explicitly set this to an empty array or accurate dependency_groups per
         // PEP751
         if self.multi_use || !self.dependency_groups.is_empty() {
             doc.insert(

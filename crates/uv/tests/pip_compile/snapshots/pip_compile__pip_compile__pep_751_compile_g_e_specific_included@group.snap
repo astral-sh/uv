@@ -52,6 +52,13 @@ wheels = [
 ]
 
 [[packages]]
+name = "colorama"
+version = "0.4.6"
+marker = "sys_platform == 'win32' and 'wls' in dependency_groups"
+sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", upload-time = 2022-10-25T02:36:22Z, size = 27697, hashes = { sha256 = "08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", upload-time = 2022-10-25T02:36:20Z, size = 25335, hashes = { sha256 = "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6" } }]
+
+[[packages]]
 name = "h11"
 version = "0.14.0"
 marker = "'wls' in dependency_groups"
@@ -79,6 +86,34 @@ sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c5
 wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
 
 [[packages]]
+name = "iniconfig"
+version = "2.0.0"
+marker = "'wls' in dependency_groups"
+sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+
+[[packages]]
+name = "packaging"
+version = "24.0"
+marker = "'wls' in dependency_groups"
+sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", upload-time = 2024-03-10T09:39:28Z, size = 147882, hashes = { sha256 = "eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", upload-time = 2024-03-10T09:39:25Z, size = 53488, hashes = { sha256 = "2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5" } }]
+
+[[packages]]
+name = "pluggy"
+version = "1.4.0"
+marker = "'wls' in dependency_groups"
+sdist = { url = "https://files.pythonhosted.org/packages/54/c6/43f9d44d92aed815e781ca25ba8c174257e27253a94630d21be8725a2b59/pluggy-1.4.0.tar.gz", upload-time = 2024-01-24T13:45:15Z, size = 65812, hashes = { sha256 = "8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/a5/5b/0cc789b59e8cc1bf288b38111d002d8c5917123194d45b29dcdac64723cc/pluggy-1.4.0-py3-none-any.whl", upload-time = 2024-01-24T13:45:14Z, size = 20120, hashes = { sha256 = "7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981" } }]
+
+[[packages]]
+name = "pytest"
+version = "8.1.1"
+marker = "'wls' in dependency_groups"
+sdist = { url = "https://files.pythonhosted.org/packages/30/b7/7d44bbc04c531dcc753056920e0988032e5871ac674b5a84cb979de6e7af/pytest-8.1.1.tar.gz", upload-time = 2024-03-09T11:51:08Z, size = 1409703, hashes = { sha256 = "ac978141a75948948817d360297b7aae0fcb9d6ff6bc9ec6d514b85d5a65c044" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/4d/7e/c79cecfdb6aa85c6c2e3cf63afc56d0f165f24f5c66c03c695c4d9b84756/pytest-8.1.1-py3-none-any.whl", upload-time = 2024-03-09T11:51:04Z, size = 337359, hashes = { sha256 = "2a8386cfc11fa9d2c50ee7b2a57e7d898ef90470a7a34c4b949ff59662bb78b7" } }]
+
+[[packages]]
 name = "requests"
 version = "2.31.0"
 sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d4380d62fd5b955065c3/requests-2.31.0.tar.gz", upload-time = 2023-05-22T15:12:44Z, size = 110794, hashes = { sha256 = "942c5a758f98d790eaed1a29cb6eefc7ffb0d1cf7af05c3d2791656dbd6ad1e1" } }
@@ -98,4 +133,4 @@ sdist = { url = "https://files.pythonhosted.org/packages/7a/50/7fd50a27caa0652cd
 wheels = [{ url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", upload-time = 2024-02-18T03:55:54Z, size = 121067, hashes = { sha256 = "450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d" } }]
 
 ----- stderr -----
-Resolved 10 packages in [TIME]
+Resolved 15 packages in [TIME]

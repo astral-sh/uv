@@ -603,7 +603,7 @@ pub async fn pip_compile(
         Box::new(DefaultResolveLogger),
         printer,
         match format {
-            // Gating extras behaviour on universal.
+            // Gating extras/dependency-group preservation behaviour on universal.
             PipCompileFormat::PylockToml => universal,
             PipCompileFormat::RequirementsTxt => false,
         },

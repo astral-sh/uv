@@ -164,17 +164,12 @@ pub async fn resolve(
 
         if let Some(selections) = &mut root_selections {
             // Treating named requirements with extras/groups markers as selections
-            selections
-                .requirements
-                .extend(requirements.iter().map(|requirement| {
-                    (
-                        Requirement {
-                            marker: requirement.marker.without_selections(),
-                            ..requirement.clone()
-                        },
-                        requirement.marker,
-                    )
-                }));
+            selections.requirements.extend(
+                requirements
+                    .iter()
+                    .cloned()
+                    .map(|req| (req, MarkerTree::TRUE)),
+            );
         }
 
         // Resolve any source trees into requirements.
