@@ -61,7 +61,12 @@ pub async fn uninstall(
             }
 
             // Best-effort cleanup: the parent may contain user files or be in use.
-            let _ = fs_err::tokio::remove_dir(top_level).await;
+            if let Err(err) = fs_err::tokio::remove_dir(top_level).await {
+                debug!(
+                    "Skipping removal of parent directory `{}`: {err}",
+                    top_level.user_display()
+                );
+            }
         }
     }
 
