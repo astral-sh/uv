@@ -438,6 +438,17 @@ def run_workloads(
             "--output-file",
             str(project_directory / "universal-requirements.txt"),
         ]
+        sync_command = [
+            str(binary),
+            "sync",
+            "--project",
+            str(project_directory),
+            "--frozen",
+            *project.python_arguments,
+            *project.group_arguments,
+            "--no-install-workspace",
+            "--no-build",
+        ]
         commands.extend(
             (
                 (f"universal-cold-{project.name}", universal_command),
@@ -491,18 +502,7 @@ def run_workloads(
                 ),
                 (
                     f"sync-{project.name}",
-                    [
-                        str(binary),
-                        "sync",
-                        "--project",
-                        str(project_directory),
-                        "--frozen",
-                        *project.python_arguments,
-                        *project.group_arguments,
-                        "--no-install-workspace",
-                        "--no-build",
-                        "--quiet",
-                    ],
+                    [*sync_command, "--quiet"],
                 ),
             )
         )
@@ -514,15 +514,7 @@ def run_workloads(
                 (
                     f"native-bytecode-{project.name}",
                     [
-                        str(binary),
-                        "sync",
-                        "--project",
-                        str(project_directory),
-                        "--frozen",
-                        *project.python_arguments,
-                        *project.group_arguments,
-                        "--no-install-workspace",
-                        "--no-build",
+                        *sync_command,
                         "--compile-bytecode",
                         "--preview-features",
                         "native-bytecode",

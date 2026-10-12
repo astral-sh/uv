@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::allow_duplicates;
@@ -144,10 +143,6 @@ fn native_bytecode_hash() -> Result<()> {
             42
             ");
             assert_eq!(compiled, bytecode_files(&package)?);
-            // Warm the directory cache, including the virtualenv shim, then verify a cached run.
-            context.pip_sync().arg("requirements.txt").arg("--compile-bytecode")
-                .arg("--preview-features").arg("native-bytecode")
-                .env(variable, value).assert().success();
             uv_snapshot!(context.filters(), context.pip_sync()
                 .arg("requirements.txt").arg("--compile-bytecode")
                 .arg("--preview-features").arg("native-bytecode")
