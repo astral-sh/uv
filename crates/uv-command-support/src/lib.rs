@@ -149,12 +149,7 @@ impl<'a> OutputWriter<'a> {
 
             // If the output file is an existing symlink, write to the destination instead.
             let output_file = if is_symlink {
-                Cow::Owned(
-                    output_file
-                        .parent()
-                        .expect("Output file must have a parent")
-                        .join(fs_err::read_link(output_file)?),
-                )
+                Cow::Owned(output_file.with_file_name(fs_err::read_link(output_file)?))
             } else {
                 Cow::Borrowed(output_file)
             };
