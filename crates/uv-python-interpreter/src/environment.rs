@@ -400,8 +400,12 @@ impl PythonEnvironment {
             return Ok(());
         }
 
-        let info = InterpreterInfo::from_virtualenv(self.interpreter())?;
-        info.cache(self.interpreter().sys_executable(), cache)?;
+        if let Some(info) = InterpreterInfo::from_virtualenv(self.interpreter())? {
+            info.cache(self.interpreter().sys_executable(), cache)?;
+        } else {
+            // Recreation can change metadata without changing the executable's cache key.
+            Interpreter::clear_cache(self.interpreter().sys_executable(), cache)?;
+        }
         Ok(())
     }
 }

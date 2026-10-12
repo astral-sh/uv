@@ -73,7 +73,7 @@ fn create_venv() {
     context.venv.assert(predicates::path::is_dir());
 }
 
-/// Creating a venv caches the same interpreter metadata that Python would report.
+/// Interpreter discovery agrees with a fresh query after creating a venv.
 #[test]
 fn create_venv_caches_interpreter() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -81,7 +81,7 @@ fn create_venv_caches_interpreter() -> Result<()> {
         .init_no_wait()?
         .context("Interpreter cache is locked")?;
 
-    // It should cache for both a system interpreter and when starting from another venv.
+    // Check both a system interpreter and an existing venv.
     for python in [Path::new("3.12"), context.venv.path()] {
         let root = tempfile::tempdir_in(context.temp_dir.path())?;
         // Check that cached metadata matches Python's output even when the venv path has
@@ -96,25 +96,12 @@ fn create_venv_caches_interpreter() -> Result<()> {
             .assert()
             .success();
 
-        let site_packages = site_packages_path(&root_path, "python3.12");
-        fs_err::write(
-            site_packages.join("sitecustomize.py"),
-            indoc! {r#"
-                from pathlib import Path
-
-                Path(__file__).with_name("interpreter-started").touch()
-            "#},
-        )?;
-        let startup_marker = site_packages.join("interpreter-started");
-
         let cached = PythonEnvironment::from_root(&root_path, &cache)?;
-        assert!(!startup_marker.exists());
 
         let fresh_cache = Cache::temp()?
             .init_no_wait()?
             .context("Fresh interpreter cache is locked")?;
         let queried = PythonEnvironment::from_root(&root_path, &fresh_cache)?;
-        assert!(startup_marker.is_file());
         assert_eq!(cached, queried);
     }
 

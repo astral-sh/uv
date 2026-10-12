@@ -1169,16 +1169,46 @@ pub(crate) struct InterpreterInfo {
 
 impl InterpreterInfo {
     /// Build metadata for virtual environment discovery without querying Python or using the cache.
-    pub(crate) fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
-        // CPython 3.11+ resolves the venv executable's symlinks to find `sys._base_executable`.
-        // https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.py#L366-L375
-        let sys_base_executable = if cfg!(unix)
-            && interpreter.implementation_name() == "cpython"
-            && interpreter.python_tuple() >= (3, 11)
-        {
-            Some(resolve_executable_symlinks(interpreter.sys_executable())?)
+    ///
+    /// Return [`None`] when the interpreter's venv metadata cannot be inferred.
+    pub(crate) fn from_virtualenv(interpreter: &Interpreter) -> Result<Option<Self>, Error> {
+        let sys_executable = std::path::absolute(interpreter.sys_executable())?
+            .simplified()
+            .to_path_buf();
+        // Pyodide reports its underlying CPython implementation name.
+        let implementation = if interpreter.matches_implementation(ImplementationName::Pyodide) {
+            LenientImplementationName::Known(ImplementationName::Pyodide)
         } else {
-            interpreter.sys_base_executable.clone()
+            LenientImplementationName::from(interpreter.implementation_name())
+        };
+        let sys_base_executable = match implementation {
+            // macOS framework launchers can derive the base executable from the runtime library.
+            // https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.py#L303-L314
+            LenientImplementationName::Known(ImplementationName::CPython)
+                if cfg!(target_os = "macos") && !interpreter.standalone =>
+            {
+                return Ok(None);
+            }
+            LenientImplementationName::Known(ImplementationName::CPython) => {
+                match interpreter.python_tuple() {
+                    // Older CPython on Unix reports the venv executable itself.
+                    // https://github.com/python/cpython/blob/v3.10.16/Python/pathconfig.c#L457-L461
+                    (3, 8..=10) if cfg!(unix) => Some(sys_executable.clone()),
+                    // CPython 3.11+ follows executable symlinks inside a venv.
+                    // https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.py#L366-L375
+                    (3, 11..) if cfg!(unix) => Some(resolve_executable_symlinks(&sys_executable)?),
+                    // Windows venv launchers report the selected base interpreter.
+                    (3, 8..) if cfg!(windows) => interpreter.sys_base_executable.clone(),
+                    _ => return Ok(None),
+                }
+            }
+            // Other implementations have different startup rules. Query their metadata on first use.
+            LenientImplementationName::Known(
+                ImplementationName::PyPy
+                | ImplementationName::GraalPy
+                | ImplementationName::Pyodide,
+            )
+            | LenientImplementationName::Unknown(_) => return Ok(None),
         };
 
         // Python reports ordinary Windows paths even when the venv was created with a verbatim path.
@@ -1190,7 +1220,7 @@ impl InterpreterInfo {
             data: interpreter.scheme.data.simplified().components().collect(),
             include: interpreter.scheme.include.simplified().to_path_buf(),
         };
-        Ok(Self {
+        Ok(Some(Self {
             platform: interpreter.platform.clone(),
             markers: (*interpreter.markers).clone(),
             scheme,
@@ -1202,9 +1232,7 @@ impl InterpreterInfo {
             sys_path: Vec::new(),
             sys_base_prefix: interpreter.sys_base_prefix.clone(),
             sys_base_executable,
-            sys_executable: std::path::absolute(interpreter.sys_executable())?
-                .simplified()
-                .to_path_buf(),
+            sys_executable,
             site_packages: interpreter
                 .site_packages
                 .iter()
@@ -1216,7 +1244,7 @@ impl InterpreterInfo {
             pointer_size: interpreter.pointer_size,
             gil_disabled: interpreter.gil_disabled,
             debug_enabled: interpreter.debug_enabled,
-        })
+        }))
     }
 
     /// Cache already prepared metadata for this executable.
