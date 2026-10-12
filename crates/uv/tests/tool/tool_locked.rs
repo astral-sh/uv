@@ -21,9 +21,10 @@ use wiremock::{
 };
 
 use uv_extract::hash::Hasher;
+use uv_fs::PythonExt;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_static::EnvVars;
-use uv_test::archive::generate_source_archive;
+use uv_test::archive::{generate_source_archive, write_tar_gz};
 use uv_test::packse::generate_wheel_with_files;
 use uv_test::{TestContext, uv_snapshot};
 
@@ -3164,6 +3165,113 @@ async fn packaged_lock_checks_override_hash_before_building() -> Result<()> {
                sha256:[SDIST_HASH]
     ");
     assert!(!marker.path().exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_requires_build_dependency_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    context.temp_dir.child("wheels").create_dir_all()?;
+    let marker = context.temp_dir.child("backend-executed");
+    let (build_filename, build_wheel) = generate_wheel_with_files(
+        &"build-dependency".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    context
+        .temp_dir
+        .child("wheels")
+        .child(build_filename)
+        .write_binary(&build_wheel)?;
+    let (wheel_filename, wheel) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.3".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let backend = formatdoc! {r#"
+        import shutil
+        from pathlib import Path
+
+        Path({}).touch()
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            wheel = Path(__file__).with_name("{wheel_filename}")
+            shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
+            return wheel.name
+    "#, marker.path().escape_for_python()};
+    let pyproject = indoc! {r#"
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#};
+    let pkg_info = "Metadata-Version: 2.2\nName: idna\nVersion: 3.3\nDynamic: Requires-Dist\n";
+    let mut sdist = Vec::new();
+    write_tar_gz(
+        &mut sdist,
+        &[
+            ("idna-3.3/pyproject.toml", pyproject.as_bytes()),
+            ("idna-3.3/PKG-INFO", pkg_info.as_bytes()),
+            ("idna-3.3/backend.py", backend.as_bytes()),
+            (&format!("idna-3.3/{wheel_filename}"), wheel.as_slice()),
+        ],
+    )?;
+    let hash = hex::encode(Sha256::digest(&sdist));
+    let server = MockServer::start().await;
+    let filename = "idna-3.3.tar.gz";
+    let (index, url) = mount_locked_artifact(&server, "sdist", filename, &sdist, &hash, None).await;
+    let lock = locked_artifact(
+        &index,
+        &url,
+        filename,
+        &format!("sha256 = \"{hash}\""),
+        "sdist",
+    );
+    tool(&context, "1.0.0", Some(&lock), None)?;
+    context
+        .temp_dir
+        .child("build-constraints.txt")
+        .write_str("build-dependency==1.0.0\n")?;
+    let run = |require_hashes| {
+        let mut command = context.tool_run();
+        command.args([
+            "--locked",
+            "--isolated",
+            "--preview-features",
+            "locked-tools,build-dependency-hashes",
+            "--find-links",
+            "wheels",
+            "--index-url",
+            &index,
+            "--build-constraint",
+            "build-constraints.txt",
+        ]);
+        if require_hashes {
+            command.arg("--require-build-hashes");
+        }
+        command.arg("locked-tool");
+        command
+    };
+    uv_snapshot!(context.filters(), run(true), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency==1.0.0`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
+    ");
+    assert!(!marker.path().exists());
+    run(false).assert().success();
+    assert!(marker.path().exists());
     Ok(())
 }
 
