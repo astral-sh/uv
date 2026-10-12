@@ -204,6 +204,7 @@ impl WheelFilename {
     ) -> Result<Self, WheelFilenameError> {
         // A wheel filename has five required components, an optional build tag, and an optional
         // variant label. The build tag starts with a digit, while the Python tag does not.
+        // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#file-name-convention
         // https://peps.python.org/pep-0825/#variant-label
         let mut splitter = memchr::Memchr::new(b'-', stem.as_bytes());
 
