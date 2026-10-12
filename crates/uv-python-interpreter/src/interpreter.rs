@@ -1557,6 +1557,7 @@ impl InterpreterInfo {
 /// See <https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.c#L419-L473>.
 fn resolve_executable_symlinks(executable: &Path) -> io::Result<PathBuf> {
     let mut executable = executable.to_path_buf();
+    // CPython caps this at 40 links, citing the Linux 4.2 kernel's symlink limit.
     for _ in 0..40 {
         // CPython stops on any readlink error, including when the path is not a symlink.
         let Ok(target) = fs::read_link(&executable) else {
