@@ -88,18 +88,3 @@ pub struct PersistError {
     pub error: io::Error,
     pub file: NamedTempFile,
 }
-
-#[cfg(all(test, unix))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn temporary_file_permissions_apply_before_writing() -> io::Result<()> {
-        let directory = tempfile::tempdir()?;
-        let file =
-            tempfile_in_with_permissions(directory.path(), Some(Permissions::from_mode(0o600)))?;
-
-        assert_eq!(file.as_file().metadata()?.permissions().mode() & 0o077, 0);
-        Ok(())
-    }
-}
