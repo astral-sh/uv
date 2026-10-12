@@ -18,7 +18,8 @@ use uv_cache::{Cache, CacheBucket, CacheEntry, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
 use uv_fs::{
-    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
+    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, normalize_absolute_path,
+    write_atomic_sync,
 };
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
@@ -1169,6 +1170,17 @@ pub(crate) struct InterpreterInfo {
 impl InterpreterInfo {
     /// Build metadata for virtual environment discovery without querying Python or using the cache.
     pub(crate) fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
+        // CPython 3.11+ resolves the venv executable's symlinks to find `sys._base_executable`.
+        // https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.py#L366-L375
+        let sys_base_executable = if cfg!(unix)
+            && interpreter.implementation_name() == "cpython"
+            && interpreter.python_tuple() >= (3, 11)
+        {
+            Some(resolve_executable_symlinks(interpreter.sys_executable())?)
+        } else {
+            interpreter.sys_base_executable.clone()
+        };
+
         // Python reports ordinary Windows paths even when the venv was created with a verbatim path.
         let scheme = Scheme {
             purelib: interpreter.scheme.purelib.simplified().to_path_buf(),
@@ -1189,7 +1201,7 @@ impl InterpreterInfo {
             sys_base_exec_prefix: PathBuf::new(),
             sys_path: Vec::new(),
             sys_base_prefix: interpreter.sys_base_prefix.clone(),
-            sys_base_executable: interpreter.sys_base_executable.clone(),
+            sys_base_executable,
             sys_executable: std::path::absolute(interpreter.sys_executable())?
                 .simplified()
                 .to_path_buf(),
@@ -1508,6 +1520,29 @@ impl InterpreterInfo {
 
         Ok(info)
     }
+}
+
+/// Follow executable symlinks without resolving symlinks in the containing directories.
+///
+/// CPython retains directory aliases in `sys._base_executable`, including aliases used for
+/// Python patch upgrades. Relative link targets are normalized without resolving directory links.
+/// See <https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.c#L419-L473>.
+fn resolve_executable_symlinks(executable: &Path) -> io::Result<PathBuf> {
+    let mut executable = executable.to_path_buf();
+    for _ in 0..40 {
+        // CPython stops on any readlink error, including when the path is not a symlink.
+        let Ok(target) = fs::read_link(&executable) else {
+            return Ok(executable);
+        };
+        executable = if target.is_absolute() {
+            target
+        } else {
+            executable.pop();
+            executable.push(target);
+            normalize_absolute_path(&executable)?
+        };
+    }
+    Err(io::Error::other("maximum number of symbolic links reached"))
 }
 
 /// Find the Python executable that should be considered the "base" for a virtual environment.
