@@ -465,7 +465,7 @@ pub async fn pip_compile(
         .platform(interpreter.platform())
         .build()?;
 
-    // Read preferences from regular files, avoiding devices and pipes used as output sinks.
+    // Read the lockfile, if present.
     let LockedRequirements { preferences, git } =
         if let Some(output_file) = output_file.filter(|output_file| output_file.is_file()) {
             match format {
