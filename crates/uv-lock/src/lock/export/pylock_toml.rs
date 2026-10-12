@@ -46,7 +46,7 @@ use uv_warnings::warn_user_once;
 
 use uv_resolver_types::ResolverOutput;
 
-use crate::lock::export::ExportableRequirements;
+use crate::lock::export::{ExportSelection, ExportableRequirements};
 use crate::lock::{LockErrorKind, Source, WheelTagHint, is_wheel_unreachable};
 use crate::{Installable, LockError};
 
@@ -923,16 +923,18 @@ impl<'lock> PylockToml {
         }
         let selection =
             ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
-        let ExportableRequirements(nodes) =
-            ExportableRequirements::from_lock_with_selection_markers(
-                target,
-                prune,
-                &selection,
-                &groups,
+        let ExportableRequirements(nodes) = ExportableRequirements::from_lock_impl(
+            target,
+            prune,
+            &selection,
+            &groups,
+            false,
+            install_options,
+            ExportSelection::MarkSelections {
                 default_groups,
-                synthetic_default.as_ref(),
-                install_options,
-            )?;
+                synthetic_default: synthetic_default.as_ref(),
+            },
+        )?;
         Self::from_nodes(
             target,
             output_dir,

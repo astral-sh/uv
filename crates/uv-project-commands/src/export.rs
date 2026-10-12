@@ -550,6 +550,7 @@ async fn render_export<'output>(
     if multi_use && (!extras.is_empty() || !groups.prod()) {
         bail!("`--multi-use` cannot be combined with extra selections or only-group options");
     }
+    // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(extras)?;
     target.validate_groups(groups)?;
 
