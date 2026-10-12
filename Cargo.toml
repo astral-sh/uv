@@ -218,7 +218,7 @@ jiff = { version = "0.2.0", default-features = false, features = [
 junction = { version = "2.0.0", default-features = false, features = ["unstable_admin"] }
 libc = { version = "0.2.0", default-features = false, features = ["std"] }
 linux-raw-sys = { version = "0.12.1", default-features = false, features = ["ioctl"] }
-mailparse = { version = "0.16.0", default-features = false }
+mailparse = { version = "0.17.0", default-features = false }
 md-5 = { version = "0.11.0", default-features = false }
 memchr = { version = "2.7.4", default-features = false, features = ["std"] }
 nix = { version = "0.31.2", default-features = false, features = ["resource", "signal"] }
