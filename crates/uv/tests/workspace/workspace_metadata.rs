@@ -727,7 +727,7 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
         .assert()
         .success();
 
-    context
+    let assert = context
         .workspace_metadata()
         .arg("--script")
         .arg(script.path())
@@ -736,6 +736,43 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
         .env(EnvVars::VIRTUAL_ENV, context.venv.path())
         .assert()
         .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "unmanaged_distributions": metadata["unmanaged_distributions"],
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info": {
+              "editable": false,
+              "name": "metadata-extra",
+              "path": "[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "module_owners": {
+            "extra_module": [
+              {
+                "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "script+[TEMP_DIR]/script.py": {
+              "dependencies": [],
+              "kind": "script",
+              "path": "[TEMP_DIR]/script.py"
+            }
+          },
+          "unmanaged_distributions": [
+            "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+          ]
+        }
+        "#);
+    });
     context.pip_show().arg("metadata-extra").assert().success();
 
     let assert = context
@@ -751,6 +788,7 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
 
     insta::assert_json_snapshot!(serde_json::json!({
+        "unmanaged_distributions": metadata.get("unmanaged_distributions"),
         "extraneous_installed": context
             .pip_show()
             .arg("metadata-extra")
@@ -763,7 +801,8 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
     {
       "extraneous_installed": false,
       "installed_packages": {},
-      "module_owners": null
+      "module_owners": null,
+      "unmanaged_distributions": null
     }
     "#);
 
@@ -1233,6 +1272,11 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
         {
           "extraneous_installed": true,
           "module_owners": {
+            "extra_module": [
+              {
+                "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+              }
+            ],
             "required_module": [
               {
                 "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
@@ -1311,6 +1355,11 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(metadata["module_owners"], @r#"
         {
+          "extra_module": [
+            {
+              "package_id": "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+            }
+          ],
           "required_module": [
             {
               "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
@@ -1891,7 +1940,7 @@ dependencies = [
 }
 
 #[test]
-fn workspace_metadata_module_owners_ignore_stale_virtual_package() -> Result<()> {
+fn workspace_metadata_module_owners_include_stale_virtual_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let stale_owner = context
@@ -1927,13 +1976,264 @@ package = false
         .assert()
         .success();
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
-    let module_owners = if let Some(module_owners) = metadata.get("module_owners") {
-        serde_json::to_string_pretty(module_owners)?
-    } else {
-        "<missing>".to_string()
-    };
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "unmanaged_distributions": metadata["unmanaged_distributions"],
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "module_owners": {
+            "stale": [
+              {
+                "package_id": "module-owner-root==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner-root",
+              "source": {
+                "virtual": "[TEMP_DIR]/"
+              },
+              "version": "0.1.0"
+            },
+            "workspace+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "workspace",
+              "path": "[TEMP_DIR]/"
+            }
+          },
+          "unmanaged_distributions": [
+            "module-owner-root==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info"
+          ]
+        }
+        "#);
+    });
 
-    insta::assert_snapshot!(module_owners, @"<missing>");
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let installed_owner = context
+        .temp_dir
+        .child("module_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        installed_owner.path(),
+        "module-owner",
+        "module_owner-0.1.0",
+        &[("installed_module.py", "")],
+    )?;
+    let locked_owner = context
+        .temp_dir
+        .child("module_owner-0.2.0-py3-none-any.whl");
+    write_wheel_with_metadata(
+        locked_owner.path(),
+        "module-owner",
+        "0.2.0",
+        "module_owner-0.2.0",
+        "",
+        &[("replacement_module.py", "")],
+    )?;
+    let locked_owner_url = Url::from_file_path(locked_owner.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context
+        .pip_install()
+        .arg(installed_owner.path())
+        .assert()
+        .success();
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["module-owner @ {locked_owner_url}"]
+        "#
+    })?;
+
+    // A selected package owns modules from an older installed version with the same name.
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "unmanaged_distributions": metadata.get("unmanaged_distributions"),
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl": {
+              "editable": false,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "module_owners": {
+            "installed_module": [
+              {
+                "package_id": "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl"
+              }
+            ]
+          },
+          "unmanaged_distributions": null
+        }
+        "#);
+    });
+
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    // Without a declaration, the installed package remains available without a dependency edge.
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "unmanaged_distributions": metadata["unmanaged_distributions"],
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info": {
+              "editable": false,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "module_owners": {
+            "installed_module": [
+              {
+                "package_id": "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner-root",
+              "source": {
+                "virtual": "[TEMP_DIR]/"
+              },
+              "version": "0.1.0"
+            },
+            "workspace+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "workspace",
+              "path": "[TEMP_DIR]/"
+            }
+          },
+          "unmanaged_distributions": [
+            "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+          ]
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Duplicate distribution metadata must retain distinct inventory entries and module owners.
+#[test]
+fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    let editable_source = context.temp_dir.child("editable-source");
+    editable_source.create_dir_all()?;
+    let editable_url = Url::from_directory_path(editable_source.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert source path to file URL"))?;
+    let site_packages = ChildPath::new(context.site_packages());
+    site_packages.child("shared.py").write_str("")?;
+    let installed = site_packages.child("module_owner-0.1.0.dist-info");
+    installed.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: module-owner
+        Version: 0.1.0
+        "
+    })?;
+    installed.child("RECORD").write_str("shared.py,,\n")?;
+    let editable = site_packages.child("module_owner-0.2.0.dist-info");
+    editable.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: module-owner
+        Version: 0.2.0
+        "
+    })?;
+    editable.child("RECORD").write_str("shared.py,,\n")?;
+    editable.child("direct_url.json").write_str(
+        &serde_json::json!({
+            "url": editable_url.as_str(),
+            "dir_info": {"editable": true},
+        })
+        .to_string(),
+    )?;
+
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+            "unmanaged_distributions": metadata["unmanaged_distributions"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info": {
+              "editable": false,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            },
+            "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info": {
+              "editable": true,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.2.0.dist-info",
+              "version": "0.2.0"
+            }
+          },
+          "module_owners": {
+            "shared": [
+              {
+                "package_id": "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+              },
+              {
+                "package_id": "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info"
+              }
+            ]
+          },
+          "unmanaged_distributions": [
+            "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+            "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info"
+          ]
+        }
+        "#);
+    });
 
     Ok(())
 }
@@ -1977,19 +2277,20 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
+            "unmanaged_distributions": metadata.get("unmanaged_distributions"),
             "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
             "resolution": metadata["resolution"],
         }), @r#"
         {
           "installed_packages": {
-            "missing-record==0.1.0@installed+[SITE_PACKAGES]/missing_record-0.1.0.dist-info": {
+            "missing-record==0.1.0@unmanaged+[SITE_PACKAGES]/missing_record-0.1.0.dist-info": {
               "editable": false,
               "name": "missing-record",
               "path": "[SITE_PACKAGES]/missing_record-0.1.0.dist-info",
               "version": "0.1.0"
             },
-            "stub-only==0.1.0@installed+[SITE_PACKAGES]/stub_only-0.1.0.dist-info": {
+            "stub-only==0.1.0@unmanaged+[SITE_PACKAGES]/stub_only-0.1.0.dist-info": {
               "editable": false,
               "name": "stub-only",
               "path": "[SITE_PACKAGES]/stub_only-0.1.0.dist-info",
@@ -2012,7 +2313,8 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
               "kind": "workspace",
               "path": "[TEMP_DIR]/"
             }
-          }
+          },
+          "unmanaged_distributions": null
         }
         "#);
     });

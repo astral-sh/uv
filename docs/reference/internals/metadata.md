@@ -50,31 +50,26 @@ provides the corresponding group node ids through `dependency_groups`.
 
 ## Installed packages
 
-When an environment exists, `environment.packages` lists its installed distributions, including
-those absent from the lockfile. Each entry contains the installed name, version, metadata path, and
-editable status.
+When an environment exists, `environment.packages` is an inventory of its installed distributions,
+including those absent from the lockfile. Each entry contains the installed name, version, metadata
+path, and editable status.
 
-An installed distribution is matched by normalized name to a non-virtual package in the selected
-resolution. A matched entry uses that package's resolution node ID, even when their versions differ.
-The entry's `version` reports the actual installed version; node IDs should be treated as opaque.
+An installed distribution is matched by normalized name to a package in the selected resolution. A
+matched entry then uses that package's resolution node ID. The entry's `version` reports the actual
+installed version; node IDs should be treated as opaque.
 
-If multiple installed distributions match the same resolution node, uv keeps the first observed
-distribution and warns about the duplicates. Only the retained distribution contributes module
-ownership information.
-
-`module_owners` maps importable module names to selected package IDs. Each `package_id` refers to an
-entry in `environment.packages` and a node in `resolution`.
+`module_owners` maps importable module names to package IDs. Each `package_id` refers to an entry in
+`environment.packages`.
 
 ### Unmanaged packages
 
-An installed distribution is _unmanaged_ if it has no matching non-virtual package in the selected
-resolution. This includes packages that remain installed after their declarations are removed.
+An installed distribution is _unmanaged_ if it has no matching package in the selected resolution.
+This includes packages that remain installed after their declarations are removed.
 
-Unmanaged entries use the same opaque node ID format as `resolution`, with the installed name and
-version and an `installed` source identifying the metadata path. The metadata path distinguishes
-multiple unmanaged installations of the same name and version.
-
-Unmanaged distributions appear only in the inventory.
+The top-level `unmanaged_distributions` array lists the sorted node IDs of unmanaged distributions
+with discoverable modules. Each ID refers to an entry in `environment.packages` and identifies
+imports provided by packages outside the selected resolution. The field is omitted when there are no
+such distributions.
 
 ## Handling multiple versions of a package
 
@@ -213,7 +208,7 @@ Here is a human-readable annotated example:
     },
     // Installed distributions, keyed by opaque node IDs
     "packages": {
-      "idna==3.10@installed+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info": {
+      "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info": {
         "name": "idna",
         "version": "3.10",
         "path": "/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info",
@@ -240,6 +235,21 @@ Here is a human-readable annotated example:
   //
   // `marker` fields all have this as an implicit constraint that is omitted for cleanliness
   "requires_python": ">=3.12",
+  // Module owners refer to entries in `environment.packages`.
+  // Matched package IDs also refer to nodes in `resolution`.
+  "module_owners": {
+    "idna": [
+      {
+        "package_id": "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info"
+      }
+    ]
+  },
+  // Unmanaged packages provide modules but are outside the selected resolution.
+  // Each ID refers to an entry in `environment.packages`.
+  // This array is omitted when no unmanaged packages provide modules.
+  "unmanaged_distributions": [
+    "idna==3.10@unmanaged+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info"
+  ],
   // A list of workspace members
   "members": [
     {

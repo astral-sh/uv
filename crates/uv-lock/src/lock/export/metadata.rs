@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::Display;
 use std::path::Path;
 
@@ -93,6 +93,9 @@ pub struct Metadata {
     /// The dependency graph.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     resolution: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
+    /// IDs of unmanaged distributions with discoverable modules in `environment.packages`.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty", default)]
+    unmanaged_distributions: BTreeSet<MetadataNodeIdFlat>,
 }
 
 /// The schema version for the metadata report.
@@ -251,7 +254,7 @@ impl MetadataWorkspaceMember {
 /// An installed distribution that provides an importable module.
 #[derive(Debug, serde::Serialize)]
 struct MetadataModuleOwner {
-    /// Key in `environment.packages` and `resolution`.
+    /// Key in `environment.packages` and, for a matched distribution, `resolution`.
     package_id: MetadataNodeIdFlat,
 }
 
@@ -784,12 +787,12 @@ pub(crate) struct MetadataWorkspaceGroupNodeId {
 type MetadataNodeIdFlat = String;
 
 impl MetadataNodeId {
-    fn from_installed_distribution(dist: &InstalledDist) -> Self {
+    fn from_unmanaged_distribution(dist: &InstalledDist) -> Self {
         Self::Package(MetadataPackageNodeId {
             name: dist.name().clone(),
             version: Some(dist.version().clone()),
-            source: MetadataSource::Installed {
-                installed: PortablePathBuf::from(dist.install_path()),
+            source: MetadataSource::Unmanaged {
+                unmanaged: PortablePathBuf::from(dist.install_path()),
             },
             kind: MetadataNodeKind::Package,
         })
@@ -931,9 +934,9 @@ enum MetadataSource {
     Virtual {
         r#virtual: PortablePathBuf,
     },
-    /// An installed distribution, identified by its metadata path.
-    Installed {
-        installed: PortablePathBuf,
+    /// An unmanaged distribution found installed in the environment, identified by its metadata path.
+    Unmanaged {
+        unmanaged: PortablePathBuf,
     },
 }
 
@@ -954,7 +957,7 @@ impl Display for MetadataSource {
             | Self::Directory { directory: path }
             | Self::Editable { editable: path }
             | Self::Virtual { r#virtual: path }
-            | Self::Installed { installed: path } => {
+            | Self::Unmanaged { unmanaged: path } => {
                 write!(f, "{}+{}", self.name(), path)
             }
         }
@@ -971,7 +974,7 @@ impl MetadataSource {
             Self::Directory { .. } => "directory",
             Self::Editable { .. } => "editable",
             Self::Virtual { .. } => "virtual",
-            Self::Installed { .. } => "installed",
+            Self::Unmanaged { .. } => "unmanaged",
         }
     }
 }
@@ -1473,6 +1476,7 @@ impl Metadata {
             requires_python: lock.requires_python.clone(),
             members,
             resolution: resolve,
+            unmanaged_distributions: BTreeSet::new(),
         }
     }
 
@@ -1490,12 +1494,22 @@ impl Metadata {
         .to_flat())
     }
 
-    /// Return the package node ID for an installed distribution.
+    /// Return the package node ID for an unmanaged distribution.
     ///
     /// Installed metadata may not identify the original source, such as the registry, so the
     /// ID uses the distribution's metadata path as its source.
-    pub fn installed_package_node_id(dist: &InstalledDist) -> String {
-        MetadataNodeId::from_installed_distribution(dist).to_flat()
+    pub fn unmanaged_package_node_id(dist: &InstalledDist) -> String {
+        MetadataNodeId::from_unmanaged_distribution(dist).to_flat()
+    }
+
+    /// Attach references to unmanaged distributions in `environment.packages`.
+    #[must_use]
+    pub fn with_unmanaged_distributions(
+        mut self,
+        distributions: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.unmanaged_distributions = distributions.into_iter().collect();
+        self
     }
 
     #[must_use]
@@ -1522,7 +1536,10 @@ impl Metadata {
             .filter_map(|(module, owners)| {
                 let owners = owners
                     .into_iter()
-                    .filter(|package_id| self.resolution.contains_key(package_id))
+                    .filter(|package_id| {
+                        self.resolution.contains_key(package_id)
+                            || self.unmanaged_distributions.contains(package_id)
+                    })
                     .map(|package_id| MetadataModuleOwner { package_id })
                     .collect::<Vec<_>>();
                 (!owners.is_empty()).then_some((module, owners))
