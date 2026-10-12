@@ -502,7 +502,7 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 ///
 /// Replacement requires write access to the target directory, even if the file itself is
 /// writable. A missing symlink target is created when its parent directory exists.
-/// Existing targets must be writable regular files.
+/// Existing targets must be regular files.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic_preserve(
     path: impl AsRef<Path>,
@@ -525,14 +525,7 @@ pub async fn write_atomic_preserve(
                     Err(err) => return Err(err),
                 };
             }
-            Ok(metadata) if metadata.is_file() => {
-                // Require write access to the file as well as its parent directory.
-                fs_err::tokio::OpenOptions::new()
-                    .write(true)
-                    .open(&path)
-                    .await?;
-                break Some(metadata.permissions());
-            }
+            Ok(metadata) if metadata.is_file() => break Some(metadata.permissions()),
             Ok(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,

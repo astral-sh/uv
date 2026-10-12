@@ -1,7 +1,5 @@
 #[cfg(feature = "test-universal")]
 use std::collections::BTreeMap;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::process::Command;
 
@@ -40,41 +38,6 @@ use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
 #[cfg(feature = "test-universal")]
 use uv_test::{download_to_disk, venv_bin_path};
-
-/// A writable project directory must not allow replacing a read-only lockfile.
-#[cfg(unix)]
-#[test]
-fn lock_read_only() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let pyproject = context.temp_dir.child("pyproject.toml");
-    pyproject.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-    "#})?;
-    context.lock().arg("--offline").assert().success();
-    let original = context.read("uv.lock");
-    fs_err::set_permissions(
-        context.temp_dir.child("uv.lock"),
-        std::fs::Permissions::from_mode(0o444),
-    )?;
-    pyproject.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.2.0"
-        requires-python = ">=3.12"
-    "#})?;
-
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: failed to open file `[TEMP_DIR]/uv.lock`: Permission denied (os error 13)
-    ");
-    assert_eq!(context.read("uv.lock"), original);
-    Ok(())
-}
 
 /// Lock validation warnings should explain why a local dependency's metadata could not be read.
 #[cfg(feature = "test-universal")]
