@@ -48,6 +48,34 @@ dependency groups are just lists of things you might want when working on the pa
 If the workspace root defines dependency groups but is not itself a package, its `"workspace"` node
 provides the corresponding group node ids through `dependency_groups`.
 
+## Installed packages
+
+When an environment exists, `environment.packages` lists its installed distributions, including
+those absent from the lockfile. Each entry contains the installed name, version, metadata path, and
+editable status.
+
+An installed distribution is matched by normalized name to a non-virtual package in the selected
+resolution. A matched entry uses that package's resolution node ID, even when their versions differ.
+The entry's `version` reports the actual installed version; node IDs should be treated as opaque.
+
+If multiple installed distributions match the same resolution node, uv keeps the first observed
+distribution and warns about the duplicates. Only the retained distribution contributes module
+ownership information.
+
+`module_owners` maps importable module names to selected package IDs. Each `package_id` refers to an
+entry in `environment.packages` and a node in `resolution`.
+
+### Unmanaged packages
+
+An installed distribution is _unmanaged_ if it has no matching non-virtual package in the selected
+resolution. This includes packages that remain installed after their declarations are removed.
+
+Unmanaged entries use the same opaque node ID format as `resolution`, with the installed name and
+version and an `installed` source identifying the metadata path. The metadata path distinguishes
+multiple unmanaged installations of the same name and version.
+
+Unmanaged distributions appear only in the inventory.
+
 ## Handling multiple versions of a package
 
 Two versions of a package cannot be installed into a Python environment, but the dependency graph
@@ -182,6 +210,15 @@ Here is a human-readable annotated example:
       "version": "3.12.12",
       // The Python implementation name
       "implementation": "cpython"
+    },
+    // Installed distributions, keyed by opaque node IDs
+    "packages": {
+      "idna==3.10@installed+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info": {
+        "name": "idna",
+        "version": "3.10",
+        "path": "/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info",
+        "editable": false
+      }
     }
   },
   // Information about the script target, only present with `--script`.
