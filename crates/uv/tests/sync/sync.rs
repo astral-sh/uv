@@ -19383,7 +19383,7 @@ fn project_build_hashes_add() -> Result<()> {
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     error: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     child
         .temp_dir
@@ -19424,7 +19424,7 @@ fn project_build_hashes_missing() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     Ok(())
 }
@@ -19452,7 +19452,7 @@ fn project_build_hashes_lock_dynamic_metadata() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -19467,7 +19467,7 @@ fn project_build_hashes_lock_dynamic_metadata() -> Result<()> {
     error: Failed to generate package metadata for `project @ editable+.`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     context
         .temp_dir
@@ -19620,7 +19620,7 @@ fn project_build_hashes_run_with() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/package`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
 
     pyproject.write_str(&formatdoc! {r#"
@@ -19667,7 +19667,7 @@ fn project_build_hashes_workspace_root_policy() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     Ok(())
 }
@@ -19719,7 +19719,7 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl#sha256=[PARENT_HASH]`
       cause: Failed to resolve dependencies for package `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `dynamic-dependency`
     ");
     uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
     exit_code: 0 (success)
