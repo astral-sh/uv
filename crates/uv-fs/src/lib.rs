@@ -498,6 +498,7 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 ///
 /// Replacement requires write access to the target directory, even if the file itself is
 /// writable. A missing symlink target is created when its parent directory exists.
+/// Existing targets must be regular files.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic_preserve(
     path: impl AsRef<Path>,
@@ -520,7 +521,16 @@ pub async fn write_atomic_preserve(
                     Err(err) => return Err(err),
                 };
             }
-            Ok(metadata) => break Some(metadata.permissions()),
+            Ok(metadata) if metadata.is_file() => break Some(metadata.permissions()),
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "Cannot atomically replace `{}`: not a regular file",
+                        path.display()
+                    ),
+                ));
+            }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => break None,
             Err(err) => return Err(err),
         }
@@ -1078,8 +1088,45 @@ pub fn clear_virtualenv(location: &Path) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    #[cfg(all(unix, feature = "tokio"))]
+    use std::os::unix::fs::FileTypeExt;
+    #[cfg(all(unix, feature = "tokio"))]
+    use std::os::unix::net::UnixListener;
 
     use super::*;
+
+    #[cfg(all(unix, feature = "tokio"))]
+    #[tokio::test]
+    async fn write_atomic_preserve_rejects_special_file() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join("socket");
+        let _listener = UnixListener::bind(&path)?;
+
+        let error = write_atomic_preserve(&path, "contents")
+            .await
+            .expect_err("A socket cannot be atomically replaced");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert!(fs_err::metadata(&path)?.file_type().is_socket());
+        Ok(())
+    }
+
+    #[cfg(all(unix, feature = "tokio"))]
+    #[tokio::test]
+    async fn write_atomic_preserve_rejects_symlink_to_special_file() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("socket");
+        let _listener = UnixListener::bind(&target)?;
+        let link = tempdir.path().join("link");
+        create_symlink(&target, &link)?;
+
+        let error = write_atomic_preserve(&link, "contents")
+            .await
+            .expect_err("A symlink target cannot be atomically replaced with a regular file");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(fs_err::read_link(&link)?, target);
+        assert!(fs_err::metadata(&target)?.file_type().is_socket());
+        Ok(())
+    }
 
     #[cfg(feature = "tokio")]
     #[test]
