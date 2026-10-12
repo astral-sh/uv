@@ -63,11 +63,7 @@ pub(crate) fn update_sysconfig(
 
     // Python processes can import this module while the installation is being patched.
     if contents != new_contents {
-        let permissions = fs_err::OpenOptions::new()
-            .write(true)
-            .open(&sysconfigdata)?
-            .metadata()?
-            .permissions();
+        let permissions = fs_err::metadata(&sysconfigdata)?.permissions();
         let mut file = uv_fs::tempfile_in_with_permissions(
             sysconfigdata
                 .parent()

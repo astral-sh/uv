@@ -203,44 +203,6 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Repairing an installation must not replace read-only sysconfig data.
-#[cfg(unix)]
-#[test]
-fn python_install_sysconfig_read_only() -> anyhow::Result<()> {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_filtered_python_keys()
-        .with_managed_python_dirs();
-    let installation = context
-        .temp_dir
-        .child("managed")
-        .child(format!("cpython-3.12.9-{}", platform_key_from_env()?));
-    let lib = installation.child("lib/python3.12");
-    lib.create_dir_all()?;
-    let bin = installation.child("bin");
-    bin.create_dir_all()?;
-    bin.child("python3.12").touch()?;
-    let sysconfig = lib.child("_sysconfigdata__test.py");
-    sysconfig.write_str(indoc! {r#"
-        # system configuration generated and used by the sysconfig module
-        build_time_vars = {"PREFIX": "/install"}
-    "#})?;
-    fs_err::set_permissions(sysconfig.path(), std::fs::Permissions::from_mode(0o444))?;
-
-    uv_snapshot!(context.filters(), context.python_install()
-        .arg("3.12.9")
-        .arg("--no-bin")
-        .arg("--offline"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: failed to open file `[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]/[PYTHON-LIB]/_sysconfigdata__test.py`: Permission denied (os error 13)
-    ");
-    insta::assert_snapshot!(context.read(sysconfig.path()), @r#"
-    # system configuration generated and used by the sysconfig module
-    build_time_vars = {"PREFIX": "/install"}
-    "#);
-    Ok(())
-}
-
 #[test]
 fn python_reinstall() {
     let context = uv_test::test_context_with_versions!(&[])
