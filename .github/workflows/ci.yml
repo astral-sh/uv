@@ -64,7 +64,7 @@ jobs:
     needs: plan
     uses: $/.github/workflows/check-lint.yml
     with:
-      code-changed: ${{ needs.plan.outputs.test-code }}
+      code-changed: ${{ needs.plan.outputs.lint-code }}
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   check-docs:
@@ -83,7 +83,7 @@ jobs:
 
   check-publish:
     needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    if: ${{ needs.plan.outputs.lint-code == 'true' }}
     uses: $/.github/workflows/check-publish.yml
 
   check-release:
@@ -107,7 +107,7 @@ jobs:
 
   check-generated-files:
     needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    if: ${{ needs.plan.outputs.lint-code == 'true' }}
     uses: $/.github/workflows/check-generated-files.yml
     with:
       schema-changed: ${{ needs.plan.outputs.check-schema }}
