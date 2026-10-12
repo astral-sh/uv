@@ -119,31 +119,6 @@ impl<'lock> ExportableRequirements<'lock> {
         )
     }
 
-    /// Keep root extras and groups as PEP 751 markers.
-    fn from_lock_with_selection_markers(
-        target: &impl Installable<'lock>,
-        prune: &[PackageName],
-        extras: &ExtrasSpecificationWithDefaults,
-        groups: &DependencyGroupsWithDefaults,
-        default_groups: &DependencyGroupsWithDefaults,
-        synthetic_default: Option<&GroupName>,
-        install_options: &'lock InstallOptions,
-    ) -> Result<Self, LockError> {
-        Self::from_lock_impl(
-            target,
-            prune,
-            extras,
-            groups,
-            false,
-            install_options,
-            VirtualPackages::Exclude,
-            ExportSelection::MarkSelections {
-                default_groups,
-                synthetic_default,
-            },
-        )
-    }
-
     fn from_lock_impl(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
