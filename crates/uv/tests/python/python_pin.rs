@@ -20,6 +20,24 @@ use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
+/// A writable directory must not allow replacing a read-only Python version file.
+#[cfg(unix)]
+#[test]
+fn python_pin_read_only() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    version_file.write_str("3.12\n")?;
+    fs_err::set_permissions(version_file.path(), Permissions::from_mode(0o444))?;
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("any").arg("--no-project"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: failed to open file `[TEMP_DIR]/.python-version`: Permission denied (os error 13)
+    ");
+    assert_snapshot!(context.read(PYTHON_VERSION_FILENAME), @"3.12");
+    Ok(())
+}
+
 /// Pinning through a symlink must not replace a special file at its target.
 #[cfg(unix)]
 #[test]
