@@ -122,6 +122,19 @@ impl<'a> OutputWriter<'a> {
     /// Commit the buffer to the output file.
     pub async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
+            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
+
+            // Devices and pipes must be opened directly: an atomic rename would replace them
+            // with a regular file. Follow symlinks when checking the destination's file type.
+            match fs_err::metadata(output_file) {
+                Ok(metadata) if !metadata.is_file() => {
+                    return fs_err::tokio::write(output_file, &stream).await;
+                }
+                Ok(_) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err),
+            }
+
             if let Some(parent_dir) = output_file.parent() {
                 fs_err::create_dir_all(parent_dir)?;
             }
@@ -130,7 +143,6 @@ impl<'a> OutputWriter<'a> {
             let output_file = fs_err::read_link(output_file)
                 .map(Cow::Owned)
                 .unwrap_or(Cow::Borrowed(output_file));
-            let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
             uv_fs::write_atomic(output_file, &stream).await?;
         }
         Ok(())

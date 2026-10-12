@@ -465,9 +465,9 @@ pub async fn pip_compile(
         .platform(interpreter.platform())
         .build()?;
 
-    // Read the lockfile, if present.
+    // Read preferences from regular files, avoiding devices and pipes used as output sinks.
     let LockedRequirements { preferences, git } =
-        if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
+        if let Some(output_file) = output_file.filter(|output_file| output_file.is_file()) {
             match format {
                 PipCompileFormat::RequirementsTxt => LockedRequirements::from_preferences(
                     read_requirements_txt(output_file, &upgrade).await?,
