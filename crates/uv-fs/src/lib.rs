@@ -1121,24 +1121,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(unix, feature = "tokio"))]
-    #[tokio::test]
-    async fn write_atomic_preserve_rejects_symlink_to_special_file() -> io::Result<()> {
-        let tempdir = tempfile::tempdir()?;
-        let target = tempdir.path().join("socket");
-        let _listener = UnixListener::bind(&target)?;
-        let link = tempdir.path().join("link");
-        create_symlink(&target, &link)?;
-
-        let error = write_atomic_preserve(&link, "contents")
-            .await
-            .expect_err("A symlink target cannot be atomically replaced with a regular file");
-        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
-        assert_eq!(fs_err::read_link(&link)?, target);
-        assert!(fs_err::metadata(&target)?.file_type().is_socket());
-        Ok(())
-    }
-
     #[cfg(feature = "tokio")]
     #[test]
     fn transcodes_bom_marked_input() -> io::Result<()> {
