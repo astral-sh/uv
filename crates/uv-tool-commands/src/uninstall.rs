@@ -42,12 +42,14 @@ pub async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitS
         fs_err::tokio::remove_dir_all(&installed_tools.root())
             .await
             .ignore_currently_being_deleted()?;
-        if let Some(parent) = installed_tools.root().parent() {
-            if uv_fs::directories(parent)?.all(|path| uv_fs::is_temporary(&path)) {
-                fs_err::tokio::remove_dir_all(parent)
-                    .await
-                    .ignore_currently_being_deleted()?;
-            }
+        // Best-effort cleanup: the parent may contain user files or be in use.
+        if let Some(parent) = installed_tools.root().parent()
+            && let Err(err) = fs_err::tokio::remove_dir(parent).await
+        {
+            debug!(
+                "Skipping removal of parent directory `{}`: {err}",
+                parent.user_display()
+            );
         }
     }
 

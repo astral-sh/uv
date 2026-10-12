@@ -60,8 +60,12 @@ pub async fn uninstall(
                 Err(err) => return Err(err.into()),
             }
 
-            if uv_fs::directories(top_level)?.all(|path| uv_fs::is_temporary(&path)) {
-                fs_err::tokio::remove_dir_all(top_level).await?;
+            // Best-effort cleanup: the parent may contain user files or be in use.
+            if let Err(err) = fs_err::tokio::remove_dir(top_level).await {
+                debug!(
+                    "Skipping removal of parent directory `{}`: {err}",
+                    top_level.user_display()
+                );
             }
         }
     }
