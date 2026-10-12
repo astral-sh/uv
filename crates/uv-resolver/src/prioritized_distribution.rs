@@ -249,6 +249,7 @@ impl IncompatibleDist {
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::Invalid) => None,
+                IncompatibleWheel::Tag(IncompatibleTag::Variant) => None,
                 IncompatibleWheel::NoBinary => None,
                 IncompatibleWheel::Yanked(..) => None,
                 IncompatibleWheel::ExcludeNewer(..) => None,
@@ -267,6 +268,7 @@ impl Display for IncompatibleDist {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => f.write_str("no source distribution"),
                 IncompatibleWheel::Tag(tag) => match tag {
+                    IncompatibleTag::Variant => f.write_str("only unsupported wheel variants"),
                     IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
                         f.write_str("no wheels with a matching Python implementation tag")
@@ -418,9 +420,18 @@ impl PrioritizedDist {
         if !compatibility.is_excluded() {
             self.0.hashes.extend(hashes);
         }
-        // Track the highest-priority wheel.
-        if let Some((.., existing_compatibility)) = self.best_wheel() {
-            if compatibility.is_more_compatible(existing_compatibility) {
+        // Track the highest-priority wheel. Variant wheels cannot provide metadata, so prefer
+        // ordinary wheels even when they cannot be installed (e.g., with `--no-binary`).
+        if let Some((existing_wheel, existing_compatibility)) = self.best_wheel() {
+            let is_more_compatible =
+                match (dist.filename.variant(), existing_wheel.filename.variant()) {
+                    (None, Some(_)) => true,
+                    (Some(_), None) => false,
+                    (None, None) | (Some(_), Some(_)) => {
+                        compatibility.is_more_compatible(existing_compatibility)
+                    }
+                };
+            if is_more_compatible {
                 self.0.best_wheel_index = Some(self.0.wheels.len());
             }
         } else {
@@ -491,15 +502,17 @@ impl PrioritizedDist {
             // using the wheel is faster.
             //
             // (If the incompatible wheel should actually be ignored entirely, fall through to
-            // using the source distribution.)
+            // using the source distribution. Variant wheels are not supported yet.)
             (
                 Some((wheel, compatibility @ WheelCompatibility::Incompatible(_))),
                 Some((sdist, SourceDistCompatibility::Compatible(_))),
-            ) if !compatibility.is_excluded() => Some(CompatibleDist::IncompatibleWheel {
-                sdist,
-                wheel,
-                prioritized: self,
-            }),
+            ) if !compatibility.is_excluded() && wheel.filename.variant().is_none() => {
+                Some(CompatibleDist::IncompatibleWheel {
+                    sdist,
+                    wheel,
+                    prioritized: self,
+                })
+            }
             // Otherwise, if we have a source distribution, return it.
             (.., Some((sdist, SourceDistCompatibility::Compatible(_)))) => {
                 Some(CompatibleDist::SourceDist {

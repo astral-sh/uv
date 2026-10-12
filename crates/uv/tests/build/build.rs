@@ -2020,7 +2020,7 @@ fn build_sha() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/project`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `hatchling`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+      cause: Hash-checking is required, but no trusted hash was provided for: `hatchling`
     ");
 
     project
@@ -2780,7 +2780,7 @@ fn build_fast_path_require_hashes() -> Result<()> {
     error: Failed to build `[WORKSPACE]/test/packages/built-by-uv`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `uv-build>=0.8.0, <0.14`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
+      cause: Hash-checking is required, but no trusted hash was provided for: `uv-build`
     ");
 
     Ok(())
@@ -4261,7 +4261,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`, `dynamic-dependency @ file://[TEMP_DIR]/wheels/dynamic_dependency-1.0.0-py3-none-any.whl#sha256=[DYNAMIC_HASH]`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `dynamic-dependency`
     ");
     Ok(())
 }

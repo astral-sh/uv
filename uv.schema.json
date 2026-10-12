@@ -1905,6 +1905,7 @@
             "build-dependency-check",
             "build-lazy-imports",
             "build-dependency-hashes",
+            "wheel-variants",
             "cache-autoprune"
           ]
         },

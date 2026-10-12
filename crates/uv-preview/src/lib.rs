@@ -460,6 +460,9 @@ pub enum PreviewFeature {
     /// project resolution, and installation. See [project build dependency
     /// hashes](./projects/build.md#project-build-dependency-hashes) for configuration and exceptions.
     BuildDependencyHashes,
+    /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
+    /// Variant wheels are not yet selectable.
+    WheelVariants,
     /// uv automatically removes unreferenced archives from the [cache](./cache.md), along with
     /// cached environments (e.g., for `uvx`) that haven't been used for a week. It prunes a few
     /// minutes after an operation leaves archives unreferenced, and at least once a day, when no
