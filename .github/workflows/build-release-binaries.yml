@@ -52,6 +52,9 @@ jobs:
       # uv
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+      - name: "Check Cargo.lock"
+        # `maturin sdist` resolves the workspace without --locked.
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: "Build sdist"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -59,6 +62,11 @@ jobs:
           maturin-version: v1.15.0
           command: sdist
           args: --out dist
+      - name: "Fix Cargo.lock in sdist"
+        run: |
+          # Ensure maturin did not update the workspace Cargo.lock.
+          git diff --exit-code -- Cargo.lock
+          python scripts/repair-sdist-cargo-lock.py dist/${PACKAGE_NAME}-*.tar.gz
       - name: "Test sdist"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -70,7 +78,7 @@ jobs:
             apt-get install -y --no-install-recommends cmake
             # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
             # we run the risk that pip pull uv from PyPI instead.
-            pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall
+            pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME} --help
             python -m ${MODULE_NAME} --help
             uvx --help
@@ -89,7 +97,10 @@ jobs:
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Fix Cargo.lock in sdist uv-build"
-        run: python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
+        run: |
+          # Ensure maturin did not update the workspace Cargo.lock.
+          git diff --exit-code -- Cargo.lock
+          python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
       - name: "Test sdist uv-build"
         uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
@@ -99,7 +110,7 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
+            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME}-build --help
             python -m ${MODULE_NAME}_build --help
       - name: "Upload sdist uv-build"

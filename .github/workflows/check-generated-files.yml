@@ -38,15 +38,15 @@ jobs:
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Generate all"
-        run: cargo dev generate-all --mode dry-run
+        run: cargo --locked dev generate-all --mode dry-run
       - name: "Check sysconfig mappings"
-        run: cargo dev generate-sysconfig-metadata --mode check
+        run: cargo --locked dev generate-sysconfig-metadata --mode check
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
       - name: "Check Packse scenario tests"
-        run: cargo dev generate-scenario-tests --mode check
+        run: cargo --locked dev generate-scenario-tests --mode check
       - name: "Check JSON schema"
         if: ${{ inputs.schema-changed == 'true' }}
-        run: cargo dev generate-json-schema --mode check
+        run: cargo --locked dev generate-json-schema --mode check
       - name: "Check uv-extract dirhash test vectors"
-        run: cargo dev generate-dirhash-test-vectors --mode check
+        run: cargo --locked dev generate-dirhash-test-vectors --mode check
