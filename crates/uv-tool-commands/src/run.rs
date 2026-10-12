@@ -439,6 +439,10 @@ pub async fn run(
     .context("Failed to build new PATH variable")?;
     process.env(EnvVars::PATH, new_path);
 
+    // Mark the environment as in use, then release the cache lock, so that a long-running command
+    // doesn't block cache removal operations.
+    let _in_use = cache.claim_in_use_and_release_lock([environment.root()]);
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     let space = if args.is_empty() { "" } else { " " };

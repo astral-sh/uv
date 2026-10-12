@@ -1,7 +1,17 @@
+#[cfg(unix)]
+use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
+use std::process::Stdio;
+use std::time::{Duration, SystemTime};
+
+#[cfg(unix)]
+use anyhow::Context;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use filetime::FileTime;
 use indoc::indoc;
+use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
@@ -599,6 +609,206 @@ fn prune_temporary_build_environment() -> Result<()> {
     ");
 
     assert!(!builds.exists());
+
+    Ok(())
+}
+
+/// With the `cache-autoprune` preview feature, uv removes unreferenced archives at most once a day.
+#[test]
+fn autoprune() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig==2.0.0")?;
+
+    // Without the preview feature, uv doesn't prune automatically.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .assert()
+        .success();
+    let marker = context.cache_dir.child(".autoprune");
+    marker.assert(predicate::path::missing());
+
+    // With it, uv prunes and records when.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .assert()
+        .success();
+    marker.assert(predicate::path::exists());
+
+    // An unreferenced archive is retained until the next prune is due.
+    let unreferenced = context.cache_dir.child("archive-v0").child("unreferenced");
+    unreferenced.create_dir_all()?;
+    unreferenced.child("payload.txt").write_str("payload")?;
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .assert()
+        .success();
+    unreferenced.assert(predicate::path::exists());
+
+    let yesterday = SystemTime::now() - Duration::from_hours(25);
+    filetime::set_file_mtime(&marker, FileTime::from_system_time(yesterday))?;
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .assert()
+        .success();
+    unreferenced.assert(predicate::path::missing());
+
+    // Referenced archives are retained.
+    uv_snapshot!(context.filters(), context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// With the `cache-autoprune` preview feature, uv removes cached environments that haven't been
+/// used for a week.
+#[test]
+fn autoprune_unused_cached_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let run_with = || {
+        let mut command = context.run();
+        command
+            .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+            .arg("--no-project")
+            .arg("--with")
+            .arg("iniconfig")
+            .arg("python")
+            .arg("-c")
+            .arg("import iniconfig");
+        command
+    };
+    let cached_environments = || -> Result<usize> {
+        let environments = context.cache_dir.child("environments-v2");
+        Ok(walkdir::WalkDir::new(&environments)
+            .min_depth(2)
+            .max_depth(2)
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .len())
+    };
+
+    run_with().assert().success();
+    assert_eq!(cached_environments()?, 1);
+
+    // Backdate the cached environment's archive and in-use lock, and the last prune.
+    let long_ago = FileTime::from_system_time(SystemTime::now() - Duration::from_hours(24 * 8));
+    for bucket in ["archive-v0", "in-use-v0/archive-v0"] {
+        for entry in fs_err::read_dir(context.cache_dir.child(bucket).path())? {
+            filetime::set_file_mtime(entry?.path(), long_ago)?;
+        }
+    }
+    filetime::set_file_mtime(context.cache_dir.child(".autoprune"), long_ago)?;
+
+    // The next invocation removes the cached environment.
+    context
+        .pip_list()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .assert()
+        .success();
+    assert_eq!(cached_environments()?, 0);
+
+    // It's recreated when next needed.
+    run_with().assert().success();
+    assert_eq!(cached_environments()?, 1);
+
+    Ok(())
+}
+
+/// With the `cache-autoprune` preview feature, a command started by `uv run` doesn't block cache
+/// removal operations, which retain the cache entries it runs from instead.
+#[cfg(unix)]
+#[test]
+fn prune_retains_in_use_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_sizes_and_units()
+        // Cache entries don't have stable keys, and in-use locks are found in arbitrary order.
+        .with_filter((r"\[CACHE_DIR\]/([^/`]+)/[^`\s]+", "[CACHE_DIR]/$1/[ENTRY]"));
+
+    // Start a command in an ephemeral environment layered on a cached environment, which waits for
+    // input before importing from the cached environment again.
+    let mut child = context
+        .run()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .arg("--no-project")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("python")
+        .arg("-c")
+        .arg("import importlib, iniconfig; print('ready', flush=True); input(); importlib.reload(iniconfig); print('ok')")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let mut stdout = BufReader::new(child.stdout.take().context("Missing stdout")?);
+    let mut line = String::new();
+    stdout.read_line(&mut line)?;
+    assert_eq!(line.trim(), "ready");
+
+    // `cache prune` doesn't wait for the command, and retains its environments.
+    uv_snapshot!(context.filters(), context
+        .prune()
+        .arg("--verbose")
+        .env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Lock is busy for `[CACHE_DIR]/in-use-v0/[ENTRY]`
+    DEBUG Lock is busy for `[CACHE_DIR]/in-use-v0/[ENTRY]`
+    DEBUG Removing cached environment: [CACHE_DIR]/environments-v2/[ENTRY]
+    DEBUG Retaining in-use build environment: [CACHE_DIR]/builds-v0/[ENTRY]
+    Removed [N] files ([SIZE])
+    ");
+
+    // `cache clean` waits for the command.
+    uv_snapshot!(context.filters(), context
+        .clean()
+        .env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
+    error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/in-use-v0/[ENTRY]` at `[CACHE_DIR]/in-use-v0/[ENTRY]`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    ");
+
+    // The command can still import from the cached environment.
+    child
+        .stdin
+        .take()
+        .context("Missing stdin")?
+        .write_all(b"\n")?;
+    line.clear();
+    stdout.read_line(&mut line)?;
+    assert_eq!(line.trim(), "ok");
+    assert!(child.wait()?.success());
+
+    // Once the command exits, `cache clean` no longer waits.
+    context
+        .clean()
+        .env(EnvVars::UV_LOCK_TIMEOUT, "1")
+        .assert()
+        .success();
 
     Ok(())
 }

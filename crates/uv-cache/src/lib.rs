@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Write;
@@ -5,13 +6,16 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
-use rustc_hash::FxHashMap;
+use fs_err::DirEntry;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::ResolutionMetadata;
 
 pub use crate::by_timestamp::CachedByTimestamp;
@@ -34,6 +38,31 @@ mod wheel;
 ///
 /// Must be kept in-sync with the version in [`CacheBucket::to_str`].
 pub const ARCHIVE_VERSION: u8 = 0;
+
+/// A marker file whose modification time records the last automatic prune.
+const AUTOPRUNE_MARKER: &str = ".autoprune";
+
+/// A marker file whose modification time records when an archive may have become unreferenced
+/// since the last automatic prune.
+const AUTOPRUNE_PENDING_MARKER: &str = ".autoprune-pending";
+
+/// How long to wait after an archive may have become unreferenced before pruning, so that a burst
+/// of operations is followed by a single prune.
+const AUTOPRUNE_DELAY: Duration = Duration::from_mins(5);
+
+/// How long a cached environment must go unused before automatic pruning removes it.
+const AUTOPRUNE_ENVIRONMENT_AGE: Duration = Duration::from_hours(24 * 7);
+
+/// The maximum interval between automatic prunes, to remove unreferenced archives that weren't
+/// recorded (e.g., those left by older uv versions).
+const AUTOPRUNE_INTERVAL: Duration = Duration::from_hours(24);
+
+/// The cache bucket families that may link into the archive bucket from distribution metadata,
+/// including former names of the source distribution bucket.
+const DISTRIBUTION_BUCKET_FAMILIES: &[&str] = &["wheels", "sdists", "built-wheels", "source-dists"];
+
+/// The cache bucket family containing environments that may link into the archive bucket.
+const ENVIRONMENTS_BUCKET_FAMILY: &str = "environments";
 
 /// Error locking a cache entry or shard
 #[derive(Debug, thiserror::Error)]
@@ -176,6 +205,8 @@ pub struct Cache {
     lock_file: Option<Arc<LockedFile>>,
     /// The storage accounting used when removing cache entries.
     removal_accounting: RemovalAccounting,
+    /// Whether automatic pruning is enabled, set by [`Cache::init`].
+    autoprune: bool,
 }
 
 impl Cache {
@@ -187,6 +218,7 @@ impl Cache {
             temp_dir: None,
             lock_file: None,
             removal_accounting: RemovalAccounting::Coarse,
+            autoprune: false,
         }
     }
 
@@ -199,6 +231,7 @@ impl Cache {
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
             removal_accounting: RemovalAccounting::Coarse,
+            autoprune: false,
         })
     }
 
@@ -238,6 +271,7 @@ impl Cache {
             temp_dir,
             lock_file,
             removal_accounting,
+            autoprune,
         } = self;
 
         // Release the existing lock, avoid deadlocks from a cloned cache.
@@ -261,6 +295,7 @@ impl Cache {
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
             removal_accounting,
+            autoprune,
         })
     }
 
@@ -274,6 +309,7 @@ impl Cache {
             temp_dir,
             lock_file,
             removal_accounting,
+            autoprune,
         } = self;
 
         match LockedFile::acquire_no_wait(
@@ -287,6 +323,7 @@ impl Cache {
                 temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
                 removal_accounting,
+                autoprune,
             }),
             None => Err(Self {
                 root,
@@ -294,8 +331,179 @@ impl Cache {
                 temp_dir,
                 lock_file,
                 removal_accounting,
+                autoprune,
             }),
         }
+    }
+
+    /// Release the cache lock, if held.
+    pub fn release_lock(&self) {
+        if let Some(lock_file) = &self.lock_file {
+            lock_file.release();
+        }
+    }
+
+    /// Mark the cache entries containing `paths` as in use, then release the cache lock.
+    ///
+    /// This allows a long-running command (e.g., a server started with `uv run`) to run without
+    /// blocking cache removal operations, which retain the entries it runs from instead. The
+    /// returned locks must be held while the command runs. Paths outside the cache are ignored.
+    ///
+    /// The entries are claimed before the cache lock is released, so a removal operation, which
+    /// requires the exclusive cache lock, can never find an entry that's in use but unclaimed. If
+    /// any entry can't be claimed, the cache lock is retained instead.
+    ///
+    /// Requires the [`PreviewFeature::CacheAutoprune`] preview feature, since older uv versions
+    /// don't respect in-use locks.
+    pub fn claim_in_use_and_release_lock<'a>(
+        &self,
+        paths: impl IntoIterator<Item = &'a Path>,
+    ) -> Vec<LockedFile> {
+        if self.is_temporary() || !uv_preview::is_enabled(PreviewFeature::CacheAutoprune) {
+            return Vec::new();
+        }
+        let mut claims = Vec::new();
+        for path in paths {
+            match self.claim_in_use(path) {
+                Ok(Some(claim)) => claims.push(claim),
+                Ok(None) => {}
+                Err(err) => {
+                    debug!(
+                        "Retaining the cache lock, failed to mark `{}` as in use: {err}",
+                        path.simplified_display()
+                    );
+                    return Vec::new();
+                }
+            }
+        }
+        self.release_lock();
+        claims
+    }
+
+    /// Take a shared lock on the in-use lock of the cache entry containing `path`.
+    ///
+    /// Returns [`None`] if `path` is not within a cache entry.
+    fn claim_in_use(&self, path: &Path) -> io::Result<Option<LockedFile>> {
+        // Compare canonical paths, since the root is only made absolute.
+        let root = fs_err::canonicalize(&self.root)?;
+        let path = fs_err::canonicalize(path)?;
+        let Ok(relative) = path.strip_prefix(&root) else {
+            return Ok(None);
+        };
+        let mut components = relative.components();
+        let (Some(bucket), Some(entry)) = (components.next(), components.next()) else {
+            return Ok(None);
+        };
+        if bucket.as_os_str() == CacheBucket::InUse.to_str() {
+            return Ok(None);
+        }
+
+        let lock_dir = self.bucket(CacheBucket::InUse).join(bucket);
+        fs_err::create_dir_all(&lock_dir)?;
+        let lock_path = lock_dir.join(entry);
+        let lock_file = LockedFile::acquire_no_wait(
+            &lock_path,
+            LockedFileMode::Shared,
+            lock_path.simplified_display(),
+        )
+        .ok_or_else(|| io::Error::other("the in-use lock is held by a removal operation"))?;
+
+        // Record when the entry was last used, for automatic pruning of cached environments.
+        if let Err(err) = fs_err::File::options()
+            .write(true)
+            .open(&lock_path)
+            .and_then(|file| file.file().set_modified(SystemTime::now()))
+        {
+            debug!(
+                "Failed to record use of `{}`: {err}",
+                path.simplified_display()
+            );
+        }
+        Ok(Some(lock_file))
+    }
+
+    /// Return the cache entries, as `<bucket>/<entry>` paths, whose in-use lock is held.
+    ///
+    /// Removes in-use locks whose entry no longer exists. This can't race a claim when the caller
+    /// holds the exclusive cache lock, since entries are only claimed under the cache lock.
+    ///
+    /// Errors are returned rather than skipped, since an incomplete set could allow removing an
+    /// entry that's in use.
+    fn in_use_entries(&self) -> io::Result<FxHashSet<PathBuf>> {
+        let mut in_use = FxHashSet::default();
+        let buckets = match fs_err::read_dir(self.bucket(CacheBucket::InUse)) {
+            Ok(buckets) => buckets,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(in_use),
+            Err(err) => return Err(err),
+        };
+        for bucket in buckets {
+            let bucket = bucket?;
+            for lock in fs_err::read_dir(bucket.path())? {
+                let lock = lock?;
+                let entry = PathBuf::from(bucket.file_name()).join(lock.file_name());
+                let Some(lock_file) = LockedFile::acquire_no_wait(
+                    lock.path(),
+                    LockedFileMode::Exclusive,
+                    lock.path().simplified_display(),
+                ) else {
+                    in_use.insert(entry);
+                    continue;
+                };
+                // Release the lock before removing the file, which Windows requires.
+                drop(lock_file);
+                if !self.root.join(&entry).try_exists()?
+                    && let Err(err) = fs_err::remove_file(lock.path())
+                {
+                    debug!("Failed to remove stale in-use lock: {err}");
+                }
+            }
+        }
+        Ok(in_use)
+    }
+
+    /// Return an in-use lock that's held, if any.
+    pub fn find_in_use_lock(&self) -> io::Result<Option<PathBuf>> {
+        Ok(self
+            .in_use_entries()?
+            .into_iter()
+            .next()
+            .map(|entry| self.bucket(CacheBucket::InUse).join(entry)))
+    }
+
+    /// Wait for the in-use lock at `path` to be released.
+    ///
+    /// The caller must not hold the cache lock, since the command holding the in-use lock may
+    /// itself need the cache lock.
+    pub async fn wait_for_in_use_lock(path: &Path) -> Result<(), LockedFileError> {
+        LockedFile::acquire(path, LockedFileMode::Exclusive, path.simplified_display())
+            .await
+            .map(drop)
+    }
+
+    /// Return the archives that in-use entries depend on: in-use archives themselves, and archives
+    /// that in-use environments link into (e.g., with `--link-mode=symlink`).
+    fn in_use_archives(&self, in_use: &FxHashSet<PathBuf>) -> io::Result<FxHashSet<PathBuf>> {
+        let mut archives = FxHashSet::default();
+        if in_use.is_empty() {
+            return Ok(archives);
+        }
+        let archive_root = match fs_err::canonicalize(self.bucket(CacheBucket::Archive)) {
+            Ok(archive_root) => archive_root,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(archives),
+            Err(err) => return Err(err),
+        };
+        let root = fs_err::canonicalize(&self.root)?;
+        let entries = in_use
+            .iter()
+            .map(|entry| root.join(entry))
+            .collect::<Vec<_>>();
+        archives.extend(
+            entries
+                .iter()
+                .filter_map(|entry| archive_entry(&archive_root, entry)),
+        );
+        collect_symlinked_archives(&archive_root, &entries, &mut archives)?;
+        Ok(archives)
     }
 
     /// Return the root of the cache.
@@ -528,6 +736,13 @@ impl Cache {
 
         Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
 
+        // Pruning requires the exclusive lock, so it must happen before taking the shared lock.
+        let autoprune =
+            !self.is_temporary() && uv_preview::is_enabled(PreviewFeature::CacheAutoprune);
+        if autoprune {
+            self.autoprune();
+        }
+
         // Block cache removal operations from interfering.
         let lock_file = match LockedFile::acquire(
             root.join(".lock"),
@@ -554,8 +769,178 @@ impl Cache {
         Ok(Self {
             root: std::path::absolute(root).map_err(Error::Absolute)?,
             lock_file,
+            autoprune,
             ..self
         })
+    }
+
+    /// Remove unreferenced archives, if a prune is due (see [`autoprune_due`]).
+    ///
+    /// Skipped if any other uv process holds the cache lock, so pruning can't race an operation on
+    /// the cache. Failures are logged and otherwise ignored.
+    fn autoprune(&self) {
+        if !autoprune_due(&self.root) {
+            return;
+        }
+        let Some(_lock_file) = LockedFile::acquire_no_wait(
+            self.root.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.root.simplified_display(),
+        ) else {
+            debug!("Skipping automatic cache pruning, the cache is in use");
+            return;
+        };
+        // Another process may have pruned since the check above.
+        if !autoprune_due(&self.root) {
+            return;
+        }
+        // Record the attempt first, so that a failing prune isn't retried on every invocation.
+        if let Err(err) = fs_err::write(self.root.join(AUTOPRUNE_MARKER), "")
+            .and_then(|()| remove_file_if_exists(&self.root.join(AUTOPRUNE_PENDING_MARKER)))
+        {
+            debug!("Failed to update the automatic pruning markers: {err}");
+            return;
+        }
+
+        debug!("Pruning unreferenced cache archives");
+        match self.prune_unreferenced_archives() {
+            Ok(summary) => debug!(
+                "Removed {} files and {} directories from the cache",
+                summary.num_files, summary.num_dirs
+            ),
+            Err(err) => warn!("Failed to prune the cache: {err}"),
+        }
+    }
+
+    /// Remove cached environments that haven't been used recently, then unreferenced archives and
+    /// the file objects they used.
+    ///
+    /// Unlike [`Cache::prune`], retains recently used cached environments, other environments,
+    /// and outdated buckets, along with the archives they reference, since they may be used by
+    /// this or another uv version. The caller must hold the exclusive cache lock.
+    fn prune_unreferenced_archives(&self) -> io::Result<Removal> {
+        let archive_root = match fs_err::canonicalize(self.bucket(CacheBucket::Archive)) {
+            Ok(archive_root) => archive_root,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(self.removal()),
+            Err(err) => return Err(err),
+        };
+        let in_use = self.in_use_archives(&self.in_use_entries()?)?;
+        let mut summary = self.remove_unused_cached_environments(&archive_root, &in_use)?;
+
+        let mut distribution_buckets = Vec::new();
+        let mut environment_buckets = Vec::new();
+        for entry in fs_err::read_dir(&self.root)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            if DISTRIBUTION_BUCKET_FAMILIES
+                .iter()
+                .any(|family| is_bucket_version(&name, family))
+            {
+                distribution_buckets.push(entry.path());
+            } else if is_bucket_version(&name, ENVIRONMENTS_BUCKET_FAMILY) {
+                environment_buckets.push(entry.path());
+            }
+        }
+
+        let mut retained = self
+            .find_archive_references_in(distribution_buckets)?
+            .into_keys()
+            .collect::<FxHashSet<_>>();
+        retained
+            .extend(self.find_environment_archive_references(&archive_root, environment_buckets)?);
+        retained.extend(in_use);
+
+        summary += self.remove_unreferenced_archives(&retained)?;
+        summary += self.prune_archive_files()?;
+        Ok(summary)
+    }
+
+    /// Remove the links to cached environments (e.g., for `uvx`) that aren't in use and haven't
+    /// been used for [`AUTOPRUNE_ENVIRONMENT_AGE`], leaving their archives unreferenced.
+    ///
+    /// A cached environment was last used when its in-use lock was last claimed or, if it never
+    /// was, when its archive was created.
+    fn remove_unused_cached_environments(
+        &self,
+        archive_root: &Path,
+        in_use: &FxHashSet<PathBuf>,
+    ) -> io::Result<Removal> {
+        let mut summary = self.removal();
+        let environments = self.bucket(CacheBucket::Environments);
+        if !environments.is_dir() {
+            return Ok(summary);
+        }
+        let locks = self
+            .bucket(CacheBucket::InUse)
+            .join(CacheBucket::Archive.to_str());
+        for entry in walkdir::WalkDir::new(&environments)
+            .min_depth(2)
+            .max_depth(2)
+        {
+            let entry = entry?;
+            if entry.file_type().is_dir() {
+                continue;
+            }
+            let Ok(target) = self.resolve_link(entry.path()) else {
+                continue;
+            };
+            let Some(archive) = archive_entry(archive_root, &target) else {
+                continue;
+            };
+            let Some(id) = archive.file_name() else {
+                continue;
+            };
+            if in_use.contains(&archive) {
+                continue;
+            }
+            let unused_for = [archive.as_path(), &locks.join(id)]
+                .into_iter()
+                .filter_map(|path| {
+                    fs_err::metadata(path)
+                        .and_then(|metadata| metadata.modified())
+                        .ok()
+                })
+                // Treat a time in the future (e.g., due to clock skew) as recent use.
+                .map(|modified| modified.elapsed().unwrap_or_default())
+                .min();
+            if unused_for.is_some_and(|unused_for| unused_for >= AUTOPRUNE_ENVIRONMENT_AGE) {
+                debug!(
+                    "Removing unused cached environment: {}",
+                    entry.path().display()
+                );
+                summary += self.remove_path(entry.path())?;
+            }
+        }
+        Ok(summary)
+    }
+
+    /// Find the archives that environments in the given buckets reference: cached environments,
+    /// which are linked from `<bucket>/<interpreter>/<resolution>`, and archives that environments
+    /// link into (e.g., with `--link-mode=symlink`), including from within cached environments.
+    fn find_environment_archive_references(
+        &self,
+        archive_root: &Path,
+        buckets: Vec<PathBuf>,
+    ) -> io::Result<FxHashSet<PathBuf>> {
+        let mut environments = Vec::new();
+        for bucket in &buckets {
+            for entry in walkdir::WalkDir::new(bucket).min_depth(2).max_depth(2) {
+                let entry = entry?;
+                if entry.file_type().is_dir() {
+                    continue;
+                }
+                if let Ok(target) = self.resolve_link(entry.path())
+                    && let Some(archive) = archive_entry(archive_root, &target)
+                {
+                    environments.push(archive);
+                }
+            }
+        }
+
+        let mut references = environments.iter().cloned().collect::<FxHashSet<_>>();
+        environments.extend(buckets);
+        collect_symlinked_archives(archive_root, &environments, &mut references)?;
+        Ok(references)
     }
 
     /// Initialize the [`Cache`], assuming that there are no other uv processes running.
@@ -635,9 +1020,15 @@ impl Cache {
         // to paths outside the cache.
         let archive_root = fs_err::canonicalize(&self.root)?.join(CacheBucket::Archive.to_str());
 
+        // Retain archives that running commands depend on.
+        let in_use = self.in_use_archives(&self.in_use_entries()?)?;
+
         // Remove any archives that are no longer referenced.
         for (target, references) in references {
-            if target.starts_with(&archive_root) && references.iter().all(|path| !path.exists()) {
+            if target.starts_with(&archive_root)
+                && !in_use.contains(&target)
+                && references.iter().all(|path| !path.exists())
+            {
                 debug!("Removing dangling cache entry: {}", target.display());
                 summary += self.remove_path(target)?;
             }
@@ -702,6 +1093,12 @@ impl Cache {
     pub fn prune(&self, ci: bool) -> Result<Removal, io::Error> {
         let mut summary = self.removal();
 
+        // Retain entries that running commands use.
+        let in_use = self.in_use_entries()?;
+        let is_in_use = |bucket: CacheBucket, entry: &DirEntry| {
+            in_use.contains(&Path::new(bucket.to_str()).join(entry.file_name()))
+        };
+
         // First, remove any top-level directories that are unused. These typically represent
         // outdated cache buckets (e.g., `wheels-v0`, when latest is `wheels-v1`).
         for entry in fs_err::read_dir(&self.root)? {
@@ -712,14 +1109,24 @@ impl Cache {
                 || entry.file_name() == ".gitignore"
                 || entry.file_name() == ".git"
                 || entry.file_name() == ".lock"
+                || entry.file_name() == AUTOPRUNE_MARKER
+                || entry.file_name() == AUTOPRUNE_PENDING_MARKER
             {
                 continue;
             }
 
             if metadata.is_dir() {
-                // If the directory is not a cache bucket, remove it.
+                // If the directory is not a cache bucket, remove it, unless a running command
+                // (e.g., from another uv version) uses one of its entries.
                 if CacheBucket::iter().all(|bucket| entry.file_name() != bucket.to_str()) {
                     let path = entry.path();
+                    if in_use
+                        .iter()
+                        .any(|in_use| in_use.starts_with(entry.file_name()))
+                    {
+                        debug!("Retaining in-use cache bucket: {}", path.display());
+                        continue;
+                    }
                     debug!("Removing dangling cache bucket: {}", path.display());
                     summary += self.remove_path(path)?;
                 }
@@ -738,6 +1145,10 @@ impl Cache {
                 for entry in entries {
                     let entry = entry?;
                     let path = entry.path();
+                    if is_in_use(CacheBucket::Environments, &entry) {
+                        debug!("Retaining in-use cached environment: {}", path.display());
+                        continue;
+                    }
                     debug!("Removing cached environment: {}", path.display());
                     summary += self.remove_path(path)?;
                 }
@@ -752,6 +1163,10 @@ impl Cache {
                 for entry in entries {
                     let entry = entry?;
                     let path = entry.path();
+                    if is_in_use(CacheBucket::Builds, &entry) {
+                        debug!("Retaining in-use build environment: {}", path.display());
+                        continue;
+                    }
                     debug!("Removing temporary build environment: {}", path.display());
                     summary += self.remove_path(path)?;
                 }
@@ -828,16 +1243,30 @@ impl Cache {
             }
         }
 
-        // Fifth, remove any unused archives (by searching for archives that are not symlinked).
-        let references = self.find_archive_references()?;
+        // Fifth, remove any unused archives (by searching for archives that are not symlinked),
+        // retaining archives that running commands depend on.
+        let mut retained = self
+            .find_archive_references()?
+            .into_keys()
+            .collect::<FxHashSet<_>>();
+        retained.extend(self.in_use_archives(&in_use)?);
+        summary += self.remove_unreferenced_archives(&retained)?;
 
+        summary += self.prune_archive_files()?;
+
+        Ok(summary)
+    }
+
+    /// Remove the archives whose canonical paths aren't in `retained`.
+    fn remove_unreferenced_archives(&self, retained: &FxHashSet<PathBuf>) -> io::Result<Removal> {
+        let mut summary = self.removal();
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
                     let path = entry.path();
                     let target = fs_err::canonicalize(&path)?;
-                    if !references.contains_key(&target) {
+                    if !retained.contains(&target) {
                         debug!("Removing dangling cache archive: {}", path.display());
                         summary += self.remove_path(path)?;
                     }
@@ -846,9 +1275,6 @@ impl Cache {
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err),
         }
-
-        summary += self.prune_archive_files()?;
-
         Ok(summary)
     }
 
@@ -866,9 +1292,19 @@ impl Cache {
     ///
     /// Returns a map from archive path to paths that reference it.
     fn find_archive_references(&self) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
+        self.find_archive_references_in([
+            self.bucket(CacheBucket::SourceDistributions),
+            self.bucket(CacheBucket::Wheels),
+        ])
+    }
+
+    /// Find all references to entries in the archive bucket from the given buckets.
+    fn find_archive_references_in(
+        &self,
+        buckets: impl IntoIterator<Item = PathBuf>,
+    ) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
         let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
-        for bucket in [CacheBucket::SourceDistributions, CacheBucket::Wheels] {
-            let bucket_path = self.bucket(bucket);
+        for bucket_path in buckets {
             if bucket_path.is_dir() {
                 let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
                 for entry in walker.filter_entry(|entry| {
@@ -916,12 +1352,29 @@ impl Cache {
         Ok(references)
     }
 
+    /// Record that an archive may have become unreferenced (e.g., because a link to it was
+    /// replaced), if automatic pruning is enabled.
+    fn mark_autoprune_pending(&self) {
+        if !self.autoprune {
+            return;
+        }
+        // Keep an existing marker, so the delay is measured from the first unreferenced archive.
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(self.root.join(AUTOPRUNE_PENDING_MARKER))
+        {
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(err) => debug!("Failed to write the pending automatic pruning marker: {err}"),
+        }
+    }
+
     /// Create a link to a directory in the archive bucket.
     ///
     /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
     /// version. On Unix, we create a symlink to the target directory.
     #[cfg(windows)]
-    #[expect(clippy::unused_self)]
     fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
         // Serialize the link.
         let link = Link::new(id.clone());
@@ -939,6 +1392,7 @@ impl Cache {
                 Ok(())
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                self.mark_autoprune_pending();
                 uv_fs::write_atomic_sync(dst, contents.as_bytes())
             }
             Err(err) => Err(err),
@@ -978,7 +1432,14 @@ impl Cache {
         // Construct the relative link target.
         let src = uv_fs::relative_to(self.archive(id), dst_parent)?;
 
-        uv_fs::replace_symlink(&src, dst)
+        match fs_err::os::unix::fs::symlink(&src, dst) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                self.mark_autoprune_pending();
+                uv_fs::replace_symlink(&src, dst)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Resolve an archive link, returning the fully-resolved path.
@@ -988,6 +1449,80 @@ impl Cache {
     pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
         path.as_ref().canonicalize()
     }
+}
+
+/// Returns `true` if an automatic prune is due: [`AUTOPRUNE_DELAY`] after an archive may have
+/// become unreferenced, or [`AUTOPRUNE_INTERVAL`] after the last prune.
+fn autoprune_due(root: &Path) -> bool {
+    modified_ago(&root.join(AUTOPRUNE_PENDING_MARKER)).is_some_and(|ago| ago >= AUTOPRUNE_DELAY)
+        || modified_ago(&root.join(AUTOPRUNE_MARKER)).is_none_or(|ago| ago >= AUTOPRUNE_INTERVAL)
+}
+
+/// Returns how long ago `path` was modified, or [`None`] if it doesn't exist.
+///
+/// A modification time in the future (e.g., due to clock skew) is treated as long ago, so that it
+/// can't postpone pruning indefinitely.
+fn modified_ago(path: &Path) -> Option<Duration> {
+    let modified = fs_err::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()?;
+    Some(modified.elapsed().unwrap_or(Duration::MAX))
+}
+
+/// Remove the file at `path`, if it exists.
+fn remove_file_if_exists(path: &Path) -> io::Result<()> {
+    match fs_err::remove_file(path) {
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
+}
+
+/// Returns `true` if `name` is a version of the given bucket family, e.g., `wheels-v7` for
+/// `wheels`.
+fn is_bucket_version(name: &OsStr, family: &str) -> bool {
+    name.to_str()
+        .and_then(|name| name.strip_prefix(family))
+        .and_then(|name| name.strip_prefix("-v"))
+        .is_some_and(|version| !version.is_empty() && version.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Returns the top-level entry of the archive bucket that contains `path`, if any.
+///
+/// Both paths must be canonical.
+fn archive_entry(archive_root: &Path, path: &Path) -> Option<PathBuf> {
+    let entry = path.strip_prefix(archive_root).ok()?.components().next()?;
+    Some(archive_root.join(entry))
+}
+
+/// Add the archives that symlinks within `directories` point into to `archives`.
+///
+/// Errors are returned rather than skipped (aside from broken symlinks), since an incomplete set
+/// could allow removing an archive that's in use.
+fn collect_symlinked_archives(
+    archive_root: &Path,
+    directories: &[PathBuf],
+    archives: &mut FxHashSet<PathBuf>,
+) -> io::Result<()> {
+    for directory in directories {
+        if !directory.is_dir() {
+            continue;
+        }
+        for entry in walkdir::WalkDir::new(directory) {
+            let entry = entry?;
+            if !entry.path_is_symlink() {
+                continue;
+            }
+            let target = match fs_err::canonicalize(entry.path()) {
+                Ok(target) => target,
+                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(err),
+            };
+            if let Some(archive) = archive_entry(archive_root, &target) {
+                archives.insert(archive);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// An archive (unzipped wheel) that exists in the local cache.
@@ -1315,6 +1850,15 @@ pub enum CacheBucket {
     /// Cache structure:
     ///  * `osv-v1/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
     Osv,
+    /// Locks marking cache entries as in use by a running command.
+    ///
+    /// A command started by `uv run` or `uvx` holds a shared lock on the in-use lock of each cache
+    /// entry it runs from, in place of the cache-wide lock. Removal operations retain entries whose
+    /// in-use lock is held.
+    ///
+    /// Cache structure:
+    ///  * `in-use-v0/<bucket>/<entry>`, e.g., `in-use-v0/archive-v0/<id>`
+    InUse,
 }
 
 impl CacheBucket {
@@ -1343,6 +1887,7 @@ impl CacheBucket {
             Self::Python => "python-v1",
             Self::Binaries => "binaries-v0",
             Self::Osv => "osv-v1",
+            Self::InUse => "in-use-v0",
         }
     }
 
@@ -1470,7 +2015,8 @@ impl CacheBucket {
             | Self::Environments
             | Self::Python
             | Self::Binaries
-            | Self::Osv => {
+            | Self::Osv
+            | Self::InUse => {
                 // Nothing to do.
             }
         }
@@ -1493,6 +2039,7 @@ impl CacheBucket {
             Self::Python,
             Self::Binaries,
             Self::Osv,
+            Self::InUse,
         ]
         .iter()
         .copied()
@@ -1584,10 +2131,14 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::path::{Path, PathBuf};
     use std::str::FromStr;
 
     use crate::ArchiveId;
 
+    #[cfg(unix)]
+    use super::CacheBucket;
     use super::{Cache, Link};
 
     #[test]
@@ -1699,5 +2250,276 @@ mod tests {
         assert!(victim_dir.is_dir());
         assert!(victim_dir.join("payload.txt").is_file());
         assert!(fs_err::symlink_metadata(symlink).is_err());
+    }
+
+    /// Create a symlink at `path` to `target`, along with its parent directories.
+    #[cfg(unix)]
+    fn symlink(target: &Path, path: &Path) {
+        fs_err::create_dir_all(path.parent().unwrap()).unwrap();
+        fs_err::os::unix::fs::symlink(target, path).unwrap();
+    }
+
+    /// Create an archive containing a single file.
+    #[cfg(unix)]
+    fn archive(cache: &Cache, name: &str) -> PathBuf {
+        let archive = cache.bucket(CacheBucket::Archive).join(name);
+        fs_err::create_dir_all(&archive).unwrap();
+        fs_err::write(archive.join("payload.txt"), "payload").unwrap();
+        archive
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unreferenced_archives_retains_references() {
+        let cache_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        // Archives linked from the current and an outdated wheel bucket.
+        let wheel = archive(&cache, "wheel");
+        symlink(
+            &wheel,
+            &cache.bucket(CacheBucket::Wheels).join("pypi/foo/foo-1.0"),
+        );
+        let outdated_wheel = archive(&cache, "outdated-wheel");
+        symlink(
+            &outdated_wheel,
+            &cache_root.path().join("wheels-v5/pypi/foo/foo-1.0"),
+        );
+
+        // A cached environment, which links into a wheel archive with `--link-mode=symlink`.
+        let environment = archive(&cache, "environment");
+        let environments = cache.bucket(CacheBucket::Environments);
+        symlink(&environment, &environments.join("interpreter/resolution"));
+        let environment_wheel = archive(&cache, "environment-wheel");
+        symlink(
+            &environment_wheel.join("payload.txt"),
+            &environment.join("site-packages/foo.py"),
+        );
+
+        // A script environment, which links into a wheel archive with `--link-mode=symlink`.
+        let script_wheel = archive(&cache, "script-wheel");
+        symlink(
+            &script_wheel.join("payload.txt"),
+            &environments.join("script/site-packages/foo.py"),
+        );
+
+        let unreferenced = archive(&cache, "unreferenced");
+
+        cache.prune_unreferenced_archives().unwrap();
+
+        for archive in [
+            &wheel,
+            &outdated_wheel,
+            &environment,
+            &environment_wheel,
+            &script_wheel,
+        ] {
+            assert!(archive.is_dir(), "{} was removed", archive.display());
+        }
+        assert!(!unreferenced.exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unreferenced_archives_removes_unused_cached_environments() {
+        use std::time::{Duration, SystemTime};
+
+        use super::AUTOPRUNE_ENVIRONMENT_AGE;
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+        let environments = cache.bucket(CacheBucket::Environments);
+        let long_ago = SystemTime::now() - AUTOPRUNE_ENVIRONMENT_AGE - Duration::from_hours(1);
+        let set_modified = |path: &Path, modified: SystemTime| {
+            fs_err::File::open(path)
+                .unwrap()
+                .file()
+                .set_modified(modified)
+                .unwrap();
+        };
+
+        // Cached environments that were created long ago, which are unused, used recently, and in
+        // use, and one in an outdated bucket.
+        let names = ["unused", "recent", "in-use", "outdated"];
+        let archives = names.map(|name| {
+            let archive = archive(&cache, name);
+            set_modified(&archive, long_ago);
+            archive
+        });
+        let links = names.map(|name| environments.join("interpreter").join(name));
+        for (archive, link) in archives.iter().zip(&links[..3]) {
+            symlink(archive, link);
+        }
+        let outdated_link = cache_root
+            .path()
+            .join("environments-v1/interpreter/outdated");
+        symlink(&archives[3], &outdated_link);
+
+        // Claiming an entry records its use, even if it was claimed long ago.
+        let locks = cache.bucket(CacheBucket::InUse).join("archive-v0");
+        drop(cache.claim_in_use(&archives[1]).unwrap().unwrap());
+        set_modified(&locks.join("recent"), long_ago);
+        drop(cache.claim_in_use(&archives[1]).unwrap().unwrap());
+        let _claim = cache.claim_in_use(&archives[2]).unwrap().unwrap();
+        set_modified(&locks.join("in-use"), long_ago);
+
+        cache.prune_unreferenced_archives().unwrap();
+
+        assert!(fs_err::symlink_metadata(&links[0]).is_err());
+        assert!(!archives[0].exists());
+        for (archive, link) in archives[1..3].iter().zip(&links[1..3]) {
+            assert!(archive.is_dir(), "{} was removed", archive.display());
+            assert!(link.exists(), "{} was removed", link.display());
+        }
+        assert!(archives[3].is_dir());
+        assert!(outdated_link.exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_retains_in_use_entries() {
+        let cache_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        // An unreferenced cached environment, which links into an unreferenced wheel archive.
+        let environment = archive(&cache, "environment");
+        let environment_wheel = archive(&cache, "environment-wheel");
+        symlink(
+            &environment_wheel.join("payload.txt"),
+            &environment.join("site-packages/foo.py"),
+        );
+
+        // A script environment, an ephemeral environment, and an environment in an outdated bucket.
+        let script = cache.bucket(CacheBucket::Environments).join("script");
+        let ephemeral = cache.bucket(CacheBucket::Builds).join(".tmp123456");
+        let outdated = cache_root.path().join("environments-v1/script");
+        for directory in [&script, &ephemeral, &outdated] {
+            fs_err::create_dir_all(directory).unwrap();
+        }
+
+        let claims = [&environment, &script, &ephemeral, &outdated]
+            .map(|path| cache.claim_in_use(path).unwrap().unwrap());
+
+        cache.prune(false).unwrap();
+        for path in [
+            &environment,
+            &environment_wheel,
+            &script,
+            &ephemeral,
+            &outdated,
+        ] {
+            assert!(path.is_dir(), "{} was removed", path.display());
+        }
+
+        drop(claims);
+
+        cache.prune(false).unwrap();
+        for path in [
+            &environment,
+            &environment_wheel,
+            &script,
+            &ephemeral,
+            &outdated,
+        ] {
+            assert!(!path.exists(), "{} was retained", path.display());
+        }
+
+        // The in-use locks of removed entries are cleaned up.
+        assert!(cache.in_use_entries().unwrap().is_empty());
+        let locks = cache.bucket(CacheBucket::InUse);
+        assert_eq!(
+            walkdir::WalkDir::new(&locks)
+                .min_depth(2)
+                .into_iter()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn claim_in_use_ignores_paths_outside_the_cache() {
+        let cache_root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        assert!(cache.claim_in_use(outside.path()).unwrap().is_none());
+        assert!(cache.claim_in_use(cache_root.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn autoprune_due() {
+        use std::time::{Duration, SystemTime};
+
+        use super::{
+            AUTOPRUNE_DELAY, AUTOPRUNE_INTERVAL, AUTOPRUNE_MARKER, AUTOPRUNE_PENDING_MARKER,
+            autoprune_due,
+        };
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let root = cache_root.path();
+        let set_modified = |name: &str, modified: SystemTime| {
+            fs_err::File::create(root.join(name))
+                .unwrap()
+                .file()
+                .set_modified(modified)
+                .unwrap();
+        };
+
+        // Without a previous prune, a prune is due.
+        assert!(autoprune_due(root));
+
+        // After a recent prune, it isn't, until the interval elapses.
+        set_modified(AUTOPRUNE_MARKER, SystemTime::now());
+        assert!(!autoprune_due(root));
+        set_modified(
+            AUTOPRUNE_MARKER,
+            SystemTime::now() - AUTOPRUNE_INTERVAL - Duration::from_mins(1),
+        );
+        assert!(autoprune_due(root));
+
+        // A pending prune is due once the delay elapses.
+        set_modified(AUTOPRUNE_MARKER, SystemTime::now());
+        set_modified(AUTOPRUNE_PENDING_MARKER, SystemTime::now());
+        assert!(!autoprune_due(root));
+        set_modified(
+            AUTOPRUNE_PENDING_MARKER,
+            SystemTime::now() - AUTOPRUNE_DELAY - Duration::from_secs(1),
+        );
+        assert!(autoprune_due(root));
+
+        // A marker from the future (e.g., due to clock skew) can't postpone pruning.
+        set_modified(
+            AUTOPRUNE_PENDING_MARKER,
+            SystemTime::now() + Duration::from_hours(1),
+        );
+        assert!(autoprune_due(root));
+    }
+
+    #[test]
+    fn replacing_a_link_marks_autoprune_pending() {
+        let cache_root = tempfile::tempdir().unwrap();
+        let pending = cache_root.path().join(super::AUTOPRUNE_PENDING_MARKER);
+        let link = cache_root.path().join("link");
+        let ids = [ArchiveId::new(), ArchiveId::new()];
+        for id in &ids {
+            fs_err::create_dir_all(Cache::from_path(cache_root.path()).archive(id)).unwrap();
+        }
+
+        // Without automatic pruning, nothing is recorded.
+        let cache = Cache::from_path(cache_root.path());
+        cache.create_link(&ids[0], &link).unwrap();
+        cache.create_link(&ids[1], &link).unwrap();
+        assert!(!pending.exists());
+
+        // With it, creating a link isn't recorded, but replacing one is.
+        let cache = Cache {
+            autoprune: true,
+            ..Cache::from_path(cache_root.path())
+        };
+        fs_err::remove_file(&link).unwrap();
+        cache.create_link(&ids[0], &link).unwrap();
+        assert!(!pending.exists());
+        cache.create_link(&ids[1], &link).unwrap();
+        assert!(pending.exists());
     }
 }

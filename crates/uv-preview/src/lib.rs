@@ -463,6 +463,15 @@ pub enum PreviewFeature {
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
     /// Variant wheels are not yet selectable.
     WheelVariants,
+    /// uv automatically removes unreferenced archives from the [cache](./cache.md), along with
+    /// cached environments (e.g., for `uvx`) that haven't been used for a week. It prunes a few
+    /// minutes after an operation leaves archives unreferenced, and at least once a day, when no
+    /// other uv process is using the cache. Commands run with `uv run` and `uvx` don't block cache
+    /// removal while they run; instead, `uv cache prune` and automatic pruning retain the cache
+    /// entries they use, and `uv cache clean` waits for them to exit. Older uv versions sharing the
+    /// cache don't respect this, and virtual environments outside the cache that were installed
+    /// with `--link-mode=symlink` aren't protected.
+    CacheAutoprune,
 }
 
 impl Display for PreviewFeature {

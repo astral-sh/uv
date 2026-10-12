@@ -4033,6 +4033,7 @@ fn preview_features() {
     +            BuildLazyImports,
     +            BuildDependencyHashes,
     +            WheelVariants,
+    +            CacheAutoprune,
     +        ],
          },
          python_preference: Managed,

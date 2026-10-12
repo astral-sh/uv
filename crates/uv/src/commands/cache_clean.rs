@@ -30,20 +30,34 @@ pub(crate) async fn cache_clean(
         return Ok(ExitStatus::Success);
     }
 
-    let cache = match cache.with_exclusive_lock_no_wait() {
+    let mut waiting = false;
+    let mut cache = match cache.with_exclusive_lock_no_wait() {
         Ok(cache) => cache,
         Err(cache) if force => {
             debug!("Cache is currently in use, proceeding due to `--force`");
             cache
         }
         Err(cache) => {
-            writeln!(
-                printer.stderr(),
-                "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
-            )?;
+            write_waiting(printer)?;
+            waiting = true;
             cache.with_exclusive_lock().await?
         }
     };
+
+    // Commands started by `uv run` and `uvx` may release the cache lock while running, marking
+    // the cache entries they use as in use instead. Wait for them before removing the entire
+    // cache, releasing the cache lock while waiting, since such a command may itself invoke uv.
+    if !force && packages.is_empty() {
+        while let Some(lock) = cache.find_in_use_lock()? {
+            if !waiting {
+                write_waiting(printer)?;
+                waiting = true;
+            }
+            cache.release_lock();
+            Cache::wait_for_in_use_lock(&lock).await?;
+            cache = cache.with_exclusive_lock().await?;
+        }
+    }
 
     let removal_accounting = if preview.is_enabled(PreviewFeature::CachePhysicalSpace) {
         RemovalAccounting::Fine
@@ -114,4 +128,12 @@ pub(crate) async fn cache_clean(
     writeln!(printer.stderr())?;
 
     Ok(ExitStatus::Success)
+}
+
+fn write_waiting(printer: Printer) -> Result<()> {
+    writeln!(
+        printer.stderr(),
+        "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
+    )?;
+    Ok(())
 }
