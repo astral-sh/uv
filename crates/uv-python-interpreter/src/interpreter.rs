@@ -6,7 +6,7 @@ use std::process::{Command, ExitStatus};
 use std::sync::OnceLock;
 use std::{env, io};
 
-use configparser::ini::Ini;
+use astral_ini::Options;
 use fs_err as fs;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
@@ -343,28 +343,15 @@ impl Interpreter {
             return None;
         };
 
-        let mut ini = Ini::new_cs();
-        ini.set_multiline(true);
-
-        let Ok(mut sections) = ini.read(contents) else {
+        let Ok(ini) = Options::default().case_sensitive(true).parse(&contents) else {
             // If a file exists but is not a valid INI file, we assume the environment is
             // externally managed.
             return Some(ExternallyManaged::default());
         };
 
-        let Some(section) = sections.get_mut("externally-managed") else {
-            // If the file exists but does not contain an "externally-managed" section, we assume
-            // the environment is externally managed.
-            return Some(ExternallyManaged::default());
-        };
-
-        let Some(error) = section.remove("Error") else {
-            // If the file exists but does not contain an "Error" key, we assume the environment is
-            // externally managed.
-            return Some(ExternallyManaged::default());
-        };
-
-        Some(ExternallyManaged { error })
+        Some(ExternallyManaged {
+            error: ini.get("externally-managed", "Error").map(str::to_owned),
+        })
     }
 
     /// Returns the `python_full_version` marker corresponding to this Python version.
