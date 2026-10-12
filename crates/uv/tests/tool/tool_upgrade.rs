@@ -817,6 +817,53 @@ fn tool_upgrade_all() -> Result<()> {
     Ok(())
 }
 
+/// With `tool-install-locks`, the installed versions are used as resolver preferences, which must
+/// not prevent the upgrade from selecting newer versions.
+#[test]
+fn tool_upgrade_all_tool_install_locks() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `babel` from the old index.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
+
+    // Upgrade all from the new index.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
+}
+
 #[test]
 fn tool_upgrade_non_existing_package() {
     let context = uv_test::test_context!("3.12")
