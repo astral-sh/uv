@@ -1848,6 +1848,7 @@ mod tests {
     use std::assert_matches;
     use std::str::FromStr;
 
+    use insta::{assert_debug_snapshot, assert_snapshot};
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
@@ -1862,7 +1863,7 @@ mod tests {
     use uv_cache::Cache;
     use uv_distribution_types::{
         FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-        IndexUrl, ToUrlError,
+        IndexUrl, ToUrlError, VariantsJsonFilename,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
@@ -2263,6 +2264,24 @@ mod tests {
     }
 
     #[test]
+    fn variants_json_filename() -> Result<(), Error> {
+        let filename = VariantsJsonFilename::from_str("some_package-1.21.0-variants.json")?;
+        assert_debug_snapshot!(filename, @r#"
+        VariantsJsonFilename {
+            name: PackageName(
+                "some-package",
+            ),
+            version: "1.21.0",
+        }
+        "#);
+        assert_snapshot!(filename, @"some_package-1.21.0-variants.json");
+        let error = VariantsJsonFilename::from_str("some_package-invalid-variants.json")
+            .expect_err("invalid version");
+        assert_snapshot!(error, @"Invalid `variants.json` version: expected version to start with a number, but no leading ASCII digits were found");
+        Ok(())
+    }
+
+    #[test]
     fn variant_json_simple_api() -> Result<(), Error> {
         let response = r#"{
             "files": [
@@ -2288,15 +2307,76 @@ mod tests {
             .flat_map(|datum| datum.files.all_entries(&package_name))
             .collect();
 
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[1].0.to_string(), "example-1.0-variants.json");
-        assert_eq!(
-            entries[1].1.url.to_url()?.as_str(),
-            "https://example.com/simple/example/metadata/1.0"
+        assert_debug_snapshot!(entries, @r#"
+        [
+            (
+                DistFilename(
+                    WheelFilename(
+                        WheelFilename {
+                            name: PackageName(
+                                "example",
+                            ),
+                            version: "1.0",
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
+                        },
+                    ),
+                ),
+                File {
+                    dist_info_metadata: None,
+                    filename: "example-1.0-py3-none-any.whl",
+                    hashes: HashDigests(
+                        [],
+                    ),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: RelativeUrl(
+                        "https://example.com/simple/example/",
+                        "example-1.0-py3-none-any.whl",
+                    ),
+                    yanked: None,
+                },
+            ),
+            (
+                VariantJson(
+                    VariantsJsonFilename {
+                        name: PackageName(
+                            "example",
+                        ),
+                        version: "1.0",
+                    },
+                ),
+                File {
+                    dist_info_metadata: None,
+                    filename: "example-1.0-variants.json",
+                    hashes: HashDigests(
+                        [],
+                    ),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: RelativeUrl(
+                        "https://example.com/simple/example/",
+                        "metadata/1.0",
+                    ),
+                    yanked: None,
+                },
+            ),
+        ]
+        "#);
+        assert_snapshot!(
+            entries[1].1.url.to_url()?,
+            @"https://example.com/simple/example/metadata/1.0"
         );
-        assert!(entries[1].1.requires_python.is_none());
-        assert!(entries[1].1.dist_info_metadata.is_none());
-        assert!(entries[1].1.yanked.is_none());
         Ok(())
     }
 
@@ -2315,11 +2395,72 @@ mod tests {
             .flat_map(|datum| datum.files.all_entries(&package_name))
             .collect();
 
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[1].0.to_string(), "example-1.0-variants.json");
-        assert!(entries[1].1.requires_python.is_none());
-        assert!(entries[1].1.dist_info_metadata.is_none());
-        assert!(entries[1].1.yanked.is_none());
+        assert_debug_snapshot!(entries, @r#"
+        [
+            (
+                DistFilename(
+                    WheelFilename(
+                        WheelFilename {
+                            name: PackageName(
+                                "example",
+                            ),
+                            version: "1.0",
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
+                        },
+                    ),
+                ),
+                File {
+                    dist_info_metadata: None,
+                    filename: "example-1.0-py3-none-any.whl",
+                    hashes: HashDigests(
+                        [],
+                    ),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: RelativeUrl(
+                        "https://example.com/simple/example/",
+                        "example-1.0-py3-none-any.whl",
+                    ),
+                    yanked: None,
+                },
+            ),
+            (
+                VariantJson(
+                    VariantsJsonFilename {
+                        name: PackageName(
+                            "example",
+                        ),
+                        version: "1.0",
+                    },
+                ),
+                File {
+                    dist_info_metadata: None,
+                    filename: "example-1.0-variants.json",
+                    hashes: HashDigests(
+                        [],
+                    ),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: RelativeUrl(
+                        "https://example.com/simple/example/",
+                        "example-1.0-variants.json",
+                    ),
+                    yanked: None,
+                },
+            ),
+        ]
+        "#);
         Ok(())
     }
 
@@ -2369,7 +2510,7 @@ mod tests {
             &base,
         );
 
-        insta::assert_debug_snapshot!(simple_metadata, @r#"
+        assert_debug_snapshot!(simple_metadata, @r#"
         SimpleDetailMetadata {
             project_status: ProjectStatus {
                 status: Archived,
@@ -2442,7 +2583,7 @@ mod tests {
         let simple_metadata =
             SimpleDetailMetadata::from_html(html, &PackageName::from_str("pepy").unwrap(), &base)
                 .unwrap();
-        insta::assert_debug_snapshot!(simple_metadata, @r#"
+        assert_debug_snapshot!(simple_metadata, @r#"
         SimpleDetailMetadata {
             project_status: ProjectStatus {
                 status: Archived,
@@ -2534,7 +2675,7 @@ mod tests {
             .iter()
             .map(DisplaySafeUrl::to_string)
             .collect::<Vec<_>>();
-        insta::assert_debug_snapshot!(urls, @r#"
+        assert_debug_snapshot!(urls, @r#"
         [
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz",
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz",

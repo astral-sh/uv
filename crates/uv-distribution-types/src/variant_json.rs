@@ -48,20 +48,3 @@ impl Display for VariantsJsonFilename {
         )
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use super::VariantsJsonFilename;
-
-    #[test]
-    fn variants_json_filename() -> Result<(), Box<dyn std::error::Error>> {
-        let filename = VariantsJsonFilename::from_str("some_package-1.21.0-variants.json")?;
-        assert_eq!(filename.name.as_str(), "some-package");
-        assert_eq!(filename.version.to_string(), "1.21.0");
-        assert_eq!(filename.to_string(), "some_package-1.21.0-variants.json");
-        assert!(VariantsJsonFilename::from_str("some_package-invalid-variants.json").is_err());
-        Ok(())
-    }
-}
