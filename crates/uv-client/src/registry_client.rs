@@ -1401,10 +1401,10 @@ impl VersionFiles {
         let file = CachedFile::from(file);
         match filename {
             IndexEntryFilename::DistFilename(DistFilename::WheelFilename(_)) => {
-                self.wheels.push(file)
+                self.wheels.push(file);
             }
             IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(_)) => {
-                self.source_dists.push(file)
+                self.source_dists.push(file);
             }
             IndexEntryFilename::VariantJson(_) => self.variant_jsons.push(file),
         }

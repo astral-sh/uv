@@ -12,7 +12,7 @@ use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
-use crate::IndexEntryFilename;
+use crate::VariantsJsonFilename;
 
 /// Error converting [`uv_pypi_types::PypiFile`] to [`File`].
 #[derive(Debug, thiserror::Error)]
@@ -47,9 +47,7 @@ impl File {
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
         // These attributes apply to distributions, not index-level variant metadata.
-        if let Some(IndexEntryFilename::VariantJson(_)) =
-            IndexEntryFilename::try_from_normalized_filename(&file.filename)
-        {
+        if VariantsJsonFilename::from_str(&file.filename).is_ok() {
             file.requires_python = None;
             file.core_metadata = None;
             file.yanked = None;
