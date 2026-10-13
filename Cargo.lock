@@ -238,6 +238,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-ini"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24bfed807c1e54bfc16a9e45e0ed0d349622877055e96c92ba5756e2fab7445a"
+dependencies = [
+ "indexmap",
+ "memchr",
+ "rustc-hash",
+]
+
+[[package]]
 name = "astral-mail-headers"
 version = "0.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -297,17 +308,6 @@ dependencies = [
  "tokio",
  "tracing",
  "wasmtimer",
-]
-
-[[package]]
-name = "astral-ini"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24bfed807c1e54bfc16a9e45e0ed0d349622877055e96c92ba5756e2fab7445a"
-dependencies = [
- "indexmap",
- "memchr",
- "rustc-hash",
 ]
 
 [[package]]
