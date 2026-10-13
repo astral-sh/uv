@@ -192,9 +192,6 @@ fn list_outdated_find_links() -> Result<()> {
             .child("validation-2.0.0-py3-none-any.whl")
             .path(),
     )?;
-    first_links_dir
-        .child("validation-99.0.0-variants.json")
-        .write_str("{}")?;
     let second_links_dir = context.temp_dir.child("second-links");
     second_links_dir.create_dir_all()?;
     fs_err::copy(
