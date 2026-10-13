@@ -58,7 +58,9 @@ def fingerprints():
     }
 
 
-def benchmark(output, reports, block, host):
+def benchmark(
+    output, reports, block, host, *, treatments=TREATMENTS, reference="none-a"
+):
     """Keep timings nested under their independent runner block, never as build replicates."""
     directory = output / "benchmarks"
     directory.mkdir()
@@ -66,7 +68,7 @@ def benchmark(output, reports, block, host):
         name: output
         / "variants"
         / name
-        / ("baseline" if name.startswith("none-") else "symbols")
+        / next(iter(report["builds"]))
         / report["executables"][0]
         for name, report in reports.items()
     }
@@ -94,15 +96,15 @@ def benchmark(output, reports, block, host):
                 "--output-file",
                 compiled,
             ]
-            run([binaries["none-a"], *arguments], cwd=ROOT)
+            run([binaries[reference], *arguments], cwd=ROOT)
             expected = digest(compiled)
-            samples = {name: [] for name in TREATMENTS}
+            samples = {name: [] for name in treatments}
             orders = []
             generator = random.Random(f"{DESIGN_SEED}:{host}:{block}:{workload}")
             for cycle in range(11):
-                labels = list(TREATMENTS)
+                labels = list(treatments)
                 generator.shuffle(labels)
-                shifts = list(range(5))
+                shifts = list(range(len(treatments)))
                 generator.shuffle(shifts)
                 for shift in shifts:
                     order = labels[shift:] + labels[:shift]
@@ -121,7 +123,7 @@ def benchmark(output, reports, block, host):
                 "resolution_sha256": expected,
                 "python": sys.version,
                 "orders": orders,
-                "warmups_per_treatment": 5,
+                "warmups_per_treatment": len(treatments),
                 "samples_seconds": samples,
                 "median_seconds": {
                     name: statistics.median(values) for name, values in samples.items()

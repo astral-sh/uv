@@ -164,10 +164,31 @@ def save_report(output, report):
     )
 
 
-def train_pgo(temporary, directory, environment, tools, host, *, telemetry=False):
+def train_pgo(
+    temporary,
+    directory,
+    environment,
+    tools,
+    host,
+    *,
+    telemetry=False,
+    training_lto=None,
+):
     training = Path(temporary) / "pgo"
     retained = directory / "pgo"
     retained.mkdir()
+    driver = ROOT / "scripts" / "build_uv_pgo.py"
+    driver_arguments = []
+    if training_lto is not None:
+        if training_lto not in {"fat", "thin"}:
+            raise ValueError("Training LTO must be fat or thin")
+        driver = Path(__file__).with_name("pgo_lto_driver.py")
+        driver_arguments = [
+            "--training-lto",
+            training_lto,
+            "--stage-report",
+            retained / "stages.json",
+        ]
     started = time.monotonic()
     with PhaseSampler(
         directory / "training-resources.jsonl", enabled=telemetry
@@ -176,7 +197,8 @@ def train_pgo(temporary, directory, environment, tools, host, *, telemetry=False
             run(
                 [
                     sys.executable,
-                    ROOT / "scripts" / "build_uv_pgo.py",
+                    driver,
+                    *driver_arguments,
                     "--target",
                     host,
                     "--target-dir",
@@ -215,6 +237,10 @@ def train_pgo(temporary, directory, environment, tools, host, *, telemetry=False
         "maximum_internal_block_count": int(maximum_count),
         "total_count": int(total_count),
     }
+    if training_lto is not None:
+        measured["stages"] = json.loads((retained / "stages.json").read_text())
+        if not measured["stages"]["complete"]:
+            raise RuntimeError("Incomplete instrumentation LTO observation")
     if sampler.summary is not None:
         measured["resources"] = sampler.summary
     # Only the merged profile is needed by the final build. Remove the instrumented
@@ -320,6 +346,7 @@ def build(output, report, tools, system, host, *, modes=("baseline", "symbols"))
                     tools,
                     host,
                     telemetry=report.get("telemetry", False),
+                    training_lto=report.get("training_lto"),
                 )
                 environment["RUSTFLAGS"] += f" -Cprofile-use={profile}"
                 save_report(output, report)

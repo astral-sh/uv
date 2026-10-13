@@ -11,7 +11,7 @@ on:
       phase:
         description: Calibration or registered confirmatory sample
         type: choice
-        options: [calibration, confirmatory]
+        options: [calibration, confirmatory, lto-pilot]
         default: calibration
       block:
         description: Unique independent runner block number
@@ -45,6 +45,7 @@ jobs:
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           enable-cache: false
       - run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_study.py
+      - run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_lto_pilot.py
   targets:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -54,6 +55,7 @@ jobs:
       - id: select
         env:
           STUDY_PLATFORM: ${{ inputs.platform }}
+          STUDY_PHASE: ${{ inputs.phase }}
         run: |
           python3 - <<'PY'
           import json
@@ -65,6 +67,8 @@ jobs:
               {"os": "macOS", "runner": "namespace-profile-macos-15", "uv-checksum": "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"},
               {"os": "Windows", "runner": "namespace-profile-windows-2022-x86-64-16x32", "uv-checksum": "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"},
           ]
+          if os.environ["STUDY_PHASE"] == "lto-pilot" and os.environ["STUDY_PLATFORM"] != "Windows":
+              raise ValueError("The LTO pilot is a single Windows allocation")
           selected = [entry for entry in matrix if os.environ["STUDY_PLATFORM"] in ("all", entry["os"])]
           if not selected:
               raise ValueError("Unknown study platform")
@@ -136,7 +140,14 @@ jobs:
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Check statistical harness and resource collection
         run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_study.py
+      - name: Check LTO pilot
+        if: inputs.phase == 'lto-pilot'
+        run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_lto_pilot.py
+      - name: Run LTO pilot
+        if: inputs.phase == 'lto-pilot'
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/lto_pilot.py
       - name: Run randomized block
+        if: inputs.phase != 'lto-pilot'
         run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/study.py --phase ${{ inputs.phase == 'confirmatory' && 'confirmatory' || 'calibration' }}
       - name: Retain block outputs and resource samples
         if: always()
@@ -144,8 +155,9 @@ jobs:
         with:
           name: debug-study-${{ inputs.phase }}-${{ inputs.block }}-${{ runner.os }}-${{ runner.arch }}
           path: |
-            target/debug-symbols-study
+            ${{ inputs.phase == 'lto-pilot' && 'target/debug-symbols-lto-pilot' || 'target/debug-symbols-study' }}
             !target/debug-symbols-study/**/*.original.whl
+            !target/debug-symbols-lto-pilot/**/*.original.whl
           if-no-files-found: error
           compression-level: 1
           retention-days: 14

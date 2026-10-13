@@ -1,5 +1,8 @@
 # Optimized Rust+C debug symbols experiment
 
+The [instrumentation LTO pilot](LTO_PILOT.md) compares fat/thin PGO instrumentation on current main
+using one Windows allocation, separately from the completed statistical study.
+
 The [randomized study results](results/2026-10-10/README.md) use fourteen independent allocations
 per platform, randomized build order, duplicate no-debug controls, resource sampling and
 simultaneous inference. All 56 allocations passed verification. The original protocol is retained in
