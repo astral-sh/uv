@@ -789,13 +789,19 @@ impl<A: Archive> Archive for RecordingArchive<'_, A> {
 }
 
 fn tar_extract_policy() -> ExtractPolicy {
-    // Keep tar-codec's defaults, including name validation, hardlink rejection, and rejection of
-    // pre-existing link targets. uv extracts archives into new temporary directories.
+    // NOTE(ww): We tweak tar-codec's defaults slightly.
+    //
+    // For one, we allow hard-links. These really shouldn't occur in sdists, but they can in practice,
+    // especially with older (pre-standard) sdists. See `pybabel-json==0.2.0` for an example of this.
+    // In the future, we may want to disable hard-link extraction again.
+    //
+    // On Windows, we additionally skip i.e. ignore symbolic link members since Windows lacks
+    // an unprivileged symbolic linking mechanism.
+    let link_policy = LinkPolicy::default().allow_hard_links(true);
     if cfg!(windows) {
-        ExtractPolicy::default()
-            .link_policy(LinkPolicy::default().symlink_policy(SymlinkPolicy::Skip))
+        ExtractPolicy::default().link_policy(link_policy.symlink_policy(SymlinkPolicy::Skip))
     } else {
-        ExtractPolicy::default()
+        ExtractPolicy::default().link_policy(link_policy)
     }
 }
 
