@@ -1,4 +1,4 @@
-"""Compare fat/thin instrumentation with no/full debug on one Windows allocation."""
+"""Run a registered instrumentation-LTO/debug-level pilot on one native allocation."""
 
 import argparse
 import json
@@ -22,7 +22,9 @@ from study import benchmark, fingerprints
 from telemetry import machine_info
 
 
-def check_compiler_flags(path, names, lto, debug_level, *, instrumented):
+def check_compiler_flags(
+    path, names, lto, debug_level, *, instrumented, system="Windows"
+):
     commands = {}
     for name in names:
         matches = [
@@ -35,23 +37,32 @@ def check_compiler_flags(path, names, lto, debug_level, *, instrumented):
         if len(matches) != 1:
             raise RuntimeError(f"Expected one compiler invocation for {name} in {path}")
         command = matches[0]
-        for setting, expected in {
+        settings = {
             "lto": lto,
             "codegen-units": "1",
             "opt-level": "3",
             "panic": "abort",
-            "target-feature": "+crt-static",
-        }.items():
+        }
+        if system == "Windows":
+            settings["target-feature"] = "+crt-static"
+        for setting, expected in settings.items():
             values = re.findall(rf"-C\s*{setting}=([^\s`]+)", command)
             if not values or values[-1] != expected:
                 raise RuntimeError(
                     f"Unexpected effective {setting} for {name}: {values}"
                 )
         debug = re.findall(r"-C\s*debuginfo=([^\s`]+)", command)
-        if debug_level == "full" and (not debug or debug[-1] != "2"):
-            raise RuntimeError(f"Full debug information missing for {name}")
-        if debug_level == "none" and debug and debug[-1] not in {"0", "none"}:
-            raise RuntimeError(f"No-debug control has debug information: {name}")
+        if debug_level == "none":
+            if debug and debug[-1] not in {"0", "none"}:
+                raise RuntimeError(f"No-debug control has debug information: {name}")
+        else:
+            expected = {
+                "line-tables-only": "line-tables-only",
+                "limited": "1",
+                "full": "2",
+            }[debug_level]
+            if not debug or debug[-1] != expected:
+                raise RuntimeError(f"Unexpected {debug_level} debug flags for {name}")
         required = "profile-generate" if instrumented else "profile-use"
         forbidden = "profile-use" if instrumented else "profile-generate"
         if not re.search(rf"-C\s*{required}=", command) or re.search(
@@ -71,28 +82,47 @@ def verify_control(directory, report, tools, system):
             or sbom_digest(binary, tools, system) != record["sbom_sha256"]
         ):
             raise RuntimeError(f"Control executable changed: {name}")
-        imports = run([tools["llvm-readobj"], "--coff-imports", binary])
-        if re.search(
-            r"(?:vcruntime|msvcp|msvcr|ucrtbase|api-ms-win-crt)[^\s]*\.dll",
-            imports,
-            re.IGNORECASE,
-        ):
-            raise RuntimeError(f"Control imports a dynamic CRT: {name}")
-        record["static_crt"] = True
+        if system == "Windows":
+            imports = run([tools["llvm-readobj"], "--coff-imports", binary])
+            if re.search(
+                r"(?:vcruntime|msvcp|msvcr|ucrtbase|api-ms-win-crt)[^\s]*\.dll",
+                imports,
+                re.IGNORECASE,
+            ):
+                raise RuntimeError(f"Control imports a dynamic CRT: {name}")
+            record["static_crt"] = True
+        if system == "Darwin":
+            run(["codesign", "--verify", binary])
     verify_install(directory, measured, report["executables"], system)
     report["verified"] = True
+
+
+def select_target(plan, host, cargo_jobs):
+    targets = plan.get("targets")
+    if targets is None:
+        targets = {plan["target"]: plan}
+    if host not in targets:
+        raise RuntimeError(f"Target outside the registered pilot: {host}")
+    target = targets[host]
+    if cargo_jobs != str(target["cargo_jobs"]):
+        raise RuntimeError("Cargo parallelism differs from the registered pilot")
+    if sorted(target["order"]) != sorted(plan["treatments"]):
+        raise RuntimeError("Pilot order must contain each treatment exactly once")
+    return target
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--plan", type=Path, default=Path(__file__).with_name("lto-pilot-plan.json")
+    )
+    parser.add_argument(
         "--output", type=Path, default=ROOT / "target" / "debug-symbols-lto-pilot"
     )
     args = parser.parse_args()
-    plan = json.loads(Path(__file__).with_name("lto-pilot-plan.json").read_text())
+    plan = json.loads(args.plan.read_text())
     system, host, compiler, tools = build_context(True)
-    if host != plan["target"] or os.environ.get("CARGO_BUILD_JOBS") != "4":
-        raise RuntimeError("This pilot requires Windows x86-64 with four Cargo jobs")
+    target = select_target(plan, host, os.environ.get("CARGO_BUILD_JOBS"))
     source = fingerprints()
     if source != plan["source_fingerprints"]:
         raise RuntimeError("Source differs from the pinned pilot revision")
@@ -110,7 +140,9 @@ def main():
         "target": host,
         "platform": system,
         "machine": machine_info(),
-        "order": plan["order"],
+        "order": target["order"],
+        "runner_profile": target["runner_profile"],
+        "cargo_jobs": target["cargo_jobs"],
         "treatments": {},
         "failures": {},
         "verified": False,
@@ -131,7 +163,7 @@ def main():
         log=output / "fetch.log",
     )
     maturin = run(["maturin", "--version"]).strip()
-    for name in plan["order"]:
+    for name in target["order"]:
         settings = plan["treatments"][name]
         mode = "baseline" if settings["debug_level"] == "none" else "symbols"
         directory = output / "variants" / name
@@ -162,6 +194,7 @@ def main():
                     settings["training_lto"],
                     settings["debug_level"],
                     instrumented=True,
+                    system=system,
                 ),
                 "final": check_compiler_flags(
                     directory / mode / "build.log",
@@ -169,6 +202,7 @@ def main():
                     "fat",
                     settings["debug_level"],
                     instrumented=False,
+                    system=system,
                 ),
             }
         except (RuntimeError, OSError, ValueError) as error:
@@ -179,13 +213,23 @@ def main():
             save_report(output, summary)
     if summary["failures"]:
         raise RuntimeError(f"Pilot variants failed: {list(summary['failures'])}")
-    for lto in ("fat", "thin"):
-        control = summary["treatments"][f"{lto}-none"]
-        verify_control(
-            output / "variants" / f"{lto}-none" / "baseline", control, tools, system
-        )
-        symbols = summary["treatments"][f"{lto}-full"]
-        checks = output / "checks" / lto
+    controls = {}
+    for name, settings in plan["treatments"].items():
+        if settings["debug_level"] == "none":
+            controls[settings["training_lto"]] = name
+            verify_control(
+                output / "variants" / name / "baseline",
+                summary["treatments"][name],
+                tools,
+                system,
+            )
+    for name, settings in plan["treatments"].items():
+        if settings["debug_level"] == "none":
+            continue
+        control_name = controls[settings["training_lto"]]
+        control = summary["treatments"][control_name]
+        symbols = summary["treatments"][name]
+        checks = output / "checks" / name
         checks.mkdir(parents=True)
         paired = symbols | {
             "builds": {
@@ -199,8 +243,8 @@ def main():
             tools,
             system,
             directories={
-                "baseline": output / "variants" / f"{lto}-none" / "baseline",
-                "symbols": output / "variants" / f"{lto}-full" / "symbols",
+                "baseline": output / "variants" / control_name / "baseline",
+                "symbols": output / "variants" / name / "symbols",
             },
         )
         symbols["verified"] = paired["verified"]
@@ -211,7 +255,7 @@ def main():
         0,
         host,
         treatments=tuple(plan["treatments"]),
-        reference="fat-none",
+        reference=plan.get("reference_treatment", "fat-none"),
     )
     for report in summary["treatments"].values():
         for measured in report["builds"].values():
@@ -222,7 +266,7 @@ def main():
     save_report(output, summary)
     print(
         json.dumps(
-            {"study": plan["study_id"], "verified": True, "order": plan["order"]}
+            {"study": plan["study_id"], "verified": True, "order": target["order"]}
         )
     )
 

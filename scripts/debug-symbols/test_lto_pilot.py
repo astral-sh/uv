@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from lto_pilot import check_compiler_flags
+from lto_pilot import check_compiler_flags, select_target
 from pgo_lto_driver import load_helper, observe
 from study import TREATMENTS, benchmark
 
@@ -97,6 +97,7 @@ class PilotChecks(unittest.TestCase):
     def test_balanced_runtime_samples_for_pilot_and_original_study(self):
         pilot = ("fat-none", "fat-full", "thin-none", "thin-full")
         for treatments, reference, count in (
+            (("thin-none", "thin-line-tables", "thin-limited"), "thin-none", 30),
             (pilot, "fat-none", 40),
             (TREATMENTS, "none-a", 50),
         ):
@@ -145,6 +146,78 @@ class PilotChecks(unittest.TestCase):
                             self.assertCountEqual(
                                 [order[position] for order in batch], treatments
                             )
+
+    def test_registered_targets_jobs_and_orders(self):
+        for filename in ("lto-pilot-plan.json", "lower-debug-pilot-plan.json"):
+            plan = json.loads(Path(__file__).with_name(filename).read_text())
+            targets = plan.get("targets", {plan.get("target"): plan})
+            for host, target in targets.items():
+                with self.subTest(plan=filename, host=host):
+                    self.assertEqual(
+                        select_target(plan, host, str(target["cargo_jobs"])), target
+                    )
+                    with self.assertRaisesRegex(RuntimeError, "parallelism"):
+                        select_target(plan, host, "1")
+                    invalid = {**plan, "targets": {host: {**target, "order": []}}}
+                    with self.assertRaisesRegex(RuntimeError, "exactly once"):
+                        select_target(invalid, host, str(target["cargo_jobs"]))
+            with self.assertRaisesRegex(RuntimeError, "outside"):
+                select_target(plan, "unregistered", "4")
+
+    def test_reduced_debug_flags_on_native_platforms(self):
+        for system, executable in (
+            ("Linux", "uv"),
+            ("Darwin", "uv"),
+            ("Windows", "uv.exe"),
+        ):
+            for level, flag in (
+                ("limited", "1"),
+                ("line-tables-only", "line-tables-only"),
+            ):
+                with (
+                    self.subTest(system=system, level=level),
+                    tempfile.TemporaryDirectory() as temporary,
+                ):
+                    path = Path(temporary) / "training.log"
+                    command = (
+                        "Running rustc --crate-name uv --crate-type bin "
+                        "-C opt-level=3 -C lto=fat -C codegen-units=1 -C panic=abort "
+                        f"-C debuginfo={flag} -Cprofile-generate=profiles -Clto=thin"
+                    )
+                    path.write_text(command)
+                    if system == "Windows":
+                        with self.assertRaisesRegex(RuntimeError, "target-feature"):
+                            check_compiler_flags(
+                                path,
+                                [executable],
+                                "thin",
+                                level,
+                                instrumented=True,
+                                system=system,
+                            )
+                        command += " -C target-feature=+crt-static"
+                        path.write_text(command)
+                    self.assertEqual(
+                        check_compiler_flags(
+                            path,
+                            [executable],
+                            "thin",
+                            level,
+                            instrumented=True,
+                            system=system,
+                        ),
+                        {executable: command},
+                    )
+                    path.write_text(command + " -C debuginfo=2")
+                    with self.assertRaisesRegex(RuntimeError, "debug flags"):
+                        check_compiler_flags(
+                            path,
+                            [executable],
+                            "thin",
+                            level,
+                            instrumented=True,
+                            system=system,
+                        )
 
     def test_effective_compiler_flags_use_the_last_lto_setting(self):
         with tempfile.TemporaryDirectory() as temporary:

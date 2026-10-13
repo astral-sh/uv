@@ -1,5 +1,8 @@
 # Optimized Rust+C debug symbols experiment
 
+The [lower-debug pilot](LOWER_DEBUG_PILOT.md) measures line tables and limited debug information
+against fresh no-debug controls with thin-LTO instrumentation on four native platforms.
+
 The [October 13 Windows LTO pilot](results/2026-10-13-lto-pilot/README.md) reduced combined
 build/training time by 29.5% without debug information and 35.0% with full debug information. It
 uses one allocation on a newer pinned main revision, separately from the completed statistical study

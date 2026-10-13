@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       phase:
-        description: Calibration or registered confirmatory sample
+        description: Registered study phase or exploratory pilot
         type: choice
-        options: [calibration, confirmatory, lto-pilot]
+        options: [calibration, confirmatory, lto-pilot, lower-debug-pilot]
         default: calibration
       block:
         description: Unique independent runner block number
@@ -141,13 +141,16 @@ jobs:
       - name: Check statistical harness and resource collection
         run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_study.py
       - name: Check LTO pilot
-        if: inputs.phase == 'lto-pilot'
+        if: inputs.phase == 'lto-pilot' || inputs.phase == 'lower-debug-pilot'
         run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_lto_pilot.py
       - name: Run LTO pilot
         if: inputs.phase == 'lto-pilot'
         run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/lto_pilot.py
+      - name: Run lower-debug pilot
+        if: inputs.phase == 'lower-debug-pilot'
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/lto_pilot.py --plan scripts/debug-symbols/lower-debug-pilot-plan.json --output target/debug-symbols-lower-debug-pilot
       - name: Run randomized block
-        if: inputs.phase != 'lto-pilot'
+        if: inputs.phase != 'lto-pilot' && inputs.phase != 'lower-debug-pilot'
         run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/study.py --phase ${{ inputs.phase == 'confirmatory' && 'confirmatory' || 'calibration' }}
       - name: Retain block outputs and resource samples
         if: always()
@@ -155,9 +158,10 @@ jobs:
         with:
           name: debug-study-${{ inputs.phase }}-${{ inputs.block }}-${{ runner.os }}-${{ runner.arch }}
           path: |
-            ${{ inputs.phase == 'lto-pilot' && 'target/debug-symbols-lto-pilot' || 'target/debug-symbols-study' }}
+            ${{ inputs.phase == 'lto-pilot' && 'target/debug-symbols-lto-pilot' || inputs.phase == 'lower-debug-pilot' && 'target/debug-symbols-lower-debug-pilot' || 'target/debug-symbols-study' }}
             !target/debug-symbols-study/**/*.original.whl
             !target/debug-symbols-lto-pilot/**/*.original.whl
+            !target/debug-symbols-lower-debug-pilot/**/*.original.whl
           if-no-files-found: error
           compression-level: 1
           retention-days: 14

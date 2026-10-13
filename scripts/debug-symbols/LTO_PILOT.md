@@ -4,6 +4,9 @@ The [completed Windows results](results/2026-10-13-lto-pilot/README.md) show a 2
 combined build/training time without debug information and 35.0% with full debug information. All
 four variants passed; this remains one exploratory allocation.
 
+The separate [lower-debug pilot](LOWER_DEBUG_PILOT.md) compares no debug information, line tables
+and limited debug information with thin-LTO instrumentation on all four native platforms.
+
 Compare fat and thin LTO during PGO instrumentation on one Windows x86-64 allocation, using main
 revision `59e5912ecff500422b99cca3df68d48be3841a67`. The pilot has four clean build variants: fat/no
 debug, fat/full debug, thin/no debug and thin/full debug. Every final compilation uses fat LTO, one
