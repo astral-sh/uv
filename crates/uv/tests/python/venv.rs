@@ -464,6 +464,54 @@ async fn create_venv_project_environment_lock() -> Result<()> {
             requires-python = ">=3.12"
             "#,
     )?;
+
+    // Simulate another project command holding the environment lock.
+    let install_path = dunce::canonicalize(context.temp_dir.path())?;
+    let lock_path = std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&install_path)));
+    let lock = LockedFile::acquire(
+        &lock_path,
+        LockedFileMode::Exclusive,
+        context.temp_dir.path().display(),
+    )
+    .await?;
+    let context = context.with_filtered_path(&lock_path, "PROJECT_ENVIRONMENT_LOCK");
+
+    // A pathless invocation from the project root uses the workspace-derived lock, including when
+    // `UV_PROJECT_ENVIRONMENT` changes the environment path. Lock errors warn and continue.
+    uv_snapshot!(context.filters(), context.venv()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo")
+        .env(EnvVars::RUST_LOG, "warn")
+        .env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: foo
+    WARN Failed to acquire project environment lock: Timeout ([TIME]) when waiting for lock on `[TEMP_DIR]/` at `[PROJECT_ENVIRONMENT_LOCK]/`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    Activate with: source foo/[BIN]/activate
+    ");
+    drop(lock);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicates::path::is_dir());
+
+    Ok(())
+}
+
+/// Project aliases share the workspace lock even before the environment exists.
+#[tokio::test]
+async fn create_venv_project_environment_lock_symlink() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            "#,
+    )?;
     let project_link = context.temp_dir.child("project-link");
     uv_fs::create_symlink(context.temp_dir.path(), project_link.path())?;
 
