@@ -1,0 +1,56 @@
+{
+  "thin_vs_fat": {
+    "none": {
+      "training_seconds": -49.935829047671184,
+      "final_seconds": 5.654123075777173,
+      "total_seconds": -29.496895461932926,
+      "wheel_bytes": 0.0499085313875991,
+      "instrumented_build": -52.42095456175488,
+      "uv_bytes_delta": 14848,
+      "uv_percent": 0.04425791682562963,
+      "runtime_percent": {
+        "jupyter": -0.09494278952596469,
+        "trio": -1.6196750913877733
+      }
+    },
+    "full": {
+      "training_seconds": -53.0684271257184,
+      "final_seconds": -6.094965531372043,
+      "total_seconds": -34.97537760979089,
+      "wheel_bytes": 0.02085876168798073,
+      "instrumented_build": -53.72759936172542,
+      "uv_bytes_delta": 1024,
+      "uv_percent": 0.0030489199201122474,
+      "runtime_percent": {
+        "jupyter": 0.9454994250406301,
+        "trio": 0.3176828692577516
+      }
+    }
+  },
+  "full_vs_none": {
+    "fat": {
+      "training_seconds": 65.15939015939007,
+      "final_seconds": 77.94727340088346,
+      "total_seconds": 69.86115165208993,
+      "wheel_bytes": 0.014102536559490453,
+      "uv_bytes_delta": 36864,
+      "uv_percent": 0.10988172453261225,
+      "runtime_percent": {
+        "jupyter": -0.995178282393816,
+        "trio": -0.5687620818722428
+      }
+    },
+    "thin": {
+      "training_seconds": 54.825093628695434,
+      "final_seconds": 58.15894690946879,
+      "total_seconds": 56.66199832348558,
+      "wheel_bytes": -0.014936836769763318,
+      "uv_bytes_delta": 23040,
+      "uv_percent": 0.0686456966775495,
+      "runtime_percent": {
+        "jupyter": 0.03588860087340162,
+        "trio": 1.3892910196647401
+      }
+    }
+  }
+}

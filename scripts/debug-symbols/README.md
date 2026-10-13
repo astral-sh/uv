@@ -1,7 +1,9 @@
 # Optimized Rust+C debug symbols experiment
 
-The [instrumentation LTO pilot](LTO_PILOT.md) compares fat/thin PGO instrumentation on current main
-using one Windows allocation, separately from the completed statistical study.
+The [October 13 Windows LTO pilot](results/2026-10-13-lto-pilot/README.md) reduced combined
+build/training time by 29.5% without debug information and 35.0% with full debug information. It
+uses one allocation on a newer pinned main revision, separately from the completed statistical study
+below; every final compilation still uses fat LTO.
 
 The [randomized study results](results/2026-10-10/README.md) use fourteen independent allocations
 per platform, randomized build order, duplicate no-debug controls, resource sampling and

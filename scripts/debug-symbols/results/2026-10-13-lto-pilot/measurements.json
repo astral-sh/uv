@@ -1,0 +1,1061 @@
+{
+  "commit": "e93dc7fae7fb2d5d8e896775085b00285e8e16c2",
+  "main_source_revision": "59e5912ecff500422b99cca3df68d48be3841a67",
+  "plan_sha256": "ff6a59f00b4e8bbba2dfa20f40c65302194a12751bc3760e9be3eea52dcf9f34",
+  "order": ["thin-none", "fat-full", "fat-none", "thin-full"],
+  "machine": {
+    "platform": "Windows-2022Server-10.0.20348-SP0",
+    "logical_cpus": 16,
+    "physical_cpus": 16,
+    "physical_memory_bytes": 34359107584,
+    "cpu_description": "{\"Name\":\"AMD EPYC-v4 Processor\",\"Manufacturer\":\"AuthenticAMD\",\"NumberOfCores\":16,\"NumberOfLogicalProcessors\":16,\"MaxClockSpeed\":4292}",
+    "cpu_description_exit_code": 0,
+    "psutil_version": "7.0.0",
+    "runner_name": "nsc-runner-ve9ptv7i8fl32"
+  },
+  "treatments": {
+    "thin-none": {
+      "training_lto": "thin",
+      "debug_level": "none",
+      "stages_seconds": {
+        "merge_profiles": 1.0939999999999372,
+        "prepare_corpus": 0.016000000000005343,
+        "instrumented_build": 399.35900000000004,
+        "train_uv": 38.547000000000025
+      },
+      "training_seconds": 439.23499999999996,
+      "final_seconds": 538.985,
+      "total_seconds": 978.22,
+      "resources": {
+        "training": {
+          "wall_seconds": 439.23499999999996,
+          "samples": 432,
+          "coverage_seconds": 438.34299999999996,
+          "max_sample_gap_seconds": 1.2649999999999864,
+          "sampled_peak_tree_rss_bytes": 5641183232,
+          "minimum_host_available_memory_bytes": 26150002688,
+          "median_host_cpu_percent": 25.0,
+          "sampled_tree_counters_lower_bound": {
+            "cpu_user_seconds": 1160.65625,
+            "cpu_system_seconds": 41.078125,
+            "num_page_faults": 20848371,
+            "read_bytes": 963827792,
+            "write_bytes": 2366909244
+          },
+          "reaped_children_rusage_delta": null,
+          "host_counter_first": {
+            "host_cpu_times": {
+              "user": 60.0625,
+              "system": 114.171875,
+              "idle": 1098.8125,
+              "interrupt": 0.734375,
+              "dpc": 1.328125
+            },
+            "host_swap": {
+              "total": 5368709120,
+              "used": 0,
+              "free": 5368709120,
+              "percent": 0.0,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 54755,
+              "write_count": 260027,
+              "read_bytes": 1163433984,
+              "write_bytes": 4060824064,
+              "read_time": 16,
+              "write_time": 11
+            }
+          },
+          "host_counter_last": {
+            "host_cpu_times": {
+              "user": 1406.109375,
+              "system": 239.59375,
+              "idle": 6640.84375,
+              "interrupt": 1.6875,
+              "dpc": 2.375
+            },
+            "host_swap": {
+              "total": 5368709120,
+              "used": 0,
+              "free": 5368709120,
+              "percent": 0.0,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 62827,
+              "write_count": 424724,
+              "read_bytes": 1329160192,
+              "write_bytes": 11904298496,
+              "read_time": 17,
+              "write_time": 45
+            }
+          },
+          "collection_errors": {
+            "process_io_unavailable": 1
+          }
+        },
+        "final": {
+          "wall_seconds": 538.985,
+          "samples": 531,
+          "coverage_seconds": 538.9060000000001,
+          "max_sample_gap_seconds": 1.0789999999999509,
+          "sampled_peak_tree_rss_bytes": 5667766272,
+          "minimum_host_available_memory_bytes": 25360805888,
+          "median_host_cpu_percent": 6.9,
+          "sampled_tree_counters_lower_bound": {
+            "cpu_user_seconds": 893.9375,
+            "cpu_system_seconds": 25.390625,
+            "num_page_faults": 19555903,
+            "read_bytes": 575251622,
+            "write_bytes": 576432066
+          },
+          "reaped_children_rusage_delta": null,
+          "host_counter_first": {
+            "host_cpu_times": {
+              "user": 1408.609375,
+              "system": 256.90625,
+              "idle": 6861.28125,
+              "interrupt": 1.75,
+              "dpc": 2.640625
+            },
+            "host_swap": {
+              "total": 5368709120,
+              "used": 0,
+              "free": 5368709120,
+              "percent": 0.0,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 63001,
+              "write_count": 492688,
+              "read_bytes": 1339876352,
+              "write_bytes": 13613552128,
+              "read_time": 17,
+              "write_time": 48
+            }
+          },
+          "host_counter_last": {
+            "host_cpu_times": {
+              "user": 2482.390625,
+              "system": 354.421875,
+              "idle": 14312.484374999998,
+              "interrupt": 2.0,
+              "dpc": 2.828125
+            },
+            "host_swap": {
+              "total": 5368709120,
+              "used": 0,
+              "free": 5368709120,
+              "percent": 0.0,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 71562,
+              "write_count": 508754,
+              "read_bytes": 1959361536,
+              "write_bytes": 17462325760,
+              "read_time": 18,
+              "write_time": 54
+            }
+          },
+          "collection_errors": {
+            "NoSuchProcess": 2
+          }
+        }
+      },
+      "profile_sha256": "0e82ae19f39d25174796b4f178dbb283e99d5ee678e6847d3c6483b7f14c913e",
+      "profile_bytes": 32426680,
+      "profile_functions": 91097,
+      "pgo_diagnostics": {
+        "warnings": 19,
+        "missing": 19,
+        "mismatch": 0
+      },
+      "wheel_bytes": 15927067,
+      "wheel_sha256": "7cc06373a56d20b4df126f33502b63af16094e8c259026685b992fe53b47c0ea",
+      "executables": {
+        "uv.exe": {
+          "stripped_executable_bytes": 33563648,
+          "sha256": "a4a139b7ad38dba85c0f2e2e95338efc745b5212231163b001b23405550b5d33",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+        },
+        "uvx.exe": {
+          "stripped_executable_bytes": 331776,
+          "sha256": "36e2ddd60cefe28d23cd854df3dad28df420afbd9c7fe6d297ca8b210856a23a",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+        },
+        "uvw.exe": {
+          "stripped_executable_bytes": 331264,
+          "sha256": "033aa51db944b57afb81e22fa8b43ac566705ba5135ef769c9cf54caa1a5e8d1",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+        }
+      }
+    },
+    "fat-full": {
+      "training_lto": "fat",
+      "debug_level": "full",
+      "stages_seconds": {
+        "merge_profiles": 1.2339999999999236,
+        "prepare_corpus": 0.015000000000100044,
+        "instrumented_build": 1396.8909999999998,
+        "train_uv": 50.71900000000005
+      },
+      "training_seconds": 1449.016,
+      "final_seconds": 907.7820000000002,
+      "total_seconds": 2356.7980000000002,
+      "resources": {
+        "training": {
+          "wall_seconds": 1449.016,
+          "samples": 1426,
+          "coverage_seconds": 1448.063,
+          "max_sample_gap_seconds": 1.2029999999999745,
+          "sampled_peak_tree_rss_bytes": 29120069632,
+          "minimum_host_available_memory_bytes": 2498129920,
+          "median_host_cpu_percent": 6.2,
+          "sampled_tree_counters_lower_bound": {
+            "cpu_user_seconds": 1954.25,
+            "cpu_system_seconds": 85.703125,
+            "num_page_faults": 54398601,
+            "read_bytes": 2141197399,
+            "write_bytes": 4958317800
+          },
+          "reaped_children_rusage_delta": null,
+          "host_counter_first": {
+            "host_cpu_times": {
+              "user": 2484.0,
+              "system": 354.875,
+              "idle": 14343.171874999998,
+              "interrupt": 2.0,
+              "dpc": 2.828125
+            },
+            "host_swap": {
+              "total": 5368709120,
+              "used": 0,
+              "free": 5368709120,
+              "percent": 0.0,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 71563,
+              "write_count": 508882,
+              "read_bytes": 1959394304,
+              "write_bytes": 17511224832,
+              "read_time": 18,
+              "write_time": 54
+            }
+          },
+          "host_counter_last": {
+            "host_cpu_times": {
+              "user": 4619.546875,
+              "system": 549.03125,
+              "idle": 35182.46875,
+              "interrupt": 3.96875,
+              "dpc": 9.28125
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 687099904,
+              "free": 18907283456,
+              "percent": 3.5,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1355150,
+              "write_count": 951861,
+              "read_bytes": 22082377216,
+              "write_bytes": 53301213696,
+              "read_time": 135,
+              "write_time": 141
+            }
+          },
+          "collection_errors": {
+            "NoSuchProcess": 1
+          }
+        },
+        "final": {
+          "wall_seconds": 907.7820000000002,
+          "samples": 894,
+          "coverage_seconds": 907.6880000000001,
+          "max_sample_gap_seconds": 1.0630000000001019,
+          "sampled_peak_tree_rss_bytes": 25142587392,
+          "minimum_host_available_memory_bytes": 6430494720,
+          "median_host_cpu_percent": 6.2,
+          "sampled_tree_counters_lower_bound": {
+            "cpu_user_seconds": 1608.5,
+            "cpu_system_seconds": 48.25,
+            "num_page_faults": 41934908,
+            "read_bytes": 1740380089,
+            "write_bytes": 2260117779
+          },
+          "reaped_children_rusage_delta": null,
+          "host_counter_first": {
+            "host_cpu_times": {
+              "user": 4621.859375,
+              "system": 563.734375,
+              "idle": 35404.203125,
+              "interrupt": 4.171875,
+              "dpc": 9.484375
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 681979904,
+              "free": 18912403456,
+              "percent": 3.5,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1355348,
+              "write_count": 1020165,
+              "read_bytes": 22088889344,
+              "write_bytes": 54997691392,
+              "read_time": 136,
+              "write_time": 144
+            }
+          },
+          "host_counter_last": {
+            "host_cpu_times": {
+              "user": 6425.984375,
+              "system": 693.2343750000073,
+              "idle": 47993.57812499999,
+              "interrupt": 4.53125,
+              "dpc": 10.078125
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 818319360,
+              "free": 18776064000,
+              "percent": 4.2,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1383583,
+              "write_count": 1098226,
+              "read_bytes": 22673047552,
+              "write_bytes": 66399541760,
+              "read_time": 142,
+              "write_time": 157
+            }
+          },
+          "collection_errors": {
+            "NoSuchProcess": 2,
+            "process_io_unavailable": 2
+          }
+        }
+      },
+      "profile_sha256": "11e26bb846abd5b0b93a5cad66d36dd2f53d335a25f777a4bd86e6741a404c85",
+      "profile_bytes": 32359896,
+      "profile_functions": 91110,
+      "pgo_diagnostics": {
+        "warnings": 19,
+        "missing": 19,
+        "mismatch": 0
+      },
+      "wheel_bytes": 15921367,
+      "wheel_sha256": "b5ec70b031a2b102c5d344d5509b4c9f30bd29de6a5745606c6a743199b9b6c5",
+      "executables": {
+        "uv.exe": {
+          "stripped_executable_bytes": 33585664,
+          "symbol_bytes": 443674624,
+          "sha256": "fffe6f42eb459515b2944081eed2cf597ca083f918440cca97067f668224aeeb",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+          "pdb_identity": {
+            "PDBGUID": "{0C37FDB4-D6D6-49E5-BC78-0B3452D15D45}",
+            "PDBAge": "1",
+            "PDBFileName": "uv.pdb"
+          },
+          "symbol_sha256": "877fa8ca2ea4052e764da743f8756fd0c82f1b8bbded183fcff32cb0f1bae226"
+        },
+        "uvx.exe": {
+          "stripped_executable_bytes": 331264,
+          "symbol_bytes": 4927488,
+          "sha256": "46ee7cefaf34dbbf042cf1fb9d43be9edbe3cd1e728a7f0b5cee721239c3136a",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+          "pdb_identity": {
+            "PDBGUID": "{9997FC9A-B2FE-4296-8FCC-5494350A78C4}",
+            "PDBAge": "1",
+            "PDBFileName": "uvx.pdb"
+          },
+          "symbol_sha256": "63032adc19a95b8ae26e271f805b84c02c9f4e3f132c828a56a37be75f7cb859"
+        },
+        "uvw.exe": {
+          "stripped_executable_bytes": 331264,
+          "symbol_bytes": 4911104,
+          "sha256": "4cff45792573d2749b22b57e0ee2980b1757921c532ae750855bf91ddd73e8e1",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+          "pdb_identity": {
+            "PDBGUID": "{D6FBD3D3-E8D7-4521-9EDD-5EB2E11E785E}",
+            "PDBAge": "1",
+            "PDBFileName": "uvw.pdb"
+          },
+          "symbol_sha256": "dc8c470deb4893492b494aa85f177958b9166d649b4d1f44d06440677eef920f"
+        }
+      }
+    },
+    "fat-none": {
+      "training_lto": "fat",
+      "debug_level": "none",
+      "stages_seconds": {
+        "merge_profiles": 1.2349999999996726,
+        "prepare_corpus": 0.016000000000076398,
+        "instrumented_build": 839.3590000000004,
+        "train_uv": 36.5619999999999
+      },
+      "training_seconds": 877.3440000000005,
+      "final_seconds": 510.1409999999996,
+      "total_seconds": 1387.4850000000001,
+      "resources": {
+        "training": {
+          "wall_seconds": 877.3440000000005,
+          "samples": 864,
+          "coverage_seconds": 877.0150000000003,
+          "max_sample_gap_seconds": 1.0779999999999745,
+          "sampled_peak_tree_rss_bytes": 6854406144,
+          "minimum_host_available_memory_bytes": 24115994624,
+          "median_host_cpu_percent": 6.2,
+          "sampled_tree_counters_lower_bound": {
+            "cpu_user_seconds": 1346.953125,
+            "cpu_system_seconds": 41.5625,
+            "num_page_faults": 23880248,
+            "read_bytes": 733056210,
+            "write_bytes": 2433985937
+          },
+          "reaped_children_rusage_delta": null,
+          "host_counter_first": {
+            "host_cpu_times": {
+              "user": 6427.625,
+              "system": 694.2500000000073,
+              "idle": 48029.17187499999,
+              "interrupt": 4.53125,
+              "dpc": 10.078125
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 817790975,
+              "free": 18776592385,
+              "percent": 4.2,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1383979,
+              "write_count": 1098421,
+              "read_bytes": 22681881088,
+              "write_bytes": 66594275328,
+              "read_time": 142,
+              "write_time": 157
+            }
+          },
+          "host_counter_last": {
+            "host_cpu_times": {
+              "user": 7951.96875,
+              "system": 806.578125,
+              "idle": 60424.75,
+              "interrupt": 5.046875,
+              "dpc": 11.0
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 710942720,
+              "free": 18883440640,
+              "percent": 3.6,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1441833,
+              "write_count": 1254457,
+              "read_bytes": 23129709568,
+              "write_bytes": 73170201088,
+              "read_time": 172,
+              "write_time": 219
+            }
+          },
+          "collection_errors": {
+            "NoSuchProcess": 2
+          }
+        },
+        "final": {
+          "wall_seconds": 510.1409999999996,
+          "samples": 503,
+          "coverage_seconds": 509.90599999999995,
+          "max_sample_gap_seconds": 1.0780000000004293,
+          "sampled_peak_tree_rss_bytes": 5545095168,
+          "minimum_host_available_memory_bytes": 26472136704,
+          "median_host_cpu_percent": 6.2,
+          "sampled_tree_counters_lower_bound": {
+            "cpu_user_seconds": 807.375,
+            "cpu_system_seconds": 23.109375,
+            "num_page_faults": 19231275,
+            "read_bytes": 623217644,
+            "write_bytes": 501247745
+          },
+          "reaped_children_rusage_delta": null,
+          "host_counter_first": {
+            "host_cpu_times": {
+              "user": 7953.234375,
+              "system": 820.78125,
+              "idle": 60645.03124999999,
+              "interrupt": 5.140625,
+              "dpc": 11.21875
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 708861952,
+              "free": 18885521408,
+              "percent": 3.6,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1441875,
+              "write_count": 1315129,
+              "read_bytes": 23130258432,
+              "write_bytes": 74900324352,
+              "read_time": 172,
+              "write_time": 248
+            }
+          },
+          "host_counter_last": {
+            "host_cpu_times": {
+              "user": 8915.703125,
+              "system": 895.296875,
+              "idle": 67766.546875,
+              "interrupt": 5.28125,
+              "dpc": 11.265625
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 706297856,
+              "free": 18888085504,
+              "percent": 3.6,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1441903,
+              "write_count": 1326690,
+              "read_bytes": 23130705920,
+              "write_bytes": 77047183360,
+              "read_time": 172,
+              "write_time": 252
+            }
+          },
+          "collection_errors": {}
+        }
+      },
+      "profile_sha256": "1b8f3a47dda0f9520d501f42102741090374c589f0eafda142addc18d71007bc",
+      "profile_bytes": 32427256,
+      "profile_functions": 91097,
+      "pgo_diagnostics": {
+        "warnings": 19,
+        "missing": 19,
+        "mismatch": 0
+      },
+      "wheel_bytes": 15919122,
+      "wheel_sha256": "337c36179ca98267fabe328b81d83494c962d8bbed183a0a6cc668c411541628",
+      "executables": {
+        "uv.exe": {
+          "stripped_executable_bytes": 33548800,
+          "sha256": "c1b98b63653dcbe9070a841730df021a2d30c1efc9d4c56f9743e4139d7eb7bb",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+        },
+        "uvx.exe": {
+          "stripped_executable_bytes": 331776,
+          "sha256": "06e5b988d46b19c8ce7c413d8fb949d2ebea47e1c856982a5b730fa7833db881",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+        },
+        "uvw.exe": {
+          "stripped_executable_bytes": 331264,
+          "sha256": "29ff066694a2296490b20b0bc2ac90df21747efd164c910321d218fc1fd294c1",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+        }
+      }
+    },
+    "thin-full": {
+      "training_lto": "thin",
+      "debug_level": "full",
+      "stages_seconds": {
+        "merge_profiles": 0.875,
+        "prepare_corpus": 0.0,
+        "instrumented_build": 646.375,
+        "train_uv": 32.65700000000015
+      },
+      "training_seconds": 680.0460000000003,
+      "final_seconds": 852.4530000000004,
+      "total_seconds": 1532.4990000000007,
+      "resources": {
+        "training": {
+          "wall_seconds": 680.0460000000003,
+          "samples": 669,
+          "coverage_seconds": 679.125,
+          "max_sample_gap_seconds": 1.1099999999996726,
+          "sampled_peak_tree_rss_bytes": 10509385728,
+          "minimum_host_available_memory_bytes": 21486505984,
+          "median_host_cpu_percent": 24.7,
+          "sampled_tree_counters_lower_bound": {
+            "cpu_user_seconds": 1839.03125,
+            "cpu_system_seconds": 58.609375,
+            "num_page_faults": 39783844,
+            "read_bytes": 2465163935,
+            "write_bytes": 4672539242
+          },
+          "reaped_children_rusage_delta": null,
+          "host_counter_first": {
+            "host_cpu_times": {
+              "user": 8917.4375,
+              "system": 895.828125,
+              "idle": 67799.78125,
+              "interrupt": 5.28125,
+              "dpc": 11.265625
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 706297856,
+              "free": 18888085504,
+              "percent": 3.6,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1441914,
+              "write_count": 1326829,
+              "read_bytes": 23130806784,
+              "write_bytes": 77096533504,
+              "read_time": 172,
+              "write_time": 252
+            }
+          },
+          "host_counter_last": {
+            "host_cpu_times": {
+              "user": 10955.390624999998,
+              "system": 1035.09375,
+              "idle": 76488.5625,
+              "interrupt": 6.0,
+              "dpc": 12.09375
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 704892928,
+              "free": 18889490432,
+              "percent": 3.6,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1441992,
+              "write_count": 1475936,
+              "read_bytes": 23132760576,
+              "write_bytes": 87153845760,
+              "read_time": 172,
+              "write_time": 282
+            }
+          },
+          "collection_errors": {
+            "NoSuchProcess": 2
+          }
+        },
+        "final": {
+          "wall_seconds": 852.4530000000004,
+          "samples": 839,
+          "coverage_seconds": 851.4529999999995,
+          "max_sample_gap_seconds": 1.0470000000004802,
+          "sampled_peak_tree_rss_bytes": 25320538112,
+          "minimum_host_available_memory_bytes": 6168547328,
+          "median_host_cpu_percent": 6.2,
+          "sampled_tree_counters_lower_bound": {
+            "cpu_user_seconds": 1366.78125,
+            "cpu_system_seconds": 36.828125,
+            "num_page_faults": 40396300,
+            "read_bytes": 1346161781,
+            "write_bytes": 2247704894
+          },
+          "reaped_children_rusage_delta": null,
+          "host_counter_first": {
+            "host_cpu_times": {
+              "user": 10957.874999999998,
+              "system": 1048.0625,
+              "idle": 76684.859375,
+              "interrupt": 6.1875,
+              "dpc": 12.375
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 704794624,
+              "free": 18889588736,
+              "percent": 3.6,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1441992,
+              "write_count": 1554007,
+              "read_bytes": 23132760576,
+              "write_bytes": 89017235456,
+              "read_time": 172,
+              "write_time": 288
+            }
+          },
+          "host_counter_last": {
+            "host_cpu_times": {
+              "user": 12490.031249999998,
+              "system": 1148.1875,
+              "idle": 88675.828125,
+              "interrupt": 6.375,
+              "dpc": 12.6875
+            },
+            "host_swap": {
+              "total": 19594383360,
+              "used": 876032000,
+              "free": 18718351360,
+              "percent": 4.5,
+              "sin": 0,
+              "sout": 0
+            },
+            "host_disk_io": {
+              "read_count": 1449765,
+              "write_count": 1626542,
+              "read_bytes": 23328046592,
+              "write_bytes": 99956982272,
+              "read_time": 173,
+              "write_time": 293
+            }
+          },
+          "collection_errors": {
+            "NoSuchProcess": 1
+          }
+        }
+      },
+      "profile_sha256": "a697a01e1b8f82fed778af753f0c5aa25bab62a7a6b3e1faa5d8cde4f183a697",
+      "profile_bytes": 32359992,
+      "profile_functions": 91110,
+      "pgo_diagnostics": {
+        "warnings": 19,
+        "missing": 19,
+        "mismatch": 0
+      },
+      "wheel_bytes": 15924688,
+      "wheel_sha256": "4b265bafb207bb7c972d457226f58e1654116ebe4e6c25ce5ecd93300af1d184",
+      "executables": {
+        "uv.exe": {
+          "stripped_executable_bytes": 33586688,
+          "symbol_bytes": 443650048,
+          "sha256": "a72a0de0a1c57fbad5f3b8795dfda81094359d4414112ea18d28252a798cf4c8",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+          "pdb_identity": {
+            "PDBGUID": "{E5B03128-D171-421E-B4A9-9D0E84C54ABD}",
+            "PDBAge": "1",
+            "PDBFileName": "uv.pdb"
+          },
+          "symbol_sha256": "ee340f8e291a415d5741a4b47939f1bbece981f2e2225af43238b7402317e6de"
+        },
+        "uvx.exe": {
+          "stripped_executable_bytes": 331264,
+          "symbol_bytes": 4927488,
+          "sha256": "ce2cb6b2ebefbb04bd5ff2ecf4624a1a01d6929c7fe726501159fcfefd061195",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+          "pdb_identity": {
+            "PDBGUID": "{8CD3C0BF-9282-4CCF-A042-694D1530FA54}",
+            "PDBAge": "1",
+            "PDBFileName": "uvx.pdb"
+          },
+          "symbol_sha256": "37359016a93e84f6ad85bb2a1cfe1fbac83ebb710a6ea4d66429f7fced71fac2"
+        },
+        "uvw.exe": {
+          "stripped_executable_bytes": 331264,
+          "symbol_bytes": 4911104,
+          "sha256": "51257e13425b21dcedfedf9d8eaf3f24ea01ffd86e369c31cc5adb73f0803645",
+          "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+          "pdb_identity": {
+            "PDBGUID": "{0647C7EE-1AC9-42CD-8C5B-AB77702E4367}",
+            "PDBAge": "1",
+            "PDBFileName": "uvw.pdb"
+          },
+          "symbol_sha256": "3dd489be5757b29aba8769bc493a8ad4e92c299fd029dc04fdf153f0ca95d4d4"
+        }
+      }
+    }
+  },
+  "benchmarks": {
+    "jupyter": {
+      "requirements_sha256": "ce72f0b7a376799ffbbb57931dceab5c9e1cea2254ce6855d4d37bdc7ba54e44",
+      "resolution_sha256": "2a6df03c2f7587e7e7588d1b4aba651e5488dec383541967d09b5b661c820da7",
+      "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "orders": [
+        ["thin-full", "fat-none", "fat-full", "thin-none"],
+        ["thin-none", "thin-full", "fat-none", "fat-full"],
+        ["fat-full", "thin-none", "thin-full", "fat-none"],
+        ["fat-none", "fat-full", "thin-none", "thin-full"],
+        ["thin-full", "fat-full", "fat-none", "thin-none"],
+        ["fat-full", "fat-none", "thin-none", "thin-full"],
+        ["fat-none", "thin-none", "thin-full", "fat-full"],
+        ["thin-none", "thin-full", "fat-full", "fat-none"],
+        ["thin-none", "fat-full", "thin-full", "fat-none"],
+        ["fat-none", "thin-none", "fat-full", "thin-full"],
+        ["fat-full", "thin-full", "fat-none", "thin-none"],
+        ["thin-full", "fat-none", "thin-none", "fat-full"],
+        ["fat-full", "thin-full", "thin-none", "fat-none"],
+        ["fat-none", "fat-full", "thin-full", "thin-none"],
+        ["thin-none", "fat-none", "fat-full", "thin-full"],
+        ["thin-full", "thin-none", "fat-none", "fat-full"],
+        ["thin-none", "fat-none", "fat-full", "thin-full"],
+        ["fat-none", "fat-full", "thin-full", "thin-none"],
+        ["fat-full", "thin-full", "thin-none", "fat-none"],
+        ["thin-full", "thin-none", "fat-none", "fat-full"],
+        ["thin-none", "thin-full", "fat-full", "fat-none"],
+        ["fat-none", "thin-none", "thin-full", "fat-full"],
+        ["fat-full", "fat-none", "thin-none", "thin-full"],
+        ["thin-full", "fat-full", "fat-none", "thin-none"],
+        ["thin-none", "fat-full", "fat-none", "thin-full"],
+        ["fat-none", "thin-full", "thin-none", "fat-full"],
+        ["fat-full", "fat-none", "thin-full", "thin-none"],
+        ["thin-full", "thin-none", "fat-full", "fat-none"],
+        ["thin-none", "fat-full", "fat-none", "thin-full"],
+        ["thin-full", "thin-none", "fat-full", "fat-none"],
+        ["fat-full", "fat-none", "thin-full", "thin-none"],
+        ["fat-none", "thin-full", "thin-none", "fat-full"],
+        ["fat-full", "thin-none", "fat-none", "thin-full"],
+        ["thin-full", "fat-full", "thin-none", "fat-none"],
+        ["fat-none", "thin-full", "fat-full", "thin-none"],
+        ["thin-none", "fat-none", "thin-full", "fat-full"],
+        ["fat-full", "thin-full", "thin-none", "fat-none"],
+        ["thin-full", "thin-none", "fat-none", "fat-full"],
+        ["fat-none", "fat-full", "thin-full", "thin-none"],
+        ["thin-none", "fat-none", "fat-full", "thin-full"],
+        ["thin-full", "fat-full", "fat-none", "thin-none"],
+        ["fat-none", "thin-none", "thin-full", "fat-full"],
+        ["thin-none", "thin-full", "fat-full", "fat-none"],
+        ["fat-full", "fat-none", "thin-none", "thin-full"]
+      ],
+      "warmups_per_treatment": 4,
+      "samples_seconds": {
+        "fat-none": [
+          0.03419500000018161, 0.03342450000036479, 0.03543009999975766,
+          0.03371820000029402, 0.028258000000278116, 0.03479029999925842,
+          0.030863200000567304, 0.03411030000006576, 0.033350200000313635,
+          0.034529700000348384, 0.035133200000018405, 0.03350320000026841,
+          0.028665799999544106, 0.035932799999500276, 0.03005880000000616,
+          0.03325970000059897, 0.03378370000064024, 0.036162500000500586,
+          0.03270630000042729, 0.03692530000080296, 0.02994999999918946,
+          0.030880500000421307, 0.0396363999998357, 0.0338806999998269,
+          0.039449299999432696, 0.03523200000017823, 0.03950359999998909,
+          0.03585579999980837, 0.03713340000012977, 0.03601509999953123,
+          0.03493590000016411, 0.03722309999920981, 0.03635839999969903,
+          0.03400710000005347, 0.03375490000053105, 0.036535600000206614,
+          0.03817429999980959, 0.03625610000017332, 0.03563320000012027,
+          0.035989999999401334
+        ],
+        "fat-full": [
+          0.03194609999991371, 0.03283640000063315, 0.03184889999920415,
+          0.033563300000423624, 0.03496369999993476, 0.0380035999996835,
+          0.03293720000056055, 0.03358320000006643, 0.03404709999995248,
+          0.034431799999765644, 0.03517939999983355, 0.030619199999819102,
+          0.03027120000024297, 0.03305980000004638, 0.032223800000792835,
+          0.031573000000207685, 0.034307199999602744, 0.03361710000081075,
+          0.037332700000661134, 0.03603869999915332, 0.030398699999750534,
+          0.03464269999949465, 0.03855269999985467, 0.035522999999557214,
+          0.044191899999532325, 0.0343473000002632, 0.03175290000035602,
+          0.03537789999973029, 0.03604129999985162, 0.035008999999263324,
+          0.03460050000012416, 0.03406930000073771, 0.03189990000009857,
+          0.038217899999835936, 0.037512599999899976, 0.035774200000560086,
+          0.03555710000000545, 0.03567480000037904, 0.03692570000021078,
+          0.04237219999959052
+        ],
+        "thin-none": [
+          0.03465740000046935, 0.03325219999987894, 0.03648339999926975,
+          0.03160539999953471, 0.030316700000184937, 0.0335360999997647,
+          0.03322409999964293, 0.032742500000495056, 0.03500259999964328,
+          0.04030299999976705, 0.03823209999973187, 0.030377400000361376,
+          0.03217839999979333, 0.03192639999997482, 0.029384100000243052,
+          0.03432109999994282, 0.032898999999815715, 0.0376949000001332,
+          0.03230619999976625, 0.037443899999743735, 0.038598999999521766,
+          0.0308298999998442, 0.035138000000188185, 0.035891200000151,
+          0.03866740000012214, 0.03816869999991468, 0.0371274999997695,
+          0.03735770000002958, 0.03324420000080863, 0.035738499999752094,
+          0.04005529999994906, 0.038384700000278826, 0.035138900000674766,
+          0.036557100000209175, 0.033248799999455514, 0.03377399999953923,
+          0.03432879999945726, 0.038660600000184786, 0.03681869999945775,
+          0.032716000000618806
+        ],
+        "thin-full": [
+          0.031992799999898125, 0.03552880000006553, 0.03512549999959447,
+          0.03471509999963018, 0.029201600000305916, 0.03464979999989737,
+          0.03385569999954896, 0.034194400000160385, 0.034969899999850895,
+          0.037191100000200095, 0.03624800000034156, 0.028375400000186346,
+          0.03546630000073492, 0.033314799999971, 0.03005129999928613,
+          0.035791700000118, 0.034570499999972526, 0.03782190000038099,
+          0.03277539999999135, 0.03118490000088059, 0.03122369999982766,
+          0.03086520000033488, 0.03520519999983662, 0.03437709999980143,
+          0.03736060000028374, 0.03460110000014538, 0.04175499999928434,
+          0.04077400000005582, 0.03426390000004176, 0.03868439999951079,
+          0.03560230000039155, 0.035519299999577925, 0.030021700000361307,
+          0.03500429999985499, 0.03906210000059218, 0.03386500000033266,
+          0.03671089999988908, 0.03567479999946954, 0.034563799999887124,
+          0.039268499999707274
+        ]
+      },
+      "median_seconds": {
+        "fat-none": 0.03486309999971127,
+        "fat-full": 0.0345161499999449,
+        "thin-none": 0.034830000000056316,
+        "thin-full": 0.03484249999974054
+      }
+    },
+    "trio": {
+      "requirements_sha256": "81c0b52237c94983dac704d4ddae59ab13c399c0d6c664e6088da4dff4395679",
+      "resolution_sha256": "018e043108f7238918ad58b3322853afd5006d30d967281d9c7453e31feededf",
+      "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "orders": [
+        ["fat-none", "thin-none", "fat-full", "thin-full"],
+        ["thin-full", "fat-none", "thin-none", "fat-full"],
+        ["thin-none", "fat-full", "thin-full", "fat-none"],
+        ["fat-full", "thin-full", "fat-none", "thin-none"],
+        ["fat-none", "fat-full", "thin-full", "thin-none"],
+        ["fat-full", "thin-full", "thin-none", "fat-none"],
+        ["thin-full", "thin-none", "fat-none", "fat-full"],
+        ["thin-none", "fat-none", "fat-full", "thin-full"],
+        ["fat-full", "fat-none", "thin-none", "thin-full"],
+        ["thin-full", "fat-full", "fat-none", "thin-none"],
+        ["fat-none", "thin-none", "thin-full", "fat-full"],
+        ["thin-none", "thin-full", "fat-full", "fat-none"],
+        ["fat-full", "fat-none", "thin-full", "thin-none"],
+        ["thin-none", "fat-full", "fat-none", "thin-full"],
+        ["fat-none", "thin-full", "thin-none", "fat-full"],
+        ["thin-full", "thin-none", "fat-full", "fat-none"],
+        ["fat-none", "fat-full", "thin-full", "thin-none"],
+        ["thin-full", "thin-none", "fat-none", "fat-full"],
+        ["fat-full", "thin-full", "thin-none", "fat-none"],
+        ["thin-none", "fat-none", "fat-full", "thin-full"],
+        ["thin-full", "fat-full", "thin-none", "fat-none"],
+        ["fat-none", "thin-full", "fat-full", "thin-none"],
+        ["thin-none", "fat-none", "thin-full", "fat-full"],
+        ["fat-full", "thin-none", "fat-none", "thin-full"],
+        ["thin-none", "fat-none", "fat-full", "thin-full"],
+        ["fat-full", "thin-full", "thin-none", "fat-none"],
+        ["thin-full", "thin-none", "fat-none", "fat-full"],
+        ["fat-none", "fat-full", "thin-full", "thin-none"],
+        ["fat-none", "thin-none", "thin-full", "fat-full"],
+        ["fat-full", "fat-none", "thin-none", "thin-full"],
+        ["thin-full", "fat-full", "fat-none", "thin-none"],
+        ["thin-none", "thin-full", "fat-full", "fat-none"],
+        ["fat-none", "thin-none", "thin-full", "fat-full"],
+        ["thin-none", "thin-full", "fat-full", "fat-none"],
+        ["thin-full", "fat-full", "fat-none", "thin-none"],
+        ["fat-full", "fat-none", "thin-none", "thin-full"],
+        ["thin-none", "fat-full", "fat-none", "thin-full"],
+        ["thin-full", "thin-none", "fat-full", "fat-none"],
+        ["fat-full", "fat-none", "thin-full", "thin-none"],
+        ["fat-none", "thin-full", "thin-none", "fat-full"],
+        ["fat-full", "thin-full", "thin-none", "fat-none"],
+        ["fat-none", "fat-full", "thin-full", "thin-none"],
+        ["thin-none", "fat-none", "fat-full", "thin-full"],
+        ["thin-full", "thin-none", "fat-none", "fat-full"]
+      ],
+      "warmups_per_treatment": 4,
+      "samples_seconds": {
+        "fat-none": [
+          0.024597199999334407, 0.024222099999860802, 0.024631899999803863,
+          0.029557199999544537, 0.024723999999878288, 0.025162100000670762,
+          0.023353900000074646, 0.023695800000496092, 0.021532099999603815,
+          0.020556600000418257, 0.0207749999999578, 0.023272399999768822,
+          0.02194099999996979, 0.01969790000021021, 0.022103100000094855,
+          0.021275199999763572, 0.019183500000508502, 0.02039229999991221,
+          0.019677400000546186, 0.019909300000108487, 0.019576499999857333,
+          0.020734299999276118, 0.019542400000318594, 0.0193820999993477,
+          0.020274099999369355, 0.02247920000081649, 0.01898689999961789,
+          0.021232600000075763, 0.020722100000057253, 0.02082719999998517,
+          0.02337069999975938, 0.0239770000007411, 0.02164939999966009,
+          0.022163999999975204, 0.02419999999983702, 0.021832999999787717,
+          0.023408999999446678, 0.022447400000601192, 0.020543999999972584,
+          0.020440899999812245
+        ],
+        "fat-full": [
+          0.023412700000335462, 0.023444999999810534, 0.023719799999526003,
+          0.025247799999306153, 0.025405700000192155, 0.02419759999975213,
+          0.02392299999974057, 0.019796499999756634, 0.022678000000269094,
+          0.021334200000637793, 0.021989099999700557, 0.02381150000019261,
+          0.026436599999215105, 0.020588100000168197, 0.020145199999205943,
+          0.02068130000043311, 0.02184769999985292, 0.020618100000319828,
+          0.020957800000360294, 0.019607900000664813, 0.01874339999994845,
+          0.0185007999998561, 0.019422100000156206, 0.019455499999821768,
+          0.022577300000193645, 0.026034599999547936, 0.019106599999759055,
+          0.020069000000148662, 0.02279519999956392, 0.02062949999981356,
+          0.020240800000465242, 0.024412300000221876, 0.019905199999811884,
+          0.021601700000246638, 0.021270600000207196, 0.02206419999947684,
+          0.022215099999812082, 0.022568399999727262, 0.019603300000198942,
+          0.020750000000589353
+        ],
+        "thin-none": [
+          0.024895000000469736, 0.023863800000071933, 0.025452599999880476,
+          0.027009699999325676, 0.025506699999823468, 0.02362619999985327,
+          0.02244299999983923, 0.024196500000471133, 0.020361899999443267,
+          0.020353600000817096, 0.02061509999930422, 0.023645000000215077,
+          0.022883599999659054, 0.0208279999997103, 0.020869199999651755,
+          0.023988500000086788, 0.019897999999557214, 0.020440700000108336,
+          0.019552500000827422, 0.01950329999999667, 0.024253800000224146,
+          0.019918899999538553, 0.019313400000100955, 0.02001970000037545,
+          0.023200200000246696, 0.02052110000022367, 0.020091499999580265,
+          0.019517300000188698, 0.02030910000030417, 0.02134329999989859,
+          0.02105680000022403, 0.022711900000103924, 0.021214299999883224,
+          0.022133800000119663, 0.021267799999804993, 0.020473800000218034,
+          0.023318599999583967, 0.02143679999971937, 0.02370529999916471,
+          0.021129700000528828
+        ],
+        "thin-full": [
+          0.02292799999941053, 0.023273700000572717, 0.025485699999990175,
+          0.024904299999434443, 0.02260630000000674, 0.02887190000001283,
+          0.023465700000087963, 0.021899999999732245, 0.020741199999974924,
+          0.02054480000060721, 0.020587699999850884, 0.022769500000322296,
+          0.022796799999923678, 0.02149459999964165, 0.02157770000030723,
+          0.02032950000011624, 0.02042669999991631, 0.019843699999910314,
+          0.023693099999945844, 0.020703999999568623, 0.01899570000023232,
+          0.019899200000509154, 0.020778000000063912, 0.0202569000002768,
+          0.02047760000004928, 0.02159730000039417, 0.02052280000043538,
+          0.020430800000212912, 0.023063200000251527, 0.021727499999542488,
+          0.01960270000017772, 0.02187300000059622, 0.020601499999429507,
+          0.0230996000000232, 0.022353800000018964, 0.02212280000003375,
+          0.020007699999951, 0.022069599999667844, 0.02018110000062734,
+          0.020327700000052573
+        ]
+      },
+      "median_seconds": {
+        "fat-none": 0.021590749999631953,
+        "fat-full": 0.021467950000442215,
+        "thin-none": 0.021241049999844108,
+        "thin-full": 0.02153614999997444
+      }
+    }
+  },
+  "verified": true,
+  "pe_import_audit": "pilot-attempt-1-pe-imports.json",
+  "provenance": {
+    "run_id": 38403298996,
+    "job_id": 115316275935,
+    "attempt": 1,
+    "artifact_id": 11825451085,
+    "digest": "sha256:86880d316f4c883c055f1418be12789f286cd64787fdecb0b736ec128101fc46",
+    "created_at": "2026-10-13T15:02:05Z",
+    "job_url": "https://github.com/astral-sh/uv/actions/runs/38403298996/job/115316275935",
+    "report_sha256": "7503824f431b81d76bea76fc975f47b53e2511c354f8f1da780327187da96276",
+    "verified_at": "2026-10-13T15:10:44.976278+00:00"
+  },
+  "validation": {
+    "native_job_success": true,
+    "artifact_digest_and_upload_provenance": true,
+    "both_compilation_stage_flags_verified": true,
+    "profiles_binaries_wheels_and_symbol_sizes_verified": true,
+    "resource_series_verified": true,
+    "source_negative_sbom_crt_install_smoke_checks_passed": true,
+    "balanced_benchmark_order_samples_outputs_and_medians_verified": true,
+    "downloaded_windows_binaries_executed_locally": false,
+    "raw_report_is_authoritative": "Per-variant reports are build snapshots; the top-level report contains final verification."
+  }
+}

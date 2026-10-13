@@ -1,9 +1,13 @@
 # Instrumentation LTO pilot
 
+The [completed Windows results](results/2026-10-13-lto-pilot/README.md) show a 29.5% reduction in
+combined build/training time without debug information and 35.0% with full debug information. All
+four variants passed; this remains one exploratory allocation.
+
 Compare fat and thin LTO during PGO instrumentation on one Windows x86-64 allocation, using main
-revision `59e5912ecff500422b99cca3df68d48be3841a67`. The pilot has four independent clean build
-variants: fat/no debug, fat/full debug, thin/no debug and thin/full debug. Every final compilation
-uses fat LTO, one codegen unit, optimization level 3 and static CRT.
+revision `59e5912ecff500422b99cca3df68d48be3841a67`. The pilot has four clean build variants: fat/no
+debug, fat/full debug, thin/no debug and thin/full debug. Every final compilation uses fat LTO, one
+codegen unit, optimization level 3 and static CRT.
 
 The [plan](lto-pilot-plan.json) records source fingerprints, runner profile, four Cargo jobs and the
 build order, selected before timing with seed 20261013. Each variant trains its own PGO profile.
