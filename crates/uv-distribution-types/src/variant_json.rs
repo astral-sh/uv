@@ -6,8 +6,8 @@ use uv_pep440::{Version, VersionParseError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum VariantsJsonFilenameError {
-    #[error("Invalid `variants.json` filename")]
-    InvalidFilename,
+    #[error("Invalid `variants.json` filename: `{0}`")]
+    InvalidFilename(String),
     #[error("Invalid `variants.json` package name: {0}")]
     InvalidName(#[from] InvalidNameError),
     #[error("Invalid `variants.json` version: {0}")]
@@ -25,12 +25,10 @@ impl FromStr for VariantsJsonFilename {
     type Err = VariantsJsonFilenameError;
 
     fn from_str(filename: &str) -> Result<Self, Self::Err> {
-        let stem = filename
+        let (name, version) = filename
             .strip_suffix("-variants.json")
-            .ok_or(VariantsJsonFilenameError::InvalidFilename)?;
-        let (name, version) = stem
-            .split_once('-')
-            .ok_or(VariantsJsonFilenameError::InvalidFilename)?;
+            .and_then(|stem| stem.split_once('-'))
+            .ok_or_else(|| VariantsJsonFilenameError::InvalidFilename(filename.to_string()))?;
         Ok(Self {
             name: PackageName::from_str(name)?,
             version: Version::from_str(version)?,

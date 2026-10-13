@@ -2278,6 +2278,12 @@ mod tests {
         let error = VariantsJsonFilename::from_str("some_package-invalid-variants.json")
             .expect_err("invalid version");
         assert_snapshot!(error, @"Invalid `variants.json` version: expected version to start with a number, but no leading ASCII digits were found");
+        let error =
+            VariantsJsonFilename::from_str("some_package-1.21.0.json").expect_err("invalid suffix");
+        assert_snapshot!(error, @"Invalid `variants.json` filename: `some_package-1.21.0.json`");
+        let error = VariantsJsonFilename::from_str("some_package-variants.json")
+            .expect_err("missing version");
+        assert_snapshot!(error, @"Invalid `variants.json` filename: `some_package-variants.json`");
         Ok(())
     }
 
@@ -2307,74 +2313,29 @@ mod tests {
             .flat_map(|datum| datum.files.all_entries(&package_name))
             .collect();
 
-        assert_debug_snapshot!(entries, @r#"
+        assert_debug_snapshot!(
+            entries
+                .iter()
+                .map(|(filename, _)| filename.to_string())
+                .collect::<Vec<_>>(),
+            @r#"
         [
-            (
-                DistFilename(
-                    WheelFilename(
-                        WheelFilename {
-                            name: PackageName(
-                                "example",
-                            ),
-                            version: "1.0",
-                            tags: Small {
-                                small: WheelTagSmall {
-                                    python_tag: Python {
-                                        major: 3,
-                                        minor: None,
-                                    },
-                                    abi_tag: None,
-                                    platform_tag: Any,
-                                },
-                            },
-                        },
-                    ),
-                ),
-                File {
-                    dist_info_metadata: None,
-                    filename: "example-1.0-py3-none-any.whl",
-                    hashes: HashDigests(
-                        [],
-                    ),
-                    requires_python: None,
-                    size: None,
-                    upload_time_utc_ms: None,
-                    url: RelativeUrl(
-                        "https://example.com/simple/example/",
-                        "example-1.0-py3-none-any.whl",
-                    ),
-                    yanked: None,
-                },
-            ),
-            (
-                VariantJson(
-                    VariantsJsonFilename {
-                        name: PackageName(
-                            "example",
-                        ),
-                        version: "1.0",
-                    },
-                ),
-                File {
-                    dist_info_metadata: None,
-                    filename: "example-1.0-variants.json",
-                    hashes: HashDigests(
-                        [],
-                    ),
-                    requires_python: None,
-                    size: None,
-                    upload_time_utc_ms: None,
-                    url: RelativeUrl(
-                        "https://example.com/simple/example/",
-                        "metadata/1.0",
-                    ),
-                    yanked: None,
-                },
-            ),
+            "example-1.0-py3-none-any.whl",
+            "example-1.0-variants.json",
         ]
         "#);
+        let sidecar = &entries[1].1;
+        assert_debug_snapshot!(
+            (&sidecar.requires_python, &sidecar.dist_info_metadata, &sidecar.yanked),
+            @r#"
+        (
+            None,
+            None,
+            None,
+        )
+        "#);
         assert_snapshot!(
-            entries[1].1.url.to_url()?,
+            sidecar.url.to_url()?,
             @"https://example.com/simple/example/metadata/1.0"
         );
         Ok(())
@@ -2395,72 +2356,31 @@ mod tests {
             .flat_map(|datum| datum.files.all_entries(&package_name))
             .collect();
 
-        assert_debug_snapshot!(entries, @r#"
+        assert_debug_snapshot!(
+            entries
+                .iter()
+                .map(|(filename, _)| filename.to_string())
+                .collect::<Vec<_>>(),
+            @r#"
         [
-            (
-                DistFilename(
-                    WheelFilename(
-                        WheelFilename {
-                            name: PackageName(
-                                "example",
-                            ),
-                            version: "1.0",
-                            tags: Small {
-                                small: WheelTagSmall {
-                                    python_tag: Python {
-                                        major: 3,
-                                        minor: None,
-                                    },
-                                    abi_tag: None,
-                                    platform_tag: Any,
-                                },
-                            },
-                        },
-                    ),
-                ),
-                File {
-                    dist_info_metadata: None,
-                    filename: "example-1.0-py3-none-any.whl",
-                    hashes: HashDigests(
-                        [],
-                    ),
-                    requires_python: None,
-                    size: None,
-                    upload_time_utc_ms: None,
-                    url: RelativeUrl(
-                        "https://example.com/simple/example/",
-                        "example-1.0-py3-none-any.whl",
-                    ),
-                    yanked: None,
-                },
-            ),
-            (
-                VariantJson(
-                    VariantsJsonFilename {
-                        name: PackageName(
-                            "example",
-                        ),
-                        version: "1.0",
-                    },
-                ),
-                File {
-                    dist_info_metadata: None,
-                    filename: "example-1.0-variants.json",
-                    hashes: HashDigests(
-                        [],
-                    ),
-                    requires_python: None,
-                    size: None,
-                    upload_time_utc_ms: None,
-                    url: RelativeUrl(
-                        "https://example.com/simple/example/",
-                        "example-1.0-variants.json",
-                    ),
-                    yanked: None,
-                },
-            ),
+            "example-1.0-py3-none-any.whl",
+            "example-1.0-variants.json",
         ]
         "#);
+        let sidecar = &entries[1].1;
+        assert_debug_snapshot!(
+            (&sidecar.requires_python, &sidecar.dist_info_metadata, &sidecar.yanked),
+            @r#"
+        (
+            None,
+            None,
+            None,
+        )
+        "#);
+        assert_snapshot!(
+            sidecar.url.to_url()?,
+            @"https://example.com/simple/example/example-1.0-variants.json"
+        );
         Ok(())
     }
 
