@@ -540,6 +540,63 @@ fn build_module_name_normalization() -> Result<()> {
     Ok(())
 }
 
+/// Older sdists can contain hard links, including files needed to build the wheel.
+#[test]
+fn build_sdist_with_hard_link() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project
+        .child("module.py")
+        .write_str("VALUE = 'Hello from a hard link'\n")?;
+
+    let sdist = context.temp_dir.child("foo-1.0.0.tar.gz");
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import sys
+            import tarfile
+
+            with tarfile.open(sys.argv[1], "w:gz") as archive:
+                archive.add("pyproject.toml", arcname="foo-1.0.0/pyproject.toml")
+                archive.add("module.py", arcname="foo-1.0.0/module.py")
+                link = tarfile.TarInfo("foo-1.0.0/src/foo/__init__.py")
+                link.type = tarfile.LNKTYPE
+                link.linkname = "foo-1.0.0/module.py"
+                archive.addfile(link)
+        "#})
+        .arg(sdist.path())
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("--offline").arg(sdist.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo-1.0.0.tar.gz)
+    ");
+
+    uv_snapshot!(context.python_command().arg("-c").arg("import foo; print(foo.VALUE)"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from a hard link
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn build_sdist_with_long_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
