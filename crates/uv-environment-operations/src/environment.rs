@@ -246,6 +246,9 @@ impl CachedEnvironment {
 
         // Create the environment in the cache, then relocate it to its content-addressed location.
         let temp_dir = cache.venv_dir()?;
+        let base_python = interpreter
+            .resolve_base_executable(cache)
+            .map_err(uv_virtualenv::Error::from)?;
         let venv = uv_virtualenv::create_venv(
             temp_dir.path(),
             interpreter.clone(),
@@ -255,6 +258,7 @@ impl CachedEnvironment {
             true,
             uv_virtualenv::Seed::Disabled,
             UpgradePolicy::Fixed,
+            &base_python,
         )?;
 
         sync_environment(
@@ -308,9 +312,9 @@ impl CachedEnvironment {
         cache: &Cache,
     ) -> Result<Interpreter, uv_python_discovery::Error> {
         let base_python = if cfg!(unix) {
-            interpreter.find_base_python()?
+            interpreter.find_base_python(cache)?
         } else {
-            interpreter.to_base_python()?
+            interpreter.resolve_base_executable(cache)?
         };
         if base_python == interpreter.sys_executable() {
             debug!(

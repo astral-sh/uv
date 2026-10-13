@@ -2984,13 +2984,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context
                     .interpreter()
                     .await
-                    .find_base_python()
+                    .find_base_python(self.build_context.cache())
                     .map_err(Error::BaseInterpreter)?
             } else {
                 self.build_context
                     .interpreter()
                     .await
-                    .to_base_python()
+                    .resolve_base_executable(self.build_context.cache())
                     .map_err(Error::BaseInterpreter)?
             };
 
@@ -3136,13 +3136,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context
                 .interpreter()
                 .await
-                .find_base_python()
+                .find_base_python(self.build_context.cache())
                 .map_err(Error::BaseInterpreter)?
         } else {
             self.build_context
                 .interpreter()
                 .await
-                .to_base_python()
+                .resolve_base_executable(self.build_context.cache())
                 .map_err(Error::BaseInterpreter)?
         };
 

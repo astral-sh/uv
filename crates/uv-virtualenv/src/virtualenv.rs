@@ -69,22 +69,11 @@ pub(crate) fn create(
     relocatable: bool,
     seed: Seed,
     upgrade_policy: UpgradePolicy,
+    base_python: &Path,
 ) -> Result<VirtualEnvironment, Error> {
-    // Determine the base Python executable; that is, the Python executable that should be
-    // considered the "base" for the virtual environment.
-    //
-    // For consistency with the standard library, rely on `sys._base_executable`, _unless_ we're
-    // using a uv-managed Python (in which case, we can do better for symlinked executables).
-    let base_python = cfg_select! {
-        unix => {
-            if interpreter.is_standalone() {
-                interpreter.find_base_python()?
-            } else {
-                interpreter.to_base_python()?
-            }
-        }
-        _ => { interpreter.to_base_python()? }
-    };
+    // The caller resolves the base before removing any existing environment, which may contain
+    // the selected interpreter and its configuration.
+    let base_python = base_python.to_path_buf();
 
     debug!(
         "Using base executable for virtual environment: {}",
@@ -560,6 +549,10 @@ pub(crate) fn create(
                 "false".to_string()
             },
         ),
+        (
+            "uv-base-executable".to_string(),
+            executable_target.simplified_display().to_string(),
+        ),
     ];
 
     if relocatable {
@@ -624,7 +617,6 @@ pub(crate) fn create(
         },
         root: location,
         executable,
-        base_executable: base_python,
     })
 }
 

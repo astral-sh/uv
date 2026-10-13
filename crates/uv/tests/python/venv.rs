@@ -121,6 +121,116 @@ fn create_venv_caches_interpreter() -> Result<()> {
     Ok(())
 }
 
+/// Cached metadata and base resolution are independent of Python's private base-executable path.
+///
+/// See <https://github.com/astral-sh/uv/issues/22383>.
+#[test]
+#[cfg(all(unix, feature = "test-python-managed"))]
+fn create_venv_caches_symlinked_base_interpreter() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    context.python_install().arg("3.12.9").assert().success();
+    let output = context.python_find().arg("3.12.9").assert().success();
+    let python = Path::new(std::str::from_utf8(&output.get_output().stdout)?.trim());
+
+    // Move the installation out of the managed directory to avoid transparent patch upgrades.
+    let installation = python
+        .parent()
+        .and_then(Path::parent)
+        .context("Python executable has no installation directory")?;
+    let relocated = context.temp_dir.child("python");
+    fs_err::rename(installation, relocated.path())?;
+    let alias = context.temp_dir.child("alias");
+    symlink(relocated.path(), alias.path())?;
+
+    // Follow an absolute link, a relative link with `..`, and the installation's python3 link.
+    let python_directory = relocated.child("bin");
+    symlink("../bin/python3", python_directory.child("python-link"))?;
+    symlink(
+        alias.child("bin/python-link"),
+        python_directory.child("python-alias"),
+    )?;
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg(alias.child("bin/python-alias").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.9 interpreter at: alias/bin/python-alias
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    let site_packages = site_packages_path(context.venv.path(), "python3.12");
+    fs_err::write(
+        site_packages.join("sitecustomize.py"),
+        indoc! {r#"
+            import sys
+            from pathlib import Path
+
+            sys._base_executable = str(Path(__file__).with_name("not-the-base-python"))
+            Path(__file__).with_name("interpreter-started").touch()
+        "#},
+    )?;
+    let startup_marker = site_packages.join("interpreter-started");
+    let cache = Cache::from_path(context.cache_dir.path().to_path_buf())
+        .init_no_wait()?
+        .context("Interpreter cache is locked")?;
+    let cached = PythonEnvironment::from_root(context.venv.path(), &cache)?;
+    assert!(!startup_marker.exists());
+
+    let fresh_cache = Cache::temp()?
+        .init_no_wait()?
+        .context("Fresh interpreter cache is locked")?;
+    let queried = PythonEnvironment::from_root(context.venv.path(), &fresh_cache)?;
+    assert!(startup_marker.is_file());
+    assert_eq!(cached, queried);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("cached")
+        .arg("--python")
+        .arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.9 interpreter at: .venv/bin/python
+    Creating virtual environment at: cached
+    Activate with: source cached/[BIN]/activate
+    ");
+    let context = context.with_cache_dir(fresh_cache.root());
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("queried")
+        .arg("--python")
+        .arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.9 interpreter at: .venv/bin/python
+    Creating virtual environment at: queried
+    Activate with: source queried/[BIN]/activate
+    ");
+    assert_link_target(
+        context.temp_dir.child("cached/bin/python"),
+        alias.child("bin/python-alias"),
+    );
+    assert_link_target(
+        context.temp_dir.child("queried/bin/python"),
+        alias.child("bin/python-alias"),
+    );
+
+    // Repair the venv's link and remove its original alias without changing the Python binary.
+    // Resolving the base must use the repaired link while the interpreter metadata stays cached.
+    fs_err::remove_file(context.venv.child("bin/python"))?;
+    symlink(alias.child("bin/python3"), context.venv.child("bin/python"))?;
+    fs_err::remove_file(python_directory.child("python-alias"))?;
+    fs_err::remove_file(&startup_marker)?;
+
+    let repaired = PythonEnvironment::from_root(context.venv.path(), &cache)?;
+    assert!(!startup_marker.exists());
+    let base_python = repaired.interpreter().resolve_base_executable(&cache)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(base_python.display(), @"[TEMP_DIR]/alias/bin/python");
+    });
+
+    Ok(())
+}
+
 /// Cached metadata matches Python after recreating an upgradeable venv.
 #[test]
 #[cfg(feature = "test-python-managed")]

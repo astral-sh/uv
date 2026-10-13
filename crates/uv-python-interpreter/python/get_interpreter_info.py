@@ -686,7 +686,6 @@ def main() -> None:
         "sys_base_prefix": sys.base_prefix,
         "sys_base_exec_prefix": sys.base_exec_prefix,
         "sys_prefix": sys.prefix,
-        "sys_base_executable": getattr(sys, "_base_executable", None),
         "sys_executable": sys.executable,
         # We prepend the location with the interpreter discovery script copied to a
         # temporary path to `sys.path` so we can import it, which we have to strip later

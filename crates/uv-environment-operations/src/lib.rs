@@ -296,7 +296,7 @@ fn discover_project_environment(
     if matches!(
         &compatibility,
         Err(EnvironmentIncompatibilityError::PyenvVersionConflict(..))
-    ) && let Ok(base_executable) = environment.interpreter().to_base_python()
+    ) && let Ok(base_executable) = environment.interpreter().resolve_base_executable(cache)
         && let Ok(base_interpreter) = Interpreter::query(&base_executable, cache)
         && environment.uses(&base_interpreter)
         && environment.interpreter().python_version() != base_interpreter.python_version()
@@ -989,6 +989,11 @@ impl ProjectEnvironment {
                     .map(uv_virtualenv::Prompt::Static)
                     .unwrap_or(uv_virtualenv::Prompt::None);
 
+                // Resolve before replacing an environment that may contain the selected interpreter.
+                let base_python = interpreter
+                    .resolve_base_executable(cache)
+                    .map_err(uv_virtualenv::Error::from)?;
+
                 // Under `--dry-run`, avoid modifying the environment.
                 if dry_run.enabled() {
                     let temp_dir = cache.venv_dir()?;
@@ -1003,6 +1008,7 @@ impl ProjectEnvironment {
                         uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                         uv_virtualenv::Seed::Disabled,
                         upgrade_policy,
+                        &base_python,
                     )?;
                     return Ok(if replace_environment {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1064,8 +1070,9 @@ impl ProjectEnvironment {
                     uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,
+                    &base_python,
                 )?;
-                environment.cache_virtualenv(false, cache)?;
+                environment.cache_virtualenv(&base_python, false, cache)?;
 
                 if centralized {
                     update_project_environment_link(&environment, target, link_error_reporting);
@@ -1205,6 +1212,11 @@ impl ScriptEnvironment {
                     .map(uv_virtualenv::Prompt::Static)
                     .unwrap_or(uv_virtualenv::Prompt::None);
 
+                // Resolve before replacing an environment that may contain the selected interpreter.
+                let base_python = interpreter
+                    .resolve_base_executable(cache)
+                    .map_err(uv_virtualenv::Error::from)?;
+
                 // Under `--dry-run`, avoid modifying the environment.
                 if dry_run.enabled() {
                     let temp_dir = cache.venv_dir()?;
@@ -1219,6 +1231,7 @@ impl ScriptEnvironment {
                         false,
                         uv_virtualenv::Seed::Disabled,
                         upgrade_policy,
+                        &base_python,
                     )?;
                     return Ok(if root.exists() {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1256,8 +1269,9 @@ impl ScriptEnvironment {
                     false,
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,
+                    &base_python,
                 )?;
-                environment.cache_virtualenv(false, cache)?;
+                environment.cache_virtualenv(&base_python, false, cache)?;
 
                 Ok(if replaced {
                     Self::Replaced(environment)

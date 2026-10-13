@@ -486,6 +486,9 @@ pub async fn run(
                 .into_interpreter();
 
                 temp_dir = cache.venv_dir()?;
+                let base_python = interpreter
+                    .resolve_base_executable(&cache)
+                    .map_err(uv_virtualenv::Error::from)?;
                 let environment = uv_virtualenv::create_venv(
                     temp_dir.path(),
                     interpreter,
@@ -497,6 +500,7 @@ pub async fn run(
                     false,
                     uv_virtualenv::Seed::Disabled,
                     UpgradePolicy::Fixed,
+                    &base_python,
                 )?;
 
                 Some(environment.into_interpreter())
@@ -679,9 +683,13 @@ pub async fn run(
 
                 // Create a virtual environment
                 temp_dir = cache.venv_dir()?;
+                let interpreter = interpreter.into_interpreter();
+                let base_python = interpreter
+                    .resolve_base_executable(&cache)
+                    .map_err(uv_virtualenv::Error::from)?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter.into_interpreter(),
+                    interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
                     uv_virtualenv::OnExisting::Remove(
@@ -690,6 +698,7 @@ pub async fn run(
                     false,
                     uv_virtualenv::Seed::Disabled,
                     UpgradePolicy::Fixed,
+                    &base_python,
                 )?
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
@@ -883,6 +892,9 @@ pub async fn run(
 
                 // If we're isolating the environment, use an ephemeral virtual environment.
                 temp_dir = cache.venv_dir()?;
+                let base_python = interpreter
+                    .resolve_base_executable(&cache)
+                    .map_err(uv_virtualenv::Error::from)?;
                 let venv = uv_virtualenv::create_venv(
                     temp_dir.path(),
                     interpreter,
@@ -894,6 +906,7 @@ pub async fn run(
                     false,
                     uv_virtualenv::Seed::Disabled,
                     UpgradePolicy::Fixed,
+                    &base_python,
                 )?;
                 venv.into_interpreter()
             } else {
@@ -1015,6 +1028,9 @@ pub async fn run(
                 dir.path().simplified_display()
             );
 
+            let base_python = base_interpreter
+                .resolve_base_executable(&cache)
+                .map_err(uv_virtualenv::Error::from)?;
             uv_virtualenv::create_venv(
                 dir.path(),
                 base_interpreter.clone(),
@@ -1026,6 +1042,7 @@ pub async fn run(
                 false,
                 uv_virtualenv::Seed::Disabled,
                 UpgradePolicy::Fixed,
+                &base_python,
             )
         })
         .transpose()?;

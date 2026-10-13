@@ -78,6 +78,9 @@ impl Prompt {
 }
 
 /// Create a virtualenv.
+///
+/// Resolve `base_python` with [`Interpreter::resolve_base_executable`] before removing any
+/// environment that contains the selected interpreter.
 pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,
@@ -87,6 +90,7 @@ pub fn create_venv(
     relocatable: bool,
     seed: Seed,
     upgrade_policy: UpgradePolicy,
+    base_python: &Path,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
@@ -98,6 +102,7 @@ pub fn create_venv(
         relocatable,
         seed,
         upgrade_policy,
+        base_python,
     )?;
 
     // Create the corresponding `PythonEnvironment`.
