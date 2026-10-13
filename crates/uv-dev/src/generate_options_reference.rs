@@ -1,6 +1,7 @@
 //! Generate a Markdown-compatible listing of configuration options for `pyproject.toml`.
 //!
 //! Based on: <https://github.com/astral-sh/ruff/blob/dc8db1afb08704ad6a788c497068b01edf8b460d/crates/ruff_dev/src/generate_options.rs>
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -99,8 +100,25 @@ enum OptionType {
     ProjectMetadata,
 }
 
+impl OptionType {
+    /// The slug used to disambiguate top-level anchors that would otherwise
+    /// collide across sections.
+    fn anchor_slug(&self) -> &'static str {
+        match self {
+            Self::Configuration => "configuration",
+            Self::ProjectMetadata => "project-metadata",
+        }
+    }
+}
+
 fn generate() -> String {
     let mut output = String::new();
+
+    // Track top-level anchor names already emitted across sections so that a
+    // top-level field name reused under a different section (e.g. `index` in
+    // both Project metadata and Configuration) gets a disambiguated anchor
+    // instead of colliding on the same `#name` fragment.
+    let mut seen_top_level_anchors = HashSet::new();
 
     generate_set(
         &mut output,
@@ -109,6 +127,7 @@ fn generate() -> String {
             option_type: OptionType::ProjectMetadata,
         },
         &mut Vec::new(),
+        &mut seen_top_level_anchors,
     );
 
     generate_set(
@@ -118,12 +137,18 @@ fn generate() -> String {
             option_type: OptionType::Configuration,
         },
         &mut Vec::new(),
+        &mut seen_top_level_anchors,
     );
 
     output
 }
 
-fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
+fn generate_set(
+    output: &mut String,
+    set: Set,
+    parents: &mut Vec<Set>,
+    seen_top_level_anchors: &mut HashSet<String>,
+) {
     match &set {
         Set::Global { option_type, .. } => {
             let header = match option_type {
@@ -160,7 +185,13 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
 
     // Generate the fields.
     for (name, field) in &fields {
-        emit_field(output, name, field, parents.as_slice());
+        emit_field(
+            output,
+            name,
+            field,
+            parents.as_slice(),
+            seen_top_level_anchors,
+        );
         output.push_str("---\n\n");
     }
 
@@ -173,6 +204,7 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
                 set: *sub_set,
             },
             parents,
+            seen_top_level_anchors,
         );
     }
 
@@ -204,17 +236,54 @@ impl Set {
             Self::Named { set, .. } => set,
         }
     }
+
+    fn option_type(&self) -> Option<&OptionType> {
+        match self {
+            Self::Global { option_type, .. } => Some(option_type),
+            Self::Named { .. } => None,
+        }
+    }
 }
 
 #[expect(clippy::format_push_string)]
-fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[Set]) {
+fn emit_field(
+    output: &mut String,
+    name: &str,
+    field: &OptionField,
+    parents: &[Set],
+    seen_top_level_anchors: &mut HashSet<String>,
+) {
     let header_level = if parents.len() > 1 { "####" } else { "###" };
     let parents_anchor = parents.iter().filter_map(|parent| parent.name()).join("_");
 
     if parents_anchor.is_empty() {
-        output.push_str(&format!(
-            "{header_level} [`{name}`](#{name}) {{: #{name} }}\n"
-        ));
+        // When the same top-level field name appears in more than one section
+        // (e.g. `index` in both Project metadata and Configuration), the first
+        // occurrence keeps the bare `#name` anchor for backwards compatibility
+        // and any subsequent occurrence is disambiguated with a section
+        // suffix so deep links resolve to the correct heading.
+        let section_slug = parents
+            .first()
+            .and_then(Set::option_type)
+            .map(OptionType::anchor_slug);
+
+        let (anchor, section_label) = if seen_top_level_anchors.insert(name.to_owned()) {
+            (name.to_owned(), None)
+        } else if let Some(slug) = section_slug {
+            (format!("{name}-{slug}"), Some(slug))
+        } else {
+            (name.to_owned(), None)
+        };
+
+        if let Some(label) = section_label {
+            output.push_str(&format!(
+                "{header_level} [`{name}`](#{anchor}) ({label}) {{: #{anchor} }}\n"
+            ));
+        } else {
+            output.push_str(&format!(
+                "{header_level} [`{name}`](#{anchor}) {{: #{anchor} }}\n"
+            ));
+        }
     } else {
         output.push_str(&format!(
             "{header_level} [`{name}`](#{parents_anchor}_{name}) {{: #{parents_anchor}_{name} }}\n"
