@@ -406,6 +406,7 @@ pub enum HashComparison {
 
 impl PrioritizedDist {
     pub(crate) fn insert_variants_json(&mut self, variants_json: RegistryVariantsJson) {
+        // A flat index can list the same metadata link more than once.
         if !self.0.variants_json.contains(&variants_json) {
             self.0.variants_json.push(variants_json);
         }
