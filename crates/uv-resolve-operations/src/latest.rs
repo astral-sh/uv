@@ -4,7 +4,8 @@ use tracing::debug;
 use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
+    File, IndexCapabilities, IndexEntryFilename, IndexLocations, IndexMetadataRef, IndexUrl,
+    RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -173,6 +174,10 @@ impl LatestClient<'_> {
                 MetadataFormat::Flat(entries) => {
                     for entry in entries {
                         let (filename, file, _) = entry.into_parts();
+                        let filename = match filename {
+                            IndexEntryFilename::DistFilename(filename) => filename,
+                            IndexEntryFilename::VariantJson(_) => continue,
+                        };
                         if self.consider_candidate(
                             package,
                             &filename,
@@ -193,6 +198,10 @@ impl LatestClient<'_> {
                 .await?
             {
                 let (filename, file, index) = entry.into_parts();
+                let filename = match filename {
+                    IndexEntryFilename::DistFilename(filename) => filename,
+                    IndexEntryFilename::VariantJson(_) => continue,
+                };
                 let exclude_newer = self.effective_exclude_newer(package, &index);
                 if self.consider_candidate(package, &filename, &file, exclude_newer.as_ref()) {
                     update_latest(filename);

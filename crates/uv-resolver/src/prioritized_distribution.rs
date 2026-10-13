@@ -6,8 +6,8 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
-    File, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython,
+    File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RequiresPython, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -24,6 +24,14 @@ use crate::resolved::ResolvedDistRef;
 #[derive(Debug, Default, Clone)]
 pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 
+/// Variant metadata for a package version on an index.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct RegistryVariantsJson {
+    pub(crate) filename: VariantsJsonFilename,
+    pub(crate) file: File,
+    pub(crate) index: IndexUrl,
+}
+
 /// The contents of a [`PrioritizedDist`], boxed to keep the outer type small.
 #[derive(Debug, Clone)]
 struct PrioritizedDistInner {
@@ -34,6 +42,8 @@ struct PrioritizedDistInner {
     best_wheel_index: Option<usize>,
     /// The set of all wheels associated with this distribution.
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
+    /// Variant metadata files from the indexes contributing files for this version.
+    variants_json: Vec<RegistryVariantsJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// Python coverage, unioned over compatible wheels independently of their platforms.
@@ -50,6 +60,7 @@ impl Default for PrioritizedDistInner {
             source: None,
             best_wheel_index: None,
             wheels: Vec::new(),
+            variants_json: Vec::new(),
             hashes: Vec::new(),
             python_markers: MarkerTree::FALSE,
             markers: [MarkerTree::FALSE; 2],
@@ -394,6 +405,13 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
+    pub(crate) fn insert_variants_json(&mut self, variants_json: RegistryVariantsJson) {
+        // A flat index can list the same metadata link more than once.
+        if !self.0.variants_json.contains(&variants_json) {
+            self.0.variants_json.push(variants_json);
+        }
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub(crate) fn insert_built(
         &mut self,
