@@ -40,8 +40,8 @@ use uv_test::package_server::PackageServer;
 use uv_test::packse::generate_wheel_with_files;
 use uv_test::packse::{PackseServer, generate_wheel};
 use uv_test::{
-    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
-    venv_bin_path,
+    DEFAULT_PYTHON_VERSION, TestContext, apply_filters, copy_dir_ignore, download_to_disk, get_bin,
+    uv_snapshot, venv_bin_path,
 };
 
 fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
@@ -7922,12 +7922,16 @@ fn install_site_packages_mtime_updated() -> Result<()> {
 /// entry (because we want to ignore the entire cache from outside), ignoring all python source
 /// files.
 #[test]
-fn deptry_gitignore() {
+fn deptry_gitignore() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let source_dist_dir = context
-        .workspace_root
-        .join("test/packages/deptry_reproducer");
+    let source_dist_dir = context.temp_dir.child("deptry_reproducer");
+    copy_dir_ignore(
+        context
+            .workspace_root
+            .join("test/packages/deptry_reproducer"),
+        &source_dist_dir,
+    )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("deptry_reproducer @ {}", source_dist_dir.join("deptry_reproducer-0.1.0.tar.gz").simplified_display()))
@@ -7940,7 +7944,7 @@ fn deptry_gitignore() {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + cffi==1.16.0
-     + deptry-reproducer==0.1.0 (from file://[WORKSPACE]/test/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
+     + deptry-reproducer==0.1.0 (from file://[TEMP_DIR]/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
      + pycparser==2.21
     "
     );
@@ -7949,6 +7953,8 @@ fn deptry_gitignore() {
     context
         .assert_command("import deptry_reproducer.foo")
         .success();
+
+    Ok(())
 }
 
 /// Reinstall an installed package with `--no-index`

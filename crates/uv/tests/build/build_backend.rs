@@ -13,6 +13,8 @@ use tar_codec::{Archive as _, TarArchive, extract::ExtractPolicy};
 use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_static::EnvVars;
+#[cfg(feature = "test-pypi")]
+use uv_test::copy_dir_ignore;
 use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
@@ -59,7 +61,11 @@ fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
 #[cfg(feature = "test-pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let built_by_uv = Path::new("../../test/packages/built-by-uv");
+    let built_by_uv = context.temp_dir.child("built-by-uv");
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/built-by-uv"),
+        &built_by_uv,
+    )?;
 
     let temp_dir = TempDir::new()?;
 
@@ -67,7 +73,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(temp_dir.path())
-        .current_dir(built_by_uv), @"
+        .current_dir(&built_by_uv), @"
     exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0-py3-none-any.whl
@@ -106,7 +112,11 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 #[cfg(feature = "test-pypi")]
 fn built_by_uv_direct() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let built_by_uv = Path::new("../../test/packages/built-by-uv");
+    let built_by_uv = context.temp_dir.child("built-by-uv");
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/built-by-uv"),
+        &built_by_uv,
+    )?;
 
     let sdist_dir = TempDir::new()?;
 
@@ -114,7 +124,7 @@ fn built_by_uv_direct() -> Result<()> {
         .build_backend()
         .arg("build-sdist")
         .arg(sdist_dir.path())
-        .current_dir(built_by_uv), @"
+        .current_dir(&built_by_uv), @"
     exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0.tar.gz
@@ -171,7 +181,11 @@ fn built_by_uv_direct() -> Result<()> {
 #[cfg(feature = "test-pypi")]
 fn built_by_uv_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let built_by_uv = Path::new("../../test/packages/built-by-uv");
+    let built_by_uv = context.temp_dir.child("built-by-uv");
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/built-by-uv"),
+        &built_by_uv,
+    )?;
 
     // Without the editable, pytest fails.
     context.pip_install().arg("pytest").assert().success();
@@ -179,7 +193,7 @@ fn built_by_uv_editable() -> Result<()> {
         .python_command()
         .arg("-m")
         .arg("pytest")
-        .current_dir(built_by_uv)
+        .current_dir(&built_by_uv)
         .assert()
         .failure();
 
@@ -190,7 +204,7 @@ fn built_by_uv_editable() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(wheel_dir.path())
-        .current_dir(built_by_uv), @"
+        .current_dir(&built_by_uv), @"
     exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0-py3-none-any.whl
@@ -210,7 +224,7 @@ fn built_by_uv_editable() -> Result<()> {
         // Avoid showing absolute paths and column dependent layout
         .arg("--quiet")
         .arg("--capture=no")
-        .current_dir(built_by_uv), @"
+        .current_dir(&built_by_uv), @"
     exit_code: 0 (success)
     ----- stdout -----
     ..
