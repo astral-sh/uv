@@ -42,7 +42,7 @@ use which::which;
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
-#[expect(clippy::struct_excessive_bools)]
+#[cfg_attr(unix, expect(clippy::struct_excessive_bools))]
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     platform: Platform,
@@ -57,6 +57,7 @@ pub struct Interpreter {
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
+    #[cfg(unix)]
     standalone: bool,
     tags: OnceLock<Tags>,
     target: Option<Target>,
@@ -95,6 +96,7 @@ impl Interpreter {
             site_packages: info.site_packages,
             stdlib: info.stdlib,
             extension_suffixes: info.extension_suffixes,
+            #[cfg(unix)]
             standalone: info.standalone,
             tags: OnceLock::new(),
             target: None,
