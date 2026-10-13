@@ -18,7 +18,7 @@ pub enum VariantsJsonFilenameError {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VariantsJsonFilename {
     pub(crate) name: PackageName,
-    pub(crate) version: Version,
+    pub version: Version,
 }
 
 impl FromStr for VariantsJsonFilename {

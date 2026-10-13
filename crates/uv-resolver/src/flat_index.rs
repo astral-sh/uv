@@ -20,7 +20,7 @@ use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
 use crate::prioritized_distribution::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist, RegistryVariantsJson,
     SourceDistCompatibility, WheelCompatibility,
 };
 
@@ -94,19 +94,31 @@ impl FlatDistributions {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
-            let IndexEntryFilename::DistFilename(filename) = filename else {
-                continue;
-            };
-            distributions.add_file(
-                file,
-                filename,
-                tags,
-                hasher,
-                build_options,
-                index,
-                minimum_libc_version,
-            );
+            match filename {
+                IndexEntryFilename::DistFilename(filename) => distributions.add_file(
+                    file,
+                    filename,
+                    tags,
+                    hasher,
+                    build_options,
+                    index,
+                    minimum_libc_version,
+                ),
+                IndexEntryFilename::VariantJson(filename) => {
+                    distributions
+                        .0
+                        .entry(filename.version.clone())
+                        .or_default()
+                        .insert_variants_json(RegistryVariantsJson {
+                            filename,
+                            file,
+                            index,
+                        });
+                }
+            }
         }
+        // Metadata alone does not make a package version installable.
+        distributions.0.retain(|_, dist| !dist.is_empty());
         distributions
     }
 
