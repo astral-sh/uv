@@ -47,9 +47,12 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, Simplified};
+use uv_lock::Lock;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
-use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
+use uv_requirements_txt::{
+    RequirementsTxt, RequirementsTxtFileError, RequirementsTxtRequirement, SourceCache,
+};
 use uv_scripts::{OverrideDependency, Pep723Metadata};
 use uv_warnings::warn_user;
 
@@ -282,7 +285,8 @@ impl RequirementsSpecification {
 
                 let requirements_txt =
                     RequirementsTxt::parse_with_cache(input.clone(), &*CWD, client_builder, cache)
-                        .await?;
+                        .await
+                        .map_err(|error| requirements_txt_error(input, cache, error))?;
 
                 if requirements_txt == RequirementsTxt::default() {
                     warn_user!(
@@ -396,7 +400,8 @@ impl RequirementsSpecification {
                         client_builder,
                         cache,
                     )
-                    .await?;
+                    .await
+                    .map_err(|error| requirements_txt_error(input, cache, error))?;
 
                     if requirements_txt == RequirementsTxt::default() {
                         match input {
@@ -742,6 +747,29 @@ pub struct GroupsSpecification {
     pub root: PathBuf,
     /// The enabled groups.
     pub groups: Vec<PipGroupName>,
+}
+
+fn requirements_txt_error(
+    input: &RequirementsInput,
+    cache: &SourceCache,
+    error: RequirementsTxtFileError,
+) -> anyhow::Error {
+    if cache
+        .get(input)
+        .is_some_and(|content| Lock::from_toml(content).is_ok())
+    {
+        let source = match input {
+            RequirementsInput::Stdin => "stdin (`-`)".to_owned(),
+            RequirementsInput::Local(_) | RequirementsInput::Remote(_) => {
+                format!("`{}`", input.user_display())
+            }
+        };
+        anyhow::anyhow!(
+            "The input {source} appears to be a uv lockfile, but `requirements.txt` format is expected. For a script, use `uv export --script <script> --format requirements-txt -o requirements.txt`. For a project, run `uv export --format requirements-txt -o requirements.txt` in the project directory."
+        )
+    } else {
+        error.into()
+    }
 }
 
 /// Read the contents of a requirements input.
