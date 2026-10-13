@@ -801,7 +801,8 @@ fn write_requirements(
         writer.array(requirements, write_requirement)?;
         writer.raw("\n");
     } else {
-        writer.multiline_array(requirements, write_requirement)?;
+        // Blank lines let Git merge edits to adjacent declarations independently.
+        writer.multiline_array(requirements, write_requirement, version >= 2)?;
     }
     Ok(())
 }
@@ -913,7 +914,7 @@ fn write_serialized_array<T: Serialize>(
         writer.array(values, write_value)?;
         writer.raw("\n");
     } else {
-        writer.multiline_array(values, write_value)?;
+        writer.multiline_array(values, write_value, false)?;
     }
     Ok(())
 }
@@ -1026,16 +1027,24 @@ impl LockWriter {
         F: FnMut(&mut Self, T) -> Result<(), WriteError>,
     {
         self.key_start(key)?;
-        self.multiline_array(values, write_value)
+        self.multiline_array(values, write_value, false)
     }
 
-    fn multiline_array<I, T, F>(&mut self, values: I, mut write_value: F) -> Result<(), WriteError>
+    fn multiline_array<I, T, F>(
+        &mut self,
+        values: I,
+        mut write_value: F,
+        blank_lines: bool,
+    ) -> Result<(), WriteError>
     where
         I: IntoIterator<Item = T>,
         F: FnMut(&mut Self, T) -> Result<(), WriteError>,
     {
         self.raw("[\n");
-        for value in values {
+        for (index, value) in values.into_iter().enumerate() {
+            if blank_lines && index > 0 {
+                self.raw("\n");
+            }
             self.raw("    ");
             write_value(self, value)?;
             self.raw(",\n");
