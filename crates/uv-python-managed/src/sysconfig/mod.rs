@@ -30,7 +30,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use itertools::Itertools;
-use tokio::io::AsyncWriteExt;
 use tracing::trace;
 
 use crate::sysconfig::generated_mappings::DEFAULT_VARIABLE_UPDATES;
@@ -89,15 +88,8 @@ pub(crate) async fn update_sysconfig(
         // Update the `pkgconfig` file in-memory.
         let contents = fs_err::tokio::read_to_string(&pkgconfig).await?;
         if let Some(new_contents) = patch_pkgconfig(&contents) {
-            // Write the updated `pkgconfig` file.
-            let mut file = fs_err::tokio::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .create(true)
-                .open(&pkgconfig)
-                .await?;
-            file.write_all(new_contents.as_bytes()).await?;
-            file.sync_data().await?;
+            // Build tools can read this file while the installation is being patched.
+            uv_fs::write_atomic_preserve(&pkgconfig, new_contents).await?;
         }
     }
 

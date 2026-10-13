@@ -203,7 +203,7 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Pkgconfig patching only visits regular `.pc` files and retains their permissions.
+/// Pkgconfig repairs must leave existing readers on the complete original file.
 #[cfg(unix)]
 #[test]
 fn python_install_pkgconfig() -> anyhow::Result<()> {
@@ -229,6 +229,8 @@ fn python_install_pkgconfig() -> anyhow::Result<()> {
     let pkgconfig = pkgconfigs.child("python.pc");
     pkgconfig.write_str("prefix=/install\nlibdir=${prefix}/lib\n")?;
     fs_err::set_permissions(pkgconfig.path(), std::fs::Permissions::from_mode(0o640))?;
+    let original = fs_err::read_to_string(pkgconfig.path())?;
+    let mut reader = fs_err::File::open(pkgconfig.path())?;
     let ignored = pkgconfigs.child("ignored.txt");
     ignored.write_str("prefix=/install\n")?;
     pkgconfigs.child("directory.pc").create_dir_all()?;
@@ -248,6 +250,9 @@ fn python_install_pkgconfig() -> anyhow::Result<()> {
     prefix=${pcfiledir}/../..
     libdir=${prefix}/lib
     ");
+    let mut previous_contents = String::new();
+    reader.read_to_string(&mut previous_contents)?;
+    assert_eq!(previous_contents, original);
     assert_eq!(
         fs_err::metadata(pkgconfig.path())?.permissions().mode() & 0o777,
         0o640
