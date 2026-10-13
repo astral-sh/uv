@@ -7,8 +7,7 @@ use url::Url;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
-use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_distribution_types::{File, FileLocation, IndexEntryFilename, IndexUrl, UrlString};
 use uv_pypi_types::HashDigests;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
@@ -54,19 +53,19 @@ pub enum FindLinksDirectoryError {
 /// An entry in a `--find-links` index.
 #[derive(Debug, Clone)]
 pub struct FlatIndexEntry {
-    filename: DistFilename,
+    filename: IndexEntryFilename,
     file: File,
     index: IndexUrl,
 }
 
 impl FlatIndexEntry {
-    /// Return the distribution filename.
-    pub fn filename(&self) -> &DistFilename {
+    /// Return the index entry filename.
+    pub fn filename(&self) -> &IndexEntryFilename {
         &self.filename
     }
 
     /// Convert the entry into its component parts.
-    pub fn into_parts(self) -> (DistFilename, File, IndexUrl) {
+    pub fn into_parts(self) -> (IndexEntryFilename, File, IndexUrl) {
         (self.filename, self.file, self.index)
     }
 }
@@ -312,7 +311,7 @@ impl<'a> FlatIndexClient<'a> {
             .into_iter()
             .filter_map(|file| {
                 Some(FlatIndexEntry {
-                    filename: DistFilename::try_from_normalized_filename(&file.filename)?,
+                    filename: IndexEntryFilename::try_from_normalized_filename(&file.filename)?,
                     file,
                     index: flat_index.clone(),
                 })
@@ -375,9 +374,9 @@ impl<'a> FlatIndexClient<'a> {
                 yanked: None,
             };
 
-            let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
+            let Some(filename) = IndexEntryFilename::try_from_normalized_filename(filename) else {
                 debug!(
-                    "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
+                    "Ignoring `--find-links` entry (expected a wheel, source distribution, or variants.json filename): {}",
                     entry.path().display()
                 );
                 continue;
@@ -438,6 +437,7 @@ mod tests {
             "beta-2.0.0-py3-none-any.whl",
             "alpha-1.0.0.tar.gz",
             "alpha-1.0.0-py3-none-any.whl",
+            "alpha-1.0.0-variants.json",
         ];
 
         for name in &filenames {
@@ -459,7 +459,7 @@ mod tests {
 
         let mut expected = filenames
             .iter()
-            .map(|name| DistFilename::try_from_normalized_filename(name).unwrap())
+            .map(|name| IndexEntryFilename::try_from_normalized_filename(name).unwrap())
             .collect::<Vec<_>>();
 
         expected.sort();
