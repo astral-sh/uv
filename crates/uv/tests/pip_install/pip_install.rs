@@ -2585,24 +2585,27 @@ fn install_editable_pep_508_cli() {
 }
 
 #[test]
-fn install_editable_bare_cli() {
+fn install_editable_bare_cli() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let packages_dir = context.workspace_root.join("test/packages");
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/black_editable"),
+        context.temp_dir.child("black_editable"),
+    )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg("black_editable")
-        .current_dir(&packages_dir), @"
+        .arg("black_editable"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "
     );
+
+    Ok(())
 }
 
 #[test]
@@ -2639,19 +2642,20 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("-e black_editable")?;
 
-    let packages_dir = context.workspace_root.join("test/packages");
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/black_editable"),
+        context.temp_dir.child("black_editable"),
+    )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
-        .arg(requirements_txt.path())
-        .current_dir(&packages_dir), @"
+        .arg(requirements_txt.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "
     );
 
