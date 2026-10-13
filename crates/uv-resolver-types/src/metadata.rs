@@ -1,9 +1,12 @@
 use reqwest::StatusCode;
 use rustc_hash::FxHasher;
+use std::error::Error;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use uv_distribution::ArchiveMetadata;
-use uv_distribution_types::{DistributionId, RequestedDist};
+use uv_distribution_types::{
+    DistributionId, RequestedDist, VariantsJsonFilename, VariantsJsonParseError,
+};
 use uv_once_map::RegisteredOnceMap;
 use uv_pep440::{Version, VersionSpecifiers};
 
@@ -31,6 +34,8 @@ pub enum MetadataUnavailable {
     Offline,
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Arc<uv_pypi_types::MetadataError>),
+    /// The variant metadata was found, but could not be parsed.
+    InvalidVariantMetadata(Arc<VariantsJsonMetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
     InconsistentMetadata(Arc<uv_distribution::Error>),
     /// The wheel has an invalid structure.
@@ -42,13 +47,23 @@ pub enum MetadataUnavailable {
     Network(StatusCode),
 }
 
+/// An error parsing variant metadata.
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to parse variant metadata `{filename}`: {source}")]
+pub struct VariantsJsonMetadataError {
+    pub filename: VariantsJsonFilename,
+    #[source]
+    pub source: VariantsJsonParseError,
+}
+
 impl MetadataUnavailable {
     /// Like [`std::error::Error::source`], but we don't want to derive the std error since our
     /// formatting system is more custom.
-    pub fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+    pub fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Offline => None,
-            Self::InvalidMetadata(err) => Some(err),
+            Self::InvalidMetadata(err) => Some(err.as_ref()),
+            Self::InvalidVariantMetadata(err) => Some(err.as_ref()),
             Self::InconsistentMetadata(err) => Some(err),
             Self::InvalidStructure(err) => Some(err),
             Self::RequiresPython(..) | Self::Network(..) => None,

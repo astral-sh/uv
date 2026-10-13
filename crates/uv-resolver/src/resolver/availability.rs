@@ -12,6 +12,7 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
 use uv_pypi_types::MetadataError;
+use uv_resolver_types::VariantsJsonMetadataError;
 
 use crate::prioritized_distribution::IncompatibleDist;
 use crate::pubgrub::Range;
@@ -192,7 +193,8 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
     fn from(reason: &MetadataUnavailable) -> Self {
         match reason {
             MetadataUnavailable::Offline => Self::Offline,
-            MetadataUnavailable::InvalidMetadata(_) => Self::InvalidMetadata,
+            MetadataUnavailable::InvalidMetadata(_)
+            | MetadataUnavailable::InvalidVariantMetadata(_) => Self::InvalidMetadata,
             MetadataUnavailable::InconsistentMetadata(_) => Self::InconsistentMetadata,
             MetadataUnavailable::InvalidStructure(_) => Self::InvalidStructure,
             MetadataUnavailable::RequiresPython(requires_python, _python_version) => {
@@ -214,6 +216,8 @@ pub enum UnavailablePackage {
     NotFound,
     /// The package metadata was found, but could not be parsed.
     InvalidMetadata(#[source] Arc<MetadataError>),
+    /// The variant metadata was found, but could not be parsed.
+    InvalidVariantMetadata(#[source] Arc<VariantsJsonMetadataError>),
     /// The package metadata was found, but the metadata was inconsistent.
     InconsistentMetadata(#[source] Arc<DistributionError>),
     /// The package has an invalid structure.
@@ -229,6 +233,7 @@ impl UnavailablePackage {
             Self::Offline => Cow::Borrowed("not found in the cache"),
             Self::NotFound => Cow::Borrowed("not found in the package registry"),
             Self::InvalidMetadata(_) => Cow::Borrowed("invalid metadata"),
+            Self::InvalidVariantMetadata(_) => Cow::Borrowed("invalid metadata"),
             Self::InconsistentMetadata(_) => Cow::Borrowed("invalid metadata"),
             Self::InvalidStructure(_) => Cow::Borrowed("an invalid package format"),
             Self::Network(status) => Cow::Owned(status.to_string()),
@@ -241,6 +246,7 @@ impl UnavailablePackage {
             Self::Offline => format!("was {self}"),
             Self::NotFound => format!("was {self}"),
             Self::InvalidMetadata(_) => format!("has {self}"),
+            Self::InvalidVariantMetadata(_) => format!("has {self}"),
             Self::InconsistentMetadata(_) => format!("has {self}"),
             Self::InvalidStructure(_) => format!("has {self}"),
             Self::Network(_) => format!("could not be fetched from the network (`{self}`)"),
@@ -281,6 +287,9 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
         match reason {
             MetadataUnavailable::Offline => Self::Offline,
             MetadataUnavailable::InvalidMetadata(err) => Self::InvalidMetadata(err.clone()),
+            MetadataUnavailable::InvalidVariantMetadata(err) => {
+                Self::InvalidVariantMetadata(err.clone())
+            }
             MetadataUnavailable::InconsistentMetadata(err) => {
                 Self::InconsistentMetadata(err.clone())
             }

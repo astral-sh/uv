@@ -1219,6 +1219,7 @@ impl PubGrubReportFormatter<'_> {
             }
             Some(
                 reason @ (UnavailablePackage::InvalidMetadata(_)
+                | UnavailablePackage::InvalidVariantMetadata(_)
                 | UnavailablePackage::InconsistentMetadata(_)),
             ) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
@@ -1251,6 +1252,13 @@ impl PubGrubReportFormatter<'_> {
                             hints.insert(PubGrubHint::Offline);
                         }
                         MetadataUnavailable::InvalidMetadata(reason) => {
+                            hints.insert(PubGrubHint::InvalidVersionMetadata {
+                                package: name.clone(),
+                                version: version.clone(),
+                                reason: reason.to_string(),
+                            });
+                        }
+                        MetadataUnavailable::InvalidVariantMetadata(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
                                 package: name.clone(),
                                 version: version.clone(),

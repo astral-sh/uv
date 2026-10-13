@@ -52,6 +52,14 @@ impl<'index> FilePins<'index> {
             .entry((candidate.name().clone(), candidate.version().clone()))
         {
             Entry::Occupied(mut entry) => {
+                if let FilePin::Registry {
+                    variants_json: pinned_variants_json,
+                    ..
+                } = entry.get_mut()
+                    && pinned_variants_json.is_none()
+                {
+                    *pinned_variants_json = variants_json;
+                }
                 if let Some(request) = request
                     && let FilePin::Registry {
                         metadata: metadata @ PinMetadata::Unrequested(_),
