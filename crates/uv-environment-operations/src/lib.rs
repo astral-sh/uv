@@ -1065,6 +1065,7 @@ impl ProjectEnvironment {
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,
                 )?;
+                environment.cache_virtualenv(false, cache)?;
 
                 if centralized {
                     update_project_environment_link(&environment, target, link_error_reporting);
@@ -1256,6 +1257,7 @@ impl ScriptEnvironment {
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,
                 )?;
+                environment.cache_virtualenv(false, cache)?;
 
                 Ok(if replaced {
                     Self::Replaced(environment)

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use async_zip::base::write::ZipFileWriter;
@@ -10,7 +10,9 @@ use indoc::{formatdoc, indoc};
 use url::Url;
 
 use uv_static::EnvVars;
-use uv_test::{copy_dir_ignore, uv_snapshot};
+#[cfg(target_os = "macos")]
+use uv_test::venv_bin_path;
+use uv_test::{copy_dir_ignore, site_packages_path, uv_snapshot};
 
 fn write_wheel(
     path: &Path,
@@ -686,6 +688,105 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
         }
         "#);
     });
+
+    Ok(())
+}
+
+/// Syncing a script caches its interpreter so the next sync does not query Python.
+#[test]
+fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "#
+    })?;
+
+    let prepared = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&prepared.get_output().stdout)?;
+    let root = metadata["environment"]["root"]
+        .as_str()
+        .context("Missing environment root")?;
+    let site_packages = site_packages_path(Path::new(root), "python3.12");
+    fs_err::write(
+        site_packages.join("sitecustomize.py"),
+        indoc! {r#"
+            from pathlib import Path
+
+            Path(__file__).with_name("interpreter-started").touch()
+        "#},
+    )?;
+    let startup_marker = site_packages.join("interpreter-started");
+
+    context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .assert()
+        .success();
+    assert!(!startup_marker.exists());
+
+    // Bypassing the cache must run Python and trigger the startup probe.
+    context
+        .python_find()
+        .arg(root)
+        .arg("--no-cache")
+        .assert()
+        .success();
+    assert!(startup_marker.is_file());
+
+    Ok(())
+}
+
+/// A launcher override can change `sys.executable` and `sys.prefix`, so syncing a script must
+/// leave its interpreter uncached when `PYTHONEXECUTABLE` is set. A subsequent query should
+/// report the override environment instead of the script environment's inferred metadata.
+#[test]
+#[cfg(target_os = "macos")]
+fn workspace_metadata_script_sync_launcher_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let override_python = venv_bin_path(&context.venv).join("python3");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "#
+    })?;
+
+    let prepared = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .env(EnvVars::PYTHONEXECUTABLE, &override_python)
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&prepared.get_output().stdout)?;
+    let root = metadata["environment"]["root"]
+        .as_str()
+        .context("Missing environment root")?;
+    assert_ne!(Path::new(root), context.venv.path());
+
+    // Inferred metadata for the script environment must not hide the launcher override.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(root)
+        .env(EnvVars::PYTHONEXECUTABLE, &override_python), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
 
     Ok(())
 }
