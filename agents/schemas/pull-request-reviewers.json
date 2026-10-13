@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "reviewer": { "type": "string" },
+    "summary": { "type": "string" }
+  },
+  "required": ["reviewer", "summary"]
+}
