@@ -1,0 +1,47 @@
+{
+  "experiment_commit": "a77b32c17fa3173e4ea3a3d52bbe91f3dd421a98",
+  "main_source_revision": "59e5912ecff500422b99cca3df68d48be3841a67",
+  "plan_sha256": "2549e7992ccfb59b2f9dde8d07b752d6a0a53982e52a06323da57a78ce9b7cae",
+  "run_id": 38437984289,
+  "attempt": 1,
+  "independent_allocations_per_platform": 1,
+  "build_variants_per_platform": 4,
+  "statistical_inference": false,
+  "completed_platforms": ["linux", "linux-arm64", "macos"],
+  "pending_platforms": ["windows"],
+  "provenance": {
+    "linux": {
+      "run_id": 38437984289,
+      "job_id": 115436950535,
+      "attempt": 1,
+      "artifact_id": 11836463891,
+      "digest": "sha256:f46b314eb2dcb6ce2a5ae975f92aa113393d024a5b355e2e09f761674456d6b3",
+      "created_at": "2026-10-13T18:04:48Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950535",
+      "report_sha256": "6dc378a8023ecd3af7b7ae7b50991c290a625798a68bc516b175132be0962dbe",
+      "verified_at": "2026-10-13T18:15:15.521710+00:00"
+    },
+    "linux-arm64": {
+      "run_id": 38437984289,
+      "job_id": 115436950528,
+      "attempt": 1,
+      "artifact_id": 11837663272,
+      "digest": "sha256:2ac1dd86c4708003f04439271517c69ebba557ccdabf2fa11427b8042edd31ba",
+      "created_at": "2026-10-13T18:14:47Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950528",
+      "report_sha256": "d1731a6ddb47d37f84bb17b41ec3e115b959617a30a1a92588fccd3170d3e22f",
+      "verified_at": "2026-10-13T18:15:48.193945+00:00"
+    },
+    "macos": {
+      "run_id": 38437984289,
+      "job_id": 115436950470,
+      "attempt": 1,
+      "artifact_id": 11837727586,
+      "digest": "sha256:b33c1ff825af17591519142db6083ae86286c7160b19c86556bb192e15b9ea31",
+      "created_at": "2026-10-13T18:10:16Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950470",
+      "report_sha256": "0926f4e274efbf666e39e7bb07b2df732ab439f54fd3493d38669769b6913a4f",
+      "verified_at": "2026-10-13T18:15:18.630501+00:00"
+    }
+  }
+}
