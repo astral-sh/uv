@@ -306,7 +306,7 @@ syn = { version = "3.0.0", default-features = false, features = [
   "printing",
   "proc-macro",
 ] }
-tar-codec = { version = "0.0.14", default-features = false }
+tar-codec = { version = "0.0.15", default-features = false }
 target-lexicon = { version = "0.13.0", default-features = false }
 tempfile = { version = "3.14.0", default-features = false, features = ["getrandom"] }
 terminal_size = { version = "0.4.2", default-features = false }

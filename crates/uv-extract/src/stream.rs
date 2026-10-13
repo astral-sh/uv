@@ -730,19 +730,24 @@ async fn untar_in_tar_codec<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     dst: &Path,
 ) -> Result<Vec<UnhashedFile>, ExtractError<DecodeError>> {
-    let decode_policy = DecodePolicy::default().pax_policy(
-        PaxDecodePolicy::default()
-            // NOTE: We intentionally allow (ignore) `SCHILY.*` and `LIBARCHIVE.*`
-            // pax extensions here, but continue to forbid others.
-            // The rationale here is that we know these vendor namespaces don't affect framing in
-            // any way, whereas others (like GNU sparse extensions) can.
-            .vendor_extension_policy(PaxVendorExtensionPolicy::ignore(["SCHILY", "LIBARCHIVE"]))
-            // NOTE: We allow pax records to contain non-UTF-8 values.
-            // This is a violation of the pax spec, but is prevalent in the
-            // wild thanks to both GNU tar and libarchive encoding `SCHILY.xattr`
-            // as raw binary.
-            .allow_non_utf8_pax_vendor_values(true),
-    );
+    let decode_policy = DecodePolicy::default()
+        // NOTE: Some encoders (notably CPython's `tarfile`) will pack a 32-byte uname/gname
+        // directly into the member header, despite pax saying that the uname/gname should
+        // always be NUL terminated and therefore 31 bytes at the most.
+        .allow_header_uname_and_gname_without_terminator(true)
+        .pax_policy(
+            PaxDecodePolicy::default()
+                // NOTE: We intentionally allow (ignore) `SCHILY.*` and `LIBARCHIVE.*`
+                // pax extensions here, but continue to forbid others.
+                // The rationale here is that we know these vendor namespaces don't affect framing in
+                // any way, whereas others (like GNU sparse extensions) can.
+                .vendor_extension_policy(PaxVendorExtensionPolicy::ignore(["SCHILY", "LIBARCHIVE"]))
+                // NOTE: We allow pax records to contain non-UTF-8 values.
+                // This is a violation of the pax spec, but is prevalent in the
+                // wild thanks to both GNU tar and libarchive encoding `SCHILY.xattr`
+                // as raw binary.
+                .allow_non_utf8_pax_vendor_values(true),
+        );
     let archive = TarArchive::new(reader).with_policy(decode_policy);
 
     let mut files = Vec::new();
