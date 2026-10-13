@@ -148,7 +148,11 @@ class PilotChecks(unittest.TestCase):
                             )
 
     def test_registered_targets_jobs_and_orders(self):
-        for filename in ("lto-pilot-plan.json", "lower-debug-pilot-plan.json"):
+        for filename in (
+            "lto-pilot-plan.json",
+            "lower-debug-pilot-plan.json",
+            "all-debug-pilot-plan.json",
+        ):
             plan = json.loads(Path(__file__).with_name(filename).read_text())
             targets = plan.get("targets", {plan.get("target"): plan})
             for host, target in targets.items():

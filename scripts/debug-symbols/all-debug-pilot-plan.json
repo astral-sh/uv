@@ -1,0 +1,62 @@
+{
+  "main_source_revision": "59e5912ecff500422b99cca3df68d48be3841a67",
+  "source_fingerprints": {
+    "crates": "d0fa2a1888082207c90a832bd8ef659f76ea565e",
+    "python": "1ea78c0b7c77f33076d4e25b8c5c9d2f73616713",
+    ".cargo": "ff95edb4198e2544d0c0cb9b2799d395fbafb226",
+    "test/requirements": "ef111aff539b2dcadd21a87b59f7369ad76469ad",
+    "Cargo.toml": "7902a208afe930099dc0afd3bef359740352e8f085f289f7f3a4c224f1dab2b3",
+    "Cargo.lock": "9652120f1a8414fc8c812d170394b1a8c31e4bb910345231ef4743a7cbe06184",
+    "rust-toolchain.toml": "ff13c9224217a4ccd63320d8b89cc82d7fa64da14a627e499f9f18db4c6602d0",
+    "scripts/build_uv_pgo.py": "c9e0e633b55ef8a3d1a9ec7c61ff3ef28b0d1e574963c90510cd21fe05771abb",
+    "scripts/cargo.sh": "375a24c1ccc53cc00780c629be6d47ef42d716c782513f6af0cce7a563b71151",
+    "scripts/cargo.cmd": "83c62a504611b90812d20c3024d8ec4fde189f7aeebad5e4a7e097ba3b17c76f"
+  },
+  "final_lto": "fat",
+  "codegen_units": 1,
+  "study_id": "uv-thin-lto-all-debug-pilot-20261013",
+  "design_seed": 2026101303,
+  "treatments": {
+    "thin-none": {
+      "training_lto": "thin",
+      "debug_level": "none"
+    },
+    "thin-line-tables": {
+      "training_lto": "thin",
+      "debug_level": "line-tables-only"
+    },
+    "thin-limited": {
+      "training_lto": "thin",
+      "debug_level": "limited"
+    },
+    "thin-full": {
+      "training_lto": "thin",
+      "debug_level": "full"
+    }
+  },
+  "reference_treatment": "thin-none",
+  "targets": {
+    "x86_64-unknown-linux-gnu": {
+      "runner_profile": "depot-ubuntu-24.04-16",
+      "cargo_jobs": 8,
+      "order": ["thin-full", "thin-line-tables", "thin-none", "thin-limited"]
+    },
+    "aarch64-unknown-linux-gnu": {
+      "runner_profile": "depot-ubuntu-24.04-arm-16",
+      "cargo_jobs": 8,
+      "order": ["thin-line-tables", "thin-none", "thin-full", "thin-limited"]
+    },
+    "aarch64-apple-darwin": {
+      "runner_profile": "namespace-profile-macos-15",
+      "cargo_jobs": 4,
+      "order": ["thin-line-tables", "thin-limited", "thin-none", "thin-full"]
+    },
+    "x86_64-pc-windows-msvc": {
+      "runner_profile": "namespace-profile-windows-2022-x86-64-16x32",
+      "cargo_jobs": 4,
+      "order": ["thin-limited", "thin-full", "thin-line-tables", "thin-none"]
+    }
+  },
+  "inference": "One allocation per platform and one independently trained PGO profile per treatment; descriptive pilot only. No significance or equivalence claims.",
+  "benchmark": "Jupyter and Trio: four warmups and forty timed samples per treatment, balanced randomized order and identical outputs."
+}

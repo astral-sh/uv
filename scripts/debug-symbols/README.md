@@ -1,5 +1,8 @@
 # Optimized Rust+C debug symbols experiment
 
+The [all-debug thin-LTO pilot](ALL_DEBUG_PILOT.md) compares fresh no-debug, line-table, limited and
+full-debug builds on each of the four native platforms, using the same pinned October 13 source.
+
 The [lower-debug thin-LTO results](results/2026-10-13-lower-debug-pilot/README.md) show combined
 build/training overhead of 10.4–18.0% for line tables and 12.6–18.5% for limited debug across Linux
 x86-64, Linux ARM64, macOS and Windows. All four allocations passed. Each platform has one
