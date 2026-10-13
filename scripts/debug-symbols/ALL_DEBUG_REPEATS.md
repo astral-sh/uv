@@ -1,5 +1,12 @@
 # Repeated debug-level measurements with thin-LTO instrumentation
 
+The [completed five-round results](results/2026-10-13-all-debug-repeat/README.md) include all 20
+allocations and 80 builds with zero failures. Median paired build/PGO overhead for full debug is
+52.5% on Linux x86-64, 47.4% on Linux ARM64, 78.0% on macOS and 57.2% on Windows. Line-table and
+limited medians are 10.5–18.6% and 11.0–13.7%, respectively. The report retains observed ranges, raw
+stage times, all resolver samples, hardware differences and every allocation's own baseline. These
+are descriptive results; the predeclared protocol follows.
+
 Four additional rounds repeat no debug, line tables, limited and full debug on Linux x86-64, Linux
 ARM64, macOS ARM64 and Windows x86-64. Each round provisions one fresh allocation per platform; each
 allocation builds all four treatments sequentially with separate target directories and independent

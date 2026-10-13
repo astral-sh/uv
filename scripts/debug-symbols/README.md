@@ -1,7 +1,23 @@
 # Optimized Rust+C debug symbols experiment
 
-The [four-round repeat plan](ALL_DEBUG_REPEATS.md) adds four fresh all-platform/all-debug rounds to
-summarize five observations per platform and debug level, retaining each allocation's baseline.
+The [five-round thin-LTO summary](results/2026-10-13-all-debug-repeat/README.md) combines the
+completed reference with four additional rounds. All 20 allocations and 80 builds passed, with zero
+failures. Combined build/PGO overhead below is the median paired effect against each allocation's
+own no-debug control, followed by the observed minimum–maximum range:
+
+| Platform       | Line tables        | Limited            | Full               |
+| -------------- | ------------------ | ------------------ | ------------------ |
+| Linux x86-64   | +12.9% [12.0–17.4] | +13.7% [12.5–14.4] | +52.5% [50.2–53.7] |
+| Linux ARM64    | +10.5% [10.2–13.2] | +12.1% [7.8–14.1]  | +47.4% [43.2–50.7] |
+| macOS ARM64    | +12.2% [10.5–12.8] | +13.5% [12.5–14.1] | +78.0% [75.0–79.0] |
+| Windows x86-64 | +18.6% [4.7–30.5]  | +11.0% [6.7–18.1]  | +57.2% [51.1–60.8] |
+
+These are descriptive medians and ranges, not confidence intervals or future bounds. Windows
+line-table timings were more variable; all observations remain included. Linux x86-64 includes three
+AMD and two Intel allocations supplied by the same requested profile. Resolver outputs matched, with
+median paired changes across the five rounds between −1.69% and +0.78%; individual allocation
+effects were wider. See the [repeat methods](ALL_DEBUG_REPEATS.md), raw stage times, sizes, memory
+evidence and runtime ranges in the linked summary. Earlier studies remain separate.
 
 The [all-debug thin-LTO results](results/2026-10-13-all-debug-pilot/README.md) include fresh
 no-debug, line-table, limited and full-debug builds on the pinned October 13 source. Full debug adds

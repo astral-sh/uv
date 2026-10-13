@@ -1,0 +1,292 @@
+{
+  "main_source_revision": "59e5912ecff500422b99cca3df68d48be3841a67",
+  "repeat_experiment_commit": "e6b065c1142546fccffb894d9321bc6718b44e77",
+  "repeat_plan_sha256": "55e7426088a9e33a58d6aceca1d32bd7bf07556b3e245258c7442c37d1f9d0ff",
+  "reference_observation": {
+    "run_id": 38437984289,
+    "experiment_commit": "a77b32c17fa3173e4ea3a3d52bbe91f3dd421a98",
+    "plan_sha256": "2549e7992ccfb59b2f9dde8d07b752d6a0a53982e52a06323da57a78ce9b7cae",
+    "results": "results/2026-10-13-all-debug-pilot"
+  },
+  "allocations_per_platform": 5,
+  "completed_allocations": 20,
+  "completed_builds": 80,
+  "failed_allocations": 0,
+  "failed_builds": 0,
+  "completed_repeat_allocations": 16,
+  "completed_repeat_builds": 64,
+  "statistical_inference": false,
+  "summary_method": "Compute each within-allocation symbols/no-debug effect, then report its five-observation median and min/max. Never pool baselines or timed resolution samples.",
+  "runs": {
+    "1": {
+      "run_id": 38459563230,
+      "url": "https://github.com/astral-sh/uv/actions/runs/38459563230",
+      "attempt": 1
+    },
+    "2": {
+      "run_id": 38459567017,
+      "url": "https://github.com/astral-sh/uv/actions/runs/38459567017",
+      "attempt": 1
+    },
+    "3": {
+      "run_id": 38459570394,
+      "url": "https://github.com/astral-sh/uv/actions/runs/38459570394",
+      "attempt": 1
+    },
+    "4": {
+      "run_id": 38459574190,
+      "url": "https://github.com/astral-sh/uv/actions/runs/38459574190",
+      "attempt": 1
+    }
+  },
+  "provenance": {
+    "linux": [
+      {
+        "round": 0,
+        "run_id": 38437984289,
+        "job_id": 115436950535,
+        "attempt": 1,
+        "artifact_id": 11836463891,
+        "digest": "sha256:f46b314eb2dcb6ce2a5ae975f92aa113393d024a5b355e2e09f761674456d6b3",
+        "created_at": "2026-10-13T18:04:48Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950535",
+        "report_sha256": "6dc378a8023ecd3af7b7ae7b50991c290a625798a68bc516b175132be0962dbe",
+        "verified_at": "2026-10-13T18:15:15.521710+00:00"
+      },
+      {
+        "round": 1,
+        "run_id": 38459563230,
+        "job_id": 115510947939,
+        "attempt": 1,
+        "artifact_id": 11848267386,
+        "digest": "sha256:61c1aa9af9ca3b1de52f8160e1406c716952200e3051bf0db1fb18ed3608e0ce",
+        "created_at": "2026-10-13T20:45:04Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459563230/job/115510947939",
+        "report_sha256": "c279ed17a2a60982fcc8c9a6e36238e8d66f1b6b7e8b16d21bf6a0561e843479",
+        "verified_at": "2026-10-13T20:49:20.898326+00:00"
+      },
+      {
+        "round": 2,
+        "run_id": 38459567017,
+        "job_id": 115510958343,
+        "attempt": 1,
+        "artifact_id": 11847599086,
+        "digest": "sha256:3a5709b9a38ebbb44fb9cf2876d9914d8a030f587911544e0b3727172dcca28d",
+        "created_at": "2026-10-13T20:45:09Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459567017/job/115510958343",
+        "report_sha256": "7f83210d4689f3188d56ae485bd682e4364ca3354c347c7de801a569b74155f5",
+        "verified_at": "2026-10-13T20:49:32.009543+00:00"
+      },
+      {
+        "round": 3,
+        "run_id": 38459570394,
+        "job_id": 115510978236,
+        "attempt": 1,
+        "artifact_id": 11849025864,
+        "digest": "sha256:9d2110834c451e38a56b9cadd3a1f43a4ae42be2eaf8c6dca7902093dc7c34a4",
+        "created_at": "2026-10-13T20:56:07Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459570394/job/115510978236",
+        "report_sha256": "c78eedcba608e05b8b991ce06d74cbdabf05a6f4bc9a41b2594ac9a87cf48695",
+        "verified_at": "2026-10-13T21:01:37.450994+00:00"
+      },
+      {
+        "round": 4,
+        "run_id": 38459574190,
+        "job_id": 115510987083,
+        "attempt": 1,
+        "artifact_id": 11849255521,
+        "digest": "sha256:89a7cbf5217951c6bf7c421dc063218e815494a0c4dfee59028a691fdc7e605d",
+        "created_at": "2026-10-13T20:54:49Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459574190/job/115510987083",
+        "report_sha256": "d836780f16239d195b22fb63d39f518d1ce30cc418c630898fb01cfe1902ca3f",
+        "verified_at": "2026-10-13T21:01:46.823059+00:00"
+      }
+    ],
+    "linux-arm64": [
+      {
+        "round": 0,
+        "run_id": 38437984289,
+        "job_id": 115436950528,
+        "attempt": 1,
+        "artifact_id": 11837663272,
+        "digest": "sha256:2ac1dd86c4708003f04439271517c69ebba557ccdabf2fa11427b8042edd31ba",
+        "created_at": "2026-10-13T18:14:47Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950528",
+        "report_sha256": "d1731a6ddb47d37f84bb17b41ec3e115b959617a30a1a92588fccd3170d3e22f",
+        "verified_at": "2026-10-13T18:15:48.193945+00:00"
+      },
+      {
+        "round": 1,
+        "run_id": 38459563230,
+        "job_id": 115510948200,
+        "attempt": 1,
+        "artifact_id": 11848868164,
+        "digest": "sha256:4b2fabc0f2a42bc3e29b1f69d92054dfe968fe6cb8d786a3163426e985565a85",
+        "created_at": "2026-10-13T20:53:28Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459563230/job/115510948200",
+        "report_sha256": "73b3afbf7bbade8d817c4c5329f92450de062fbce9da864ce21ef83e43b92992",
+        "verified_at": "2026-10-13T20:58:55.804339+00:00"
+      },
+      {
+        "round": 2,
+        "run_id": 38459567017,
+        "job_id": 115510957909,
+        "attempt": 1,
+        "artifact_id": 11848858005,
+        "digest": "sha256:f9440c53c6230ab8e3fd318f05a08fa53ab23cebcbd8b0da88d916a2118fcc35",
+        "created_at": "2026-10-13T20:53:09Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459567017/job/115510957909",
+        "report_sha256": "933729be157276a9c8188243cf30445e7dbb088a95bf98f1ffe82eb60ddc63a2",
+        "verified_at": "2026-10-13T20:59:28.650369+00:00"
+      },
+      {
+        "round": 3,
+        "run_id": 38459570394,
+        "job_id": 115510978191,
+        "attempt": 1,
+        "artifact_id": 11848564976,
+        "digest": "sha256:e7e82d5c4318687ca4792221ceb77da44118b7aa30222800816e91749ac21fff",
+        "created_at": "2026-10-13T20:59:54Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459570394/job/115510978191",
+        "report_sha256": "fa27d17b28746146064a64d24316391bdf30b791aea461c604ea8e8bcd2adc9d",
+        "verified_at": "2026-10-13T21:05:48.414010+00:00"
+      },
+      {
+        "round": 4,
+        "run_id": 38459574190,
+        "job_id": 115510987285,
+        "attempt": 1,
+        "artifact_id": 11848514036,
+        "digest": "sha256:2c4e1766b0765dc1b4cefe08ab3e9e3682c7e0bf4ee0f9be51991a368e3e8d4c",
+        "created_at": "2026-10-13T20:58:28Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459574190/job/115510987285",
+        "report_sha256": "df8e97120f8f505eb0e6a72b9cf0d728ba8a755316f05230c8841949a674bda7",
+        "verified_at": "2026-10-13T21:06:15.634563+00:00"
+      }
+    ],
+    "macos": [
+      {
+        "round": 0,
+        "run_id": 38437984289,
+        "job_id": 115436950470,
+        "attempt": 1,
+        "artifact_id": 11837727586,
+        "digest": "sha256:b33c1ff825af17591519142db6083ae86286c7160b19c86556bb192e15b9ea31",
+        "created_at": "2026-10-13T18:10:16Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950470",
+        "report_sha256": "0926f4e274efbf666e39e7bb07b2df732ab439f54fd3493d38669769b6913a4f",
+        "verified_at": "2026-10-13T18:15:18.630501+00:00"
+      },
+      {
+        "round": 1,
+        "run_id": 38459563230,
+        "job_id": 115510947918,
+        "attempt": 1,
+        "artifact_id": 11847918748,
+        "digest": "sha256:7be3a1556d97773243432b83182bb3b88217be923c63eda05ff82e61f0232169",
+        "created_at": "2026-10-13T20:51:16Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459563230/job/115510947918",
+        "report_sha256": "19743fc59390993eb3ec18af7ad72012e922c367156c41a212f7e3a79f527155",
+        "verified_at": "2026-10-13T21:00:04.639907+00:00"
+      },
+      {
+        "round": 2,
+        "run_id": 38459567017,
+        "job_id": 115510957931,
+        "attempt": 1,
+        "artifact_id": 11847823055,
+        "digest": "sha256:f45b0a20a73be5fc261e930534da41a99573cfc861e6a7ce4b6cbfa0854b2801",
+        "created_at": "2026-10-13T20:51:06Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459567017/job/115510957931",
+        "report_sha256": "d1515f1420780d4f02e4bcb3b4b761456aac7731dd2aadd0f9b6aee50cc6d2a8",
+        "verified_at": "2026-10-13T20:59:57.880873+00:00"
+      },
+      {
+        "round": 3,
+        "run_id": 38459570394,
+        "job_id": 115510977963,
+        "attempt": 1,
+        "artifact_id": 11848132995,
+        "digest": "sha256:f5ab51ee84701952391c354161b279281331300bb1bd443cfe4a2f9fb363bf0e",
+        "created_at": "2026-10-13T20:51:16Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459570394/job/115510977963",
+        "report_sha256": "d1541bae98f7ffb2422f8ea39183530e1a926a118b7e95bfb9c4174080572c43",
+        "verified_at": "2026-10-13T21:00:56.203271+00:00"
+      },
+      {
+        "round": 4,
+        "run_id": 38459574190,
+        "job_id": 115510987177,
+        "attempt": 1,
+        "artifact_id": 11848328532,
+        "digest": "sha256:9c983d3d54080afe0e9b11124e8e16a075067bc6b686117ccc5761c10b95f2eb",
+        "created_at": "2026-10-13T20:51:05Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459574190/job/115510987177",
+        "report_sha256": "2a8311351434a183d39f0587ecb7446dbade30587b53f3a11cec44695dd90fbf",
+        "verified_at": "2026-10-13T21:01:55.664265+00:00"
+      }
+    ],
+    "windows": [
+      {
+        "round": 0,
+        "run_id": 38437984289,
+        "job_id": 115436950574,
+        "attempt": 1,
+        "artifact_id": 11839503781,
+        "digest": "sha256:e9cd1b02bf86d78ed8c907b332fc75fb011bf51a46c1096b5cd81a6a1ac03b4e",
+        "created_at": "2026-10-13T18:50:15Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950574",
+        "report_sha256": "c82aecd0e8d7c55d958eb4a4384ed2c2f9fc85b417b3f4cd06eb80d18a9002b8",
+        "verified_at": "2026-10-13T18:55:34.494941+00:00"
+      },
+      {
+        "round": 1,
+        "run_id": 38459563230,
+        "job_id": 115510947920,
+        "attempt": 1,
+        "artifact_id": 11851028249,
+        "digest": "sha256:a81e9ae3a63dbad82a959dff9091af9aa97b5efe9c801f063e5b84203cd8342f",
+        "created_at": "2026-10-13T21:24:44Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459563230/job/115510947920",
+        "report_sha256": "f594ce19df7706e5d10d3f5ef59d68c6461244679c897e81def501b8ec500a3a",
+        "verified_at": "2026-10-13T21:30:15.706757+00:00"
+      },
+      {
+        "round": 2,
+        "run_id": 38459567017,
+        "job_id": 115510958175,
+        "attempt": 1,
+        "artifact_id": 11851956790,
+        "digest": "sha256:75fd9922f2e45df6e2c37e9e2821ac0dc04fd487ea51eb9adb998555400a15c7",
+        "created_at": "2026-10-13T21:27:52Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459567017/job/115510958175",
+        "report_sha256": "b021c96ea998fcbea7c5bdfd2de737e7659e1e7dbd18f5c6c0429a549660dd0e",
+        "verified_at": "2026-10-13T21:31:41.507283+00:00"
+      },
+      {
+        "round": 3,
+        "run_id": 38459570394,
+        "job_id": 115510978147,
+        "attempt": 1,
+        "artifact_id": 11851462922,
+        "digest": "sha256:a467fd9e8e640a11659f7013575a25225cfa749a32979277b1f4209495c49b86",
+        "created_at": "2026-10-13T21:26:15Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459570394/job/115510978147",
+        "report_sha256": "e9006c232f99639cd742b75792f34fb45e5ad1cd3aef4378f77da5db8075daab",
+        "verified_at": "2026-10-13T21:30:23.259865+00:00"
+      },
+      {
+        "round": 4,
+        "run_id": 38459574190,
+        "job_id": 115510987146,
+        "attempt": 1,
+        "artifact_id": 11851233723,
+        "digest": "sha256:42cb27681ec567dcae4187758a2e7b135e7bafee8ccc3662a0e32cc44c9d6038",
+        "created_at": "2026-10-13T21:30:11Z",
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38459574190/job/115510987146",
+        "report_sha256": "3aeb0bc2655c3ec96f9cb863f0cdbdc731b59f4eeba3059f0319147013ab711c",
+        "verified_at": "2026-10-13T21:32:18.634497+00:00"
+      }
+    ]
+  }
+}

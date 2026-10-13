@@ -1,0 +1,506 @@
+{
+  "1": {
+    "verified": true,
+    "provenance": {
+      "run_id": 38459563230,
+      "job_id": 115510947920,
+      "attempt": 1,
+      "artifact_id": 11851028249,
+      "digest": "sha256:a81e9ae3a63dbad82a959dff9091af9aa97b5efe9c801f063e5b84203cd8342f",
+      "created_at": "2026-10-13T21:24:44Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38459563230/job/115510947920",
+      "report_sha256": "f594ce19df7706e5d10d3f5ef59d68c6461244679c897e81def501b8ec500a3a",
+      "verified_at": "2026-10-13T21:30:15.706757+00:00"
+    },
+    "capacity_step_matches_telemetry": true,
+    "logical_cpus": 16,
+    "physical_memory_bytes": 34359107584,
+    "pe_sboms": 12,
+    "pdbs": 9,
+    "records": {
+      "thin-none/uv.exe": {
+        "binary_sha256": "6acb36786955141a2735e0a1fdb172686313a468e2b821142f0d466d21e75f97",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-none/uvx.exe": {
+        "binary_sha256": "04d72379b0e6154a735637f66baf441f8ea9e85eb92064436973cdcc13e354c1",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-none/uvw.exe": {
+        "binary_sha256": "1c961adca168ea06b76995a5f49e833178738f2769c08db713404f2b1f3c9e37",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-full/uv.exe": {
+        "binary_sha256": "0049ab1ea39d82245dd8c4cb05be61f21be54b2f357fcc6c14db5613a33bbcbc",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uv.pdb",
+          "bytes": 443748352,
+          "sha256": "e70ef6193d339d41853b9f7ca2bfc08684928e1aa77c5cca53b8ff372759c39e"
+        }
+      },
+      "thin-full/uvx.exe": {
+        "binary_sha256": "2745084dcf6fa09c566f14f1e49c4e83b9bc30a0f2ecac14de566153c33ac08a",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uvx.pdb",
+          "bytes": 4935680,
+          "sha256": "72f615c5f99062f62f89a6d4611fe690b1626608e9e5dcc97069d7f978b56a62"
+        }
+      },
+      "thin-full/uvw.exe": {
+        "binary_sha256": "0b1c5995821abb983107f09724afe64d21b1b391fa68a15e9d15e1e8330a94a5",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uvw.pdb",
+          "bytes": 4911104,
+          "sha256": "144cd384f0f45acbae1c45aae26bf9ade3b3660404f336bb3e9ded9edc3ae1fc"
+        }
+      },
+      "thin-line-tables/uv.exe": {
+        "binary_sha256": "751fd15275018a97798725a7e73ed2d0bcaa528b8051ad0f9626777057989aea",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uv.pdb",
+          "bytes": 120123392,
+          "sha256": "497e01c075b21014fc2e147031a93249e49b11ce66cf8be3ab10afc71aa365c2"
+        }
+      },
+      "thin-line-tables/uvx.exe": {
+        "binary_sha256": "d57cf6863f26361a220b82b6ef7ed6471bb8c1355cd712e2139a2571e5da65f9",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uvx.pdb",
+          "bytes": 4501504,
+          "sha256": "75aa436b98b4083082b8212a466b07f5858d09e2ac6f9a720e305cd20a4c1cd0"
+        }
+      },
+      "thin-line-tables/uvw.exe": {
+        "binary_sha256": "36d1e4f940eb474a26479b3607bc5e246a36e91d39576bc51ebfd897abd4d2ec",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uvw.pdb",
+          "bytes": 4509696,
+          "sha256": "7660f46b0c11bb9a38172450892892a13fe8d00064b9174294f29a311ac55add"
+        }
+      },
+      "thin-limited/uv.exe": {
+        "binary_sha256": "0888e5aa52255d993145b549e213001314708d79d8cf3053dbe4919b181a8029",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uv.pdb",
+          "bytes": 120328192,
+          "sha256": "8616f883db1da878122f4bb9432fef4b5d98a1750b0129d6231d10b257eec0e5"
+        }
+      },
+      "thin-limited/uvx.exe": {
+        "binary_sha256": "ffea1ec00b772191dd6c6276bbdbb3db5478e57f68e1b6a68425436ee4b89e11",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uvx.pdb",
+          "bytes": 4501504,
+          "sha256": "5f3b25f0673af26d13b275dd9b518254bf515803d94a8c08d221c6aec92a4ba2"
+        }
+      },
+      "thin-limited/uvw.exe": {
+        "binary_sha256": "0a6029ec444dcfff7afe9c69ec126548a74b38364cbec0ecc6b6fc82623474bd",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uvw.pdb",
+          "bytes": 4509696,
+          "sha256": "4b70ef891edce962295a1e23afc6fa3f66d639a59714dd3dd996860c9ffd30f2"
+        }
+      }
+    }
+  },
+  "2": {
+    "verified": true,
+    "provenance": {
+      "run_id": 38459567017,
+      "job_id": 115510958175,
+      "attempt": 1,
+      "artifact_id": 11851956790,
+      "digest": "sha256:75fd9922f2e45df6e2c37e9e2821ac0dc04fd487ea51eb9adb998555400a15c7",
+      "created_at": "2026-10-13T21:27:52Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38459567017/job/115510958175",
+      "report_sha256": "b021c96ea998fcbea7c5bdfd2de737e7659e1e7dbd18f5c6c0429a549660dd0e",
+      "verified_at": "2026-10-13T21:31:41.507283+00:00"
+    },
+    "capacity_step_matches_telemetry": true,
+    "logical_cpus": 16,
+    "physical_memory_bytes": 34359107584,
+    "pe_sboms": 12,
+    "pdbs": 9,
+    "records": {
+      "thin-line-tables/uv.exe": {
+        "binary_sha256": "9ac4026690141eb637e06cfc5267df4bf874de69222849e27fc3ecc0412ff859",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uv.pdb",
+          "bytes": 120066048,
+          "sha256": "851739d6e40de4244bfc7b30fa1badef98c12688bcfe21dd02df2584bc57b29e"
+        }
+      },
+      "thin-line-tables/uvx.exe": {
+        "binary_sha256": "7ac2955dc98bf5636e85b61c84a49ddaca0faeaecb0c4abebb510f1d50fea9e8",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uvx.pdb",
+          "bytes": 4509696,
+          "sha256": "a617e58e7fc47acbceb1686cc9cb78cb98cbc7d4babc1c3e23d51fb3a1ba01f1"
+        }
+      },
+      "thin-line-tables/uvw.exe": {
+        "binary_sha256": "970ee9a181aac7d6b087d59802b81d3c1e83cf28578b7323a743a8ba0d15ca02",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uvw.pdb",
+          "bytes": 4509696,
+          "sha256": "06cd7adce36bb72b03fc4f226b8ceae3f485ffdaa510f9646ab49e9c53a8d0f5"
+        }
+      },
+      "thin-limited/uv.exe": {
+        "binary_sha256": "52ccb5e53ee95f11b2c8360070e8fac2923fbefe8c9b1ee015e7f7ab4d917982",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uv.pdb",
+          "bytes": 120213504,
+          "sha256": "5ab39a8229985234af94e2a5cf05ad0bbd1a0f17443afa946ccc0e12ad6064bb"
+        }
+      },
+      "thin-limited/uvx.exe": {
+        "binary_sha256": "3b102cc854ce4c1580bc77c5103e8f6858e879ac663f89be602ff92ea0a920e3",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uvx.pdb",
+          "bytes": 4509696,
+          "sha256": "799b63cca909eaf5287edbb4791aff5c4c4f7f3919c415752e72e89ba554eee6"
+        }
+      },
+      "thin-limited/uvw.exe": {
+        "binary_sha256": "56bbd5e8714cf0821a1e2ce969969e4eaa6c5fce73b94e8f6524515dca78598d",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uvw.pdb",
+          "bytes": 4509696,
+          "sha256": "2d05c0f08e563b05e286cfeba4116d17a63d9c7cfbe38dc7eb0662ec4e5ad293"
+        }
+      },
+      "thin-none/uv.exe": {
+        "binary_sha256": "6752304611b168abe9a699e351daada590fff489c6ffedfe7fc52743d626cabd",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-none/uvx.exe": {
+        "binary_sha256": "53579430e271cf2271731424e4591d81b40c7053ca7d479429273bb2f24487af",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-none/uvw.exe": {
+        "binary_sha256": "c379bb7408b6c35eb07e0e87bdcb96d24b3814c3364fe6e96a1eb651dda23ca4",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-full/uv.exe": {
+        "binary_sha256": "b5ffd66102a8664bba22bae9a8c0ed85d325b8e9c48b76e12dd2d229aaa46e39",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uv.pdb",
+          "bytes": 443592704,
+          "sha256": "86ee02b3211845b77323ee51a1e02a37888454eeca27ad746fbff7c27d4c8070"
+        }
+      },
+      "thin-full/uvx.exe": {
+        "binary_sha256": "f6afa1a5ad8faa10f4f55d58ec4dc064cbfa7b707d0daf22609f9e21ee7f380e",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uvx.pdb",
+          "bytes": 4935680,
+          "sha256": "efac33d2de5a99f210bb884b3a3d6150e3fca3bf136f0dd947353be35a439797"
+        }
+      },
+      "thin-full/uvw.exe": {
+        "binary_sha256": "009c37b8ed4b87ed3a71565d07e6f0dd8a08a0de678d1875b4ac62a2a2328057",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uvw.pdb",
+          "bytes": 4911104,
+          "sha256": "159bcd24094496d8b029f77356bbbdacdd00a4ef671901a7042da0584c59e5bc"
+        }
+      }
+    }
+  },
+  "3": {
+    "verified": true,
+    "provenance": {
+      "run_id": 38459570394,
+      "job_id": 115510978147,
+      "attempt": 1,
+      "artifact_id": 11851462922,
+      "digest": "sha256:a467fd9e8e640a11659f7013575a25225cfa749a32979277b1f4209495c49b86",
+      "created_at": "2026-10-13T21:26:15Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38459570394/job/115510978147",
+      "report_sha256": "e9006c232f99639cd742b75792f34fb45e5ad1cd3aef4378f77da5db8075daab",
+      "verified_at": "2026-10-13T21:30:23.259865+00:00"
+    },
+    "capacity_step_matches_telemetry": true,
+    "logical_cpus": 16,
+    "physical_memory_bytes": 34359107584,
+    "pe_sboms": 12,
+    "pdbs": 9,
+    "records": {
+      "thin-limited/uv.exe": {
+        "binary_sha256": "b4ea7878f0125edff759c1be0f1da328f893cde6646dc079a6d0395c61739319",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uv.pdb",
+          "bytes": 120254464,
+          "sha256": "82d5daafdd154ca8d0e6644f4298f052303ac4750112397196c9c476c4b7010a"
+        }
+      },
+      "thin-limited/uvx.exe": {
+        "binary_sha256": "3eeda69ed7f10929f0477c794e174ce69bfed7a72b13887ab1bd7661e34e0d98",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uvx.pdb",
+          "bytes": 4501504,
+          "sha256": "71b1b121fb6d3b26d5161cd23c73017d6435e1355f532b7f0723c39bd20cae87"
+        }
+      },
+      "thin-limited/uvw.exe": {
+        "binary_sha256": "b13c266682adb799b18c98215a4d40768ca074e3c9d9975895223d759b5e2a8d",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uvw.pdb",
+          "bytes": 4509696,
+          "sha256": "33d3ac487089d923dbabb2718f5df73232198cd93167e2fc59833a3060c2a264"
+        }
+      },
+      "thin-none/uv.exe": {
+        "binary_sha256": "bd9396185976087b18a606e6658c2953bad7ae7945bba61492b2bc8ea4122c56",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-none/uvx.exe": {
+        "binary_sha256": "7ccadd2fac077e49f17cb242043dec89ccc3582ac284b493d2183fc10f6bb173",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-none/uvw.exe": {
+        "binary_sha256": "49621058573783c6b542679acb3f5e11220acf666c410292868ef57728a0f893",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-full/uv.exe": {
+        "binary_sha256": "00069a4537722c091566fe205afa6faceea292df4bcffb6359d6abd034199d69",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uv.pdb",
+          "bytes": 443568128,
+          "sha256": "cdd47902ae6768a0dfa33f2aedb8add2b05465d2c968039ac4bdfda004f18fdb"
+        }
+      },
+      "thin-full/uvx.exe": {
+        "binary_sha256": "03faa89f6697753ddc3556aa9027edc84bcd98c825bb6b1d0f258e940d11cd16",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uvx.pdb",
+          "bytes": 4935680,
+          "sha256": "c1e45f184aa151c0a89873260bea51e58637567191b399b517ff4b1eb47ff2fd"
+        }
+      },
+      "thin-full/uvw.exe": {
+        "binary_sha256": "a37902791ebaa8dd06d572f207ed30f97a330cf34da86dc11db7a2aaeca9b94f",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uvw.pdb",
+          "bytes": 4911104,
+          "sha256": "3eec4544bcf2e0ef493fc6ed738126248f22768317f64037bda6f54ea381a22b"
+        }
+      },
+      "thin-line-tables/uv.exe": {
+        "binary_sha256": "69c8f978cf53cdefa51b33f4f96f99596e8719a6e311eda07e36e898a204e992",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uv.pdb",
+          "bytes": 120098816,
+          "sha256": "87399be52c51bee42b9450bac99eab453f3c461cdd02e1261417054e980bd172"
+        }
+      },
+      "thin-line-tables/uvx.exe": {
+        "binary_sha256": "083834c12333469891557dbda88545f5640ef447fa246d7f479b38115c987fff",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uvx.pdb",
+          "bytes": 4501504,
+          "sha256": "f9a8d90a3a9c4576a6d85f51ade2a8f80e8049f133d422ca723f58a4ac81a10f"
+        }
+      },
+      "thin-line-tables/uvw.exe": {
+        "binary_sha256": "12c35b636474cb2c1538bf25ec25c76438b3bebd6f08aafcbcfdb83f063c54a1",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uvw.pdb",
+          "bytes": 4509696,
+          "sha256": "0aa0f17427871f6a72bbe569bb7f941fc3c0826fd4c3f7dbdab1f7696fe5b17f"
+        }
+      }
+    }
+  },
+  "4": {
+    "verified": true,
+    "provenance": {
+      "run_id": 38459574190,
+      "job_id": 115510987146,
+      "attempt": 1,
+      "artifact_id": 11851233723,
+      "digest": "sha256:42cb27681ec567dcae4187758a2e7b135e7bafee8ccc3662a0e32cc44c9d6038",
+      "created_at": "2026-10-13T21:30:11Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38459574190/job/115510987146",
+      "report_sha256": "3aeb0bc2655c3ec96f9cb863f0cdbdc731b59f4eeba3059f0319147013ab711c",
+      "verified_at": "2026-10-13T21:32:18.634497+00:00"
+    },
+    "capacity_step_matches_telemetry": true,
+    "logical_cpus": 16,
+    "physical_memory_bytes": 34359107584,
+    "pe_sboms": 12,
+    "pdbs": 9,
+    "records": {
+      "thin-full/uv.exe": {
+        "binary_sha256": "606c48c8176711e886564b2a605fa90d4318c41fe4faab7c25cf9b00d2ff5e4f",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uv.pdb",
+          "bytes": 443584512,
+          "sha256": "81b833f88a0ccac82536f84ec0e1a51165f40a2b9f5541c63b519359574d6dda"
+        }
+      },
+      "thin-full/uvx.exe": {
+        "binary_sha256": "25e00c261a883adcd465827acb6b588f70b1a68a9514e58326e6beba141f1e89",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uvx.pdb",
+          "bytes": 4927488,
+          "sha256": "1d743cc777b308ac636b1000674301a836d320209728cfcf25421aa46c426220"
+        }
+      },
+      "thin-full/uvw.exe": {
+        "binary_sha256": "32bc0b2b02d0c79f0991b3ac82ecb42f788fc136bbeda94a6148a6b7cea3aba9",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-full/symbols/uvw.pdb",
+          "bytes": 4911104,
+          "sha256": "79aeaafb9d2c219a88f9fdfab91c04886efbb23217580edbb47a7fb7921f787f"
+        }
+      },
+      "thin-line-tables/uv.exe": {
+        "binary_sha256": "91863c810bb8a7722ded35f5e7d42c156128bb6ffa6e07f724a1413da7b61be9",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uv.pdb",
+          "bytes": 120098816,
+          "sha256": "cd54b7f9f23e19f9d9f4519b3e30a206b19c12615acc0f2cc3c81cd7ff9a449a"
+        }
+      },
+      "thin-line-tables/uvx.exe": {
+        "binary_sha256": "55b92961b185821df4eedbefd5ffc94b6298fcc987f589ae6fce399d18063f0a",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uvx.pdb",
+          "bytes": 4509696,
+          "sha256": "d8f46ad8ad2260d89d2acc30c2264b26a3b8272d9d0e4c639f6b213aadd12ecc"
+        }
+      },
+      "thin-line-tables/uvw.exe": {
+        "binary_sha256": "0f671937d868ef3fae823517aec88b5ad40f67fbdf8aa70b5b7a5ac0bfa81452",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-line-tables/symbols/uvw.pdb",
+          "bytes": 4509696,
+          "sha256": "fb4b3530c59c3cb002d3283c565381e69fb22f2ed30c26f029d8f7cc703214a0"
+        }
+      },
+      "thin-limited/uv.exe": {
+        "binary_sha256": "5e16ed4290ba784d1ac3613b87ab9dd79668da86ca3118e0b39f4f830bc69b11",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uv.pdb",
+          "bytes": 120254464,
+          "sha256": "e198af2f45edee7fa23ba34ffe1592f4102db8fc903d9fab54019f90b67a013c"
+        }
+      },
+      "thin-limited/uvx.exe": {
+        "binary_sha256": "35611c889de71b34677e28dc861da20d31bd59b5e3c77dea246d0c0e7b1ab800",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uvx.pdb",
+          "bytes": 4509696,
+          "sha256": "a6d87512bbeb201e82912723025be9797fe2d02ff3d3ad212a905e0e2a932476"
+        }
+      },
+      "thin-limited/uvw.exe": {
+        "binary_sha256": "9e93d6e417d208c660e97f4f22b05ef36b91b7db88df813a208677babf0131e9",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594,
+        "pdb": {
+          "path": "windows-outputs/variants/thin-limited/symbols/uvw.pdb",
+          "bytes": 4509696,
+          "sha256": "4ae52aeebb9a38f23694385d314514e60b992a6c37c4c14a7d2898e624f6266f"
+        }
+      },
+      "thin-none/uv.exe": {
+        "binary_sha256": "71d7e6c520620afeec241007e872c17c840db532ca4a67113ed9957dce3887f9",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-none/uvx.exe": {
+        "binary_sha256": "586dadc3391f407e8ce4de81ac2f972f6e11f476cecd3f7c21b2b4ef3ea9a40d",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      },
+      "thin-none/uvw.exe": {
+        "binary_sha256": "a1c2b4e9cebedc0904f5efe6245b83eaedb422aa070692b3539f0efaef4a3142",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "sbom_packages": 594
+      }
+    }
+  }
+}
