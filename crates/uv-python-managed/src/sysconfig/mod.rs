@@ -41,7 +41,7 @@ mod parser;
 mod replacements;
 
 /// Update the `sysconfig` data in a Python installation.
-pub(crate) fn update_sysconfig(
+pub(crate) async fn update_sysconfig(
     install_root: &Path,
     major: u8,
     minor: u8,
@@ -59,16 +59,12 @@ pub(crate) fn update_sysconfig(
     let contents = fs_err::read_to_string(&sysconfigdata)?;
     let data = SysconfigData::from_str(&contents)?;
     let data = patch_sysconfigdata(data, &real_prefix);
-    let contents = data.to_string_pretty()?;
+    let new_contents = data.to_string_pretty()?;
 
-    // Write the updated `_sysconfigdata_` file.
-    let mut file = fs_err::OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(&sysconfigdata)?;
-    file.write_all(contents.as_bytes())?;
-    file.sync_data()?;
+    // Python processes can import this module while the installation is being patched.
+    if contents != new_contents {
+        uv_fs::write_atomic_preserve(&sysconfigdata, new_contents).await?;
+    }
 
     // Find the `pkgconfig` files in the Python installation.
     for pkgconfig in find_pkgconfigs(&real_prefix)? {

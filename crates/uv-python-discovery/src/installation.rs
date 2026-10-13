@@ -345,7 +345,7 @@ impl PythonInstallation {
 
         let installed = ManagedPythonInstallation::new(path, download)?;
         installed.ensure_externally_managed()?;
-        installed.ensure_sysconfig_patched()?;
+        installed.ensure_sysconfig_patched().await?;
         installed.ensure_canonical_executables()?;
         installed.ensure_build_file()?;
 
