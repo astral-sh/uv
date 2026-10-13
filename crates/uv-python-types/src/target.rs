@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 /// A `--target` directory into which packages can be installed, separate from a virtual environment
 /// or system Python interpreter.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Target(PathBuf);
 
 impl Target {

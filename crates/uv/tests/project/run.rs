@@ -1889,13 +1889,11 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Switch to a relocatable virtual environment using the same interpreter.
+    // Switch to a relocatable virtual environment.
     context
         .venv()
         .arg("--allow-existing")
         .arg("--relocatable")
-        .arg("--python")
-        .arg(context.venv.path())
         .assert()
         .success();
 
