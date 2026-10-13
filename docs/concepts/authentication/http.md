@@ -19,7 +19,7 @@ Authentication may be used for hosts specified in the following contexts:
 
 ## netrc files
 
-[`.netrc`](https://everything.curl.dev/usingcurl/netrc.html) files are a long-standing plain text
+[`.netrc`](https://everything.curl.dev/usingcurl/netrc) files are a long-standing plain text
 format for storing credentials on a system.
 
 Reading credentials from `.netrc` files is always enabled. The target file path will be loaded from
