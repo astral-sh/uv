@@ -35,11 +35,9 @@ impl IndexEntryFilename {
         if filename.ends_with("-variants.json")
             && let Ok(filename) = VariantsJsonFilename::from_str(filename)
         {
-            Some(Self::VariantJson(VariantsJsonFilename::from(filename)))
-        } else if let Some(filename) = DistFilename::try_from_normalized_filename(filename) {
-            Some(Self::DistFilename(filename))
+            Some(Self::VariantJson(filename))
         } else {
-            None
+            DistFilename::try_from_normalized_filename(filename).map(Self::DistFilename)
         }
     }
 
