@@ -611,6 +611,118 @@ fn build_sdist_with_hard_link() -> Result<()> {
     Ok(())
 }
 
+/// Python's `tarfile` omits the NUL terminator when a group name fills the 32-byte header field.
+///
+/// See <https://github.com/astral-sh/uv/issues/22510>.
+#[test]
+fn build_sdist_with_full_group_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/foo/__init__.py").touch()?;
+
+    let sdist = context.temp_dir.child("foo-1.0.0.tar.gz");
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import io
+            import sys
+            import tarfile
+            from pathlib import Path
+
+            with tarfile.open(sys.argv[1], "w:gz", format=tarfile.PAX_FORMAT) as archive:
+                for name in ["pyproject.toml", "src/foo/__init__.py"]:
+                    data = Path(name).read_bytes()
+                    info = tarfile.TarInfo(f"foo-1.0.0/{name}")
+                    info.size = len(data)
+                    info.gname = "g" * 32
+                    archive.addfile(info, io.BytesIO(data))
+        "#})
+        .arg(sdist.path())
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
+        .arg("--offline")
+        .arg(sdist.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo-1.0.0.tar.gz)
+    ");
+
+    Ok(())
+}
+
+/// Group names longer than 32 bytes also have a PAX record overriding the unterminated header field.
+///
+/// See <https://github.com/astral-sh/uv/issues/22510>.
+#[test]
+fn build_sdist_with_long_group_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/foo/__init__.py").touch()?;
+
+    let sdist = context.temp_dir.child("foo-1.0.0.tar.gz");
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import io
+            import sys
+            import tarfile
+            from pathlib import Path
+
+            with tarfile.open(sys.argv[1], "w:gz", format=tarfile.PAX_FORMAT) as archive:
+                for name in ["pyproject.toml", "src/foo/__init__.py"]:
+                    data = Path(name).read_bytes()
+                    info = tarfile.TarInfo(f"foo-1.0.0/{name}")
+                    info.size = len(data)
+                    info.gname = "g" * 40
+                    archive.addfile(info, io.BytesIO(data))
+        "#})
+        .arg(sdist.path())
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
+        .arg("--offline")
+        .arg(sdist.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo-1.0.0.tar.gz)
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn build_sdist_with_long_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
