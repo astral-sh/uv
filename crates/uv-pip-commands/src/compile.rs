@@ -467,7 +467,7 @@ pub async fn pip_compile(
 
     // Read the lockfile, if present.
     let LockedRequirements { preferences, git } =
-        if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
+        if let Some(output_file) = output_file.filter(|output_file| output_file.is_file()) {
             match format {
                 PipCompileFormat::RequirementsTxt => LockedRequirements::from_preferences(
                     read_requirements_txt(output_file, &upgrade).await?,

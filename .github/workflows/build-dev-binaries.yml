@@ -42,7 +42,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -77,7 +77,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -128,7 +128,7 @@ jobs:
       - name: "Build"
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -168,7 +168,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -200,7 +200,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -234,7 +234,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target x86_64-apple-darwin --bin uv --bin uvx
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target x86_64-apple-darwin --bin uv --bin uvx
 
       - name: "Verify binary architecture"
         run: |
@@ -282,7 +282,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -325,7 +325,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -358,7 +358,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - run: cargo +${MSRV} build --profile no-debug
+      - run: cargo +${MSRV} build --locked --profile no-debug
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - run: ./target/no-debug/uv --version
@@ -409,7 +409,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx
+        run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

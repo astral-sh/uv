@@ -7,9 +7,8 @@ use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::{metadata, set_permissions};
 use indoc::indoc;
-use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
-use uv_test::{uv_snapshot, venv_bin_path};
+use uv_test::{copy_dir_ignore, uv_snapshot, venv_bin_path};
 
 #[test]
 fn tool_run_args() {
@@ -1285,13 +1284,13 @@ fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1344,13 +1343,13 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1403,13 +1402,13 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1462,13 +1461,13 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1523,13 +1522,13 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -1583,13 +1582,13 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
         .with_tool_dirs();
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -3569,7 +3568,7 @@ fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
     let test_package_source = workspace_packages.join("package.name.with.dots");
     let test_package_dest = context.temp_dir.child("package.name.with.dots");
 
-    copy_dir_all(&test_package_source, &test_package_dest)?;
+    copy_dir_ignore(&test_package_source, &test_package_dest)?;
 
     // Test that uv tool run can find and execute the dotted package name
     uv_snapshot!(context.filters(), context.tool_run()

@@ -26,9 +26,7 @@ use uv_python_managed::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{
-    ChildPath, FileWriteStr, PathChild, PathCopy, PathCreateDir, SymlinkToFile,
-};
+use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir, SymlinkToFile};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use futures::StreamExt;
 use indoc::{formatdoc, indoc};
@@ -2046,7 +2044,7 @@ impl TestContext {
     /// This panics (fails the current test) for any failure.
     pub fn copy_ecosystem_project(&self, name: &str) {
         let project_dir = PathBuf::from(format!("../../test/ecosystem/{name}"));
-        self.temp_dir.copy_from(project_dir, &["**/*"]).unwrap();
+        copy_dir_ignore(project_dir, &self.temp_dir).expect("Failed to copy ecosystem project");
         // If there is a (gitignore) lockfile, remove it.
         if let Err(err) = fs_err::remove_file(self.temp_dir.join("uv.lock")) {
             assert_eq!(
@@ -2555,7 +2553,7 @@ pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::
         let relative = entry.path().strip_prefix(&src)?;
         let ty = entry.file_type().unwrap();
         if ty.is_dir() {
-            fs_err::create_dir(dst.as_ref().join(relative))?;
+            fs_err::create_dir_all(dst.as_ref().join(relative))?;
         } else {
             fs_err::copy(entry.path(), dst.as_ref().join(relative))?;
         }
@@ -2861,5 +2859,52 @@ mod file_read_tests {
         let context = TestContext::new_with_versions_and_bin(&[], PathBuf::from("uv"));
 
         context.read_bytes("missing.bin");
+    }
+}
+
+#[cfg(test)]
+mod copy_dir_ignore_tests {
+    use anyhow::Result;
+    use assert_fs::prelude::*;
+    use predicates::prelude::predicate;
+
+    use super::copy_dir_ignore;
+
+    #[test]
+    fn copy_fixture_into_nested_destination() -> Result<()> {
+        let root = assert_fs::TempDir::new()?;
+        let source = root.child("source");
+        source.child(".git").create_dir_all()?;
+        source.child(".gitignore").write_str("ignored.txt\n")?;
+        source.child("module.py").write_str("VALUE = 1\n")?;
+        source
+            .child("ignored.txt")
+            .write_str("local build output")?;
+
+        let destination = root.child("nested/destination");
+        copy_dir_ignore(&source, &destination)?;
+
+        destination.child("module.py").assert("VALUE = 1\n");
+        destination
+            .child("ignored.txt")
+            .assert(predicate::path::missing());
+        Ok(())
+    }
+
+    #[test]
+    fn copy_fixture_into_existing_destination() -> Result<()> {
+        let root = assert_fs::TempDir::new()?;
+        let source = root.child("source");
+        source.child("module.py").write_str("VALUE = 1\n")?;
+
+        let destination = root.child("destination");
+        destination
+            .child("existing.txt")
+            .write_str("existing file")?;
+        copy_dir_ignore(&source, &destination)?;
+
+        destination.child("module.py").assert("VALUE = 1\n");
+        destination.child("existing.txt").assert("existing file");
+        Ok(())
     }
 }

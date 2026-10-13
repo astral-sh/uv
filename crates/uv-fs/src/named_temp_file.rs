@@ -1,3 +1,4 @@
+use std::fs::Permissions;
 use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -19,13 +20,25 @@ pub struct NamedTempFile(tempfile::NamedTempFile);
 /// On Windows, stores a verbatim path so later persistence supports long paths.
 /// On Unix, requests `0o666` permissions (subject to the umask), matching non-temporary files.
 pub fn tempfile_in(path: &Path) -> io::Result<NamedTempFile> {
+    tempfile_in_with_permissions(path, None)
+}
+
+/// Create a temporary file with permissions no broader than the requested permissions.
+///
+/// On Unix, the umask can further restrict the initial permissions. Set the final permissions
+/// after writing when replacing an existing file whose mode must be retained.
+/// Without explicit permissions, use the defaults from [`tempfile_in`].
+pub(crate) fn tempfile_in_with_permissions(
+    path: &Path,
+    permissions: Option<Permissions>,
+) -> io::Result<NamedTempFile> {
     #[cfg(unix)]
-    let file = tempfile::Builder::new()
-        .permissions(std::fs::Permissions::from_mode(0o666))
-        .tempfile_in(path)?;
-    #[cfg(not(unix))]
-    let file = tempfile::Builder::new().tempfile_in(verbatim_path(path))?;
-    Ok(NamedTempFile(file))
+    let permissions = Some(permissions.unwrap_or_else(|| Permissions::from_mode(0o666)));
+    let mut builder = tempfile::Builder::new();
+    if let Some(permissions) = permissions {
+        builder.permissions(permissions);
+    }
+    Ok(NamedTempFile(builder.tempfile_in(verbatim_path(path))?))
 }
 
 impl NamedTempFile {

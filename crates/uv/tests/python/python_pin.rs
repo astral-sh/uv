@@ -1,11 +1,15 @@
 #[cfg(unix)]
 use std::fs::Permissions;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+#[cfg(unix)]
+use assert_fs::fixture::SymlinkToFile;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 #[cfg(unix)]
 use indoc::indoc;
@@ -15,6 +19,30 @@ use uv_python_discovery::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+/// Pinning through a symlink must not replace a special file at its target.
+#[cfg(unix)]
+#[test]
+fn python_pin_symlink_to_special_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let target = context.temp_dir.child("socket");
+    let _listener = UnixListener::bind(target.path())?;
+    let version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    version_file.symlink_to_file("socket")?;
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot atomically replace `[TEMP_DIR]/socket`: not a regular file
+    ");
+
+    assert_eq!(
+        fs_err::read_link(version_file.path())?,
+        PathBuf::from("socket")
+    );
+    assert!(fs_err::metadata(target.path())?.file_type().is_socket());
+    Ok(())
+}
 
 /// Repeated pins should warn once while retaining the failed interpreter's status and stderr.
 #[cfg(unix)]

@@ -13,6 +13,8 @@ use tar_codec::{Archive as _, TarArchive, extract::ExtractPolicy};
 use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_static::EnvVars;
+#[cfg(feature = "test-pypi")]
+use uv_test::copy_dir_ignore;
 use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
@@ -59,7 +61,11 @@ fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
 #[cfg(feature = "test-pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let built_by_uv = Path::new("../../test/packages/built-by-uv");
+    let built_by_uv = context.temp_dir.child("built-by-uv");
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/built-by-uv"),
+        &built_by_uv,
+    )?;
 
     let temp_dir = TempDir::new()?;
 
@@ -67,7 +73,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(temp_dir.path())
-        .current_dir(built_by_uv), @"
+        .current_dir(&built_by_uv), @"
     exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0-py3-none-any.whl
@@ -106,7 +112,11 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 #[cfg(feature = "test-pypi")]
 fn built_by_uv_direct() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let built_by_uv = Path::new("../../test/packages/built-by-uv");
+    let built_by_uv = context.temp_dir.child("built-by-uv");
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/built-by-uv"),
+        &built_by_uv,
+    )?;
 
     let sdist_dir = TempDir::new()?;
 
@@ -114,7 +124,7 @@ fn built_by_uv_direct() -> Result<()> {
         .build_backend()
         .arg("build-sdist")
         .arg(sdist_dir.path())
-        .current_dir(built_by_uv), @"
+        .current_dir(&built_by_uv), @"
     exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0.tar.gz
@@ -171,7 +181,11 @@ fn built_by_uv_direct() -> Result<()> {
 #[cfg(feature = "test-pypi")]
 fn built_by_uv_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let built_by_uv = Path::new("../../test/packages/built-by-uv");
+    let built_by_uv = context.temp_dir.child("built-by-uv");
+    copy_dir_ignore(
+        context.workspace_root.join("test/packages/built-by-uv"),
+        &built_by_uv,
+    )?;
 
     // Without the editable, pytest fails.
     context.pip_install().arg("pytest").assert().success();
@@ -179,7 +193,7 @@ fn built_by_uv_editable() -> Result<()> {
         .python_command()
         .arg("-m")
         .arg("pytest")
-        .current_dir(built_by_uv)
+        .current_dir(&built_by_uv)
         .assert()
         .failure();
 
@@ -190,7 +204,7 @@ fn built_by_uv_editable() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(wheel_dir.path())
-        .current_dir(built_by_uv), @"
+        .current_dir(&built_by_uv), @"
     exit_code: 0 (success)
     ----- stdout -----
     built_by_uv-0.1.0-py3-none-any.whl
@@ -210,7 +224,7 @@ fn built_by_uv_editable() -> Result<()> {
         // Avoid showing absolute paths and column dependent layout
         .arg("--quiet")
         .arg("--capture=no")
-        .current_dir(built_by_uv), @"
+        .current_dir(&built_by_uv), @"
     exit_code: 0 (success)
     ----- stdout -----
     ..
@@ -536,6 +550,175 @@ fn build_module_name_normalization() -> Result<()> {
         django_plugin-1.0.0-py3-none-any.whl
         ");
     }
+
+    Ok(())
+}
+
+/// Older sdists can contain hard links, including files needed to build the wheel.
+#[test]
+fn build_sdist_with_hard_link() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project
+        .child("module.py")
+        .write_str("VALUE = 'Hello from a hard link'\n")?;
+
+    let sdist = context.temp_dir.child("foo-1.0.0.tar.gz");
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import sys
+            import tarfile
+
+            with tarfile.open(sys.argv[1], "w:gz") as archive:
+                archive.add("pyproject.toml", arcname="foo-1.0.0/pyproject.toml")
+                archive.add("module.py", arcname="foo-1.0.0/module.py")
+                link = tarfile.TarInfo("foo-1.0.0/src/foo/__init__.py")
+                link.type = tarfile.LNKTYPE
+                link.linkname = "foo-1.0.0/module.py"
+                archive.addfile(link)
+        "#})
+        .arg(sdist.path())
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("--offline").arg(sdist.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo-1.0.0.tar.gz)
+    ");
+
+    uv_snapshot!(context.python_command().arg("-c").arg("import foo; print(foo.VALUE)"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from a hard link
+    ");
+
+    Ok(())
+}
+
+/// Python's `tarfile` omits the NUL terminator when a group name fills the 32-byte header field.
+///
+/// See <https://github.com/astral-sh/uv/issues/22510>.
+#[test]
+fn build_sdist_with_full_group_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/foo/__init__.py").touch()?;
+
+    let sdist = context.temp_dir.child("foo-1.0.0.tar.gz");
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import io
+            import sys
+            import tarfile
+            from pathlib import Path
+
+            with tarfile.open(sys.argv[1], "w:gz", format=tarfile.PAX_FORMAT) as archive:
+                for name in ["pyproject.toml", "src/foo/__init__.py"]:
+                    data = Path(name).read_bytes()
+                    info = tarfile.TarInfo(f"foo-1.0.0/{name}")
+                    info.size = len(data)
+                    info.gname = "g" * 32
+                    archive.addfile(info, io.BytesIO(data))
+        "#})
+        .arg(sdist.path())
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
+        .arg("--offline")
+        .arg(sdist.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo-1.0.0.tar.gz)
+    ");
+
+    Ok(())
+}
+
+/// Group names longer than 32 bytes also have a PAX record overriding the unterminated header field.
+///
+/// See <https://github.com/astral-sh/uv/issues/22510>.
+#[test]
+fn build_sdist_with_long_group_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/foo/__init__.py").touch()?;
+
+    let sdist = context.temp_dir.child("foo-1.0.0.tar.gz");
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import io
+            import sys
+            import tarfile
+            from pathlib import Path
+
+            with tarfile.open(sys.argv[1], "w:gz", format=tarfile.PAX_FORMAT) as archive:
+                for name in ["pyproject.toml", "src/foo/__init__.py"]:
+                    data = Path(name).read_bytes()
+                    info = tarfile.TarInfo(f"foo-1.0.0/{name}")
+                    info.size = len(data)
+                    info.gname = "g" * 40
+                    archive.addfile(info, io.BytesIO(data))
+        "#})
+        .arg(sdist.path())
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
+        .arg("--offline")
+        .arg(sdist.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo-1.0.0.tar.gz)
+    ");
 
     Ok(())
 }

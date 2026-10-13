@@ -668,10 +668,10 @@ async fn perform_install(
     // Ensure that the installations are _complete_ for both downloaded installations and existing
     // installations that match the request
     for installation in &installations {
-        installation.ensure_externally_managed()?;
-        installation.ensure_sysconfig_patched()?;
-        installation.ensure_canonical_executables()?;
-        installation.ensure_build_file()?;
+        installation.ensure_externally_managed().await?;
+        installation.ensure_sysconfig_patched().await?;
+        installation.ensure_canonical_executables().await?;
+        installation.ensure_build_file().await?;
         if let Err(e) = installation.ensure_dylib_patched() {
             e.warn_user(installation);
         }
@@ -725,7 +725,7 @@ async fn perform_install(
     );
 
     for installation in minor_versions.values() {
-        installation.ensure_minor_version_link()?;
+        installation.ensure_minor_version_link().await?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {

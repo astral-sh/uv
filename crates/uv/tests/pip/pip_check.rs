@@ -347,6 +347,47 @@ fn check_python_version() {
     );
 }
 
+/// Packages accepted by the resolver must not trigger Python upper-bound diagnostics.
+#[test]
+fn check_python_version_upper_bound() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "python-version-upper-bound"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.package-a.versions."1.0.0"]
+        sdist = false
+        requires_python = ">=3.8.6,<3.11"
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("package-a")
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.0.0
+    ");
+
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    All installed packages are compatible
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn check_dependency_metadata_from_config_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");

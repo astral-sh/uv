@@ -19,13 +19,12 @@ use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use uv_fs::Simplified;
-use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
 use uv_test::packse::{
     PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
 };
-use uv_test::uv_snapshot;
+use uv_test::{copy_dir_ignore, uv_snapshot};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -715,7 +714,7 @@ fn tool_install_with_editable() -> Result<()> {
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
@@ -6404,7 +6403,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
             error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
               cause: Failed to resolve requirements from `build-system.requires`
               cause: No solution found when resolving: `build-dependency==1.0.0`
-              cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+              cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
             ");
             project
                 .child("backend-executed")

@@ -15,7 +15,7 @@ use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
-    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Requirement, RequiresPython, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -211,6 +211,8 @@ impl SitePackages {
         dependency_metadata: &DependencyMetadata,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
+        let python_requirement =
+            RequiresPython::greater_than_equal_version(markers.python_full_version());
 
         for (package, indexes) in &self.by_name {
             let mut distributions = indexes.iter().flat_map(|index| &self.distributions[*index]);
@@ -253,15 +255,15 @@ impl SitePackages {
                     Cow::Borrowed(metadata)
                 };
 
-                // Verify that the package is compatible with the current Python version.
-                if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    if !requires_python.contains(markers.python_full_version()) {
-                        diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
-                            package: package.clone(),
-                            version: self.interpreter.python_version().clone(),
-                            requires_python: requires_python.clone(),
-                        });
-                    }
+                // Ignore Python upper bounds, as we do during resolution.
+                if let Some(requires_python) = metadata.requires_python.as_ref()
+                    && !python_requirement.is_contained_by(requires_python)
+                {
+                    diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
+                        package: package.clone(),
+                        version: self.interpreter.python_version().clone(),
+                        requires_python: requires_python.clone(),
+                    });
                 }
 
                 // Verify that the package is compatible with the current tags.

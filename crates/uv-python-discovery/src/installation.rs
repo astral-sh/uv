@@ -344,10 +344,10 @@ impl PythonInstallation {
         };
 
         let installed = ManagedPythonInstallation::new(path, download)?;
-        installed.ensure_externally_managed()?;
-        installed.ensure_sysconfig_patched()?;
-        installed.ensure_canonical_executables()?;
-        installed.ensure_build_file()?;
+        installed.ensure_externally_managed().await?;
+        installed.ensure_sysconfig_patched().await?;
+        installed.ensure_canonical_executables().await?;
+        installed.ensure_build_file().await?;
 
         let minor_version = installed.minor_version_key();
         let highest_patch = installations
@@ -360,7 +360,7 @@ impl PythonInstallation {
             .patch()
             .is_some_and(|p| p >= highest_patch)
         {
-            installed.ensure_minor_version_link()?;
+            installed.ensure_minor_version_link().await?;
         }
 
         if let Err(e) = installed.ensure_dylib_patched() {

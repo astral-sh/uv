@@ -25,11 +25,11 @@
 //! ```
 
 use std::borrow::Cow;
-use std::io::Write;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use tracing::trace;
 
 use crate::sysconfig::generated_mappings::DEFAULT_VARIABLE_UPDATES;
@@ -41,7 +41,7 @@ mod parser;
 mod replacements;
 
 /// Update the `sysconfig` data in a Python installation.
-pub(crate) fn update_sysconfig(
+pub(crate) async fn update_sysconfig(
     install_root: &Path,
     major: u8,
     minor: u8,
@@ -49,43 +49,47 @@ pub(crate) fn update_sysconfig(
 ) -> Result<(), Error> {
     // Find the `_sysconfigdata_` file in the Python installation.
     let real_prefix = std::path::absolute(install_root)?;
-    let sysconfigdata = find_sysconfigdata(&real_prefix, major, minor, suffix)?;
+    let sysconfigdata = find_sysconfigdata(&real_prefix, major, minor, suffix).await?;
     trace!(
         "Discovered `sysconfig` data at: {}",
         sysconfigdata.display()
     );
 
     // Update the `_sysconfigdata_` file in-memory.
-    let contents = fs_err::read_to_string(&sysconfigdata)?;
+    let contents = fs_err::tokio::read_to_string(&sysconfigdata).await?;
     let data = SysconfigData::from_str(&contents)?;
     let data = patch_sysconfigdata(data, &real_prefix);
-    let contents = data.to_string_pretty()?;
+    let new_contents = data.to_string_pretty()?;
 
-    // Write the updated `_sysconfigdata_` file.
-    let mut file = fs_err::OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(&sysconfigdata)?;
-    file.write_all(contents.as_bytes())?;
-    file.sync_data()?;
+    // Python processes can import this module while the installation is being patched.
+    if contents != new_contents {
+        uv_fs::write_atomic_preserve(&sysconfigdata, new_contents).await?;
+    }
 
     // Find the `pkgconfig` files in the Python installation.
-    for pkgconfig in find_pkgconfigs(&real_prefix)? {
-        let pkgconfig = pkgconfig?;
+    let mut pkgconfigs =
+        match fs_err::tokio::read_dir(real_prefix.join("lib").join("pkgconfig")).await {
+            Ok(read_dir) => read_dir,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err.into()),
+        };
+    while let Some(entry) = pkgconfigs.next_entry().await? {
+        let pkgconfig = entry.path();
+        if pkgconfig.extension().is_none_or(|ext| ext != "pc")
+            || !entry
+                .file_type()
+                .await
+                .is_ok_and(|file_type| file_type.is_file())
+        {
+            continue;
+        }
         trace!("Discovered `pkgconfig` data at: {}", pkgconfig.display());
 
         // Update the `pkgconfig` file in-memory.
-        let contents = fs_err::read_to_string(&pkgconfig)?;
+        let contents = fs_err::tokio::read_to_string(&pkgconfig).await?;
         if let Some(new_contents) = patch_pkgconfig(&contents) {
-            // Write the updated `pkgconfig` file.
-            let mut file = fs_err::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .create(true)
-                .open(&pkgconfig)?;
-            file.write_all(new_contents.as_bytes())?;
-            file.sync_data()?;
+            // Build tools can read this file while the installation is being patched.
+            uv_fs::write_atomic_preserve(&pkgconfig, new_contents).await?;
         }
     }
 
@@ -95,7 +99,7 @@ pub(crate) fn update_sysconfig(
 /// Find the `_sysconfigdata_` file in a Python installation.
 ///
 /// For example, on macOS, returns `{real_prefix}/lib/python3.12/_sysconfigdata__darwin_darwin.py"`.
-fn find_sysconfigdata(
+async fn find_sysconfigdata(
     real_prefix: &Path,
     major: u8,
     minor: u8,
@@ -105,34 +109,25 @@ fn find_sysconfigdata(
     let lib = real_prefix
         .join("lib")
         .join(format!("python{major}.{minor}{suffix}"));
-    if !lib.exists() {
+    if !fs_err::tokio::try_exists(&lib).await.unwrap_or(false) {
         return Err(Error::MissingLib(lib));
     }
 
     // Probe the `lib` directory for `_sysconfigdata_`.
-    for entry in lib.read_dir()? {
-        let entry = entry?;
-
-        if entry.path().extension().is_none_or(|ext| ext != "py") {
-            continue;
-        }
-
-        if !entry
-            .path()
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .is_some_and(|stem| stem.starts_with("_sysconfigdata_"))
+    let mut entries = fs_err::tokio::read_dir(&lib).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if path.extension().is_none_or(|ext| ext != "py")
+            || !path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .is_some_and(|stem| stem.starts_with("_sysconfigdata_"))
         {
             continue;
         }
 
-        let metadata = entry.metadata()?;
-        if metadata.is_symlink() {
-            continue;
-        }
-
-        if metadata.is_file() {
-            return Ok(entry.path());
+        if entry.metadata().await?.is_file() {
+            return Ok(path);
         }
     }
 
@@ -204,30 +199,6 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
     data.insert("PYTHON_BUILD_STANDALONE".to_string(), Value::Int(1));
 
     data
-}
-
-/// Find the location of all `pkg-config` files in a Python installation.
-///
-/// Specifically, searches for files under `lib/pkgconfig` with the `.pc` extension.
-fn find_pkgconfigs(
-    install_root: &Path,
-) -> Result<impl Iterator<Item = Result<PathBuf, std::io::Error>>, std::io::Error> {
-    let pkgconfig = install_root.join("lib").join("pkgconfig");
-
-    let read_dir = match pkgconfig.read_dir() {
-        Ok(read_dir) => read_dir,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Either::Left(std::iter::empty()));
-        }
-        Err(err) => return Err(err),
-    };
-
-    Ok(Either::Right(
-        read_dir
-            .filter_ok(|entry| entry.path().extension().is_some_and(|ext| ext == "pc"))
-            .filter_ok(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_file()))
-            .map_ok(|entry| entry.path()),
-    ))
 }
 
 /// Patch the given `pkgconfig` contents.
