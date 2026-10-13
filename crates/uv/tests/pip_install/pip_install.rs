@@ -2591,6 +2591,7 @@ fn install_editable_bare_cli() {
     let packages_dir = context.workspace_root.join("test/packages");
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-config")
         .arg("-e")
         .arg("black_editable")
         .current_dir(&packages_dir), @"
@@ -2642,6 +2643,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     let packages_dir = context.workspace_root.join("test/packages");
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-config")
         .arg("-r")
         .arg(requirements_txt.path())
         .current_dir(&packages_dir), @"
