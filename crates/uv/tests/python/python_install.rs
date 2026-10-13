@@ -203,6 +203,64 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Pkgconfig repairs must leave existing readers on the complete original file.
+#[cfg(unix)]
+#[test]
+fn python_install_pkgconfig() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let installation = context
+        .temp_dir
+        .child("managed")
+        .child(format!("cpython-3.12.9-{}", platform_key_from_env()?));
+    let lib = installation.child("lib").child("python3.12");
+    lib.create_dir_all()?;
+    let bin = installation.child("bin");
+    bin.create_dir_all()?;
+    bin.child("python3.12").touch()?;
+    lib.child("_sysconfigdata__test.py").write_str(indoc! {r"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {}
+    "})?;
+
+    let pkgconfigs = installation.child("lib").child("pkgconfig");
+    pkgconfigs.create_dir_all()?;
+    let pkgconfig = pkgconfigs.child("python.pc");
+    pkgconfig.write_str("prefix=/install\nlibdir=${prefix}/lib\n")?;
+    fs_err::set_permissions(pkgconfig.path(), std::fs::Permissions::from_mode(0o640))?;
+    let original = fs_err::read_to_string(pkgconfig.path())?;
+    let mut reader = fs_err::File::open(pkgconfig.path())?;
+    let ignored = pkgconfigs.child("ignored.txt");
+    ignored.write_str("prefix=/install\n")?;
+    pkgconfigs.child("directory.pc").create_dir_all()?;
+    let linked = installation.child("linked.pc");
+    linked.write_str("prefix=/install\n")?;
+    fs_err::os::unix::fs::symlink(linked.path(), pkgconfigs.child("linked.pc").path())?;
+
+    context
+        .python_install()
+        .arg("3.12.9")
+        .arg("--no-bin")
+        .arg("--offline")
+        .assert()
+        .success();
+
+    insta::assert_snapshot!(context.read(pkgconfig.path()), @r"
+    prefix=${pcfiledir}/../..
+    libdir=${prefix}/lib
+    ");
+    let mut previous_contents = String::new();
+    reader.read_to_string(&mut previous_contents)?;
+    assert_eq!(previous_contents, original);
+    assert_eq!(
+        fs_err::metadata(pkgconfig.path())?.permissions().mode() & 0o777,
+        0o640
+    );
+    assert_eq!(context.read(ignored.path()), "prefix=/install\n");
+    assert_eq!(context.read(linked.path()), "prefix=/install\n");
+
+    Ok(())
+}
+
 #[test]
 fn python_reinstall() {
     let context = uv_test::test_context_with_versions!(&[])
