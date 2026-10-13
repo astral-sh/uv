@@ -1,0 +1,2759 @@
+{
+  "linux": {
+    "commit": "c17ce3c58fb55f2c27b84591bb955648e0fca8ed",
+    "main_source_revision": "59e5912ecff500422b99cca3df68d48be3841a67",
+    "plan_sha256": "4c1cba7a8fc99bb04170bf8ae556644db6d27c39b23af239452391d78c47d628",
+    "order": ["thin-line-tables", "thin-none", "thin-limited"],
+    "machine": {
+      "platform": "Linux-6.17.0-1019-aws-x86_64-with-glibc2.39",
+      "logical_cpus": 16,
+      "physical_cpus": 8,
+      "physical_memory_bytes": 132916703232,
+      "cpu_description": "{\n   \"lscpu\": [\n      {\n         \"field\": \"Architecture:\",\n         \"data\": \"x86_64\"\n      },{\n         \"field\": \"CPU op-mode(s):\",\n         \"data\": \"32-bit, 64-bit\"\n      },{\n         \"field\": \"Address sizes:\",\n         \"data\": \"48 bits physical, 48 bits virtual\"\n      },{\n         \"field\": \"Byte Order:\",\n         \"data\": \"Little Endian\"\n      },{\n         \"field\": \"CPU(s):\",\n         \"data\": \"16\"\n      },{\n         \"field\": \"On-line CPU(s) list:\",\n         \"data\": \"0-15\"\n      },{\n         \"field\": \"Vendor ID:\",\n         \"data\": \"GenuineIntel\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"Intel(R) Xeon(R) 6975P-C\"\n      },{\n         \"field\": \"CPU family:\",\n         \"data\": \"6\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"173\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"2\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"8\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"5400.00\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc arch_perfmon rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq monitor ssse3 fma cx16 pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx_vnni avx512_bf16 wbnoinvd ida arat avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq rdpid bus_lock_detect cldemote movdiri movdir64b md_clear serialize amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\"\n      },{\n         \"field\": \"Hypervisor vendor:\",\n         \"data\": \"KVM\"\n      },{\n         \"field\": \"Virtualization type:\",\n         \"data\": \"full\"\n      },{\n         \"field\": \"L1d cache:\",\n         \"data\": \"384 KiB (8 instances)\"\n      },{\n         \"field\": \"L1i cache:\",\n         \"data\": \"512 KiB (8 instances)\"\n      },{\n         \"field\": \"L2 cache:\",\n         \"data\": \"16 MiB (8 instances)\"\n      },{\n         \"field\": \"L3 cache:\",\n         \"data\": \"480 MiB (1 instance)\"\n      },{\n         \"field\": \"NUMA node(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"NUMA node0 CPU(s):\",\n         \"data\": \"0-15\"\n      },{\n         \"field\": \"Vulnerability Gather data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Ghostwrite:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Indirect target selection:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Itlb multihit:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability L1tf:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Meltdown:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mmio stale data:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Old microcode:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Reg file data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Retbleed:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec rstack overflow:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec store bypass:\",\n         \"data\": \"Vulnerable\"\n      },{\n         \"field\": \"Vulnerability Spectre v1:\",\n         \"data\": \"Vulnerable: __user pointer sanitization and usercopy barriers only; no swapgs barriers\"\n      },{\n         \"field\": \"Vulnerability Spectre v2:\",\n         \"data\": \"Vulnerable; IBPB: disabled; STIBP: disabled; PBRSB-eIBRS: Not affected; BHI: Vulnerable\"\n      },{\n         \"field\": \"Vulnerability Srbds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsa:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsx async abort:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Vmscape:\",\n         \"data\": \"Not affected\"\n      }\n   ]\n}",
+      "cpu_description_exit_code": 0,
+      "psutil_version": "7.0.0",
+      "runner_name": "depot-hzq5d08jh7"
+    },
+    "platform": "Linux",
+    "target": "x86_64-unknown-linux-gnu",
+    "treatments": {
+      "thin-line-tables": {
+        "training_lto": "thin",
+        "debug_level": "line-tables-only",
+        "stages_seconds": {
+          "instrumented_build": 260.789105104,
+          "prepare_corpus": 0.0043672430000043505,
+          "train_uv": 28.796801475999985,
+          "merge_profiles": 0.972836089999987
+        },
+        "training_seconds": 290.66333076300003,
+        "final_seconds": 414.299878252,
+        "total_seconds": 704.9632090150001,
+        "resources": {
+          "training": {
+            "wall_seconds": 290.663033713,
+            "samples": 289,
+            "coverage_seconds": 289.762010916,
+            "max_sample_gap_seconds": 1.0196747269999946,
+            "sampled_peak_tree_rss_bytes": 15874355200,
+            "minimum_host_available_memory_bytes": 116739407872,
+            "median_host_cpu_percent": 44.0,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1169.4699999999998,
+              "cpu_system_seconds": 22.579999999999973,
+              "read_bytes": 46936064,
+              "write_bytes": 20630347776
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1413.504236,
+              "ru_stime": 58.78495,
+              "ru_minflt": 11885910,
+              "ru_majflt": 8298,
+              "ru_inblock": 31976,
+              "ru_oublock": 20299144,
+              "ru_nvcsw": 235124,
+              "ru_nivcsw": 35699
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 54.24,
+                "nice": 0.0,
+                "system": 12.04,
+                "idle": 1569.13,
+                "iowait": 91.63,
+                "irq": 0.0,
+                "softirq": 0.08,
+                "steal": 0.25,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 107977,
+                "write_count": 180424,
+                "read_bytes": 5138766848,
+                "write_bytes": 11820523008,
+                "read_time": 483159,
+                "write_time": 570124,
+                "read_merged_count": 12663,
+                "write_merged_count": 52038,
+                "busy_time": 197687
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 1473.21,
+                "nice": 0.0,
+                "system": 76.3,
+                "idle": 4694.97,
+                "iowait": 106.75,
+                "irq": 0.0,
+                "softirq": 0.44,
+                "steal": 0.4,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 121719,
+                "write_count": 605485,
+                "read_bytes": 5799422976,
+                "write_bytes": 28839738880,
+                "read_time": 539260,
+                "write_time": 1763021,
+                "read_merged_count": 12956,
+                "write_merged_count": 195135,
+                "busy_time": 244773
+              }
+            },
+            "collection_errors": {
+              "NoSuchProcess": 1,
+              "process_io_unavailable": 50
+            }
+          },
+          "final": {
+            "wall_seconds": 414.299598059,
+            "samples": 413,
+            "coverage_seconds": 414.206881546,
+            "max_sample_gap_seconds": 1.0089561049999816,
+            "sampled_peak_tree_rss_bytes": 15368282112,
+            "minimum_host_available_memory_bytes": 117153505280,
+            "median_host_cpu_percent": 6.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 801.3299999999999,
+              "cpu_system_seconds": 15.07999999999997,
+              "read_bytes": 0,
+              "write_bytes": 14035648512
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1002.1790199999998,
+              "ru_stime": 42.906026000000004,
+              "ru_minflt": 9496446,
+              "ru_majflt": 7470,
+              "ru_inblock": 0,
+              "ru_oublock": 11851088,
+              "ru_nvcsw": 153435,
+              "ru_nivcsw": 14791
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 1475.49,
+                "nice": 0.0,
+                "system": 79.22,
+                "idle": 4749.06,
+                "iowait": 108.31,
+                "irq": 0.0,
+                "softirq": 0.46,
+                "steal": 0.4,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 121743,
+                "write_count": 661758,
+                "read_bytes": 5801126912,
+                "write_bytes": 31191776768,
+                "read_time": 539385,
+                "write_time": 2207828,
+                "read_merged_count": 12958,
+                "write_merged_count": 214214,
+                "busy_time": 249930
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 2486.92,
+                "nice": 0.0,
+                "system": 129.08,
+                "idle": 10300.13,
+                "iowait": 112.63,
+                "irq": 0.0,
+                "softirq": 0.49,
+                "steal": 0.64,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 133766,
+                "write_count": 885579,
+                "read_bytes": 6578457600,
+                "write_bytes": 42890051072,
+                "read_time": 546905,
+                "write_time": 2812849,
+                "read_merged_count": 13086,
+                "write_merged_count": 281647,
+                "busy_time": 266843
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 21,
+              "NoSuchProcess": 12
+            }
+          }
+        },
+        "profile_sha256": "56ba131d02f2e50c210c97dd3d2bcc55a6b0b97867c7db946e67e2e301a727d1",
+        "profile_bytes": 34307872,
+        "profile_functions": 95372,
+        "pgo_diagnostics": {
+          "warnings": 18,
+          "missing": 18,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RINvMNtNtCs1C1lLj4PWSY_5alloc2io5errorNtNtNtCsevLNFiNqfJP_4core2io5error5Error3newNtNtB7_6string6StringECsaNTJqNKrRqA_3uvx Hash = 784007058953177093 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs1C1lLj4PWSY_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtCsevLNFiNqfJP_4core6option6OptionB1s_ENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECsaNTJqNKrRqA_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECsaNTJqNKrRqA_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECsaNTJqNKrRqA_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBL_3BoxDNtNtB4_5error5ErrorNtNtB4_6marker4SendNtB1R_4SyncEL_EINtNtB4_7convert4FromNtNtBN_6string6StringE4from11StringErrorECsaNTJqNKrRqA_3uvx Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtB4_7process8ExitCodeECsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RINvNtNtCsgHYyB3hU8Ec_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECsaNTJqNKrRqA_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RINvNvMs2_NtCs1C1lLj4PWSY_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECsaNTJqNKrRqA_3uvx Hash = 948827211316022377 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNCINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtB6_7process8ExitCodeE0CsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNSNvYNCINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCsevLNFiNqfJP_4core3ops8function6FnOnceuE9call_once6vtableCsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNvCsaNTJqNKrRqA_3uvx4main Hash = 63442354526028824 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNvXs1i_NtCsevLNFiNqfJP_4core3fmtReNtB6_7Display3fmtCsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNvXs_NtNtNtCsevLNFiNqfJP_4core4iter8adapters5chainINtB4_5ChainINtNtB6_3map3MapINtNtNtBa_5slice4iter4IterReENvYNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtBa_7convert4FromRB1F_E4fromEINtNtB6_4skip4SkipNtNtB1R_3env6ArgsOsEENtNtNtB8_6traits8iterator8Iterator4nextCsaNTJqNKrRqA_3uvx Hash = 646080716688671202 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_11descriptionCsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_5causeCsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_6sourceCsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7provideCsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7dd9b6264c9fb02e-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7type_idCsaNTJqNKrRqA_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 17534206,
+        "wheel_sha256": "05aa9536b6d9085719494f7ea497dad3ba608577eacddd6ffd6916e45dca85d4",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 39812400,
+            "symbol_bytes": 169646336,
+            "sha256": "8ecf111a612d36d8d6eef416f1607103e5bdc68b3fde33bbe791851437c441c8",
+            "sbom_sha256": "472a2e4a5b983caa83730d6fefc86eb397e1733368a3572a88b63b009ba04b2a",
+            "identity": ["b5f16474904e508328ce84897825b450f58e6526"]
+          },
+          "uvx": {
+            "stripped_executable_bytes": 331584,
+            "symbol_bytes": 1952944,
+            "sha256": "2bd38d4ce423b45b299342d1e61645b30c9f28149bdf55386da7ac620a986fec",
+            "sbom_sha256": "472a2e4a5b983caa83730d6fefc86eb397e1733368a3572a88b63b009ba04b2a",
+            "identity": ["5af41afd3d8c4897c87e8964a701a18961faad3e"]
+          }
+        }
+      },
+      "thin-none": {
+        "training_lto": "thin",
+        "debug_level": "none",
+        "stages_seconds": {
+          "instrumented_build": 228.57283648400005,
+          "prepare_corpus": 0.004284774000097968,
+          "train_uv": 28.68660082500014,
+          "merge_profiles": 0.9597331010002108
+        },
+        "training_seconds": 258.323104006,
+        "final_seconds": 363.73641034599996,
+        "total_seconds": 622.059514352,
+        "resources": {
+          "training": {
+            "wall_seconds": 258.32288353,
+            "samples": 257,
+            "coverage_seconds": 257.54498075000004,
+            "max_sample_gap_seconds": 1.0219441629999437,
+            "sampled_peak_tree_rss_bytes": 11541663744,
+            "minimum_host_available_memory_bytes": 120538947584,
+            "median_host_cpu_percent": 44.3,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1046.2199999999996,
+              "cpu_system_seconds": 19.109999999999967,
+              "read_bytes": 1310720,
+              "write_bytes": 12956827648
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1269.5696950000001,
+              "ru_stime": 51.06733299999999,
+              "ru_minflt": 10511801,
+              "ru_majflt": 1901,
+              "ru_inblock": 1488,
+              "ru_oublock": 13715512,
+              "ru_nvcsw": 218874,
+              "ru_nivcsw": 32429
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 2489.89,
+                "nice": 0.0,
+                "system": 129.71,
+                "idle": 10353.42,
+                "iowait": 112.72,
+                "irq": 0.0,
+                "softirq": 0.49,
+                "steal": 0.65,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 133915,
+                "write_count": 888513,
+                "read_bytes": 6588173312,
+                "write_bytes": 43141594624,
+                "read_time": 546910,
+                "write_time": 2821311,
+                "read_merged_count": 13086,
+                "write_merged_count": 282570,
+                "busy_time": 267176
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 3763.77,
+                "nice": 0.0,
+                "system": 185.36,
+                "idle": 13126.03,
+                "iowait": 120.17,
+                "irq": 0.0,
+                "softirq": 0.87,
+                "steal": 0.77,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 145050,
+                "write_count": 1159301,
+                "read_bytes": 7264271360,
+                "write_bytes": 53435960832,
+                "read_time": 551739,
+                "write_time": 3459532,
+                "read_merged_count": 13114,
+                "write_merged_count": 364761,
+                "busy_time": 321236
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 38,
+              "NoSuchProcess": 1
+            }
+          },
+          "final": {
+            "wall_seconds": 363.73614821499996,
+            "samples": 362,
+            "coverage_seconds": 362.90404936100003,
+            "max_sample_gap_seconds": 1.0082777109998915,
+            "sampled_peak_tree_rss_bytes": 10784481280,
+            "minimum_host_available_memory_bytes": 120319213568,
+            "median_host_cpu_percent": 6.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 691.1399999999999,
+              "cpu_system_seconds": 12.379999999999967,
+              "read_bytes": 0,
+              "write_bytes": 6899998720
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 878.1414080000004,
+              "ru_stime": 37.156608000000006,
+              "ru_minflt": 8757421,
+              "ru_majflt": 940,
+              "ru_inblock": 0,
+              "ru_oublock": 6109120,
+              "ru_nvcsw": 137413,
+              "ru_nivcsw": 11578
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 3765.85,
+                "nice": 0.0,
+                "system": 188.02,
+                "idle": 13177.99,
+                "iowait": 121.3,
+                "irq": 0.0,
+                "softirq": 0.88,
+                "steal": 0.77,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 152899,
+                "write_count": 1201757,
+                "read_bytes": 7779253248,
+                "write_bytes": 55094853120,
+                "read_time": 552126,
+                "write_time": 3680309,
+                "read_merged_count": 13123,
+                "write_merged_count": 380667,
+                "busy_time": 324504
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 4651.13,
+                "nice": 0.0,
+                "system": 231.27,
+                "idle": 18043.83,
+                "iowait": 124.08,
+                "irq": 0.0,
+                "softirq": 0.9,
+                "steal": 1.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 168760,
+                "write_count": 1377023,
+                "read_bytes": 8826760192,
+                "write_bytes": 62326717952,
+                "read_time": 553675,
+                "write_time": 4071714,
+                "read_merged_count": 13253,
+                "write_merged_count": 427834,
+                "busy_time": 361440
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 31,
+              "NoSuchProcess": 3
+            }
+          }
+        },
+        "profile_sha256": "2f825889647ba2ef07606137a4f5a320d1e6664160906475ee1e6742b18388e4",
+        "profile_bytes": 34300480,
+        "profile_functions": 95372,
+        "pgo_diagnostics": {
+          "warnings": 18,
+          "missing": 18,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RINvMNtNtCs1C1lLj4PWSY_5alloc2io5errorNtNtNtCsevLNFiNqfJP_4core2io5error5Error3newNtNtB7_6string6StringECsjedzuOIeRb1_3uvx Hash = 784007058953177093 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs1C1lLj4PWSY_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtCsevLNFiNqfJP_4core6option6OptionB1s_ENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECsjedzuOIeRb1_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECsjedzuOIeRb1_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECsjedzuOIeRb1_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBL_3BoxDNtNtB4_5error5ErrorNtNtB4_6marker4SendNtB1R_4SyncEL_EINtNtB4_7convert4FromNtNtBN_6string6StringE4from11StringErrorECsjedzuOIeRb1_3uvx Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtB4_7process8ExitCodeECsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RINvNtNtCsgHYyB3hU8Ec_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECsjedzuOIeRb1_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RINvNvMs2_NtCs1C1lLj4PWSY_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECsjedzuOIeRb1_3uvx Hash = 948827211316022377 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNCINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtB6_7process8ExitCodeE0CsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNSNvYNCINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCsevLNFiNqfJP_4core3ops8function6FnOnceuE9call_once6vtableCsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNvCsjedzuOIeRb1_3uvx4main Hash = 63442354526028824 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNvXs1i_NtCsevLNFiNqfJP_4core3fmtReNtB6_7Display3fmtCsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNvXs_NtNtNtCsevLNFiNqfJP_4core4iter8adapters5chainINtB4_5ChainINtNtB6_3map3MapINtNtNtBa_5slice4iter4IterReENvYNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtBa_7convert4FromRB1F_E4fromEINtNtB6_4skip4SkipNtNtB1R_3env6ArgsOsEENtNtNtB8_6traits8iterator8Iterator4nextCsjedzuOIeRb1_3uvx Hash = 646080716688671202 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_11descriptionCsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_5causeCsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_6sourceCsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7provideCsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.dff9da24dba1ef91-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7type_idCsjedzuOIeRb1_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 17404299,
+        "wheel_sha256": "ab8987237ac98f2cb6df2827afce9351dde79b1d100326997d7668ed138b2040",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 39563168,
+            "sha256": "bbb6c10245b5b95f32fa3565a8e455cf40a42f95d0859f8779aa9957ef407cf1",
+            "sbom_sha256": "472a2e4a5b983caa83730d6fefc86eb397e1733368a3572a88b63b009ba04b2a"
+          },
+          "uvx": {
+            "stripped_executable_bytes": 331376,
+            "sha256": "feb59c067cac961d302f40d8dd7d31e95eed90eb9562e37006370b3835839630",
+            "sbom_sha256": "472a2e4a5b983caa83730d6fefc86eb397e1733368a3572a88b63b009ba04b2a"
+          }
+        }
+      },
+      "thin-limited": {
+        "training_lto": "thin",
+        "debug_level": "limited",
+        "stages_seconds": {
+          "instrumented_build": 257.012054541,
+          "prepare_corpus": 0.004358055000011518,
+          "train_uv": 28.389169955999932,
+          "merge_profiles": 0.8884872700000415
+        },
+        "training_seconds": 286.39396896999983,
+        "final_seconds": 414.3995472710001,
+        "total_seconds": 700.7935162409999,
+        "resources": {
+          "training": {
+            "wall_seconds": 286.39374689400006,
+            "samples": 285,
+            "coverage_seconds": 285.76364152099995,
+            "max_sample_gap_seconds": 1.0294983980002144,
+            "sampled_peak_tree_rss_bytes": 14539956224,
+            "minimum_host_available_memory_bytes": 117415809024,
+            "median_host_cpu_percent": 44.95,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1173.2599999999998,
+              "cpu_system_seconds": 22.59999999999997,
+              "read_bytes": 4096,
+              "write_bytes": 21154115584
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1410.709632,
+              "ru_stime": 59.44977399999999,
+              "ru_minflt": 11859322,
+              "ru_majflt": 9174,
+              "ru_inblock": 8,
+              "ru_oublock": 21184824,
+              "ru_nvcsw": 221818,
+              "ru_nivcsw": 34140
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 4653.85,
+                "nice": 0.0,
+                "system": 231.63,
+                "idle": 18088.14,
+                "iowait": 124.09,
+                "irq": 0.0,
+                "softirq": 0.9,
+                "steal": 1.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 168766,
+                "write_count": 1377075,
+                "read_bytes": 8827153408,
+                "write_bytes": 62328786432,
+                "read_time": 553677,
+                "write_time": 4071727,
+                "read_merged_count": 13253,
+                "write_merged_count": 427834,
+                "busy_time": 361451
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 6070.5,
+                "nice": 0.0,
+                "system": 296.76,
+                "idle": 21162.27,
+                "iowait": 128.91,
+                "irq": 0.0,
+                "softirq": 1.22,
+                "steal": 1.13,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 187430,
+                "write_count": 1818781,
+                "read_bytes": 10051161088,
+                "write_bytes": 79433252352,
+                "read_time": 554816,
+                "write_time": 5105803,
+                "read_merged_count": 13306,
+                "write_merged_count": 568249,
+                "busy_time": 386814
+              }
+            },
+            "collection_errors": {
+              "NoSuchProcess": 2,
+              "process_io_unavailable": 42
+            }
+          },
+          "final": {
+            "wall_seconds": 414.3992626039999,
+            "samples": 413,
+            "coverage_seconds": 414.18910437599993,
+            "max_sample_gap_seconds": 1.008863288000157,
+            "sampled_peak_tree_rss_bytes": 15266639872,
+            "minimum_host_available_memory_bytes": 117148311552,
+            "median_host_cpu_percent": 6.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 793.17,
+              "cpu_system_seconds": 15.159999999999961,
+              "read_bytes": 0,
+              "write_bytes": 14201806848
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 999.0717560000003,
+              "ru_stime": 43.92776900000001,
+              "ru_minflt": 9595593,
+              "ru_majflt": 7428,
+              "ru_inblock": 0,
+              "ru_oublock": 12511176,
+              "ru_nvcsw": 143095,
+              "ru_nivcsw": 14715
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 6072.19,
+                "nice": 0.0,
+                "system": 299.13,
+                "idle": 21215.0,
+                "iowait": 129.01,
+                "irq": 0.0,
+                "softirq": 1.23,
+                "steal": 1.14,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 190240,
+                "write_count": 1822228,
+                "read_bytes": 10235317248,
+                "write_bytes": 79720369664,
+                "read_time": 554849,
+                "write_time": 5112509,
+                "read_merged_count": 13306,
+                "write_merged_count": 569193,
+                "busy_time": 387083
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 7080.43,
+                "nice": 0.0,
+                "system": 350.07,
+                "idle": 26768.43,
+                "iowait": 133.11,
+                "irq": 0.0,
+                "softirq": 1.27,
+                "steal": 1.3,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 211869,
+                "write_count": 2065205,
+                "read_bytes": 11656268800,
+                "write_bytes": 92347088384,
+                "read_time": 555498,
+                "write_time": 5672695,
+                "read_merged_count": 13362,
+                "write_merged_count": 633800,
+                "busy_time": 437754
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 28,
+              "NoSuchProcess": 5
+            }
+          }
+        },
+        "profile_sha256": "7525cfa84c144c3ae71e605938efe8066b7c74457165a173911507bcc321141f",
+        "profile_bytes": 34305800,
+        "profile_functions": 95372,
+        "pgo_diagnostics": {
+          "warnings": 18,
+          "missing": 18,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RINvMNtNtCs1C1lLj4PWSY_5alloc2io5errorNtNtNtCsevLNFiNqfJP_4core2io5error5Error3newNtNtB7_6string6StringECskAl2pWMPxh9_3uvx Hash = 784007058953177093 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs1C1lLj4PWSY_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtCsevLNFiNqfJP_4core6option6OptionB1s_ENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECskAl2pWMPxh9_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECskAl2pWMPxh9_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECskAl2pWMPxh9_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RINvNtCsevLNFiNqfJP_4core3ptr9drop_glueNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBL_3BoxDNtNtB4_5error5ErrorNtNtB4_6marker4SendNtB1R_4SyncEL_EINtNtB4_7convert4FromNtNtBN_6string6StringE4from11StringErrorECskAl2pWMPxh9_3uvx Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtB4_7process8ExitCodeECskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RINvNtNtCsgHYyB3hU8Ec_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECskAl2pWMPxh9_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RINvNvMs2_NtCs1C1lLj4PWSY_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECskAl2pWMPxh9_3uvx Hash = 948827211316022377 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNCINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtB6_7process8ExitCodeE0CskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNSNvYNCINvNtCsgHYyB3hU8Ec_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCsevLNFiNqfJP_4core3ops8function6FnOnceuE9call_once6vtableCskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNvCskAl2pWMPxh9_3uvx4main Hash = 63442354526028824 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNvXs1i_NtCsevLNFiNqfJP_4core3fmtReNtB6_7Display3fmtCskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNvXs_NtNtNtCsevLNFiNqfJP_4core4iter8adapters5chainINtB4_5ChainINtNtB6_3map3MapINtNtNtBa_5slice4iter4IterReENvYNtNtNtCsgHYyB3hU8Ec_3std3ffi6os_str8OsStringINtNtBa_7convert4FromRB1F_E4fromEINtNtB6_4skip4SkipNtNtB1R_3env6ArgsOsEENtNtNtB8_6traits8iterator8Iterator4nextCskAl2pWMPxh9_3uvx Hash = 646080716688671202 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_11descriptionCskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_5causeCskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_6sourceCskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7provideCskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.efc77d24c70bc115-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCs1C1lLj4PWSY_5alloc5boxed7convertINtBc_3BoxDNtNtCsevLNFiNqfJP_4core5error5ErrorNtNtB11_6marker4SendNtB1y_4SyncEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7type_idCskAl2pWMPxh9_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 17405446,
+        "wheel_sha256": "7f965a38ac78fed64da7bff2861722607828c75c2b0443490853586204467d67",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 39553456,
+            "symbol_bytes": 263585624,
+            "sha256": "7bd5e9988586e98339c856e8f4400d0f16a9b0855ddd4c0edf1b32a4f698161f",
+            "sbom_sha256": "472a2e4a5b983caa83730d6fefc86eb397e1733368a3572a88b63b009ba04b2a",
+            "identity": ["136ace4322bcd12122edfad59716fde19c1485d3"]
+          },
+          "uvx": {
+            "stripped_executable_bytes": 331584,
+            "symbol_bytes": 1995192,
+            "sha256": "c35c19f63ee425a371529007c2ba1bfefb9d63ea533e06b140b5f3edd2d6fe5c",
+            "sbom_sha256": "472a2e4a5b983caa83730d6fefc86eb397e1733368a3572a88b63b009ba04b2a",
+            "identity": ["c0bfd7d057a2f75792cd661dbfa6f5d362819bd8"]
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "requirements_sha256": "ce72f0b7a376799ffbbb57931dceab5c9e1cea2254ce6855d4d37bdc7ba54e44",
+        "resolution_sha256": "25b0f61edc619009645ba23471faceb78c8d2eb1f3e6ea57f35439841f64120d",
+        "python": "3.12.14 (main, Aug 13 2026, 02:47:42) [GCC 13.3.0]",
+        "orders": [
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"]
+        ],
+        "warmups_per_treatment": 3,
+        "samples_seconds": {
+          "thin-none": [
+            0.013266712999666197, 0.01253798600009759, 0.013326578000032896,
+            0.012976467999578745, 0.01336980299993229, 0.013380389999838371,
+            0.013310443999671406, 0.01334167899995009, 0.013161284000034357,
+            0.013550794999900972, 0.01343963299996176, 0.0133498220002366,
+            0.013481160999617714, 0.013848560000042198, 0.012279830999887054,
+            0.01319202500008032, 0.013270829999783018, 0.013296735000039916,
+            0.012800875000266387, 0.013512254000033863, 0.01380189400015297,
+            0.01314388799983135, 0.012811521000003268, 0.01325636299998223,
+            0.013612122000267846, 0.013739449999775388, 0.013286374000017531,
+            0.013991307000196684, 0.013311370000337774, 0.013419545000033395
+          ],
+          "thin-line-tables": [
+            0.013902275999953417, 0.013663666999946145, 0.013331000000107451,
+            0.01414546399973915, 0.013027834000240546, 0.01328188500019678,
+            0.013979450000078941, 0.01314953399969454, 0.013278464999984863,
+            0.013196893999975146, 0.01316229599979124, 0.012876049999704264,
+            0.012616371000149229, 0.013139492999926006, 0.013511888999801158,
+            0.013314672999968025, 0.01289075899967429, 0.013107548999869323,
+            0.01305942299995877, 0.01320182500012379, 0.013793762000204879,
+            0.013027843000145367, 0.013898183000037534, 0.012822966999920027,
+            0.013911308999922767, 0.013501720000022033, 0.013510786000097141,
+            0.013503445999958785, 0.013384732999838889, 0.013691916999960085
+          ],
+          "thin-limited": [
+            0.012766029999966122, 0.01374707299964939, 0.014292338999894127,
+            0.01274713700013308, 0.013281204999657348, 0.01340136499993605,
+            0.013289355000324576, 0.013259866000225884, 0.013619337999898562,
+            0.012940032999722462, 0.013172541000130877, 0.013059729000360676,
+            0.012555611000152567, 0.012706248000085907, 0.013823501999922883,
+            0.012796539000191842, 0.013536536999708915, 0.01234148000003188,
+            0.012829943999804527, 0.013427023000076588, 0.01289547800024593,
+            0.01361486599989803, 0.013211860999945202, 0.013548290000017005,
+            0.012620770000012271, 0.013337976999991952, 0.013183659999867814,
+            0.013369186999625526, 0.01366681299987249, 0.013309021000168286
+          ]
+        },
+        "median_seconds": {
+          "thin-none": 0.013318974000185335,
+          "thin-line-tables": 0.013298279000082402,
+          "thin-limited": 0.013270535499941616
+        }
+      },
+      "trio": {
+        "requirements_sha256": "81c0b52237c94983dac704d4ddae59ab13c399c0d6c664e6088da4dff4395679",
+        "resolution_sha256": "d84c4ad074c0bf2ccbf7ec4cf338f25fb03d920d98ec13bc4ca1686b06f5d4fd",
+        "python": "3.12.14 (main, Aug 13 2026, 02:47:42) [GCC 13.3.0]",
+        "orders": [
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"]
+        ],
+        "warmups_per_treatment": 3,
+        "samples_seconds": {
+          "thin-none": [
+            0.009855557999799203, 0.010858280999855197, 0.010607476999666687,
+            0.01080779399990206, 0.011044312000194623, 0.011071936999996979,
+            0.010704812000312813, 0.010914317999777268, 0.010402892000001884,
+            0.011076234000029217, 0.010677805999876, 0.01040041599981123,
+            0.010613910999836662, 0.01003281200019046, 0.010420191999855888,
+            0.010736983999777294, 0.010868333000416897, 0.011064136000186409,
+            0.010879468999974051, 0.010398333000011917, 0.011165686999902391,
+            0.010496855999917898, 0.010843633999684243, 0.010938158000044496,
+            0.010797025000101712, 0.01040965199990751, 0.010965521999878547,
+            0.01035278700010167, 0.010571112999969046, 0.011135842999919987
+          ],
+          "thin-line-tables": [
+            0.010512104000099498, 0.010216390000095998, 0.010624596000070596,
+            0.010728505999850313, 0.010790483999699063, 0.010062189000109356,
+            0.010957109999708337, 0.010867022999718756, 0.010674032000224543,
+            0.010639265999998315, 0.010842667999895639, 0.009678434999841556,
+            0.01041552100014087, 0.010215427999810345, 0.010387228000126925,
+            0.010806298999796127, 0.010757045999980619, 0.010329133000141155,
+            0.010817363999649388, 0.01013512500003344, 0.01067886200007706,
+            0.010905971999818576, 0.010828801000116073, 0.010978969000007055,
+            0.0099847060000684, 0.010565781999957835, 0.01081205799982854,
+            0.010852939000415063, 0.011007834000338335, 0.0105150239996874
+          ],
+          "thin-limited": [
+            0.010324356000182888, 0.011878987999807578, 0.010522191000291059,
+            0.0106285389997538, 0.010457334999955492, 0.01067214500017144,
+            0.010511538999708137, 0.010794231000090804, 0.010583792000034009,
+            0.010922536000180116, 0.010905006000029971, 0.011551879000307963,
+            0.010481241999968915, 0.01032236599985481, 0.009940502999597811,
+            0.011565307999717334, 0.010492956999769376, 0.010614747999625251,
+            0.010802272999626439, 0.011257297000156541, 0.010759405000044353,
+            0.010957466999570897, 0.010503192000214767, 0.010368854999796895,
+            0.010791924000386643, 0.010533167000176036, 0.010472099000253365,
+            0.010836916999778623, 0.010080500999720243, 0.010416954999982408
+          ]
+        },
+        "median_seconds": {
+          "thin-none": 0.010767004499939503,
+          "thin-line-tables": 0.010676447000150802,
+          "thin-limited": 0.01059926999982963
+        }
+      }
+    },
+    "verified": true,
+    "provenance": {
+      "run_id": 38422747719,
+      "job_id": 115384153263,
+      "attempt": 1,
+      "artifact_id": 11829531764,
+      "digest": "sha256:2cceff44a03060aff0cf0b1c90bfd6a2db1b234dda109c52d59511f7a28ebe02",
+      "created_at": "2026-10-13T16:07:41Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38422747719/job/115384153263",
+      "report_sha256": "95137c0d286423cf8db81d8175f027112f247e3f8366f626fcd0cdfd291b4289",
+      "verified_at": "2026-10-13T16:13:47.817163+00:00"
+    }
+  },
+  "linux-arm64": {
+    "commit": "c17ce3c58fb55f2c27b84591bb955648e0fca8ed",
+    "main_source_revision": "59e5912ecff500422b99cca3df68d48be3841a67",
+    "plan_sha256": "4c1cba7a8fc99bb04170bf8ae556644db6d27c39b23af239452391d78c47d628",
+    "order": ["thin-none", "thin-line-tables", "thin-limited"],
+    "machine": {
+      "platform": "Linux-6.17.0-1019-aws-aarch64-with-glibc2.39",
+      "logical_cpus": 16,
+      "physical_cpus": 16,
+      "physical_memory_bytes": 66192830464,
+      "cpu_description": "{\n   \"lscpu\": [\n      {\n         \"field\": \"Architecture:\",\n         \"data\": \"aarch64\"\n      },{\n         \"field\": \"CPU op-mode(s):\",\n         \"data\": \"64-bit\"\n      },{\n         \"field\": \"Byte Order:\",\n         \"data\": \"Little Endian\"\n      },{\n         \"field\": \"CPU(s):\",\n         \"data\": \"16\"\n      },{\n         \"field\": \"On-line CPU(s) list:\",\n         \"data\": \"0-15\"\n      },{\n         \"field\": \"Vendor ID:\",\n         \"data\": \"ARM\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"Neoverse-V2\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"16\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"r0p1\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"2000.00\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 flagm2 frint svei8mm svebf16 i8mm bf16 dgh rng bti\"\n      },{\n         \"field\": \"L1d cache:\",\n         \"data\": \"1 MiB (16 instances)\"\n      },{\n         \"field\": \"L1i cache:\",\n         \"data\": \"1 MiB (16 instances)\"\n      },{\n         \"field\": \"L2 cache:\",\n         \"data\": \"32 MiB (16 instances)\"\n      },{\n         \"field\": \"L3 cache:\",\n         \"data\": \"36 MiB (1 instance)\"\n      },{\n         \"field\": \"NUMA node(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"NUMA node0 CPU(s):\",\n         \"data\": \"0-15\"\n      },{\n         \"field\": \"Vulnerability Gather data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Ghostwrite:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Indirect target selection:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Itlb multihit:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability L1tf:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Meltdown:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mmio stale data:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Old microcode:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Reg file data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Retbleed:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec rstack overflow:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec store bypass:\",\n         \"data\": \"Vulnerable\"\n      },{\n         \"field\": \"Vulnerability Spectre v1:\",\n         \"data\": \"Mitigation; __user pointer sanitization\"\n      },{\n         \"field\": \"Vulnerability Spectre v2:\",\n         \"data\": \"Mitigation; CSV2, but not BHB\"\n      },{\n         \"field\": \"Vulnerability Srbds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsa:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsx async abort:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Vmscape:\",\n         \"data\": \"Not affected\"\n      }\n   ]\n}",
+      "cpu_description_exit_code": 0,
+      "psutil_version": "7.0.0",
+      "runner_name": "depot-tfv3qd95lv"
+    },
+    "platform": "Linux",
+    "target": "aarch64-unknown-linux-gnu",
+    "treatments": {
+      "thin-none": {
+        "training_lto": "thin",
+        "debug_level": "none",
+        "stages_seconds": {
+          "prepare_corpus": 0.005268150999995669,
+          "merge_profiles": 0.7949241800000095,
+          "train_uv": 19.642318578000015,
+          "instrumented_build": 236.646214446
+        },
+        "training_seconds": 257.18387235299997,
+        "final_seconds": 359.59898894800006,
+        "total_seconds": 616.782861301,
+        "resources": {
+          "training": {
+            "wall_seconds": 257.183575712,
+            "samples": 256,
+            "coverage_seconds": 256.50227619500004,
+            "max_sample_gap_seconds": 1.0070986970000035,
+            "sampled_peak_tree_rss_bytes": 11260882944,
+            "minimum_host_available_memory_bytes": 53776003072,
+            "median_host_cpu_percent": 44.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1039.8799999999999,
+              "cpu_system_seconds": 12.729999999999972,
+              "read_bytes": 44290048,
+              "write_bytes": 13191315456
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1269.684937,
+              "ru_stime": 40.831416,
+              "ru_minflt": 12276977,
+              "ru_majflt": 2013,
+              "ru_inblock": 32768,
+              "ru_oublock": 13923208,
+              "ru_nvcsw": 161157,
+              "ru_nivcsw": 15325
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 58.15,
+                "nice": 0.0,
+                "system": 13.15,
+                "idle": 1430.58,
+                "iowait": 96.47,
+                "irq": 0.0,
+                "softirq": 0.05,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 98385,
+                "write_count": 259215,
+                "read_bytes": 5270560768,
+                "write_bytes": 14488157696,
+                "read_time": 397852,
+                "write_time": 829158,
+                "read_merged_count": 9083,
+                "write_merged_count": 83283,
+                "busy_time": 162116
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 1331.94,
+                "nice": 0.0,
+                "system": 58.64,
+                "idle": 4203.24,
+                "iowait": 105.73,
+                "irq": 0.0,
+                "softirq": 0.28,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 112660,
+                "write_count": 615501,
+                "read_bytes": 5878202368,
+                "write_bytes": 25703570944,
+                "read_time": 438275,
+                "write_time": 1836375,
+                "read_merged_count": 9397,
+                "write_merged_count": 201824,
+                "busy_time": 194064
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 38,
+              "NoSuchProcess": 3
+            }
+          },
+          "final": {
+            "wall_seconds": 359.598746638,
+            "samples": 358,
+            "coverage_seconds": 358.99462891499996,
+            "max_sample_gap_seconds": 1.00690821500001,
+            "sampled_peak_tree_rss_bytes": 11165057024,
+            "minimum_host_available_memory_bytes": 53900161024,
+            "median_host_cpu_percent": 6.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 700.9699999999999,
+              "cpu_system_seconds": 7.0499999999999785,
+              "read_bytes": 0,
+              "write_bytes": 6868873216
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 906.2346419999999,
+              "ru_stime": 28.969210999999994,
+              "ru_minflt": 10182186,
+              "ru_majflt": 1705,
+              "ru_inblock": 0,
+              "ru_oublock": 6025424,
+              "ru_nvcsw": 70640,
+              "ru_nivcsw": 8201
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 1334.14,
+                "nice": 0.0,
+                "system": 61.65,
+                "idle": 4267.22,
+                "iowait": 105.98,
+                "irq": 0.0,
+                "softirq": 0.28,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 118356,
+                "write_count": 621108,
+                "read_bytes": 6251495424,
+                "write_bytes": 26179087872,
+                "read_time": 438300,
+                "write_time": 1849229,
+                "read_merged_count": 9397,
+                "write_merged_count": 203494,
+                "busy_time": 194628
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 2246.89,
+                "nice": 0.0,
+                "system": 96.56,
+                "idle": 9058.82,
+                "iowait": 108.9,
+                "irq": 0.0,
+                "softirq": 0.29,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 128530,
+                "write_count": 790441,
+                "read_bytes": 6926344192,
+                "write_bytes": 32939179520,
+                "read_time": 460113,
+                "write_time": 2309884,
+                "read_merged_count": 9526,
+                "write_merged_count": 247168,
+                "busy_time": 284617
+              }
+            },
+            "collection_errors": {
+              "NoSuchProcess": 12,
+              "process_io_unavailable": 48
+            }
+          }
+        },
+        "profile_sha256": "e7b9dab04a15f7b21af170853595ba7aa8fbd9abd2e7d9f76fde5ed3039a3312",
+        "profile_bytes": 34059832,
+        "profile_functions": 94479,
+        "pgo_diagnostics": {
+          "warnings": 18,
+          "missing": 18,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RINvMNtNtCscoGKTY0KSTf_5alloc2io5errorNtNtNtCslpfLnFkgLmC_4core2io5error5Error3newNtNtB7_6string6StringECsaWv66Q9RAdi_3uvx Hash = 784007058953177093 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RINvMsh_NtNtNtCscoGKTY0KSTf_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtCslpfLnFkgLmC_4core6option6OptionB1s_ENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECsaWv66Q9RAdi_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RINvNtCseRusUqf3t16_3std2rt10lang_startNtNtB4_7process8ExitCodeECsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECsaWv66Q9RAdi_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECsaWv66Q9RAdi_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBL_3BoxDNtNtB4_5error5ErrorNtNtB4_6marker4SyncNtB1R_4SendEL_EINtNtB4_7convert4FromNtNtBN_6string6StringE4from11StringErrorECsaWv66Q9RAdi_3uvx Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RINvNtNtCseRusUqf3t16_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECsaWv66Q9RAdi_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RINvNvMs2_NtCscoGKTY0KSTf_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECsaWv66Q9RAdi_3uvx Hash = 948827211316022377 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNCINvNtCseRusUqf3t16_3std2rt10lang_startNtNtB6_7process8ExitCodeE0CsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNSNvYNCINvNtCseRusUqf3t16_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCslpfLnFkgLmC_4core3ops8function6FnOnceuE9call_once6vtableCsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNvCsaWv66Q9RAdi_3uvx4main Hash = 63442354526028824 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNvXs1i_NtCslpfLnFkgLmC_4core3fmtReNtB6_7Display3fmtCsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNvXs_NtNtNtCslpfLnFkgLmC_4core4iter8adapters5chainINtB4_5ChainINtNtB6_3map3MapINtNtNtBa_5slice4iter4IterReENvYNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtBa_7convert4FromRB1F_E4fromEINtNtB6_4skip4SkipNtNtB1R_3env6ArgsOsEENtNtNtB8_6traits8iterator8Iterator4nextCsaWv66Q9RAdi_3uvx Hash = 646080716688671202 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_11descriptionCsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_5causeCsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_6sourceCsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7provideCsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.7f77717b69b0f0b2-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7type_idCsaWv66Q9RAdi_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 16473747,
+        "wheel_sha256": "a17ed1405abfc8330fda91a0d6ac2962a3f4b169617cd6eac6227ad837f818a6",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 33475920,
+            "sha256": "a83f602636ae79b315f175a1bb0c8cd820d70b85468f59093a20703d939b9995",
+            "sbom_sha256": "7bb372ca66bc56768242f8c8f6e4003bfc631262945c85aa08ca9bd96137e420"
+          },
+          "uvx": {
+            "stripped_executable_bytes": 297200,
+            "sha256": "76cb6b3c406506824ecf56570454d3ed33a7083331b153f52af91234dc59d7e4",
+            "sbom_sha256": "7bb372ca66bc56768242f8c8f6e4003bfc631262945c85aa08ca9bd96137e420"
+          }
+        }
+      },
+      "thin-line-tables": {
+        "training_lto": "thin",
+        "debug_level": "line-tables-only",
+        "stages_seconds": {
+          "prepare_corpus": 0.0052722789999961606,
+          "merge_profiles": 0.8017273169999726,
+          "train_uv": 18.82035921199997,
+          "instrumented_build": 260.9938467740001
+        },
+        "training_seconds": 280.715500155,
+        "final_seconds": 400.47691221799994,
+        "total_seconds": 681.1924123729999,
+        "resources": {
+          "training": {
+            "wall_seconds": 280.715315639,
+            "samples": 280,
+            "coverage_seconds": 280.61118054300005,
+            "max_sample_gap_seconds": 1.0070333510000182,
+            "sampled_peak_tree_rss_bytes": 16848330752,
+            "minimum_host_available_memory_bytes": 49477050368,
+            "median_host_cpu_percent": 45.2,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1152.3099999999997,
+              "cpu_system_seconds": 12.879999999999967,
+              "read_bytes": 3309568,
+              "write_bytes": 20278898688
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1390.0623679999999,
+              "ru_stime": 44.745834,
+              "ru_minflt": 13374310,
+              "ru_majflt": 3765,
+              "ru_inblock": 4024,
+              "ru_oublock": 20970040,
+              "ru_nvcsw": 153313,
+              "ru_nivcsw": 16416
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 2248.98,
+                "nice": 0.0,
+                "system": 96.91,
+                "idle": 9094.33,
+                "iowait": 108.9,
+                "irq": 0.0,
+                "softirq": 0.29,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 128535,
+                "write_count": 790464,
+                "read_bytes": 6926671872,
+                "write_bytes": 32940305920,
+                "read_time": 460117,
+                "write_time": 2309887,
+                "read_merged_count": 9526,
+                "write_merged_count": 247168,
+                "busy_time": 284623
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 3644.82,
+                "nice": 0.0,
+                "system": 146.69,
+                "idle": 12130.07,
+                "iowait": 114.65,
+                "irq": 0.0,
+                "softirq": 0.54,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 140392,
+                "write_count": 1127940,
+                "read_bytes": 7592378368,
+                "write_bytes": 48952086016,
+                "read_time": 461870,
+                "write_time": 3185940,
+                "read_merged_count": 9568,
+                "write_merged_count": 351965,
+                "busy_time": 310200
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 41,
+              "NoSuchProcess": 2
+            }
+          },
+          "final": {
+            "wall_seconds": 400.47667243499984,
+            "samples": 399,
+            "coverage_seconds": 400.2385311390001,
+            "max_sample_gap_seconds": 1.0069951160000983,
+            "sampled_peak_tree_rss_bytes": 15198625792,
+            "minimum_host_available_memory_bytes": 51012046848,
+            "median_host_cpu_percent": 6.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 801.99,
+              "cpu_system_seconds": 8.769999999999968,
+              "read_bytes": 0,
+              "write_bytes": 13406932992
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1018.9044859999995,
+              "ru_stime": 32.91884799999998,
+              "ru_minflt": 11027721,
+              "ru_majflt": 3453,
+              "ru_inblock": 0,
+              "ru_oublock": 11777176,
+              "ru_nvcsw": 72887,
+              "ru_nivcsw": 9937
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 3645.76,
+                "nice": 0.0,
+                "system": 149.77,
+                "idle": 12187.69,
+                "iowait": 114.92,
+                "irq": 0.0,
+                "softirq": 0.54,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 148392,
+                "write_count": 1133865,
+                "read_bytes": 8116666368,
+                "write_bytes": 49476410880,
+                "read_time": 461903,
+                "write_time": 3199661,
+                "read_merged_count": 9568,
+                "write_merged_count": 354049,
+                "busy_time": 310778
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 4672.22,
+                "nice": 0.0,
+                "system": 189.19,
+                "idle": 17519.86,
+                "iowait": 118.66,
+                "irq": 0.0,
+                "softirq": 0.54,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 164606,
+                "write_count": 1366399,
+                "read_bytes": 9193902080,
+                "write_bytes": 61357956608,
+                "read_time": 462637,
+                "write_time": 3715631,
+                "read_merged_count": 9796,
+                "write_merged_count": 413453,
+                "busy_time": 332033
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 37,
+              "NoSuchProcess": 2
+            }
+          }
+        },
+        "profile_sha256": "1f838bfda23989968d7f0761b68304dd51068075d1622be6aaed760356ef2a0f",
+        "profile_bytes": 34057656,
+        "profile_functions": 94479,
+        "pgo_diagnostics": {
+          "warnings": 18,
+          "missing": 18,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RINvMNtNtCscoGKTY0KSTf_5alloc2io5errorNtNtNtCslpfLnFkgLmC_4core2io5error5Error3newNtNtB7_6string6StringECs4j5Qs4qzCvh_3uvx Hash = 784007058953177093 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RINvMsh_NtNtNtCscoGKTY0KSTf_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtCslpfLnFkgLmC_4core6option6OptionB1s_ENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECs4j5Qs4qzCvh_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RINvNtCseRusUqf3t16_3std2rt10lang_startNtNtB4_7process8ExitCodeECs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECs4j5Qs4qzCvh_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECs4j5Qs4qzCvh_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBL_3BoxDNtNtB4_5error5ErrorNtNtB4_6marker4SyncNtB1R_4SendEL_EINtNtB4_7convert4FromNtNtBN_6string6StringE4from11StringErrorECs4j5Qs4qzCvh_3uvx Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RINvNtNtCseRusUqf3t16_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECs4j5Qs4qzCvh_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RINvNvMs2_NtCscoGKTY0KSTf_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECs4j5Qs4qzCvh_3uvx Hash = 948827211316022377 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNCINvNtCseRusUqf3t16_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Cs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNSNvYNCINvNtCseRusUqf3t16_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCslpfLnFkgLmC_4core3ops8function6FnOnceuE9call_once6vtableCs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNvCs4j5Qs4qzCvh_3uvx4main Hash = 63442354526028824 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNvXs1i_NtCslpfLnFkgLmC_4core3fmtReNtB6_7Display3fmtCs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNvXs_NtNtNtCslpfLnFkgLmC_4core4iter8adapters5chainINtB4_5ChainINtNtB6_3map3MapINtNtNtBa_5slice4iter4IterReENvYNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtBa_7convert4FromRB1F_E4fromEINtNtB6_4skip4SkipNtNtB1R_3env6ArgsOsEENtNtNtB8_6traits8iterator8Iterator4nextCs4j5Qs4qzCvh_3uvx Hash = 646080716688671202 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_11descriptionCs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_5causeCs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_6sourceCs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7provideCs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.322d7876a4232735-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7type_idCs4j5Qs4qzCvh_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 16591360,
+        "wheel_sha256": "4eb272ae154b826614bdca1fcd6ff74041308b67cc18e8598c6eaca58b4455a3",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 33686488,
+            "symbol_bytes": 180691912,
+            "sha256": "40dae2307d25ba44a502aecc3f3e2f5da621769821dc7ef0dc005f058aaec316",
+            "sbom_sha256": "7bb372ca66bc56768242f8c8f6e4003bfc631262945c85aa08ca9bd96137e420",
+            "identity": ["ece6289571b01ec10e073ee33679408f82b9dd2e"]
+          },
+          "uvx": {
+            "stripped_executable_bytes": 297368,
+            "symbol_bytes": 2126656,
+            "sha256": "2d7a5fac380d7e1b1bb1775d9b8f5ae84b8581a2915e8d5b1edc00f39e2c9d14",
+            "sbom_sha256": "7bb372ca66bc56768242f8c8f6e4003bfc631262945c85aa08ca9bd96137e420",
+            "identity": ["a543593526b4fc627c84324d27aa65be8ff45c38"]
+          }
+        }
+      },
+      "thin-limited": {
+        "training_lto": "thin",
+        "debug_level": "limited",
+        "stages_seconds": {
+          "prepare_corpus": 0.00530593400003454,
+          "merge_profiles": 0.8097177150000334,
+          "train_uv": 18.760780582000052,
+          "instrumented_build": 262.90065411
+        },
+        "training_seconds": 282.57190180400016,
+        "final_seconds": 411.66621491700016,
+        "total_seconds": 694.2381167210003,
+        "resources": {
+          "training": {
+            "wall_seconds": 282.5716816690001,
+            "samples": 281,
+            "coverage_seconds": 281.62040026599993,
+            "max_sample_gap_seconds": 1.009004607999941,
+            "sampled_peak_tree_rss_bytes": 16760569856,
+            "minimum_host_available_memory_bytes": 49518563328,
+            "median_host_cpu_percent": 45.45,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1146.4999999999995,
+              "cpu_system_seconds": 12.799999999999956,
+              "read_bytes": 241664,
+              "write_bytes": 21067448320
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1389.7562530000005,
+              "ru_stime": 45.966646999999995,
+              "ru_minflt": 13369445,
+              "ru_majflt": 5009,
+              "ru_inblock": 336,
+              "ru_oublock": 21851272,
+              "ru_nvcsw": 148469,
+              "ru_nivcsw": 18662
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 4674.82,
+                "nice": 0.0,
+                "system": 189.8,
+                "idle": 17567.23,
+                "iowait": 118.73,
+                "irq": 0.0,
+                "softirq": 0.55,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 164606,
+                "write_count": 1368782,
+                "read_bytes": 9193902080,
+                "write_bytes": 61563547136,
+                "read_time": 462637,
+                "write_time": 3722826,
+                "read_merged_count": 9796,
+                "write_merged_count": 414229,
+                "busy_time": 332306
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 6068.25,
+                "nice": 1.27,
+                "system": 240.94,
+                "idle": 20617.88,
+                "iowait": 125.25,
+                "irq": 0.0,
+                "softirq": 0.79,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 206913,
+                "write_count": 1749689,
+                "read_bytes": 10564603904,
+                "write_bytes": 78972419584,
+                "read_time": 471994,
+                "write_time": 4616985,
+                "read_merged_count": 10860,
+                "write_merged_count": 517279,
+                "busy_time": 364690
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 39,
+              "NoSuchProcess": 3
+            }
+          },
+          "final": {
+            "wall_seconds": 411.6659804399999,
+            "samples": 410,
+            "coverage_seconds": 411.32202575099996,
+            "max_sample_gap_seconds": 1.006978909999816,
+            "sampled_peak_tree_rss_bytes": 15331536896,
+            "minimum_host_available_memory_bytes": 50786787328,
+            "median_host_cpu_percent": 6.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 807.2899999999997,
+              "cpu_system_seconds": 8.819999999999968,
+              "read_bytes": 0,
+              "write_bytes": 13986185216
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 1031.0822210000006,
+              "ru_stime": 33.702237999999994,
+              "ru_minflt": 11199071,
+              "ru_majflt": 3596,
+              "ru_inblock": 0,
+              "ru_oublock": 12453584,
+              "ru_nvcsw": 69591,
+              "ru_nivcsw": 10970
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 6071.08,
+                "nice": 1.27,
+                "system": 244.59,
+                "idle": 20687.19,
+                "iowait": 125.54,
+                "irq": 0.0,
+                "softirq": 0.79,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 214106,
+                "write_count": 1757654,
+                "read_bytes": 11035820032,
+                "write_bytes": 79602966016,
+                "read_time": 472040,
+                "write_time": 4634215,
+                "read_merged_count": 10860,
+                "write_merged_count": 519469,
+                "busy_time": 365420
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 7110.19,
+                "nice": 1.27,
+                "system": 285.03,
+                "idle": 26182.89,
+                "iowait": 129.51,
+                "irq": 0.0,
+                "softirq": 0.8,
+                "steal": 0.0,
+                "guest": 0.0,
+                "guest_nice": 0.0
+              },
+              "host_swap": {
+                "total": 4294963200,
+                "used": 0,
+                "free": 4294963200,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 230559,
+                "write_count": 1996342,
+                "read_bytes": 12122357760,
+                "write_bytes": 91763613184,
+                "read_time": 473366,
+                "write_time": 5171251,
+                "read_merged_count": 10987,
+                "write_merged_count": 579752,
+                "busy_time": 415447
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 36,
+              "NoSuchProcess": 9
+            }
+          }
+        },
+        "profile_sha256": "bf72ae3c06618b765685ac6e95f293fd780e2e87e3de1e60b4a60c8880b6e7fa",
+        "profile_bytes": 34058512,
+        "profile_functions": 94479,
+        "pgo_diagnostics": {
+          "warnings": 18,
+          "missing": 18,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RINvMNtNtCscoGKTY0KSTf_5alloc2io5errorNtNtNtCslpfLnFkgLmC_4core2io5error5Error3newNtNtB7_6string6StringECskeoVXsccG9X_3uvx Hash = 784007058953177093 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RINvMsh_NtNtNtCscoGKTY0KSTf_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtCslpfLnFkgLmC_4core6option6OptionB1s_ENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECskeoVXsccG9X_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RINvNtCseRusUqf3t16_3std2rt10lang_startNtNtB4_7process8ExitCodeECskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECskeoVXsccG9X_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECskeoVXsccG9X_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RINvNtCslpfLnFkgLmC_4core3ptr9drop_glueNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBL_3BoxDNtNtB4_5error5ErrorNtNtB4_6marker4SyncNtB1R_4SendEL_EINtNtB4_7convert4FromNtNtBN_6string6StringE4from11StringErrorECskeoVXsccG9X_3uvx Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RINvNtNtCseRusUqf3t16_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECskeoVXsccG9X_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RINvNvMs2_NtCscoGKTY0KSTf_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECskeoVXsccG9X_3uvx Hash = 948827211316022377 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNCINvNtCseRusUqf3t16_3std2rt10lang_startNtNtB6_7process8ExitCodeE0CskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNSNvYNCINvNtCseRusUqf3t16_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCslpfLnFkgLmC_4core3ops8function6FnOnceuE9call_once6vtableCskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNvCskeoVXsccG9X_3uvx4main Hash = 63442354526028824 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNvXs1i_NtCslpfLnFkgLmC_4core3fmtReNtB6_7Display3fmtCskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNvXs_NtNtNtCslpfLnFkgLmC_4core4iter8adapters5chainINtB4_5ChainINtNtB6_3map3MapINtNtNtBa_5slice4iter4IterReENvYNtNtNtCseRusUqf3t16_3std3ffi6os_str8OsStringINtNtBa_7convert4FromRB1F_E4fromEINtNtB6_4skip4SkipNtNtB1R_3env6ArgsOsEENtNtNtB8_6traits8iterator8Iterator4nextCskeoVXsccG9X_3uvx Hash = 646080716688671202 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_11descriptionCskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_5causeCskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_6sourceCskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7provideCskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.eba874c8c3c28833-cgu.0: no profile data available for function _RNvYNtNvXsf_NtNtCscoGKTY0KSTf_5alloc5boxed7convertINtBc_3BoxDNtNtCslpfLnFkgLmC_4core5error5ErrorNtNtB11_6marker4SyncNtB1y_4SendEL_EINtNtB11_7convert4FromNtNtBe_6string6StringE4from11StringErrorBX_7type_idCskeoVXsccG9X_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 16588064,
+        "wheel_sha256": "4428b36e5a943bb5034f264c0ea4e95929f75413b327c08a6a0599ecdc5e8cf3",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 33699352,
+            "symbol_bytes": 277040720,
+            "sha256": "11654dfffa36c0b01495b4dacb9e98f5bcab27e7629066a48ef94373cdfcf51a",
+            "sbom_sha256": "7bb372ca66bc56768242f8c8f6e4003bfc631262945c85aa08ca9bd96137e420",
+            "identity": ["4d05e7db4c97191ea4a3b2b0d5562b59d5989245"]
+          },
+          "uvx": {
+            "stripped_executable_bytes": 297368,
+            "symbol_bytes": 2167640,
+            "sha256": "95e9e848fc7663237d2444ae7313b362c0fdb11ff1d226daee458918d259146e",
+            "sbom_sha256": "7bb372ca66bc56768242f8c8f6e4003bfc631262945c85aa08ca9bd96137e420",
+            "identity": ["993ccc5c914cba7cad3ef35902187208c5dcee48"]
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "requirements_sha256": "ce72f0b7a376799ffbbb57931dceab5c9e1cea2254ce6855d4d37bdc7ba54e44",
+        "resolution_sha256": "25b0f61edc619009645ba23471faceb78c8d2eb1f3e6ea57f35439841f64120d",
+        "python": "3.12.15 (main, Oct  1 2026, 02:36:15) [GCC 13.3.0]",
+        "orders": [
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"]
+        ],
+        "warmups_per_treatment": 3,
+        "samples_seconds": {
+          "thin-none": [
+            0.010253324000132125, 0.010252751000280114, 0.01035376699974222,
+            0.010193529999924067, 0.010167249999994965, 0.01048293099984221,
+            0.010385320999830583, 0.010264623999773903, 0.010416113000246696,
+            0.010381263999988732, 0.009985019999930955, 0.010362519999944197,
+            0.010050528999727248, 0.01133688300024005, 0.010189412999807246,
+            0.010369790999902762, 0.010217942000053881, 0.01022188599972651,
+            0.009962399999949412, 0.010038631000043097, 0.010366115999659087,
+            0.010069036000004417, 0.009910970999953861, 0.01085966999971788,
+            0.010289595000358531, 0.009970823999992717, 0.010244931000215729,
+            0.010099771000113833, 0.010362449000240304, 0.010340860999804136
+          ],
+          "thin-line-tables": [
+            0.009985950000100274, 0.01035628399995403, 0.00989718900018488,
+            0.01050309299989749, 0.010239613000067038, 0.010129663000043365,
+            0.01033132900010969, 0.010104887000125018, 0.01020464599969273,
+            0.010285437000220554, 0.010478821000106109, 0.01011319100007313,
+            0.010161390000121173, 0.010457521000262204, 0.010157215000162978,
+            0.010066954000194528, 0.01025040300010005, 0.010297134000211372,
+            0.010172006000175315, 0.01013354699989577, 0.01014063200000237,
+            0.01017603499985853, 0.010221218999959092, 0.010767033999854903,
+            0.010104626000156713, 0.010378394999861484, 0.010075181999582128,
+            0.010782921000100032, 0.010186730999976135, 0.01025685699960377
+          ],
+          "thin-limited": [
+            0.010084924999773648, 0.010306005999609624, 0.010119532999851799,
+            0.010111563000009482, 0.010088960000302905, 0.010156321000067692,
+            0.009768998999788892, 0.009961518000181968, 0.01014550700028849,
+            0.010290519999671233, 0.010207100000116043, 0.010794210000312887,
+            0.010296083999946859, 0.010363282000071194, 0.010188748000018677,
+            0.010158279999814113, 0.010271430000102555, 0.010121923000042443,
+            0.010180213999774423, 0.010066431999803171, 0.01046614100005172,
+            0.010520372999963001, 0.010078133000206435, 0.010364510999806953,
+            0.010981146000176523, 0.010102498999913223, 0.010150559000067005,
+            0.01015498500009926, 0.010652230999767198, 0.010014878000220051
+          ]
+        },
+        "median_seconds": {
+          "thin-none": 0.01025303750020612,
+          "thin-line-tables": 0.010195688499834432,
+          "thin-limited": 0.010157300499940902
+        }
+      },
+      "trio": {
+        "requirements_sha256": "81c0b52237c94983dac704d4ddae59ab13c399c0d6c664e6088da4dff4395679",
+        "resolution_sha256": "d84c4ad074c0bf2ccbf7ec4cf338f25fb03d920d98ec13bc4ca1686b06f5d4fd",
+        "python": "3.12.15 (main, Oct  1 2026, 02:36:15) [GCC 13.3.0]",
+        "orders": [
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"]
+        ],
+        "warmups_per_treatment": 3,
+        "samples_seconds": {
+          "thin-none": [
+            0.008151460000135557, 0.008396231999995507, 0.0077569810000568395,
+            0.007989314000042214, 0.007800143000167736, 0.007774007999614696,
+            0.008083571000042866, 0.007755960999929812, 0.008158721000199876,
+            0.007830663999811804, 0.007598442000016803, 0.007700394000039523,
+            0.008665484000175638, 0.008301067000047624, 0.007881012999860104,
+            0.008199592999972083, 0.007935228999940591, 0.007733599999937724,
+            0.00797614800012525, 0.0077210859999468084, 0.008026599999993778,
+            0.007753075000437093, 0.008095270000012533, 0.008077746000253683,
+            0.00774621600021419, 0.007598511999731272, 0.00794303900011073,
+            0.007734911000170541, 0.00788625699988188, 0.007733267000276101
+          ],
+          "thin-line-tables": [
+            0.008325034999870695, 0.007715172000189341, 0.007694338999954198,
+            0.007948275000217109, 0.007952421000027243, 0.007744321000245691,
+            0.007992054000169446, 0.007475153000086721, 0.007564233999801218,
+            0.007791929000177333, 0.00805253399994399, 0.007569102000161365,
+            0.0078327240003091, 0.00785761499992077, 0.008154369999829214,
+            0.007957266000175878, 0.007878439000251092, 0.007879676999891672,
+            0.007837550000203919, 0.0077587539999512956, 0.007588457000110793,
+            0.007873484999890934, 0.007839882000098441, 0.007756054999845219,
+            0.007500563000121474, 0.007902753000053053, 0.0077177590001156204,
+            0.0077484590001404285, 0.007693944000038755, 0.0077528130000246165
+          ],
+          "thin-limited": [
+            0.007528953000019101, 0.008018822999929398, 0.007586824000100023,
+            0.0080041070000334, 0.007778878999943117, 0.007689641000069969,
+            0.007752007000362937, 0.007951186000354937, 0.0076949310000600235,
+            0.007805430000189517, 0.007577368000056595, 0.00776747100007924,
+            0.00745737499983079, 0.007640643000286218, 0.007697232999817061,
+            0.007722145000116143, 0.008377182999993238, 0.0078463009999723,
+            0.008017804000246542, 0.007798042000104033, 0.00793745700002546,
+            0.007581460999972478, 0.007794378000198776, 0.007614081999690825,
+            0.008173284999884345, 0.007768093000322551, 0.007692567000049166,
+            0.007955008999942947, 0.007579821000035736, 0.007758410999940679
+          ]
+        },
+        "median_seconds": {
+          "thin-none": 0.007883634999870992,
+          "thin-line-tables": 0.007812326500243216,
+          "thin-limited": 0.00776294100000996
+        }
+      }
+    },
+    "verified": true,
+    "provenance": {
+      "run_id": 38422747719,
+      "job_id": 115384153257,
+      "attempt": 1,
+      "artifact_id": 11828903028,
+      "digest": "sha256:c371e842ed573bc053d25a7460d9bd7663780f2169a100e05a26c2db0bf0317f",
+      "created_at": "2026-10-13T16:06:51Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38422747719/job/115384153257",
+      "report_sha256": "caa7815cd892b43ccc3246e57be17013fcbe845550e0805c2a607e709483293a",
+      "verified_at": "2026-10-13T16:13:38.563388+00:00"
+    }
+  },
+  "macos": {
+    "commit": "c17ce3c58fb55f2c27b84591bb955648e0fca8ed",
+    "main_source_revision": "59e5912ecff500422b99cca3df68d48be3841a67",
+    "plan_sha256": "4c1cba7a8fc99bb04170bf8ae556644db6d27c39b23af239452391d78c47d628",
+    "order": ["thin-line-tables", "thin-limited", "thin-none"],
+    "machine": {
+      "platform": "macOS-15.7.5-arm64-arm-64bit",
+      "logical_cpus": 12,
+      "physical_cpus": 12,
+      "physical_memory_bytes": 30064771072,
+      "cpu_description": "Apple M5 Max (Virtual)",
+      "cpu_description_exit_code": 0,
+      "psutil_version": "7.0.0",
+      "runner_name": "nsc-runner-fj19oon9ik8a0"
+    },
+    "platform": "Darwin",
+    "target": "aarch64-apple-darwin",
+    "treatments": {
+      "thin-line-tables": {
+        "training_lto": "thin",
+        "debug_level": "line-tables-only",
+        "stages_seconds": {
+          "train_uv": 51.993818791999956,
+          "instrumented_build": 264.64770250000004,
+          "prepare_corpus": 0.009879875000002869,
+          "merge_profiles": 0.45430458300000964
+        },
+        "training_seconds": 317.222125959,
+        "final_seconds": 307.027629709,
+        "total_seconds": 624.249755668,
+        "resources": {
+          "training": {
+            "wall_seconds": 317.221955333,
+            "samples": 314,
+            "coverage_seconds": 316.583112417,
+            "max_sample_gap_seconds": 1.0729587089999768,
+            "sampled_peak_tree_rss_bytes": 8453685248,
+            "minimum_host_available_memory_bytes": 17090609152,
+            "median_host_cpu_percent": 33.6,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 673.6583191780002,
+              "cpu_system_seconds": 104.757445663,
+              "pfaults": 6925434,
+              "pageins": 9853
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 843.074678,
+              "ru_stime": 142.610908,
+              "ru_minflt": 19244798,
+              "ru_majflt": 226372,
+              "ru_inblock": 0,
+              "ru_oublock": 0,
+              "ru_nvcsw": 18067,
+              "ru_nivcsw": 4823989
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 90.1,
+                "nice": 0.0,
+                "system": 137.21,
+                "idle": 435.41
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 4411408384,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 97617,
+                "write_count": 66694,
+                "read_bytes": 2616158208,
+                "write_bytes": 2808725504,
+                "read_time": 19834,
+                "write_time": 7747
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 1029.36,
+                "nice": 0.0,
+                "system": 416.77,
+                "idle": 2981.19
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 8553775104,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 182179,
+                "write_count": 306237,
+                "read_bytes": 3459565568,
+                "write_bytes": 12686491648,
+                "read_time": 32736,
+                "write_time": 37542
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 2093,
+              "ZombieProcess": 30,
+              "NoSuchProcess": 1
+            }
+          },
+          "final": {
+            "wall_seconds": 307.02736816699996,
+            "samples": 303,
+            "coverage_seconds": 306.786906875,
+            "max_sample_gap_seconds": 1.0233542500000112,
+            "sampled_peak_tree_rss_bytes": 10215931904,
+            "minimum_host_available_memory_bytes": 14701199360,
+            "median_host_cpu_percent": 8.6,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 462.6978757859998,
+              "cpu_system_seconds": 10.596166792999997,
+              "pfaults": 5814754,
+              "pageins": 8388
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 613.846835,
+              "ru_stime": 32.55903900000001,
+              "ru_minflt": 17486471,
+              "ru_majflt": 211899,
+              "ru_inblock": 0,
+              "ru_oublock": 0,
+              "ru_nvcsw": 15845,
+              "ru_nivcsw": 148570
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 1061.99,
+                "nice": 0.0,
+                "system": 475.6,
+                "idle": 3060.95
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 8594653184,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 222251,
+                "write_count": 424468,
+                "read_bytes": 3639875584,
+                "write_bytes": 13555859456,
+                "read_time": 36614,
+                "write_time": 49083
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 1693.5,
+                "nice": 0.0,
+                "system": 548.99,
+                "idle": 6035.25
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 12090081280,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 319988,
+                "write_count": 455154,
+                "read_bytes": 4338878464,
+                "write_bytes": 17571545088,
+                "read_time": 41790,
+                "write_time": 53728
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 2129,
+              "ZombieProcess": 28,
+              "NoSuchProcess": 1
+            }
+          }
+        },
+        "profile_sha256": "a3135424125ba7a7987b4e76433c072ed7e9aa83da6a94dd2109bd8cdc3cbfba",
+        "profile_bytes": 27486816,
+        "profile_functions": 72239,
+        "pgo_diagnostics": {
+          "warnings": 3823,
+          "missing": 3823,
+          "mismatch": 0,
+          "examples": [
+            "warning: uv_errors.5a5fd4170732dbb8-cgu.0: no profile data available for function _RINvNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable14driftsort_mainNtCs7L3Kk2qzWiG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSBZ_11sort_by_keyNtB11_12HintOrderingNCNvXs4_B11_NtB11_5HintsNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iter0E0INtNtB1C_3vec3VecBZ_EEB11_ Hash = 650973719838764456 up to 0 count discarded",
+            "warning: uv_errors.5a5fd4170732dbb8-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6shared5pivot11median3_recNtCs7L3Kk2qzWiG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB14_11sort_by_keyNtB16_12HintOrderingNCNvXs4_B16_NtB16_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB16_ Hash = 679210745886084866 up to 0 count discarded",
+            "warning: uv_errors.5a5fd4170732dbb8-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6shared9smallsort25insertion_sort_shift_leftNtCs7L3Kk2qzWiG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB1m_11sort_by_keyNtB1o_12HintOrderingNCNvXs4_B1o_NtB1o_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB1o_ Hash = 1096621589474666504 up to 0 count discarded",
+            "warning: uv_errors.5a5fd4170732dbb8-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable5drift4sortNtCs7L3Kk2qzWiG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSBW_11sort_by_keyNtBY_12HintOrderingNCNvXs4_BY_NtBY_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EBY_ Hash = 264241547158504904 up to 0 count discarded",
+            "warning: uv_errors.5a5fd4170732dbb8-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable9quicksort9quicksortNtCs7L3Kk2qzWiG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB15_11sort_by_keyNtB17_12HintOrderingNCNvXs4_B17_NtB17_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB17_ Hash = 103655747236352664 up to 0 count discarded",
+            "warning: uv_errors.5a5fd4170732dbb8-cgu.0: no profile data available for function _RNvXs4_Cs7L3Kk2qzWiG_9uv_errorsNtB5_5HintsNtNtNtNtCsjIpoRzUjyHQ_4core4iter6traits7collect12IntoIterator9into_iter Hash = 238984482966880379 up to 0 count discarded",
+            "warning: uv_errors.5a5fd4170732dbb8-cgu.0: no profile data available for function _RNvYNCNvXs4_Cs7L3Kk2qzWiG_9uv_errorsNtBa_5HintsNtNtNtNtCsjIpoRzUjyHQ_4core4iter6traits7collect12IntoIterator9into_iters_0INtNtNtBR_3ops8function6FnOnceTNtBa_4HintEE9call_onceBa_ Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.287edef01e304ac1-cgu.0: no profile data available for function _RNvXs0_NtCs3tyxnIt1n3x_5uv_fs15named_temp_fileNtB5_13NamedTempFileNtNtNtCsjIpoRzUjyHQ_4core2io5write5Write5flush Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.287edef01e304ac1-cgu.0: no profile data available for function _RNvXs0_NtCs3tyxnIt1n3x_5uv_fs5spaceNtB5_18PhysicalSpaceErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 146835647075900052 up to 0 count discarded",
+            "warning: uv_fs.287edef01e304ac1-cgu.0: no profile data available for function _RNvXs0_NvXNvNtCs3tyxnIt1n3x_5uv_fs4links_1__NtBa_8LinkModeNtNtCsbsx3EdISwxj_10serde_core2de11Deserialize11deserializeNtB5_9___VisitorNtBW_7Visitor9expecting Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.287edef01e304ac1-cgu.0: no profile data available for function _RNvXs1i_NtCsjIpoRzUjyHQ_4core3fmtRNtNtNtB8_2io5error5ErrorNtB6_7Display3fmtCs3tyxnIt1n3x_5uv_fs Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.287edef01e304ac1-cgu.0: no profile data available for function _RNvXs4_NtCs3tyxnIt1n3x_5uv_fs15named_temp_fileNtB5_12PersistErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.287edef01e304ac1-cgu.0: no profile data available for function _RNvXs_NtCs3tyxnIt1n3x_5uv_fs5spaceNtB4_18PhysicalSpaceErrorNtNtCsjIpoRzUjyHQ_4core5error5Error6source Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uv_small_str.35bd3e00600b972e-cgu.0: no profile data available for function _RNvXsd_Cs4C3gn1g48Dq_12uv_small_strNtNtCsaTvG6HVSn8p_4rkyv6string14ArchivedStringINtNtCsjIpoRzUjyHQ_4core3cmp9PartialEqNtB5_11SmallStringE2eq Hash = 778228583399867287 up to 0 count discarded",
+            "warning: uv_small_str.35bd3e00600b972e-cgu.0: no profile data available for function _RNvXse_Cs4C3gn1g48Dq_12uv_small_strNtNtCsaTvG6HVSn8p_4rkyv6string14ArchivedStringINtNtCsjIpoRzUjyHQ_4core3cmp10PartialOrdNtB5_11SmallStringE11partial_cmp Hash = 1027614720266944533 up to 0 count discarded",
+            "warning: uv_cache_key.c6ea6827bf91e2c6-cgu.0: no profile data available for function _RNvXs2_NtCsh4P2WCduTu4_12uv_cache_key13canonical_urlNtB5_12CanonicalUrlNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.57cfa743c2b5e1cb-cgu.0: no profile data available for function _RNvXNvXs_NtCs7xpPG3xZu2d_12uv_normalize10extra_nameNtB7_13DefaultExtrasNtNtCsbsx3EdISwxj_10serde_core2de11Deserialize11deserializeNtB2_18StringOrVecVisitorNtB19_7Visitor9expecting Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.57cfa743c2b5e1cb-cgu.0: no profile data available for function _RNvXs0_Cs7xpPG3xZu2d_12uv_normalizeNtB5_24InvalidPipGroupPathErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.57cfa743c2b5e1cb-cgu.0: no profile data available for function _RNvXs7_NtCs7xpPG3xZu2d_12uv_normalize10group_nameNtB5_12PipGroupNameNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 146835647075900052 up to 0 count discarded",
+            "warning: uv_normalize.57cfa743c2b5e1cb-cgu.0: no profile data available for function _RNvXs9_NtCs7xpPG3xZu2d_12uv_normalize10group_nameNtB5_13DefaultGroupsNtCs2fYwprhBmd5_8schemars10JsonSchema11json_schema Hash = 989283252139533307 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 14977953,
+        "wheel_sha256": "d30758268cfacf160b2dccd0db77628b1cd64f0f80e8a5dba7e659bec5b1f754",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 29327056,
+            "symbol_bytes": 187179127,
+            "sha256": "d74af6f8ca208d462fb7ab9b711fb1e10608ee2d7026aa3d4220aff05a94e2d4",
+            "sbom_sha256": "f0f2ba5aac21d0c494c7f9661e257f9981951f6e83f4a1993bf90cc501cc2830",
+            "identity": ["4C4C448A-5555-3144-A157-A41CB272FDA2"]
+          },
+          "uvx": {
+            "stripped_executable_bytes": 338032,
+            "symbol_bytes": 2557827,
+            "sha256": "c19e75d5bcf4323e80a86ed0693168f519830170e9ed0bf1ff73f4321f85af9a",
+            "sbom_sha256": "f0f2ba5aac21d0c494c7f9661e257f9981951f6e83f4a1993bf90cc501cc2830",
+            "identity": ["4C4C440D-5555-3144-A183-674D32E7462A"]
+          }
+        }
+      },
+      "thin-limited": {
+        "training_lto": "thin",
+        "debug_level": "limited",
+        "stages_seconds": {
+          "train_uv": 55.663075875000004,
+          "instrumented_build": 263.15128516699997,
+          "prepare_corpus": 0.012805250000042179,
+          "merge_profiles": 0.39927624999995714
+        },
+        "training_seconds": 319.3309535000001,
+        "final_seconds": 310.7542221660001,
+        "total_seconds": 630.0851756660002,
+        "resources": {
+          "training": {
+            "wall_seconds": 319.330761459,
+            "samples": 315,
+            "coverage_seconds": 319.18161358300006,
+            "max_sample_gap_seconds": 1.1105735419999974,
+            "sampled_peak_tree_rss_bytes": 8651456512,
+            "minimum_host_available_memory_bytes": 16128180224,
+            "median_host_cpu_percent": 33.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 671.3486047019999,
+              "cpu_system_seconds": 96.425654328,
+              "pfaults": 7028528,
+              "pageins": 8907
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 831.112296,
+              "ru_stime": 131.51872400000002,
+              "ru_minflt": 19303690,
+              "ru_majflt": 223141,
+              "ru_inblock": 0,
+              "ru_oublock": 0,
+              "ru_nvcsw": 16285,
+              "ru_nivcsw": 4668448
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 1695.01,
+                "nice": 0.0,
+                "system": 549.93,
+                "idle": 6051.79
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 12150423552,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 320746,
+                "write_count": 456200,
+                "read_bytes": 4400777216,
+                "write_bytes": 17901682688,
+                "read_time": 41837,
+                "write_time": 53873
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 2584.01,
+                "nice": 0.0,
+                "system": 785.06,
+                "idle": 8727.8
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 15893495808,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 329843,
+                "write_count": 685281,
+                "read_bytes": 4793821184,
+                "write_bytes": 27625181184,
+                "read_time": 42319,
+                "write_time": 81267
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 2048,
+              "ZombieProcess": 35,
+              "NoSuchProcess": 1
+            }
+          },
+          "final": {
+            "wall_seconds": 310.75397758300005,
+            "samples": 306,
+            "coverage_seconds": 309.95391075,
+            "max_sample_gap_seconds": 1.0234984999999597,
+            "sampled_peak_tree_rss_bytes": 10405265408,
+            "minimum_host_available_memory_bytes": 14314225664,
+            "median_host_cpu_percent": 8.6,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 466.3964894410002,
+              "cpu_system_seconds": 10.654597546,
+              "pfaults": 6017199,
+              "pageins": 7663
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 616.7965230000004,
+              "ru_stime": 32.30049100000002,
+              "ru_minflt": 17524035,
+              "ru_majflt": 211584,
+              "ru_inblock": 0,
+              "ru_oublock": 0,
+              "ru_nvcsw": 14181,
+              "ru_nivcsw": 149008
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 2607.85,
+                "nice": 0.0,
+                "system": 825.64,
+                "idle": 8803.68
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 15928803328,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 330501,
+                "write_count": 785513,
+                "read_bytes": 4803123200,
+                "write_bytes": 28234444800,
+                "read_time": 42488,
+                "write_time": 90701
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 3241.94,
+                "nice": 0.0,
+                "system": 884.77,
+                "idle": 11827.84
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 19417137152,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 337348,
+                "write_count": 815396,
+                "read_bytes": 5115377664,
+                "write_bytes": 32421277696,
+                "read_time": 43088,
+                "write_time": 95535
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 2140,
+              "ZombieProcess": 29,
+              "NoSuchProcess": 1
+            }
+          }
+        },
+        "profile_sha256": "bd5f0dcb6878622551f0fe3ad2cbb80e057c614a7d1e7ba09b9e850fb2179d8f",
+        "profile_bytes": 27498736,
+        "profile_functions": 72249,
+        "pgo_diagnostics": {
+          "warnings": 3819,
+          "missing": 3819,
+          "mismatch": 0,
+          "examples": [
+            "warning: uv_errors.54bd0819b8da69a6-cgu.0: no profile data available for function _RINvNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable14driftsort_mainNtCs7h3KIwX3CTy_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSBZ_11sort_by_keyNtB11_12HintOrderingNCNvXs4_B11_NtB11_5HintsNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iter0E0INtNtB1C_3vec3VecBZ_EEB11_ Hash = 650973719838764456 up to 0 count discarded",
+            "warning: uv_errors.54bd0819b8da69a6-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6shared5pivot11median3_recNtCs7h3KIwX3CTy_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB14_11sort_by_keyNtB16_12HintOrderingNCNvXs4_B16_NtB16_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB16_ Hash = 679210745886084866 up to 0 count discarded",
+            "warning: uv_errors.54bd0819b8da69a6-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6shared9smallsort25insertion_sort_shift_leftNtCs7h3KIwX3CTy_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB1m_11sort_by_keyNtB1o_12HintOrderingNCNvXs4_B1o_NtB1o_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB1o_ Hash = 1096621589474666504 up to 0 count discarded",
+            "warning: uv_errors.54bd0819b8da69a6-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable5drift4sortNtCs7h3KIwX3CTy_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSBW_11sort_by_keyNtBY_12HintOrderingNCNvXs4_BY_NtBY_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EBY_ Hash = 264241547158504904 up to 0 count discarded",
+            "warning: uv_errors.54bd0819b8da69a6-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable9quicksort9quicksortNtCs7h3KIwX3CTy_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB15_11sort_by_keyNtB17_12HintOrderingNCNvXs4_B17_NtB17_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB17_ Hash = 103655747236352664 up to 0 count discarded",
+            "warning: uv_errors.54bd0819b8da69a6-cgu.0: no profile data available for function _RNvXs4_Cs7h3KIwX3CTy_9uv_errorsNtB5_5HintsNtNtNtNtCsjIpoRzUjyHQ_4core4iter6traits7collect12IntoIterator9into_iter Hash = 238984482966880379 up to 0 count discarded",
+            "warning: uv_errors.54bd0819b8da69a6-cgu.0: no profile data available for function _RNvYNCNvXs4_Cs7h3KIwX3CTy_9uv_errorsNtBa_5HintsNtNtNtNtCsjIpoRzUjyHQ_4core4iter6traits7collect12IntoIterator9into_iters_0INtNtNtBR_3ops8function6FnOnceTNtBa_4HintEE9call_onceBa_ Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.e0b72841e6291173-cgu.0: no profile data available for function _RNvXs0_NtCsji9Cf5yGYzn_5uv_fs15named_temp_fileNtB5_13NamedTempFileNtNtNtCsjIpoRzUjyHQ_4core2io5write5Write5flush Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.e0b72841e6291173-cgu.0: no profile data available for function _RNvXs0_NtCsji9Cf5yGYzn_5uv_fs5spaceNtB5_18PhysicalSpaceErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 146835647075900052 up to 0 count discarded",
+            "warning: uv_fs.e0b72841e6291173-cgu.0: no profile data available for function _RNvXs0_NvXNvNtCsji9Cf5yGYzn_5uv_fs4links_1__NtBa_8LinkModeNtNtCsg79erSsfNWY_10serde_core2de11Deserialize11deserializeNtB5_9___VisitorNtBW_7Visitor9expecting Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.e0b72841e6291173-cgu.0: no profile data available for function _RNvXs1i_NtCsjIpoRzUjyHQ_4core3fmtRNtNtNtB8_2io5error5ErrorNtB6_7Display3fmtCsji9Cf5yGYzn_5uv_fs Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.e0b72841e6291173-cgu.0: no profile data available for function _RNvXs4_NtCsji9Cf5yGYzn_5uv_fs15named_temp_fileNtB5_12PersistErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.e0b72841e6291173-cgu.0: no profile data available for function _RNvXs_NtCsji9Cf5yGYzn_5uv_fs5spaceNtB4_18PhysicalSpaceErrorNtNtCsjIpoRzUjyHQ_4core5error5Error6source Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uv_small_str.6f400e8e3d6d5490-cgu.0: no profile data available for function _RNvXsd_Cs9ybiQny0yMC_12uv_small_strNtNtCsiDVOwQy9dUs_4rkyv6string14ArchivedStringINtNtCsjIpoRzUjyHQ_4core3cmp9PartialEqNtB5_11SmallStringE2eq Hash = 778228583399867287 up to 0 count discarded",
+            "warning: uv_small_str.6f400e8e3d6d5490-cgu.0: no profile data available for function _RNvXse_Cs9ybiQny0yMC_12uv_small_strNtNtCsiDVOwQy9dUs_4rkyv6string14ArchivedStringINtNtCsjIpoRzUjyHQ_4core3cmp10PartialOrdNtB5_11SmallStringE11partial_cmp Hash = 1027614720266944533 up to 0 count discarded",
+            "warning: uv_cache_key.70488b3518790557-cgu.0: no profile data available for function _RNvXs2_NtCs9DGgHSvhLdb_12uv_cache_key13canonical_urlNtB5_12CanonicalUrlNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.836d00d9cd948c35-cgu.0: no profile data available for function _RNvXNvXs_NtCsbhzJKJIBWhR_12uv_normalize10extra_nameNtB7_13DefaultExtrasNtNtCsg79erSsfNWY_10serde_core2de11Deserialize11deserializeNtB2_18StringOrVecVisitorNtB19_7Visitor9expecting Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.836d00d9cd948c35-cgu.0: no profile data available for function _RNvXs0_CsbhzJKJIBWhR_12uv_normalizeNtB5_24InvalidPipGroupPathErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.836d00d9cd948c35-cgu.0: no profile data available for function _RNvXs7_NtCsbhzJKJIBWhR_12uv_normalize10group_nameNtB5_12PipGroupNameNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 146835647075900052 up to 0 count discarded",
+            "warning: uv_normalize.836d00d9cd948c35-cgu.0: no profile data available for function _RNvXs9_NtCsbhzJKJIBWhR_12uv_normalize10group_nameNtB5_13DefaultGroupsNtCs2lFPRKGuWyN_8schemars10JsonSchema11json_schema Hash = 989283252139533307 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 15084278,
+        "wheel_sha256": "1059dd567e41aea2d542bcd1037441337f4bf1992f2a8a313045b0949dfc5e8a",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 29542240,
+            "symbol_bytes": 300748667,
+            "sha256": "97b99501f2db57fc93009950ce9fe9dbe108194198c8232dabdf6b8398f979cf",
+            "sbom_sha256": "f0f2ba5aac21d0c494c7f9661e257f9981951f6e83f4a1993bf90cc501cc2830",
+            "identity": ["4C4C4486-5555-3144-A18A-73AFF550D0FA"]
+          },
+          "uvx": {
+            "stripped_executable_bytes": 338032,
+            "symbol_bytes": 2608304,
+            "sha256": "59a8092d0bfae0ae511bd43ba595f6632a11372e9b00ba47ea7a61a54815030d",
+            "sbom_sha256": "f0f2ba5aac21d0c494c7f9661e257f9981951f6e83f4a1993bf90cc501cc2830",
+            "identity": ["4C4C4424-5555-3144-A177-2DB28C46D88C"]
+          }
+        }
+      },
+      "thin-none": {
+        "training_lto": "thin",
+        "debug_level": "none",
+        "stages_seconds": {
+          "train_uv": 53.44057612500001,
+          "instrumented_build": 230.3308508329999,
+          "prepare_corpus": 0.012824124999951891,
+          "merge_profiles": 0.4136316669998905
+        },
+        "training_seconds": 284.293649125,
+        "final_seconds": 270.6670974169999,
+        "total_seconds": 554.9607465419999,
+        "resources": {
+          "training": {
+            "wall_seconds": 284.29340525,
+            "samples": 280,
+            "coverage_seconds": 283.43062837499997,
+            "max_sample_gap_seconds": 1.0838562500000535,
+            "sampled_peak_tree_rss_bytes": 6509985792,
+            "minimum_host_available_memory_bytes": 17394434048,
+            "median_host_cpu_percent": 33.5,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 585.8928667359997,
+              "cpu_system_seconds": 104.99222759800001,
+              "pfaults": 5550182,
+              "pageins": 13436
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 740.1889339999998,
+              "ru_stime": 134.903817,
+              "ru_minflt": 17743984,
+              "ru_majflt": 215404,
+              "ru_inblock": 0,
+              "ru_oublock": 0,
+              "ru_nvcsw": 14105,
+              "ru_nivcsw": 4829611
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 3243.98,
+                "nice": 0.0,
+                "system": 885.77,
+                "idle": 11850.09
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 19489800192,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 337691,
+                "write_count": 816834,
+                "read_bytes": 5184141312,
+                "write_bytes": 32875175936,
+                "read_time": 43119,
+                "write_time": 95800
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 4037.72,
+                "nice": 0.0,
+                "system": 1129.53,
+                "idle": 14181.85
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 23103733760,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 343116,
+                "write_count": 1033805,
+                "read_bytes": 5482833920,
+                "write_bytes": 40470556672,
+                "read_time": 43451,
+                "write_time": 131459
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 1804,
+              "ZombieProcess": 29,
+              "NoSuchProcess": 2
+            }
+          },
+          "final": {
+            "wall_seconds": 270.6668468749999,
+            "samples": 267,
+            "coverage_seconds": 270.11574233400006,
+            "max_sample_gap_seconds": 1.023352000000159,
+            "sampled_peak_tree_rss_bytes": 8058699776,
+            "minimum_host_available_memory_bytes": 15315828736,
+            "median_host_cpu_percent": 8.6,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 388.30015248899997,
+              "cpu_system_seconds": 8.692294518999994,
+              "pfaults": 4671788,
+              "pageins": 5393
+            },
+            "reaped_children_rusage_delta": {
+              "ru_utime": 535.88933,
+              "ru_stime": 29.574103000000036,
+              "ru_minflt": 16107587,
+              "ru_majflt": 202125,
+              "ru_inblock": 0,
+              "ru_oublock": 0,
+              "ru_nvcsw": 12637,
+              "ru_nivcsw": 141423
+            },
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 4064.37,
+                "nice": 0.0,
+                "system": 1172.38,
+                "idle": 14260.93
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 23123820544,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 343761,
+                "write_count": 1155085,
+                "read_bytes": 5501655040,
+                "write_bytes": 41318993920,
+                "read_time": 43520,
+                "write_time": 143411
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 4617.31,
+                "nice": 0.0,
+                "system": 1228.87,
+                "idle": 16890.83
+              },
+              "host_swap": {
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "percent": 0.0,
+                "sin": 26453016576,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 348548,
+                "write_count": 1182878,
+                "read_bytes": 5709113344,
+                "write_bytes": 43838623744,
+                "read_time": 43983,
+                "write_time": 148488
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 1846,
+              "ZombieProcess": 31,
+              "NoSuchProcess": 2
+            }
+          }
+        },
+        "profile_sha256": "1e65a92bb2a95f3fdab7ded047d1c5b0342728d53ec1183b2544ce424e5bdf29",
+        "profile_bytes": 27512232,
+        "profile_functions": 72255,
+        "pgo_diagnostics": {
+          "warnings": 3787,
+          "missing": 3787,
+          "mismatch": 0,
+          "examples": [
+            "warning: uv_errors.74da2c48b4a1e96e-cgu.0: no profile data available for function _RINvNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable14driftsort_mainNtCsa206CqrLRBG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSBZ_11sort_by_keyNtB11_12HintOrderingNCNvXs4_B11_NtB11_5HintsNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iter0E0INtNtB1C_3vec3VecBZ_EEB11_ Hash = 650973719838764456 up to 0 count discarded",
+            "warning: uv_errors.74da2c48b4a1e96e-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6shared5pivot11median3_recNtCsa206CqrLRBG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB14_11sort_by_keyNtB16_12HintOrderingNCNvXs4_B16_NtB16_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB16_ Hash = 679210745886084866 up to 0 count discarded",
+            "warning: uv_errors.74da2c48b4a1e96e-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6shared9smallsort25insertion_sort_shift_leftNtCsa206CqrLRBG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB1m_11sort_by_keyNtB1o_12HintOrderingNCNvXs4_B1o_NtB1o_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB1o_ Hash = 1096621589474666504 up to 0 count discarded",
+            "warning: uv_errors.74da2c48b4a1e96e-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable5drift4sortNtCsa206CqrLRBG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSBW_11sort_by_keyNtBY_12HintOrderingNCNvXs4_BY_NtBY_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EBY_ Hash = 264241547158504904 up to 0 count discarded",
+            "warning: uv_errors.74da2c48b4a1e96e-cgu.0: no profile data available for function _RINvNtNtNtNtCsjIpoRzUjyHQ_4core5slice4sort6stable9quicksort9quicksortNtCsa206CqrLRBG_9uv_errors4HintNCINvMNtCs6zY7rJBZy9D_5alloc5sliceSB15_11sort_by_keyNtB17_12HintOrderingNCNvXs4_B17_NtB17_5HintsNtNtNtNtBa_4iter6traits7collect12IntoIterator9into_iter0E0EB17_ Hash = 103655747236352664 up to 0 count discarded",
+            "warning: uv_errors.74da2c48b4a1e96e-cgu.0: no profile data available for function _RNvXs4_Csa206CqrLRBG_9uv_errorsNtB5_5HintsNtNtNtNtCsjIpoRzUjyHQ_4core4iter6traits7collect12IntoIterator9into_iter Hash = 238984482966880379 up to 0 count discarded",
+            "warning: uv_errors.74da2c48b4a1e96e-cgu.0: no profile data available for function _RNvYNCNvXs4_Csa206CqrLRBG_9uv_errorsNtBa_5HintsNtNtNtNtCsjIpoRzUjyHQ_4core4iter6traits7collect12IntoIterator9into_iters_0INtNtNtBR_3ops8function6FnOnceTNtBa_4HintEE9call_onceBa_ Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.ddf786193577225b-cgu.0: no profile data available for function _RNvXs0_NtCsj3wwm9sLVZ7_5uv_fs15named_temp_fileNtB5_13NamedTempFileNtNtNtCsjIpoRzUjyHQ_4core2io5write5Write5flush Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.ddf786193577225b-cgu.0: no profile data available for function _RNvXs0_NtCsj3wwm9sLVZ7_5uv_fs5spaceNtB5_18PhysicalSpaceErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 146835647075900052 up to 0 count discarded",
+            "warning: uv_fs.ddf786193577225b-cgu.0: no profile data available for function _RNvXs0_NvXNvNtCsj3wwm9sLVZ7_5uv_fs4links_1__NtBa_8LinkModeNtNtCsb3RA4kkRqry_10serde_core2de11Deserialize11deserializeNtB5_9___VisitorNtBW_7Visitor9expecting Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.ddf786193577225b-cgu.0: no profile data available for function _RNvXs1i_NtCsjIpoRzUjyHQ_4core3fmtRNtNtNtB8_2io5error5ErrorNtB6_7Display3fmtCsj3wwm9sLVZ7_5uv_fs Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.ddf786193577225b-cgu.0: no profile data available for function _RNvXs4_NtCsj3wwm9sLVZ7_5uv_fs15named_temp_fileNtB5_12PersistErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_fs.ddf786193577225b-cgu.0: no profile data available for function _RNvXs_NtCsj3wwm9sLVZ7_5uv_fs5spaceNtB4_18PhysicalSpaceErrorNtNtCsjIpoRzUjyHQ_4core5error5Error6source Hash = 784007056844089447 up to 0 count discarded",
+            "warning: uv_small_str.e240dc9c26d4ef3-cgu.0: no profile data available for function _RNvXsd_Cs1dgP0IDgxHj_12uv_small_strNtNtCs8KfZ2ZsYJLp_4rkyv6string14ArchivedStringINtNtCsjIpoRzUjyHQ_4core3cmp9PartialEqNtB5_11SmallStringE2eq Hash = 778228583399867287 up to 0 count discarded",
+            "warning: uv_small_str.e240dc9c26d4ef3-cgu.0: no profile data available for function _RNvXse_Cs1dgP0IDgxHj_12uv_small_strNtNtCs8KfZ2ZsYJLp_4rkyv6string14ArchivedStringINtNtCsjIpoRzUjyHQ_4core3cmp10PartialOrdNtB5_11SmallStringE11partial_cmp Hash = 1027614720266944533 up to 0 count discarded",
+            "warning: uv_cache_key.bdacbc8e55b79090-cgu.0: no profile data available for function _RNvXs2_NtCsghDk4HwZNtc_12uv_cache_key13canonical_urlNtB5_12CanonicalUrlNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.1ecc9760ceef8284-cgu.0: no profile data available for function _RNvXNvXs_NtCs2DWubUMS9ua_12uv_normalize10extra_nameNtB7_13DefaultExtrasNtNtCsb3RA4kkRqry_10serde_core2de11Deserialize11deserializeNtB2_18StringOrVecVisitorNtB19_7Visitor9expecting Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.1ecc9760ceef8284-cgu.0: no profile data available for function _RNvXs0_Cs2DWubUMS9ua_12uv_normalizeNtB5_24InvalidPipGroupPathErrorNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uv_normalize.1ecc9760ceef8284-cgu.0: no profile data available for function _RNvXs7_NtCs2DWubUMS9ua_12uv_normalize10group_nameNtB5_12PipGroupNameNtNtCsjIpoRzUjyHQ_4core3fmt7Display3fmt Hash = 146835647075900052 up to 0 count discarded",
+            "warning: uv_normalize.1ecc9760ceef8284-cgu.0: no profile data available for function _RNvXs9_NtCs2DWubUMS9ua_12uv_normalize10group_nameNtB5_13DefaultGroupsNtCs2F2wNgNgHgg_8schemars10JsonSchema11json_schema Hash = 989283252139533307 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 14953236,
+        "wheel_sha256": "ff384fbf335e5c5c37b37eda137db4fb01808a05b7b8d200774a3a92859616a5",
+        "executables": {
+          "uv": {
+            "stripped_executable_bytes": 29274128,
+            "sha256": "770e7e9f480a56188058837b24d812ede71bb900fc0e83c34ecfa9a5ef67d606",
+            "sbom_sha256": "f0f2ba5aac21d0c494c7f9661e257f9981951f6e83f4a1993bf90cc501cc2830"
+          },
+          "uvx": {
+            "stripped_executable_bytes": 337856,
+            "sha256": "84c575edd1e02bf4dfc5865a95badba524821e57f44e5474045663e14ec907a1",
+            "sbom_sha256": "f0f2ba5aac21d0c494c7f9661e257f9981951f6e83f4a1993bf90cc501cc2830"
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "requirements_sha256": "ce72f0b7a376799ffbbb57931dceab5c9e1cea2254ce6855d4d37bdc7ba54e44",
+        "resolution_sha256": "490513ce86646b65a2464c2d52177d1367559f97e4ec4b57c8c787b692266135",
+        "python": "3.12.10 (v3.12.10:0cc81280367, Apr  8 2025, 08:46:59) [Clang 13.0.0 (clang-1300.0.29.30)]",
+        "orders": [
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"]
+        ],
+        "warmups_per_treatment": 3,
+        "samples_seconds": {
+          "thin-none": [
+            0.01124125000001186, 0.011146625000037602, 0.011244457999964652,
+            0.01106549999985873, 0.011468292000017755, 0.010940458999812108,
+            0.011526583999966533, 0.011465958999906434, 0.011124582999855193,
+            0.011189250000143147, 0.012336540999967838, 0.011224416999993991,
+            0.011190709000175048, 0.01165583300007711, 0.011091832999909457,
+            0.011243874999991021, 0.011177458000020124, 0.011236541000016587,
+            0.011192625000148837, 0.011014083999953073, 0.011430124999833424,
+            0.011296874999970896, 0.01123812499986343, 0.01089608400002362,
+            0.010556332999840379, 0.011144957999931648, 0.010839999999916472,
+            0.011439958999972077, 0.010809457999812366, 0.010994374999881984
+          ],
+          "thin-line-tables": [
+            0.010781082999983482, 0.011400874999935695, 0.01095758300016314,
+            0.011361749999878157, 0.011205667000012909, 0.011033249999854888,
+            0.011379042000044137, 0.011147583000138184, 0.011493833000031373,
+            0.010947750000013912, 0.011767166000026918, 0.011472082999944178,
+            0.011375915999906283, 0.011162084000034156, 0.010858666999865818,
+            0.011348749999797292, 0.011457083000095736, 0.011088917000051879,
+            0.010783333000063067, 0.011320917000148256, 0.01121333300011429,
+            0.01138937500013526, 0.011204249999991589, 0.011348624999982349,
+            0.010877459000084855, 0.01192520900008276, 0.010920707999957813,
+            0.011874416999944515, 0.011205000000018117, 0.010769624999966254
+          ],
+          "thin-limited": [
+            0.010990916999844558, 0.011120458000050348, 0.01129537499991784,
+            0.011299667000002955, 0.01111233300002823, 0.011366334000058487,
+            0.011833666000029552, 0.011091625000062777, 0.011722417000100904,
+            0.01123841599996922, 0.011149958000032711, 0.011281708000069557,
+            0.011130916000183788, 0.011563083000055485, 0.011368416000095749,
+            0.011231707999968421, 0.011158875000091939, 0.011477707999802078,
+            0.011636166000016601, 0.011475957999891762, 0.011329416999842579,
+            0.011066499999969892, 0.011057708999942406, 0.010931415999948513,
+            0.010811042000113957, 0.010675125000034313, 0.010974499999974796,
+            0.010828042000184723, 0.011036707999892315, 0.011231958000053055
+          ]
+        },
+        "median_seconds": {
+          "thin-none": 0.011191667000161942,
+          "thin-line-tables": 0.0112095000000636,
+          "thin-limited": 0.01119529150003018
+        }
+      },
+      "trio": {
+        "requirements_sha256": "81c0b52237c94983dac704d4ddae59ab13c399c0d6c664e6088da4dff4395679",
+        "resolution_sha256": "d84c4ad074c0bf2ccbf7ec4cf338f25fb03d920d98ec13bc4ca1686b06f5d4fd",
+        "python": "3.12.10 (v3.12.10:0cc81280367, Apr  8 2025, 08:46:59) [Clang 13.0.0 (clang-1300.0.29.30)]",
+        "orders": [
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables"]
+        ],
+        "warmups_per_treatment": 3,
+        "samples_seconds": {
+          "thin-none": [
+            0.00912783299986586, 0.008835958999952709, 0.009395832999871345,
+            0.008985291000044526, 0.009573541000008845, 0.00958987499984687,
+            0.009317042000020592, 0.009250750000092012, 0.009069209000017509,
+            0.008821041000146579, 0.009280209000053219, 0.008892958999922485,
+            0.009033791999854657, 0.009050584000078743, 0.008966665999878387,
+            0.00916779200019846, 0.009138291999988724, 0.008932042000196816,
+            0.00879175000000032, 0.008793000000196116, 0.009117583000033846,
+            0.008946375000050466, 0.009049874999845997, 0.009037959000124829,
+            0.009078332999933991, 0.009132041999919238, 0.00899758299988207,
+            0.009000125000056869, 0.008895499999880485, 0.008662916999810477
+          ],
+          "thin-line-tables": [
+            0.008811583000124301, 0.009370708000005834, 0.009130333000030078,
+            0.008727542000087851, 0.009831875000145374, 0.009679999999889333,
+            0.009236500000042724, 0.008980208999901151, 0.00878220900017368,
+            0.009064041999863548, 0.008882999999968888, 0.0089155830000891,
+            0.00896095799998875, 0.009094125000046915, 0.009276541999952315,
+            0.009070083000096929, 0.009048791000168421, 0.009151958000074956,
+            0.008771291000130077, 0.008908542000199304, 0.009449166999957015,
+            0.008868874999961918, 0.009056708999878538, 0.009658749999971405,
+            0.009212790999981735, 0.009094208000078652, 0.009019582999826525,
+            0.009080042000050526, 0.009103458000026876, 0.00900783300016883
+          ],
+          "thin-limited": [
+            0.00901770900009069, 0.009452208000084283, 0.009227290999888282,
+            0.00916541599985976, 0.008914209000067785, 0.009024375000080909,
+            0.009172124999849984, 0.00918750000005275, 0.00907608300008178,
+            0.009194833000037761, 0.008846250000033251, 0.009210791999976209,
+            0.00879533299985269, 0.009113167000123212, 0.008707374999858075,
+            0.009184750000031272, 0.009091666999893278, 0.008925707999878796,
+            0.00886850000006234, 0.009221416999935172, 0.008725833999960741,
+            0.008969250000063766, 0.009167334000039773, 0.009190084000010756,
+            0.009087333000024955, 0.009293832999901497, 0.008764083999949435,
+            0.00905287499995211, 0.009014083000010942, 0.009002958000110084
+          ]
+        },
+        "median_seconds": {
+          "thin-none": 0.009043916999985413,
+          "thin-line-tables": 0.009067062499980238,
+          "thin-limited": 0.009081708000053368
+        }
+      }
+    },
+    "verified": true,
+    "provenance": {
+      "run_id": 38422747719,
+      "job_id": 115384153836,
+      "attempt": 1,
+      "artifact_id": 11829491089,
+      "digest": "sha256:d633c388156b947f4561a4b9318d2a3d6d3516e8bc7d5a20d1261a07f6d6ed3f",
+      "created_at": "2026-10-13T16:03:20Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38422747719/job/115384153836",
+      "report_sha256": "37772274b2e1f9dc8e732c2f1cec326bb72f55e018c1a10f2cdd77a5aac6ad34",
+      "verified_at": "2026-10-13T16:13:54.836244+00:00"
+    }
+  }
+}

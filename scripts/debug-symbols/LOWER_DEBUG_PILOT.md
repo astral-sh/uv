@@ -1,5 +1,8 @@
 # Lower debug levels with thin-LTO instrumentation
 
+[Results and retained measurements](results/2026-10-13-lower-debug-pilot/README.md) are available
+for Linux x86-64, Linux ARM64 and macOS. Windows remains in progress.
+
 Compare no debug information, Rust line tables and limited Rust debug information on four native
 platforms. Each platform gets one independent runner allocation and three fresh builds, each with
 its own PGO profile. Instrumentation uses thin LTO; final compilation uses fat LTO, optimization

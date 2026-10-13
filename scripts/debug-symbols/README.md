@@ -1,7 +1,9 @@
 # Optimized Rust+C debug symbols experiment
 
-The [lower-debug pilot](LOWER_DEBUG_PILOT.md) measures line tables and limited debug information
-against fresh no-debug controls with thin-LTO instrumentation on four native platforms.
+The [lower-debug thin-LTO results](results/2026-10-13-lower-debug-pilot/README.md) show combined
+build/training overhead of 10.4–13.3% for line tables and 12.6–13.5% for limited debug on Linux
+x86-64, Linux ARM64 and macOS. Windows is pending. Each platform has one allocation; see the
+[pilot methods](LOWER_DEBUG_PILOT.md) for its fresh no-debug controls and limitations.
 
 The [October 13 Windows LTO pilot](results/2026-10-13-lto-pilot/README.md) reduced combined
 build/training time by 29.5% without debug information and 35.0% with full debug information. It
