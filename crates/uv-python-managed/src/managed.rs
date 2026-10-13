@@ -12,6 +12,7 @@ use fs_err as fs;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use thiserror::Error;
+use tokio::task::{JoinError, spawn_blocking};
 use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
@@ -41,6 +42,8 @@ use uv_python_types::{
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    Join(#[from] JoinError),
     #[error(transparent)]
     LockedFile(#[from] LockedFileError),
     #[error(transparent)]
@@ -511,62 +514,74 @@ impl ManagedPythonInstallation {
     }
 
     /// Ensure the environment contains the canonical Python executable names.
-    pub fn ensure_canonical_executables(&self) -> Result<(), Error> {
-        let python = self.executable(false);
+    pub async fn ensure_canonical_executables(&self) -> Result<(), Error> {
+        let installation = self.clone();
+        spawn_blocking(move || {
+            let python = installation.executable(false);
 
-        let canonical_names = &["python"];
+            let canonical_names = &["python"];
 
-        for name in canonical_names {
-            let executable =
-                python.with_file_name(format!("{name}{exe}", exe = std::env::consts::EXE_SUFFIX));
+            for name in canonical_names {
+                let executable = python
+                    .with_file_name(format!("{name}{exe}", exe = std::env::consts::EXE_SUFFIX));
 
-            // Do not attempt to perform same-file copies — this is fine on Unix but fails on
-            // Windows with a permission error instead of 'already exists'
-            if executable == python {
-                continue;
+                // Do not attempt to perform same-file copies — this is fine on Unix but fails on
+                // Windows with a permission error instead of 'already exists'
+                if executable == python {
+                    continue;
+                }
+
+                match symlink_or_copy_file(&python, &executable) {
+                    Ok(()) => {
+                        debug!(
+                            "Created link `{}` -> `{}`",
+                            executable.user_display(),
+                            python.user_display(),
+                        );
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                        return Err(Error::MissingExecutable(python.clone()));
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                    Err(err) => {
+                        return Err(Error::CanonicalizeExecutable(err));
+                    }
+                }
             }
 
-            match symlink_or_copy_file(&python, &executable) {
-                Ok(()) => {
-                    debug!(
-                        "Created link `{}` -> `{}`",
-                        executable.user_display(),
-                        python.user_display(),
-                    );
-                }
-                Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingExecutable(python.clone()));
-                }
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(err) => {
-                    return Err(Error::CanonicalizeExecutable(err));
-                }
-            }
-        }
-
-        Ok(())
+            Ok(())
+        })
+        .await?
     }
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self) {
-            minor_version_link.create_directory()?;
-        }
-        Ok(())
+    pub async fn ensure_minor_version_link(&self) -> Result<(), Error> {
+        let installation = self.clone();
+        spawn_blocking(move || {
+            if let Some(minor_version_link) =
+                PythonMinorVersionLink::from_installation(&installation)
+            {
+                minor_version_link.create_directory()?;
+            }
+            Ok(())
+        })
+        .await?
     }
 
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
-    pub fn ensure_externally_managed(&self) -> Result<(), Error> {
+    pub async fn ensure_externally_managed(&self) -> Result<(), Error> {
         if self.key.os().is_emscripten() {
             // Emscripten's stdlib is a zip file so we can't put an
             // EXTERNALLY-MANAGED inside.
             return Ok(());
         }
+        let installation = self.clone();
+        let python_dir = spawn_blocking(move || installation.python_dir()).await?;
         // Construct the path to the `stdlib` directory.
         let stdlib = if self.key.os().is_windows() {
-            self.python_dir().join("Lib")
+            python_dir.join("Lib")
         } else {
             let lib_suffix = self.key.variant.lib_suffix();
             let python = if matches!(
@@ -577,11 +592,11 @@ impl ManagedPythonInstallation {
             } else {
                 format!("python{}{lib_suffix}", self.key.version().python_version())
             };
-            self.python_dir().join("lib").join(python)
+            python_dir.join("lib").join(python)
         };
 
         let file = stdlib.join("EXTERNALLY-MANAGED");
-        fs_err::write(file, EXTERNALLY_MANAGED)?;
+        fs::tokio::write(file, EXTERNALLY_MANAGED).await?;
 
         Ok(())
     }
@@ -632,10 +647,10 @@ impl ManagedPythonInstallation {
     }
 
     /// Ensure the build version is written to a BUILD file in the installation directory.
-    pub fn ensure_build_file(&self) -> Result<(), Error> {
+    pub async fn ensure_build_file(&self) -> Result<(), Error> {
         if let Some(ref build) = self.build {
             let build_file = self.path.join("BUILD");
-            fs::write(&build_file, build.as_ref())?;
+            fs::tokio::write(&build_file, build.as_ref()).await?;
         }
         Ok(())
     }
