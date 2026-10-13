@@ -18,6 +18,7 @@ on:
             lto-pilot,
             lower-debug-pilot,
             all-debug-pilot,
+            all-debug-repeat,
           ]
         default: calibration
       block:
@@ -148,7 +149,7 @@ jobs:
       - name: Check statistical harness and resource collection
         run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_study.py
       - name: Check LTO pilot
-        if: inputs.phase == 'lto-pilot' || inputs.phase == 'lower-debug-pilot' || inputs.phase == 'all-debug-pilot'
+        if: inputs.phase == 'lto-pilot' || inputs.phase == 'lower-debug-pilot' || inputs.phase == 'all-debug-pilot' || inputs.phase == 'all-debug-repeat'
         run: uv run --no-project --python 3.12 --with psutil==7.0.0 python scripts/debug-symbols/test_lto_pilot.py
       - name: Run LTO pilot
         if: inputs.phase == 'lto-pilot'
@@ -159,8 +160,11 @@ jobs:
       - name: Run all-debug pilot
         if: inputs.phase == 'all-debug-pilot'
         run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/lto_pilot.py --plan scripts/debug-symbols/all-debug-pilot-plan.json --output target/debug-symbols-all-debug-pilot
+      - name: Run all-debug repeat
+        if: inputs.phase == 'all-debug-repeat'
+        run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/lto_pilot.py --plan scripts/debug-symbols/all-debug-repeat-plan.json --output target/debug-symbols-all-debug-repeat
       - name: Run randomized block
-        if: inputs.phase != 'lto-pilot' && inputs.phase != 'lower-debug-pilot' && inputs.phase != 'all-debug-pilot'
+        if: inputs.phase != 'lto-pilot' && inputs.phase != 'lower-debug-pilot' && inputs.phase != 'all-debug-pilot' && inputs.phase != 'all-debug-repeat'
         run: uv run --no-project --python 3.12 --with maturin==1.15.0 --with psutil==7.0.0 python scripts/debug-symbols/study.py --phase ${{ inputs.phase == 'confirmatory' && 'confirmatory' || 'calibration' }}
       - name: Retain block outputs and resource samples
         if: always()
@@ -168,11 +172,12 @@ jobs:
         with:
           name: debug-study-${{ inputs.phase }}-${{ inputs.block }}-${{ runner.os }}-${{ runner.arch }}
           path: |
-            ${{ inputs.phase == 'lto-pilot' && 'target/debug-symbols-lto-pilot' || inputs.phase == 'lower-debug-pilot' && 'target/debug-symbols-lower-debug-pilot' || inputs.phase == 'all-debug-pilot' && 'target/debug-symbols-all-debug-pilot' || 'target/debug-symbols-study' }}
+            ${{ inputs.phase == 'lto-pilot' && 'target/debug-symbols-lto-pilot' || inputs.phase == 'lower-debug-pilot' && 'target/debug-symbols-lower-debug-pilot' || inputs.phase == 'all-debug-pilot' && 'target/debug-symbols-all-debug-pilot' || inputs.phase == 'all-debug-repeat' && 'target/debug-symbols-all-debug-repeat' || 'target/debug-symbols-study' }}
             !target/debug-symbols-study/**/*.original.whl
             !target/debug-symbols-lto-pilot/**/*.original.whl
             !target/debug-symbols-lower-debug-pilot/**/*.original.whl
             !target/debug-symbols-all-debug-pilot/**/*.original.whl
+            !target/debug-symbols-all-debug-repeat/**/*.original.whl
           if-no-files-found: error
           compression-level: 1
           retention-days: 14

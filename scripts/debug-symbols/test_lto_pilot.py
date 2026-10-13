@@ -168,6 +168,39 @@ class PilotChecks(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "outside"):
                 select_target(plan, "unregistered", "4")
 
+    def test_repeat_blocks_have_balanced_build_positions(self):
+        plan = json.loads(
+            Path(__file__).with_name("all-debug-repeat-plan.json").read_text()
+        )
+        for host, target in plan["targets"].items():
+            with self.subTest(host=host):
+                orders = []
+                for block in plan["repeat_blocks"]:
+                    selected = select_target(
+                        plan, host, str(target["cargo_jobs"]), block
+                    )
+                    self.assertEqual(selected["order"], target["orders"][str(block)])
+                    orders.append(selected["order"])
+                for position in range(len(plan["treatments"])):
+                    self.assertCountEqual(
+                        [order[position] for order in orders], plan["treatments"]
+                    )
+                with self.assertRaisesRegex(RuntimeError, "Block outside"):
+                    select_target(plan, host, str(target["cargo_jobs"]), 0)
+                with self.assertRaisesRegex(RuntimeError, "parallelism"):
+                    select_target(plan, host, "1", 1)
+                invalid = {
+                    **plan,
+                    "targets": {host: {**target, "orders": {"1": ["thin-none"]}}},
+                }
+                with self.assertRaisesRegex(RuntimeError, "exactly once"):
+                    select_target(invalid, host, str(target["cargo_jobs"]), 1)
+        original = json.loads(
+            Path(__file__).with_name("all-debug-pilot-plan.json").read_text()
+        )
+        with self.assertRaisesRegex(RuntimeError, "block zero"):
+            select_target(original, "x86_64-pc-windows-msvc", "4", 1)
+
     def test_reduced_debug_flags_on_native_platforms(self):
         for system, executable in (
             ("Linux", "uv"),

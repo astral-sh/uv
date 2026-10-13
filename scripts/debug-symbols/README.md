@@ -1,5 +1,8 @@
 # Optimized Rust+C debug symbols experiment
 
+The [four-round repeat plan](ALL_DEBUG_REPEATS.md) adds four fresh all-platform/all-debug rounds to
+summarize five observations per platform and debug level, retaining each allocation's baseline.
+
 The [all-debug thin-LTO results](results/2026-10-13-all-debug-pilot/README.md) include fresh
 no-debug, line-table, limited and full-debug builds on the pinned October 13 source. Full debug adds
 52.9% on Linux x86-64, 44.3% on Linux ARM64, 78.0% on macOS and 59.7% on Windows in these

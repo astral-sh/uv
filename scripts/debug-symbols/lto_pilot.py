@@ -97,7 +97,7 @@ def verify_control(directory, report, tools, system):
     report["verified"] = True
 
 
-def select_target(plan, host, cargo_jobs):
+def select_target(plan, host, cargo_jobs, block=0):
     targets = plan.get("targets")
     if targets is None:
         targets = {plan["target"]: plan}
@@ -106,6 +106,12 @@ def select_target(plan, host, cargo_jobs):
     target = targets[host]
     if cargo_jobs != str(target["cargo_jobs"]):
         raise RuntimeError("Cargo parallelism differs from the registered pilot")
+    if "orders" in target:
+        if str(block) not in target["orders"]:
+            raise RuntimeError("Block outside the registered pilot")
+        target = {**target, "order": target["orders"][str(block)]}
+    elif block != 0:
+        raise RuntimeError("This pilot plan only registers block zero")
     if sorted(target["order"]) != sorted(plan["treatments"]):
         raise RuntimeError("Pilot order must contain each treatment exactly once")
     return target
@@ -113,6 +119,7 @@ def select_target(plan, host, cargo_jobs):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--block", type=int, default=os.environ.get("STUDY_BLOCK", "0"))
     parser.add_argument(
         "--plan", type=Path, default=Path(__file__).with_name("lto-pilot-plan.json")
     )
@@ -122,7 +129,7 @@ def main():
     args = parser.parse_args()
     plan = json.loads(args.plan.read_text())
     system, host, compiler, tools = build_context(True)
-    target = select_target(plan, host, os.environ.get("CARGO_BUILD_JOBS"))
+    target = select_target(plan, host, os.environ.get("CARGO_BUILD_JOBS"), args.block)
     source = fingerprints()
     if source != plan["source_fingerprints"]:
         raise RuntimeError("Source differs from the pinned pilot revision")
@@ -133,6 +140,7 @@ def main():
         "schema": 1,
         "study": plan["study_id"],
         "phase": "pilot",
+        "block": args.block,
         "plan_sha256": plan_fingerprint(plan),
         "commit": commit,
         "main_source_revision": plan["main_source_revision"],
@@ -252,7 +260,7 @@ def main():
     summary["benchmarks"] = benchmark(
         output,
         summary["treatments"],
-        0,
+        args.block,
         host,
         treatments=tuple(plan["treatments"]),
         reference=plan.get("reference_treatment", "fat-none"),
@@ -266,7 +274,12 @@ def main():
     save_report(output, summary)
     print(
         json.dumps(
-            {"study": plan["study_id"], "verified": True, "order": target["order"]}
+            {
+                "study": plan["study_id"],
+                "block": args.block,
+                "verified": True,
+                "order": target["order"],
+            }
         )
     )
 
