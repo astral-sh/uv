@@ -22,9 +22,9 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
-    RegistryBuiltWheel,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexEntryFilename, IndexFormat,
+    IndexLocations, IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl,
+    Name, RegistryBuiltWheel,
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
@@ -1390,14 +1390,20 @@ type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 pub struct VersionFiles {
     pub wheels: Vec<CachedFile>,
     pub source_dists: Vec<CachedFile>,
+    pub variant_jsons: Vec<CachedFile>,
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: &DistFilename, file: File) {
+    fn push(&mut self, filename: &IndexEntryFilename, file: File) {
         let file = CachedFile::from(file);
         match filename {
-            DistFilename::WheelFilename(_) => self.wheels.push(file),
-            DistFilename::SourceDistFilename(_) => self.source_dists.push(file),
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(_)) => {
+                self.wheels.push(file)
+            }
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(_)) => {
+                self.source_dists.push(file)
+            }
+            IndexEntryFilename::VariantJson(_) => self.variant_jsons.push(file),
         }
     }
 
@@ -1408,6 +1414,21 @@ impl VersionFiles {
             .filter_map(|file| {
                 let file = File::from(file);
                 let filename = DistFilename::try_from_filename(&file.filename, package_name)?;
+                Some((filename, file))
+            })
+    }
+
+    pub fn all_entries(
+        self,
+        package_name: &PackageName,
+    ) -> impl Iterator<Item = (IndexEntryFilename, File)> {
+        self.source_dists
+            .into_iter()
+            .chain(self.wheels)
+            .chain(self.variant_jsons)
+            .filter_map(|file| {
+                let file = File::from(file);
+                let filename = IndexEntryFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
     }
@@ -1655,17 +1676,19 @@ impl SimpleDetailMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            let filename =
-                match DistFilename::try_from_filename_with_reason(&file.filename, package_name) {
-                    Ok(filename) => filename,
-                    Err(err) => {
-                        debug!(
-                            "Skipping file for {package_name}: {:?} ({err})",
-                            file.filename
-                        );
-                        continue;
-                    }
-                };
+            let filename = match IndexEntryFilename::try_from_filename_with_reason(
+                &file.filename,
+                package_name,
+            ) {
+                Ok(filename) => filename,
+                Err(err) => {
+                    debug!(
+                        "Skipping file for {package_name}: {:?} ({err})",
+                        file.filename
+                    );
+                    continue;
+                }
+            };
             let file = match File::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
@@ -1693,6 +1716,9 @@ impl SimpleDetailMetadata {
                 .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
             files
                 .source_dists
+                .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
+            files
+                .variant_jsons
                 .sort_unstable_by(|left, right| left.filename().cmp(right.filename()));
         }
 
@@ -2232,6 +2258,67 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn variant_json_simple_api() -> Result<(), Error> {
+        let response = r#"{
+            "files": [
+                {"filename": "example-1.0-py3-none-any.whl", "hashes": {}, "url": "example-1.0-py3-none-any.whl"},
+                {"filename": "example-1.0-variants.json", "hashes": {}, "url": "metadata/1.0", "requires-python": "not a version", "core-metadata": true, "yanked": "ignored"},
+                {"filename": "other-2.0-variants.json", "hashes": {}, "url": "other-2.0-variants.json"}
+            ]
+        }"#;
+        let data: PypiSimpleDetail = serde_json::from_str(response)?;
+        let package_name = PackageName::from_str("example")?;
+        let base = DisplaySafeUrl::parse("https://example.com/simple/example/")?;
+        let metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &package_name,
+            data.project_status,
+            &base,
+        );
+        let archived = super::OwnedArchive::from_unarchived(&metadata)?;
+        let metadata = super::OwnedArchive::deserialize(&archived);
+        let entries: Vec<_> = metadata
+            .versions
+            .into_iter()
+            .flat_map(|datum| datum.files.all_entries(&package_name))
+            .collect();
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[1].0.to_string(), "example-1.0-variants.json");
+        assert_eq!(
+            entries[1].1.url.to_url()?.as_str(),
+            "https://example.com/simple/example/metadata/1.0"
+        );
+        assert!(entries[1].1.requires_python.is_none());
+        assert!(entries[1].1.dist_info_metadata.is_none());
+        assert!(entries[1].1.yanked.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn variant_json_html_index() -> Result<(), Error> {
+        let html = r#"
+            <a href="example-1.0-py3-none-any.whl">example-1.0-py3-none-any.whl</a>
+            <a href="example-1.0-variants.json" data-requires-python="invalid" data-core-metadata="true" data-yanked>example-1.0-variants.json</a>
+        "#;
+        let package_name = PackageName::from_str("example")?;
+        let base = DisplaySafeUrl::parse("https://example.com/simple/example/")?;
+        let metadata = SimpleDetailMetadata::from_html(html, &package_name, &base)?;
+        let entries: Vec<_> = metadata
+            .versions
+            .into_iter()
+            .flat_map(|datum| datum.files.all_entries(&package_name))
+            .collect();
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[1].0.to_string(), "example-1.0-variants.json");
+        assert!(entries[1].1.requires_python.is_none());
+        assert!(entries[1].1.dist_info_metadata.is_none());
+        assert!(entries[1].1.yanked.is_none());
+        Ok(())
+    }
+
     /// Test for project statuses from PyPI's JSON detail response.
     #[test]
     fn project_status_pypi_json() {
@@ -2319,6 +2406,7 @@ mod tests {
                                 has_upload_time: true,
                             },
                         ],
+                        variant_jsons: [],
                     },
                     metadata: None,
                 },
@@ -2391,6 +2479,7 @@ mod tests {
                                 has_upload_time: false,
                             },
                         ],
+                        variant_jsons: [],
                     },
                     metadata: None,
                 },

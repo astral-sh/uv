@@ -10,8 +10,8 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, Index, IndexLocations, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel,
-    RegistrySourceDist,
+    File, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
+    RegistryBuiltWheel, RegistrySourceDist,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -94,6 +94,9 @@ impl FlatDistributions {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
+            let IndexEntryFilename::DistFilename(filename) = filename else {
+                continue;
+            };
             distributions.add_file(
                 file,
                 filename,
