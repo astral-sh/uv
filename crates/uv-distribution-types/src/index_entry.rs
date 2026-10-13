@@ -31,12 +31,15 @@ impl IndexEntryFilename {
 
     /// Parse a filename without knowing its package name.
     pub fn try_from_normalized_filename(filename: &str) -> Option<Self> {
-        if let Some(filename) = DistFilename::try_from_normalized_filename(filename) {
+        // Check the extension first to avoid allocating the error.
+        if filename.ends_with("-variants.json")
+            && let Ok(filename) = VariantsJsonFilename::from_str(filename)
+        {
+            Some(Self::VariantJson(VariantsJsonFilename::from(filename)))
+        } else if let Some(filename) = DistFilename::try_from_normalized_filename(filename) {
             Some(Self::DistFilename(filename))
         } else {
-            VariantsJsonFilename::from_str(filename)
-                .ok()
-                .map(Self::VariantJson)
+            None
         }
     }
 
