@@ -3711,5 +3711,1119 @@
       "report_sha256": "0926f4e274efbf666e39e7bb07b2df732ab439f54fd3493d38669769b6913a4f",
       "verified_at": "2026-10-13T18:15:18.630501+00:00"
     }
+  },
+  "windows": {
+    "commit": "a77b32c17fa3173e4ea3a3d52bbe91f3dd421a98",
+    "main_source_revision": "59e5912ecff500422b99cca3df68d48be3841a67",
+    "plan_sha256": "2549e7992ccfb59b2f9dde8d07b752d6a0a53982e52a06323da57a78ce9b7cae",
+    "order": ["thin-limited", "thin-full", "thin-line-tables", "thin-none"],
+    "machine": {
+      "platform": "Windows-2022Server-10.0.20348-SP0",
+      "logical_cpus": 16,
+      "physical_cpus": 16,
+      "physical_memory_bytes": 34359107584,
+      "cpu_description": "{\"Name\":\"AMD EPYC-v4 Processor\",\"Manufacturer\":\"AuthenticAMD\",\"NumberOfCores\":16,\"NumberOfLogicalProcessors\":16,\"MaxClockSpeed\":4292}",
+      "cpu_description_exit_code": 0,
+      "psutil_version": "7.0.0",
+      "runner_name": "nsc-runner-97ejk5ckir94u"
+    },
+    "platform": "Windows",
+    "target": "x86_64-pc-windows-msvc",
+    "treatments": {
+      "thin-limited": {
+        "training_lto": "thin",
+        "debug_level": "limited",
+        "stages_seconds": {
+          "train_uv": 53.59400000000005,
+          "prepare_corpus": 0.016000000000005343,
+          "instrumented_build": 533.578,
+          "merge_profiles": 1.1870000000000118
+        },
+        "training_seconds": 588.6089999999999,
+        "final_seconds": 587.6400000000001,
+        "total_seconds": 1176.249,
+        "resources": {
+          "training": {
+            "wall_seconds": 588.6089999999999,
+            "samples": 579,
+            "coverage_seconds": 587.9839999999999,
+            "max_sample_gap_seconds": 1.156000000000006,
+            "sampled_peak_tree_rss_bytes": 7451262976,
+            "minimum_host_available_memory_bytes": 24340389888,
+            "median_host_cpu_percent": 24.8,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1569.359375,
+              "cpu_system_seconds": 61.109375,
+              "num_page_faults": 27044701,
+              "read_bytes": 1407657613,
+              "write_bytes": 3065384725
+            },
+            "reaped_children_rusage_delta": null,
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 63.46875,
+                "system": 95.71875,
+                "idle": 1167.3125,
+                "interrupt": 0.71875,
+                "dpc": 1.90625
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 0,
+                "free": 5368709120,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 54899,
+                "write_count": 211234,
+                "read_bytes": 1165143040,
+                "write_bytes": 3607334912,
+                "read_time": 21,
+                "write_time": 15
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 1829.15625,
+                "system": 262.953125,
+                "idle": 8642.140625,
+                "interrupt": 2.09375,
+                "dpc": 3.734375
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 0,
+                "free": 5368709120,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 70985,
+                "write_count": 400943,
+                "read_bytes": 1949117952,
+                "write_bytes": 16200169984,
+                "read_time": 24,
+                "write_time": 67
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 1,
+              "NoSuchProcess": 1
+            }
+          },
+          "final": {
+            "wall_seconds": 587.6400000000001,
+            "samples": 579,
+            "coverage_seconds": 587.406,
+            "max_sample_gap_seconds": 1.0779999999999745,
+            "sampled_peak_tree_rss_bytes": 13156548608,
+            "minimum_host_available_memory_bytes": 18189258752,
+            "median_host_cpu_percent": 6.2,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1007.703125,
+              "cpu_system_seconds": 29.34375,
+              "num_page_faults": 25167788,
+              "read_bytes": 840093327,
+              "write_bytes": 913449503
+            },
+            "reaped_children_rusage_delta": null,
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 1831.03125,
+                "system": 278.71875,
+                "idle": 8867.0,
+                "interrupt": 2.1875,
+                "dpc": 4.03125
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 0,
+                "free": 5368709120,
+                "percent": 0.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 71281,
+                "write_count": 470608,
+                "read_bytes": 1950330368,
+                "write_bytes": 17854874112,
+                "read_time": 24,
+                "write_time": 69
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 3013.84375,
+                "system": 377.046875,
+                "idle": 16984.359375,
+                "interrupt": 2.390625,
+                "dpc": 4.078125
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 636461056,
+                "free": 4732248064,
+                "percent": 11.9,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 71777,
+                "write_count": 485188,
+                "read_bytes": 1960902144,
+                "write_bytes": 21719039488,
+                "read_time": 24,
+                "write_time": 75
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 1
+            }
+          }
+        },
+        "profile_sha256": "b7b4ecaeec2a8dcf5f534e746865dd444c636e91765c56adb114befeeb2ea23b",
+        "profile_bytes": 32464496,
+        "profile_functions": 91097,
+        "pgo_diagnostics": {
+          "warnings": 19,
+          "missing": 19,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs89r4j2vouvF_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtNtCsljvfXcM3w8L_3std3sys7process7windows6EnvKeyINtNtCs9rw95XCWuke_4core6option6OptionNtNtNtB1A_3ffi6os_str8OsStringENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECsiw4skrOj0XE_3uvw Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters4skip4SkipNtNtCsljvfXcM3w8L_3std3env6ArgsOsEECsiw4skrOj0XE_3uvw Hash = 798733566801274259 up to 0 count discarded",
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECsiw4skrOj0XE_3uvw Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB4_7process8ExitCodeECsiw4skrOj0XE_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RINvNtNtCsljvfXcM3w8L_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECsiw4skrOj0XE_3uvw Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Csiw4skrOj0XE_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RNSNvYNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceuE9call_once6vtableCsiw4skrOj0XE_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RNvCsiw4skrOj0XE_3uvw4main Hash = 904365845180631687 up to 0 count discarded",
+            "warning: uvw.d7aeac007e90359c-cgu.0: no profile data available for function _RNvXs1i_NtCs9rw95XCWuke_4core3fmtReNtB6_7Display3fmtCsiw4skrOj0XE_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs89r4j2vouvF_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtNtCsljvfXcM3w8L_3std3sys7process7windows6EnvKeyINtNtCs9rw95XCWuke_4core6option6OptionNtNtNtB1A_3ffi6os_str8OsStringENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECs92KgFR7kfeA_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCsljvfXcM3w8L_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECs92KgFR7kfeA_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECs92KgFR7kfeA_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB4_7process8ExitCodeECs92KgFR7kfeA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RINvNtNtCsljvfXcM3w8L_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECs92KgFR7kfeA_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RINvNvMs2_NtCs89r4j2vouvF_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECs92KgFR7kfeA_3uvx Hash = 753202733449284396 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Cs92KgFR7kfeA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RNSNvYNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceuE9call_once6vtableCs92KgFR7kfeA_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RNvCs92KgFR7kfeA_3uvx4main Hash = 65450789262851566 up to 0 count discarded",
+            "warning: uvx.695830ce30af2636-cgu.0: no profile data available for function _RNvXs1i_NtCs9rw95XCWuke_4core3fmtReNtB6_7Display3fmtCs92KgFR7kfeA_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 15919134,
+        "wheel_sha256": "95109ff4f4c52bd6734415e19516a230d194399d1162f754664a1ce85e68eebb",
+        "executables": {
+          "uv.exe": {
+            "stripped_executable_bytes": 33556480,
+            "symbol_bytes": 120246272,
+            "sha256": "52b6f19b7fe8e33aa2fecb92a2c1bb62ad95816b98cbd890839d8086a6f44b97",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-limited\\symbols\\uv.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:51 (0x6ACE6D9B)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x1F\n    AddressOfRawData: 0x1F3D0A0\n    PointerToRawData: 0x1F3BCA0\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {54C5561C-F860-422C-9181-5DDB025CB9CD}\n      PDBAge: 1\n      PDBFileName: uv.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:51 (0x6ACE6D9B)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x1F3D0C0\n    PointerToRawData: 0x1F3BCC0\n    RawData (\n      0000: 07000000 5F010000 5F010000 00000000  |...._..._.......|\n      0010: 06010000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:51 (0x6ACE6D9B)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x4B4\n    AddressOfRawData: 0x1F3D0D4\n    PointerToRawData: 0x1F3BCD4\n    RawData (\n      0000: 00000000 00100000 20D76200 2E746578  |........ .b..tex|\n      0010: 74000000 20E76200 B05A2E00 2E746578  |t... .b..Z...tex|\n      0020: 7424686F 74000000 D0419100 10FF1200  |t$hot....A......|\n      0030: 2E746578 74246D6E 00000000 E040A400  |.text$mn.....@..|\n      0040: 60000000 2E746578 74246D6E 24303000  |`....text$mn$00.|\n      0050: 4041A400 B00D0000 2E746578 74246D6E  |@A.......text$mn|\n      0060: 24323100 F04EA400 90900C01 2E746578  |$21..N.......tex|\n      0070: 7424756E 6C696B65 6C790000 80DFB001  |t$unlikely......|\n      0080: 50070000 2E746578 74247800 00F0B001  |P....text$x.....|\n      0090: 88080000 2E696461 74612435 00000000  |.....idata$5....|\n      00A0: 88F8B001 38000000 2E303063 66670000  |....8....00cfg..|\n      00B0: C0F8B001 08000000 2E435254 24584341  |.........CRT$XCA|\n      00C0: 00000000 C8F8B001 08000000 2E435254  |.............CRT|\n      00D0: 24584341 41000000 D0F8B001 18000000  |$XCAA...........|\n      00E0: 2E435254 24584355 00000000 E8F8B001  |.CRT$XCU........|\n      00F0: 08000000 2E435254 24584356 00000000  |.....CRT$XCV....|\n      0100: F0F8B001 08000000 2E435254 2458435A  |.........CRT$XCZ|\n      0110: 00000000 F8F8B001 08000000 2E435254  |.............CRT|\n      0120: 24584441 00000000 00F9B001 08000000  |$XDA............|\n      0130: 2E435254 2458445A 00000000 08F9B001  |.CRT$XDZ........|\n      0140: 08000000 2E435254 24584941 00000000  |.....CRT$XIA....|\n      0150: 10F9B001 08000000 2E435254 24584941  |.........CRT$XIA|\n      0160: 41000000 18F9B001 08000000 2E435254  |A............CRT|\n      0170: 24584941 43000000 20F9B001 08000000  |$XIAC... .......|\n      0180: 2E435254 24584942 00000000 28F9B001  |.CRT$XIB....(...|\n      0190: 28000000 2E435254 24584943 00000000  |(....CRT$XIC....|\n      01A0: 50F9B001 08000000 2E435254 2458495A  |P........CRT$XIZ|\n      01B0: 00000000 58F9B001 08000000 2E435254  |....X........CRT|\n      01C0: 24584C41 00000000 60F9B001 08000000  |$XLA....`.......|\n      01D0: 2E435254 24584C42 00000000 68F9B001  |.CRT$XLB....h...|\n      01E0: 10000000 2E435254 24584C43 00000000  |.....CRT$XLC....|\n      01F0: 78F9B001 08000000 2E435254 24584C59  |x........CRT$XLY|\n      0200: 00000000 80F9B001 08000000 2E435254  |.............CRT|\n      0210: 24584C5A 00000000 88F9B001 08000000  |$XLZ............|\n      0220: 2E435254 24585041 00000000 90F9B001  |.CRT$XPA........|\n      0230: 10000000 2E435254 24585058 00000000  |.....CRT$XPX....|\n      0240: A0F9B001 08000000 2E435254 24585058  |.........CRT$XPX|\n      0250: 41000000 A8F9B001 08000000 2E435254  |A............CRT|\n      0260: 2458505A 00000000 B0F9B001 08000000  |$XPZ............|\n      0270: 2E435254 24585441 00000000 B8F9B001  |.CRT$XTA........|\n      0280: 48060000 2E435254 2458545A 00000000  |H....CRT$XTZ....|\n      0290: 0000B101 E0C14200 2E726461 74610000  |......B..rdata..|\n      02A0: E0C1F301 A0010000 2E726461 74612430  |.........rdata$0|\n      02B0: 30000000 80C3F301 28000000 2E726461  |0.......(....rda|\n      02C0: 74612454 00000000 A8C3F301 6C010000  |ta$T........l...|\n      02D0: 2E726461 74612472 00000000 14C5F301  |.rdata$r........|\n      02E0: 8C0B0000 2E726461 74612476 6F6C746D  |.....rdata$voltm|\n      02F0: 64000000 A0D0F301 20050000 2E726461  |d....... ....rda|\n      0300: 7461247A 7A7A6462 67000000 C0D5F301  |ta$zzzdbg.......|\n      0310: 08000000 2E727463 24494141 00000000  |.....rtc$IAA....|\n      0320: C8D5F301 08000000 2E727463 24495A5A  |.........rtc$IZZ|\n      0330: 00000000 D0D5F301 08000000 2E727463  |.............rtc|\n      0340: 24544141 00000000 D8D5F301 08000000  |$TAA............|\n      0350: 2E727463 24545A5A 00000000 E0D5F301  |.rtc$TZZ........|\n      0360: 08000000 2E746C73 00000000 E8D5F301  |.....tls........|\n      0370: D9020000 2E746C73 24000000 C1D8F301  |.....tls$.......|\n      0380: 07000000 2E746C73 245A5A5A 00000000  |.....tls$ZZZ....|\n      0390: C8D8F301 70770200 2E786461 74610000  |....pw...xdata..|\n      03A0: 3850F601 88000000 2E786461 74612478  |8P.......xdata$x|\n      03B0: 00000000 C050F601 DC010000 2E656461  |.....P.......eda|\n      03C0: 74610000 9C52F601 40010000 2E696461  |ta...R..@....ida|\n      03D0: 74612432 00000000 DC53F601 2C010000  |ta$2.....S..,...|\n      03E0: 2E696461 74612433 00000000 0855F601  |.idata$3.....U..|\n      03F0: 88080000 2E696461 74612434 00000000  |.....idata$4....|\n      0400: 905DF601 B2140000 2E696461 74612436  |.].......idata$6|\n      0410: 00000000 0080F601 50FD0000 2E646174  |........P....dat|\n      0420: 61000000 507DF701 50000000 2E646174  |a...P}..P....dat|\n      0430: 61247200 A07DF701 60000000 2E646174  |a$r..}..`....dat|\n      0440: 61247273 00000000 007EF701 C4C00000  |a$rs.....~......|\n      0450: 2E627373 00000000 0040F801 D8930600  |.bss.....@......|\n      0460: 2E706461 74610000 00E0FE01 AA260000  |.pdata.......&..|\n      0470: 2E646570 2D763000 0010FF01 00010000  |.dep-v0.........|\n      0480: 2E667074 61626C65 00000000 0020FF01  |.fptable..... ..|\n      0490: 60000000 2E727372 63243031 00000000  |`....rsrc$01....|\n      04A0: 6020FF01 90060000 2E727372 63243032  |` .......rsrc$02|\n      04B0: 00000000                             |....|\n    )\n  }\n]\n"
+          },
+          "uvx.exe": {
+            "stripped_executable_bytes": 331264,
+            "symbol_bytes": 4509696,
+            "sha256": "54a8c8773ca0793321e5ec270f23610d05eb0e157f2e6af25ff19e50802e0bca",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-limited\\symbols\\uvx.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:57 (0x6ACE6DA1)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x20\n    AddressOfRawData: 0x45288\n    PointerToRawData: 0x44088\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {7DD8A818-28DD-40C6-B209-5CE784D4F2D8}\n      PDBAge: 1\n      PDBFileName: uvx.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:57 (0x6ACE6DA1)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x452A8\n    PointerToRawData: 0x440A8\n    RawData (\n      0000: 02000000 D2000000 D2000000 00000000  |................|\n      0010: D2000000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:57 (0x6ACE6DA1)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x3F0\n    AddressOfRawData: 0x452BC\n    PointerToRawData: 0x440BC\n    RawData (\n      0000: 00000000 00100000 E0560200 2E746578  |.........V...tex|\n      0010: 74000000 E0660200 C0D00000 2E746578  |t....f.......tex|\n      0020: 74246D6E 00000000 A0370300 60000000  |t$mn.....7..`...|\n      0030: 2E746578 74246D6E 24303000 00380300  |.text$mn$00..8..|\n      0040: 100D0000 2E746578 74246D6E 24323100  |.....text$mn$21.|\n      0050: 10450300 A0200000 2E746578 7424756E  |.E... ...text$un|\n      0060: 6C696B65 6C790000 B0650300 20040000  |likely...e.. ...|\n      0070: 2E746578 74247800 00700300 D8030000  |.text$x..p......|\n      0080: 2E696461 74612435 00000000 D8730300  |.idata$5.....s..|\n      0090: 38000000 2E303063 66670000 10740300  |8....00cfg...t..|\n      00A0: 08000000 2E435254 24584341 00000000  |.....CRT$XCA....|\n      00B0: 18740300 08000000 2E435254 24584341  |.t.......CRT$XCA|\n      00C0: 41000000 20740300 08000000 2E435254  |A... t.......CRT|\n      00D0: 2458435A 00000000 28740300 08000000  |$XCZ....(t......|\n      00E0: 2E435254 24584941 00000000 30740300  |.CRT$XIA....0t..|\n      00F0: 08000000 2E435254 24584941 41000000  |.....CRT$XIAA...|\n      0100: 38740300 08000000 2E435254 24584941  |8t.......CRT$XIA|\n      0110: 43000000 40740300 20000000 2E435254  |C...@t.. ....CRT|\n      0120: 24584943 00000000 60740300 08000000  |$XIC....`t......|\n      0130: 2E435254 2458495A 00000000 68740300  |.CRT$XIZ....ht..|\n      0140: 08000000 2E435254 24584C41 00000000  |.....CRT$XLA....|\n      0150: 70740300 08000000 2E435254 24584C5A  |pt.......CRT$XLZ|\n      0160: 00000000 78740300 08000000 2E435254  |....xt.......CRT|\n      0170: 24585041 00000000 80740300 10000000  |$XPA.....t......|\n      0180: 2E435254 24585058 00000000 90740300  |.CRT$XPX.....t..|\n      0190: 08000000 2E435254 24585058 41000000  |.....CRT$XPXA...|\n      01A0: 98740300 08000000 2E435254 2458505A  |.t.......CRT$XPZ|\n      01B0: 00000000 A0740300 08000000 2E435254  |.....t.......CRT|\n      01C0: 24585441 00000000 A8740300 08000000  |$XTA.....t......|\n      01D0: 2E435254 2458545A 00000000 B0740300  |.CRT$XTZ.....t..|\n      01E0: E0D90000 2E726461 74610000 904E0400  |.....rdata...N..|\n      01F0: 70010000 2E726461 74612430 30000000  |p....rdata$00...|\n      0200: 00500400 28000000 2E726461 74612454  |.P..(....rdata$T|\n      0210: 00000000 28500400 6C010000 2E726461  |....(P..l....rda|\n      0220: 74612472 00000000 94510400 F4000000  |ta$r.....Q......|\n      0230: 2E726461 74612476 6F6C746D 64000000  |.rdata$voltmd...|\n      0240: 88520400 50040000 2E726461 7461247A  |.R..P....rdata$z|\n      0250: 7A7A6462 67000000 D8560400 08000000  |zzdbg....V......|\n      0260: 2E727463 24494141 00000000 E0560400  |.rtc$IAA.....V..|\n      0270: 08000000 2E727463 24495A5A 00000000  |.....rtc$IZZ....|\n      0280: E8560400 08000000 2E727463 24544141  |.V.......rtc$TAA|\n      0290: 00000000 F0560400 08000000 2E727463  |.....V.......rtc|\n      02A0: 24545A5A 00000000 F8560400 08000000  |$TZZ.....V......|\n      02B0: 2E746C73 00000000 00570400 51000000  |.tls.....W..Q...|\n      02C0: 2E746C73 24000000 51570400 07000000  |.tls$...QW......|\n      02D0: 2E746C73 245A5A5A 00000000 58570400  |.tls$ZZZ....XW..|\n      02E0: C84A0000 2E786461 74610000 20A20400  |.J...xdata.. ...|\n      02F0: 84000000 2E786461 74612478 00000000  |.....xdata$x....|\n      0300: A4A20400 64000000 2E696461 74612432  |....d....idata$2|\n      0310: 00000000 08A30400 68000000 2E696461  |........h....ida|\n      0320: 74612433 00000000 70A30400 D8030000  |ta$3....p.......|\n      0330: 2E696461 74612434 00000000 48A70400  |.idata$4....H...|\n      0340: 2C090000 2E696461 74612436 00000000  |,....idata$6....|\n      0350: 00C00400 D80A0000 2E646174 61000000  |.........data...|\n      0360: D8CA0400 50000000 2E646174 61247200  |....P....data$r.|\n      0370: 28CB0400 28000000 2E646174 61247273  |(...(....data$rs|\n      0380: 00000000 50CB0400 84110000 2E627373  |....P........bss|\n      0390: 00000000 00E00400 C0240000 2E706461  |.........$...pda|\n      03A0: 74610000 00100500 AA260000 2E646570  |ta.......&...dep|\n      03B0: 2D763000 00400500 00010000 2E667074  |-v0..@.......fpt|\n      03C0: 61626C65 00000000 00500500 60000000  |able.....P..`...|\n      03D0: 2E727372 63243031 00000000 60500500  |.rsrc$01....`P..|\n      03E0: 90060000 2E727372 63243032 00000000  |.....rsrc$02....|\n    )\n  }\n]\n"
+          },
+          "uvw.exe": {
+            "stripped_executable_bytes": 331264,
+            "symbol_bytes": 4501504,
+            "sha256": "03359fdd71d9d354dfa11743e23c2587142633b1c233b9322f469eea9e9572e0",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-limited\\symbols\\uvw.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:54 (0x6ACE6D9E)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x20\n    AddressOfRawData: 0x45290\n    PointerToRawData: 0x44090\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {B3B4D824-7D80-4020-9D1B-DDFED2ECC813}\n      PDBAge: 1\n      PDBFileName: uvw.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:54 (0x6ACE6D9E)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x452B0\n    PointerToRawData: 0x440B0\n    RawData (\n      0000: 02000000 D2000000 D2000000 00000000  |................|\n      0010: D2000000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 17:42:54 (0x6ACE6D9E)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x3F0\n    AddressOfRawData: 0x452C4\n    PointerToRawData: 0x440C4\n    RawData (\n      0000: 00000000 00100000 00570200 2E746578  |.........W...tex|\n      0010: 74000000 00670200 B0D00000 2E746578  |t....g.......tex|\n      0020: 74246D6E 00000000 B0370300 60000000  |t$mn.....7..`...|\n      0030: 2E746578 74246D6E 24303000 10380300  |.text$mn$00..8..|\n      0040: 100D0000 2E746578 74246D6E 24323100  |.....text$mn$21.|\n      0050: 20450300 F01F0000 2E746578 7424756E  | E.......text$un|\n      0060: 6C696B65 6C790000 10650300 30040000  |likely...e..0...|\n      0070: 2E746578 74247800 00700300 D8030000  |.text$x..p......|\n      0080: 2E696461 74612435 00000000 D8730300  |.idata$5.....s..|\n      0090: 38000000 2E303063 66670000 10740300  |8....00cfg...t..|\n      00A0: 08000000 2E435254 24584341 00000000  |.....CRT$XCA....|\n      00B0: 18740300 08000000 2E435254 24584341  |.t.......CRT$XCA|\n      00C0: 41000000 20740300 08000000 2E435254  |A... t.......CRT|\n      00D0: 2458435A 00000000 28740300 08000000  |$XCZ....(t......|\n      00E0: 2E435254 24584941 00000000 30740300  |.CRT$XIA....0t..|\n      00F0: 08000000 2E435254 24584941 41000000  |.....CRT$XIAA...|\n      0100: 38740300 08000000 2E435254 24584941  |8t.......CRT$XIA|\n      0110: 43000000 40740300 20000000 2E435254  |C...@t.. ....CRT|\n      0120: 24584943 00000000 60740300 08000000  |$XIC....`t......|\n      0130: 2E435254 2458495A 00000000 68740300  |.CRT$XIZ....ht..|\n      0140: 08000000 2E435254 24584C41 00000000  |.....CRT$XLA....|\n      0150: 70740300 08000000 2E435254 24584C5A  |pt.......CRT$XLZ|\n      0160: 00000000 78740300 08000000 2E435254  |....xt.......CRT|\n      0170: 24585041 00000000 80740300 10000000  |$XPA.....t......|\n      0180: 2E435254 24585058 00000000 90740300  |.CRT$XPX.....t..|\n      0190: 08000000 2E435254 24585058 41000000  |.....CRT$XPXA...|\n      01A0: 98740300 08000000 2E435254 2458505A  |.t.......CRT$XPZ|\n      01B0: 00000000 A0740300 08000000 2E435254  |.....t.......CRT|\n      01C0: 24585441 00000000 A8740300 08000000  |$XTA.....t......|\n      01D0: 2E435254 2458545A 00000000 B0740300  |.CRT$XTZ.....t..|\n      01E0: C0D90000 2E726461 74610000 704E0400  |.....rdata..pN..|\n      01F0: 90010000 2E726461 74612430 30000000  |.....rdata$00...|\n      0200: 00500400 28000000 2E726461 74612454  |.P..(....rdata$T|\n      0210: 00000000 28500400 6C010000 2E726461  |....(P..l....rda|\n      0220: 74612472 00000000 94510400 FC000000  |ta$r.....Q......|\n      0230: 2E726461 74612476 6F6C746D 64000000  |.rdata$voltmd...|\n      0240: 90520400 50040000 2E726461 7461247A  |.R..P....rdata$z|\n      0250: 7A7A6462 67000000 E0560400 08000000  |zzdbg....V......|\n      0260: 2E727463 24494141 00000000 E8560400  |.rtc$IAA.....V..|\n      0270: 08000000 2E727463 24495A5A 00000000  |.....rtc$IZZ....|\n      0280: F0560400 08000000 2E727463 24544141  |.V.......rtc$TAA|\n      0290: 00000000 F8560400 08000000 2E727463  |.....V.......rtc|\n      02A0: 24545A5A 00000000 00570400 08000000  |$TZZ.....W......|\n      02B0: 2E746C73 00000000 08570400 51000000  |.tls.....W..Q...|\n      02C0: 2E746C73 24000000 59570400 07000000  |.tls$...YW......|\n      02D0: 2E746C73 245A5A5A 00000000 60570400  |.tls$ZZZ....`W..|\n      02E0: D04A0000 2E786461 74610000 30A20400  |.J...xdata..0...|\n      02F0: 84000000 2E786461 74612478 00000000  |.....xdata$x....|\n      0300: B4A20400 64000000 2E696461 74612432  |....d....idata$2|\n      0310: 00000000 18A30400 68000000 2E696461  |........h....ida|\n      0320: 74612433 00000000 80A30400 D8030000  |ta$3............|\n      0330: 2E696461 74612434 00000000 58A70400  |.idata$4....X...|\n      0340: 2C090000 2E696461 74612436 00000000  |,....idata$6....|\n      0350: 00C00400 D80A0000 2E646174 61000000  |.........data...|\n      0360: D8CA0400 50000000 2E646174 61247200  |....P....data$r.|\n      0370: 28CB0400 28000000 2E646174 61247273  |(...(....data$rs|\n      0380: 00000000 50CB0400 88110000 2E627373  |....P........bss|\n      0390: 00000000 00E00400 B4240000 2E706461  |.........$...pda|\n      03A0: 74610000 00100500 AA260000 2E646570  |ta.......&...dep|\n      03B0: 2D763000 00400500 00010000 2E667074  |-v0..@.......fpt|\n      03C0: 61626C65 00000000 00500500 60000000  |able.....P..`...|\n      03D0: 2E727372 63243031 00000000 60500500  |.rsrc$01....`P..|\n      03E0: 90060000 2E727372 63243032 00000000  |.....rsrc$02....|\n    )\n  }\n]\n"
+          }
+        }
+      },
+      "thin-full": {
+        "training_lto": "thin",
+        "debug_level": "full",
+        "stages_seconds": {
+          "train_uv": 32.75,
+          "prepare_corpus": 0.015000000000100044,
+          "instrumented_build": 616.797,
+          "merge_profiles": 1.125
+        },
+        "training_seconds": 650.8430000000001,
+        "final_seconds": 939.531,
+        "total_seconds": 1590.374,
+        "resources": {
+          "training": {
+            "wall_seconds": 650.8430000000001,
+            "samples": 641,
+            "coverage_seconds": 650.328,
+            "max_sample_gap_seconds": 1.0630000000001019,
+            "sampled_peak_tree_rss_bytes": 11019390976,
+            "minimum_host_available_memory_bytes": 20918009856,
+            "median_host_cpu_percent": 24.6,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1810.78125,
+              "cpu_system_seconds": 53.84375,
+              "num_page_faults": 39304723,
+              "read_bytes": 2474337499,
+              "write_bytes": 4509421873
+            },
+            "reaped_children_rusage_delta": null,
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 3015.84375,
+                "system": 377.953125,
+                "idle": 17026.203125,
+                "interrupt": 2.390625,
+                "dpc": 4.078125
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 634400768,
+                "free": 4734308352,
+                "percent": 11.8,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 71778,
+                "write_count": 485382,
+                "read_bytes": 1960934912,
+                "write_bytes": 21792090624,
+                "read_time": 24,
+                "write_time": 75
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 5007.75,
+                "system": 507.96875000000364,
+                "idle": 25309.531249999996,
+                "interrupt": 3.25,
+                "dpc": 5.09375
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 500043776,
+                "free": 4868665344,
+                "percent": 9.3,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 71842,
+                "write_count": 638048,
+                "read_bytes": 1962620416,
+                "write_bytes": 31956884480,
+                "read_time": 24,
+                "write_time": 107
+              }
+            },
+            "collection_errors": {
+              "NoSuchProcess": 2
+            }
+          },
+          "final": {
+            "wall_seconds": 939.531,
+            "samples": 925,
+            "coverage_seconds": 939.219,
+            "max_sample_gap_seconds": 1.0630000000001019,
+            "sampled_peak_tree_rss_bytes": 25076875264,
+            "minimum_host_available_memory_bytes": 6476611584,
+            "median_host_cpu_percent": 6.2,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1666.671875,
+              "cpu_system_seconds": 49.265625,
+              "num_page_faults": 41928836,
+              "read_bytes": 1515891711,
+              "write_bytes": 2191683515
+            },
+            "reaped_children_rusage_delta": null,
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 5009.484375,
+                "system": 524.6718750000036,
+                "idle": 25546.343749999996,
+                "interrupt": 3.359375,
+                "dpc": 5.34375
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 499060736,
+                "free": 4869648384,
+                "percent": 9.3,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 71842,
+                "write_count": 714201,
+                "read_bytes": 1962620416,
+                "write_bytes": 33852813312,
+                "read_time": 24,
+                "write_time": 110
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 6870.703125,
+                "system": 655.359375,
+                "idle": 38581.9375,
+                "interrupt": 3.578125,
+                "dpc": 5.546875
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 755216384,
+                "free": 4613492736,
+                "percent": 14.1,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 79912,
+                "write_count": 748479,
+                "read_bytes": 2168836608,
+                "write_bytes": 43565805568,
+                "read_time": 26,
+                "write_time": 120
+              }
+            },
+            "collection_errors": {
+              "NoSuchProcess": 4,
+              "process_io_unavailable": 1
+            }
+          }
+        },
+        "profile_sha256": "68c67130324dad8e1266ff246f13d29ca83209c2003d082dbfa076c3d3f45e2a",
+        "profile_bytes": 32360120,
+        "profile_functions": 91110,
+        "pgo_diagnostics": {
+          "warnings": 19,
+          "missing": 19,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs89r4j2vouvF_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtNtCsljvfXcM3w8L_3std3sys7process7windows6EnvKeyINtNtCs9rw95XCWuke_4core6option6OptionNtNtNtB1A_3ffi6os_str8OsStringENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECs7g5lwZUqeMg_3uvw Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters4skip4SkipNtNtCsljvfXcM3w8L_3std3env6ArgsOsEECs7g5lwZUqeMg_3uvw Hash = 798733566801274259 up to 0 count discarded",
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECs7g5lwZUqeMg_3uvw Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB4_7process8ExitCodeECs7g5lwZUqeMg_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RINvNtNtCsljvfXcM3w8L_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECs7g5lwZUqeMg_3uvw Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Cs7g5lwZUqeMg_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RNSNvYNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceuE9call_once6vtableCs7g5lwZUqeMg_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RNvCs7g5lwZUqeMg_3uvw4main Hash = 904365845180631687 up to 0 count discarded",
+            "warning: uvw.548e2caeaab2997a-cgu.0: no profile data available for function _RNvXs1i_NtCs9rw95XCWuke_4core3fmtReNtB6_7Display3fmtCs7g5lwZUqeMg_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs89r4j2vouvF_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtNtCsljvfXcM3w8L_3std3sys7process7windows6EnvKeyINtNtCs9rw95XCWuke_4core6option6OptionNtNtNtB1A_3ffi6os_str8OsStringENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECs9cXA7VtMya3_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCsljvfXcM3w8L_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECs9cXA7VtMya3_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECs9cXA7VtMya3_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB4_7process8ExitCodeECs9cXA7VtMya3_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RINvNtNtCsljvfXcM3w8L_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECs9cXA7VtMya3_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RINvNvMs2_NtCs89r4j2vouvF_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECs9cXA7VtMya3_3uvx Hash = 753202733449284396 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Cs9cXA7VtMya3_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RNSNvYNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceuE9call_once6vtableCs9cXA7VtMya3_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RNvCs9cXA7VtMya3_3uvx4main Hash = 65450789262851566 up to 0 count discarded",
+            "warning: uvx.6b4373b97c253ce9-cgu.0: no profile data available for function _RNvXs1i_NtCs9rw95XCWuke_4core3fmtReNtB6_7Display3fmtCs9cXA7VtMya3_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 15917017,
+        "wheel_sha256": "770bbb3bdcf38a5c71429c73180652f19a36ca7b0725c334c8ef63c1740a5627",
+        "executables": {
+          "uv.exe": {
+            "stripped_executable_bytes": 33581056,
+            "symbol_bytes": 443584512,
+            "sha256": "aa672fc9db86cea6f2ca85496af7a1820964f8f75c8239bb2cb846dbb188676f",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-full\\symbols\\uv.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:33 (0x6ACE73DD)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x1F\n    AddressOfRawData: 0x1F430A0\n    PointerToRawData: 0x1F418A0\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {00DE91CE-156F-4C59-93DF-6D3A79DDCC70}\n      PDBAge: 1\n      PDBFileName: uv.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:33 (0x6ACE73DD)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x1F430C0\n    PointerToRawData: 0x1F418C0\n    RawData (\n      0000: 07000000 5F010000 5F010000 00000000  |...._..._.......|\n      0010: 06010000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:33 (0x6ACE73DD)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x4B4\n    AddressOfRawData: 0x1F430D4\n    PointerToRawData: 0x1F418D4\n    RawData (\n      0000: 00000000 00100000 20796000 2E746578  |........ y`..tex|\n      0010: 74000000 20896000 60133100 2E746578  |t... .`.`.1..tex|\n      0020: 7424686F 74000000 809C9100 10FF1200  |t$hot...........|\n      0030: 2E746578 74246D6E 00000000 909BA400  |.text$mn........|\n      0040: 60000000 2E746578 74246D6E 24303000  |`....text$mn$00.|\n      0050: F09BA400 B00D0000 2E746578 74246D6E  |.........text$mn|\n      0060: 24323100 A0A9A400 A0810C01 2E746578  |$21..........tex|\n      0070: 7424756E 6C696B65 6C790000 402BB101  |t$unlikely..@+..|\n      0080: 50070000 2E746578 74247800 0040B101  |P....text$x..@..|\n      0090: 88080000 2E696461 74612435 00000000  |.....idata$5....|\n      00A0: 8848B101 38000000 2E303063 66670000  |.H..8....00cfg..|\n      00B0: C048B101 08000000 2E435254 24584341  |.H.......CRT$XCA|\n      00C0: 00000000 C848B101 08000000 2E435254  |.....H.......CRT|\n      00D0: 24584341 41000000 D048B101 18000000  |$XCAA....H......|\n      00E0: 2E435254 24584355 00000000 E848B101  |.CRT$XCU.....H..|\n      00F0: 08000000 2E435254 24584356 00000000  |.....CRT$XCV....|\n      0100: F048B101 08000000 2E435254 2458435A  |.H.......CRT$XCZ|\n      0110: 00000000 F848B101 08000000 2E435254  |.....H.......CRT|\n      0120: 24584441 00000000 0049B101 08000000  |$XDA.....I......|\n      0130: 2E435254 2458445A 00000000 0849B101  |.CRT$XDZ.....I..|\n      0140: 08000000 2E435254 24584941 00000000  |.....CRT$XIA....|\n      0150: 1049B101 08000000 2E435254 24584941  |.I.......CRT$XIA|\n      0160: 41000000 1849B101 08000000 2E435254  |A....I.......CRT|\n      0170: 24584941 43000000 2049B101 08000000  |$XIAC... I......|\n      0180: 2E435254 24584942 00000000 2849B101  |.CRT$XIB....(I..|\n      0190: 28000000 2E435254 24584943 00000000  |(....CRT$XIC....|\n      01A0: 5049B101 08000000 2E435254 2458495A  |PI.......CRT$XIZ|\n      01B0: 00000000 5849B101 08000000 2E435254  |....XI.......CRT|\n      01C0: 24584C41 00000000 6049B101 08000000  |$XLA....`I......|\n      01D0: 2E435254 24584C42 00000000 6849B101  |.CRT$XLB....hI..|\n      01E0: 10000000 2E435254 24584C43 00000000  |.....CRT$XLC....|\n      01F0: 7849B101 08000000 2E435254 24584C59  |xI.......CRT$XLY|\n      0200: 00000000 8049B101 08000000 2E435254  |.....I.......CRT|\n      0210: 24584C5A 00000000 8849B101 08000000  |$XLZ.....I......|\n      0220: 2E435254 24585041 00000000 9049B101  |.CRT$XPA.....I..|\n      0230: 10000000 2E435254 24585058 00000000  |.....CRT$XPX....|\n      0240: A049B101 08000000 2E435254 24585058  |.I.......CRT$XPX|\n      0250: 41000000 A849B101 08000000 2E435254  |A....I.......CRT|\n      0260: 2458505A 00000000 B049B101 08000000  |$XPZ.....I......|\n      0270: 2E435254 24585441 00000000 B849B101  |.CRT$XTA.....I..|\n      0280: 48060000 2E435254 2458545A 00000000  |H....CRT$XTZ....|\n      0290: 0050B101 E0D14200 2E726461 74610000  |.P....B..rdata..|\n      02A0: E021F401 A0010000 2E726461 74612430  |.!.......rdata$0|\n      02B0: 30000000 8023F401 28000000 2E726461  |0....#..(....rda|\n      02C0: 74612454 00000000 A823F401 6C010000  |ta$T.....#..l...|\n      02D0: 2E726461 74612472 00000000 1425F401  |.rdata$r.....%..|\n      02E0: 8C0B0000 2E726461 74612476 6F6C746D  |.....rdata$voltm|\n      02F0: 64000000 A030F401 20050000 2E726461  |d....0.. ....rda|\n      0300: 7461247A 7A7A6462 67000000 C035F401  |ta$zzzdbg....5..|\n      0310: 08000000 2E727463 24494141 00000000  |.....rtc$IAA....|\n      0320: C835F401 08000000 2E727463 24495A5A  |.5.......rtc$IZZ|\n      0330: 00000000 D035F401 08000000 2E727463  |.....5.......rtc|\n      0340: 24544141 00000000 D835F401 08000000  |$TAA.....5......|\n      0350: 2E727463 24545A5A 00000000 E035F401  |.rtc$TZZ.....5..|\n      0360: 08000000 2E746C73 00000000 E835F401  |.....tls.....5..|\n      0370: D9020000 2E746C73 24000000 C138F401  |.....tls$....8..|\n      0380: 07000000 2E746C73 245A5A5A 00000000  |.....tls$ZZZ....|\n      0390: C838F401 10780200 2E786461 74610000  |.8...x...xdata..|\n      03A0: D8B0F601 88000000 2E786461 74612478  |.........xdata$x|\n      03B0: 00000000 60B1F601 DC010000 2E656461  |....`........eda|\n      03C0: 74610000 3CB3F601 40010000 2E696461  |ta..<...@....ida|\n      03D0: 74612432 00000000 7CB4F601 2C010000  |ta$2....|...,...|\n      03E0: 2E696461 74612433 00000000 A8B5F601  |.idata$3........|\n      03F0: 88080000 2E696461 74612434 00000000  |.....idata$4....|\n      0400: 30BEF601 B2140000 2E696461 74612436  |0........idata$6|\n      0410: 00000000 00E0F601 50FD0000 2E646174  |........P....dat|\n      0420: 61000000 50DDF701 50000000 2E646174  |a...P...P....dat|\n      0430: 61247200 A0DDF701 60000000 2E646174  |a$r.....`....dat|\n      0440: 61247273 00000000 00DEF701 C4C00000  |a$rs............|\n      0450: 2E627373 00000000 00A0F801 14940600  |.bss............|\n      0460: 2E706461 74610000 0040FF01 AA260000  |.pdata...@...&..|\n      0470: 2E646570 2D763000 0070FF01 00010000  |.dep-v0..p......|\n      0480: 2E667074 61626C65 00000000 0080FF01  |.fptable........|\n      0490: 60000000 2E727372 63243031 00000000  |`....rsrc$01....|\n      04A0: 6080FF01 90060000 2E727372 63243032  |`........rsrc$02|\n      04B0: 00000000                             |....|\n    )\n  }\n]\n"
+          },
+          "uvx.exe": {
+            "stripped_executable_bytes": 331264,
+            "symbol_bytes": 4927488,
+            "sha256": "e3c0554866977e9a788b35eef431aa5b70c650969def9b42dd9622f5f316745f",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-full\\symbols\\uvx.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:45 (0x6ACE73E9)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x20\n    AddressOfRawData: 0x45288\n    PointerToRawData: 0x44088\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {424F9E7D-F46E-47AE-B584-8FFA0CADC874}\n      PDBAge: 1\n      PDBFileName: uvx.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:45 (0x6ACE73E9)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x452A8\n    PointerToRawData: 0x440A8\n    RawData (\n      0000: 02000000 D2000000 D2000000 00000000  |................|\n      0010: D2000000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:45 (0x6ACE73E9)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x3F0\n    AddressOfRawData: 0x452BC\n    PointerToRawData: 0x440BC\n    RawData (\n      0000: 00000000 00100000 E0560200 2E746578  |.........V...tex|\n      0010: 74000000 E0660200 C0D00000 2E746578  |t....f.......tex|\n      0020: 74246D6E 00000000 A0370300 60000000  |t$mn.....7..`...|\n      0030: 2E746578 74246D6E 24303000 00380300  |.text$mn$00..8..|\n      0040: 100D0000 2E746578 74246D6E 24323100  |.....text$mn$21.|\n      0050: 10450300 A0200000 2E746578 7424756E  |.E... ...text$un|\n      0060: 6C696B65 6C790000 B0650300 20040000  |likely...e.. ...|\n      0070: 2E746578 74247800 00700300 D8030000  |.text$x..p......|\n      0080: 2E696461 74612435 00000000 D8730300  |.idata$5.....s..|\n      0090: 38000000 2E303063 66670000 10740300  |8....00cfg...t..|\n      00A0: 08000000 2E435254 24584341 00000000  |.....CRT$XCA....|\n      00B0: 18740300 08000000 2E435254 24584341  |.t.......CRT$XCA|\n      00C0: 41000000 20740300 08000000 2E435254  |A... t.......CRT|\n      00D0: 2458435A 00000000 28740300 08000000  |$XCZ....(t......|\n      00E0: 2E435254 24584941 00000000 30740300  |.CRT$XIA....0t..|\n      00F0: 08000000 2E435254 24584941 41000000  |.....CRT$XIAA...|\n      0100: 38740300 08000000 2E435254 24584941  |8t.......CRT$XIA|\n      0110: 43000000 40740300 20000000 2E435254  |C...@t.. ....CRT|\n      0120: 24584943 00000000 60740300 08000000  |$XIC....`t......|\n      0130: 2E435254 2458495A 00000000 68740300  |.CRT$XIZ....ht..|\n      0140: 08000000 2E435254 24584C41 00000000  |.....CRT$XLA....|\n      0150: 70740300 08000000 2E435254 24584C5A  |pt.......CRT$XLZ|\n      0160: 00000000 78740300 08000000 2E435254  |....xt.......CRT|\n      0170: 24585041 00000000 80740300 10000000  |$XPA.....t......|\n      0180: 2E435254 24585058 00000000 90740300  |.CRT$XPX.....t..|\n      0190: 08000000 2E435254 24585058 41000000  |.....CRT$XPXA...|\n      01A0: 98740300 08000000 2E435254 2458505A  |.t.......CRT$XPZ|\n      01B0: 00000000 A0740300 08000000 2E435254  |.....t.......CRT|\n      01C0: 24585441 00000000 A8740300 08000000  |$XTA.....t......|\n      01D0: 2E435254 2458545A 00000000 B0740300  |.CRT$XTZ.....t..|\n      01E0: E0D90000 2E726461 74610000 904E0400  |.....rdata...N..|\n      01F0: 70010000 2E726461 74612430 30000000  |p....rdata$00...|\n      0200: 00500400 28000000 2E726461 74612454  |.P..(....rdata$T|\n      0210: 00000000 28500400 6C010000 2E726461  |....(P..l....rda|\n      0220: 74612472 00000000 94510400 F4000000  |ta$r.....Q......|\n      0230: 2E726461 74612476 6F6C746D 64000000  |.rdata$voltmd...|\n      0240: 88520400 50040000 2E726461 7461247A  |.R..P....rdata$z|\n      0250: 7A7A6462 67000000 D8560400 08000000  |zzdbg....V......|\n      0260: 2E727463 24494141 00000000 E0560400  |.rtc$IAA.....V..|\n      0270: 08000000 2E727463 24495A5A 00000000  |.....rtc$IZZ....|\n      0280: E8560400 08000000 2E727463 24544141  |.V.......rtc$TAA|\n      0290: 00000000 F0560400 08000000 2E727463  |.....V.......rtc|\n      02A0: 24545A5A 00000000 F8560400 08000000  |$TZZ.....V......|\n      02B0: 2E746C73 00000000 00570400 51000000  |.tls.....W..Q...|\n      02C0: 2E746C73 24000000 51570400 07000000  |.tls$...QW......|\n      02D0: 2E746C73 245A5A5A 00000000 58570400  |.tls$ZZZ....XW..|\n      02E0: C84A0000 2E786461 74610000 20A20400  |.J...xdata.. ...|\n      02F0: 84000000 2E786461 74612478 00000000  |.....xdata$x....|\n      0300: A4A20400 64000000 2E696461 74612432  |....d....idata$2|\n      0310: 00000000 08A30400 68000000 2E696461  |........h....ida|\n      0320: 74612433 00000000 70A30400 D8030000  |ta$3....p.......|\n      0330: 2E696461 74612434 00000000 48A70400  |.idata$4....H...|\n      0340: 2C090000 2E696461 74612436 00000000  |,....idata$6....|\n      0350: 00C00400 D80A0000 2E646174 61000000  |.........data...|\n      0360: D8CA0400 50000000 2E646174 61247200  |....P....data$r.|\n      0370: 28CB0400 28000000 2E646174 61247273  |(...(....data$rs|\n      0380: 00000000 50CB0400 84110000 2E627373  |....P........bss|\n      0390: 00000000 00E00400 C0240000 2E706461  |.........$...pda|\n      03A0: 74610000 00100500 AA260000 2E646570  |ta.......&...dep|\n      03B0: 2D763000 00400500 00010000 2E667074  |-v0..@.......fpt|\n      03C0: 61626C65 00000000 00500500 60000000  |able.....P..`...|\n      03D0: 2E727372 63243031 00000000 60500500  |.rsrc$01....`P..|\n      03E0: 90060000 2E727372 63243032 00000000  |.....rsrc$02....|\n    )\n  }\n]\n"
+          },
+          "uvw.exe": {
+            "stripped_executable_bytes": 331264,
+            "symbol_bytes": 4911104,
+            "sha256": "fd45d298daaa78ab9fbe0b7c9a290d9f017a9598b1da0e3248fd364771dcdeee",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-full\\symbols\\uvw.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:41 (0x6ACE73E5)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x20\n    AddressOfRawData: 0x45290\n    PointerToRawData: 0x44090\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {8CED2BF7-912C-4242-B0E7-3B1C99A7C033}\n      PDBAge: 1\n      PDBFileName: uvw.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:41 (0x6ACE73E5)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x452B0\n    PointerToRawData: 0x440B0\n    RawData (\n      0000: 02000000 D2000000 D2000000 00000000  |................|\n      0010: D2000000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:09:41 (0x6ACE73E5)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x3F0\n    AddressOfRawData: 0x452C4\n    PointerToRawData: 0x440C4\n    RawData (\n      0000: 00000000 00100000 00570200 2E746578  |.........W...tex|\n      0010: 74000000 00670200 B0D00000 2E746578  |t....g.......tex|\n      0020: 74246D6E 00000000 B0370300 60000000  |t$mn.....7..`...|\n      0030: 2E746578 74246D6E 24303000 10380300  |.text$mn$00..8..|\n      0040: 100D0000 2E746578 74246D6E 24323100  |.....text$mn$21.|\n      0050: 20450300 F01F0000 2E746578 7424756E  | E.......text$un|\n      0060: 6C696B65 6C790000 10650300 30040000  |likely...e..0...|\n      0070: 2E746578 74247800 00700300 D8030000  |.text$x..p......|\n      0080: 2E696461 74612435 00000000 D8730300  |.idata$5.....s..|\n      0090: 38000000 2E303063 66670000 10740300  |8....00cfg...t..|\n      00A0: 08000000 2E435254 24584341 00000000  |.....CRT$XCA....|\n      00B0: 18740300 08000000 2E435254 24584341  |.t.......CRT$XCA|\n      00C0: 41000000 20740300 08000000 2E435254  |A... t.......CRT|\n      00D0: 2458435A 00000000 28740300 08000000  |$XCZ....(t......|\n      00E0: 2E435254 24584941 00000000 30740300  |.CRT$XIA....0t..|\n      00F0: 08000000 2E435254 24584941 41000000  |.....CRT$XIAA...|\n      0100: 38740300 08000000 2E435254 24584941  |8t.......CRT$XIA|\n      0110: 43000000 40740300 20000000 2E435254  |C...@t.. ....CRT|\n      0120: 24584943 00000000 60740300 08000000  |$XIC....`t......|\n      0130: 2E435254 2458495A 00000000 68740300  |.CRT$XIZ....ht..|\n      0140: 08000000 2E435254 24584C41 00000000  |.....CRT$XLA....|\n      0150: 70740300 08000000 2E435254 24584C5A  |pt.......CRT$XLZ|\n      0160: 00000000 78740300 08000000 2E435254  |....xt.......CRT|\n      0170: 24585041 00000000 80740300 10000000  |$XPA.....t......|\n      0180: 2E435254 24585058 00000000 90740300  |.CRT$XPX.....t..|\n      0190: 08000000 2E435254 24585058 41000000  |.....CRT$XPXA...|\n      01A0: 98740300 08000000 2E435254 2458505A  |.t.......CRT$XPZ|\n      01B0: 00000000 A0740300 08000000 2E435254  |.....t.......CRT|\n      01C0: 24585441 00000000 A8740300 08000000  |$XTA.....t......|\n      01D0: 2E435254 2458545A 00000000 B0740300  |.CRT$XTZ.....t..|\n      01E0: C0D90000 2E726461 74610000 704E0400  |.....rdata..pN..|\n      01F0: 90010000 2E726461 74612430 30000000  |.....rdata$00...|\n      0200: 00500400 28000000 2E726461 74612454  |.P..(....rdata$T|\n      0210: 00000000 28500400 6C010000 2E726461  |....(P..l....rda|\n      0220: 74612472 00000000 94510400 FC000000  |ta$r.....Q......|\n      0230: 2E726461 74612476 6F6C746D 64000000  |.rdata$voltmd...|\n      0240: 90520400 50040000 2E726461 7461247A  |.R..P....rdata$z|\n      0250: 7A7A6462 67000000 E0560400 08000000  |zzdbg....V......|\n      0260: 2E727463 24494141 00000000 E8560400  |.rtc$IAA.....V..|\n      0270: 08000000 2E727463 24495A5A 00000000  |.....rtc$IZZ....|\n      0280: F0560400 08000000 2E727463 24544141  |.V.......rtc$TAA|\n      0290: 00000000 F8560400 08000000 2E727463  |.....V.......rtc|\n      02A0: 24545A5A 00000000 00570400 08000000  |$TZZ.....W......|\n      02B0: 2E746C73 00000000 08570400 51000000  |.tls.....W..Q...|\n      02C0: 2E746C73 24000000 59570400 07000000  |.tls$...YW......|\n      02D0: 2E746C73 245A5A5A 00000000 60570400  |.tls$ZZZ....`W..|\n      02E0: D04A0000 2E786461 74610000 30A20400  |.J...xdata..0...|\n      02F0: 84000000 2E786461 74612478 00000000  |.....xdata$x....|\n      0300: B4A20400 64000000 2E696461 74612432  |....d....idata$2|\n      0310: 00000000 18A30400 68000000 2E696461  |........h....ida|\n      0320: 74612433 00000000 80A30400 D8030000  |ta$3............|\n      0330: 2E696461 74612434 00000000 58A70400  |.idata$4....X...|\n      0340: 2C090000 2E696461 74612436 00000000  |,....idata$6....|\n      0350: 00C00400 D80A0000 2E646174 61000000  |.........data...|\n      0360: D8CA0400 50000000 2E646174 61247200  |....P....data$r.|\n      0370: 28CB0400 28000000 2E646174 61247273  |(...(....data$rs|\n      0380: 00000000 50CB0400 88110000 2E627373  |....P........bss|\n      0390: 00000000 00E00400 B4240000 2E706461  |.........$...pda|\n      03A0: 74610000 00100500 AA260000 2E646570  |ta.......&...dep|\n      03B0: 2D763000 00400500 00010000 2E667074  |-v0..@.......fpt|\n      03C0: 61626C65 00000000 00500500 60000000  |able.....P..`...|\n      03D0: 2E727372 63243031 00000000 60500500  |.rsrc$01....`P..|\n      03E0: 90060000 2E727372 63243032 00000000  |.....rsrc$02....|\n    )\n  }\n]\n"
+          }
+        }
+      },
+      "thin-line-tables": {
+        "training_lto": "thin",
+        "debug_level": "line-tables-only",
+        "stages_seconds": {
+          "train_uv": 35.34400000000005,
+          "prepare_corpus": 0.03099999999994907,
+          "instrumented_build": 681.672,
+          "merge_profiles": 1.405999999999949
+        },
+        "training_seconds": 718.6709999999998,
+        "final_seconds": 580.2030000000004,
+        "total_seconds": 1298.8740000000003,
+        "resources": {
+          "training": {
+            "wall_seconds": 718.6709999999998,
+            "samples": 707,
+            "coverage_seconds": 718.078,
+            "max_sample_gap_seconds": 1.0779999999999745,
+            "sampled_peak_tree_rss_bytes": 7219392512,
+            "minimum_host_available_memory_bytes": 24899649536,
+            "median_host_cpu_percent": 24.8,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1936.40625,
+              "cpu_system_seconds": 63.375,
+              "num_page_faults": 28251442,
+              "read_bytes": 1548213018,
+              "write_bytes": 3210433603
+            },
+            "reaped_children_rusage_delta": null,
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 6872.765625,
+                "system": 656.25,
+                "idle": 38625.734375,
+                "interrupt": 3.578125,
+                "dpc": 5.546875
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 752967680,
+                "free": 4615741440,
+                "percent": 14.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 80227,
+                "write_count": 748733,
+                "read_bytes": 2177372672,
+                "write_bytes": 43752407040,
+                "read_time": 26,
+                "write_time": 120
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 9004.671875,
+                "system": 799.1406250000073,
+                "idle": 47840.18749999999,
+                "interrupt": 4.40625,
+                "dpc": 6.84375
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 643842048,
+                "free": 4724867072,
+                "percent": 12.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 125684,
+                "write_count": 899599,
+                "read_bytes": 2568592896,
+                "write_bytes": 51584758784,
+                "read_time": 51,
+                "write_time": 191
+              }
+            },
+            "collection_errors": {
+              "NoSuchProcess": 4
+            }
+          },
+          "final": {
+            "wall_seconds": 580.2030000000004,
+            "samples": 572,
+            "coverage_seconds": 579.8440000000005,
+            "max_sample_gap_seconds": 1.0619999999998981,
+            "sampled_peak_tree_rss_bytes": 12651147264,
+            "minimum_host_available_memory_bytes": 18179919872,
+            "median_host_cpu_percent": 6.2,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 944.78125,
+              "cpu_system_seconds": 25.1875,
+              "num_page_faults": 25042466,
+              "read_bytes": 874160058,
+              "write_bytes": 821426022
+            },
+            "reaped_children_rusage_delta": null,
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 9006.3125,
+                "system": 811.3750000000073,
+                "idle": 48035.31249999999,
+                "interrupt": 4.515625,
+                "dpc": 7.09375
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 642183168,
+                "free": 4726525952,
+                "percent": 12.0,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 125733,
+                "write_count": 968820,
+                "read_bytes": 2569104896,
+                "write_bytes": 53333890560,
+                "read_time": 51,
+                "write_time": 206
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 10104.578125,
+                "system": 888.6874999999927,
+                "idle": 56137.234375,
+                "interrupt": 4.609375,
+                "dpc": 7.140625
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 637968384,
+                "free": 4730740736,
+                "percent": 11.9,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 126147,
+                "write_count": 981893,
+                "read_bytes": 2578210304,
+                "write_bytes": 56378730496,
+                "read_time": 51,
+                "write_time": 212
+              }
+            },
+            "collection_errors": {
+              "process_io_unavailable": 1,
+              "NoSuchProcess": 3
+            }
+          }
+        },
+        "profile_sha256": "fea70f4c0550f14323284874bbe34411011fa15a12b04abc08f548a12bc34084",
+        "profile_bytes": 32460968,
+        "profile_functions": 91097,
+        "pgo_diagnostics": {
+          "warnings": 19,
+          "missing": 19,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs89r4j2vouvF_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtNtCsljvfXcM3w8L_3std3sys7process7windows6EnvKeyINtNtCs9rw95XCWuke_4core6option6OptionNtNtNtB1A_3ffi6os_str8OsStringENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECsf6csxBVT7g5_3uvw Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters4skip4SkipNtNtCsljvfXcM3w8L_3std3env6ArgsOsEECsf6csxBVT7g5_3uvw Hash = 798733566801274259 up to 0 count discarded",
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECsf6csxBVT7g5_3uvw Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB4_7process8ExitCodeECsf6csxBVT7g5_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RINvNtNtCsljvfXcM3w8L_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECsf6csxBVT7g5_3uvw Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Csf6csxBVT7g5_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RNSNvYNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceuE9call_once6vtableCsf6csxBVT7g5_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RNvCsf6csxBVT7g5_3uvw4main Hash = 904365845180631687 up to 0 count discarded",
+            "warning: uvw.afe114b713a9d17b-cgu.0: no profile data available for function _RNvXs1i_NtCs9rw95XCWuke_4core3fmtReNtB6_7Display3fmtCsf6csxBVT7g5_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs89r4j2vouvF_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtNtCsljvfXcM3w8L_3std3sys7process7windows6EnvKeyINtNtCs9rw95XCWuke_4core6option6OptionNtNtNtB1A_3ffi6os_str8OsStringENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECsd9k4tQq3TI8_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCsljvfXcM3w8L_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECsd9k4tQq3TI8_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECsd9k4tQq3TI8_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB4_7process8ExitCodeECsd9k4tQq3TI8_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RINvNtNtCsljvfXcM3w8L_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECsd9k4tQq3TI8_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RINvNvMs2_NtCs89r4j2vouvF_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECsd9k4tQq3TI8_3uvx Hash = 753202733449284396 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Csd9k4tQq3TI8_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RNSNvYNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceuE9call_once6vtableCsd9k4tQq3TI8_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RNvCsd9k4tQq3TI8_3uvx4main Hash = 65450789262851566 up to 0 count discarded",
+            "warning: uvx.992baf5b6ceb33d6-cgu.0: no profile data available for function _RNvXs1i_NtCs9rw95XCWuke_4core3fmtReNtB6_7Display3fmtCsd9k4tQq3TI8_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 15910510,
+        "wheel_sha256": "e5688b1af132f6d34b04f13af28456781b2bdbc679894eead628a13a9c81963b",
+        "executables": {
+          "uv.exe": {
+            "stripped_executable_bytes": 33537024,
+            "symbol_bytes": 120107008,
+            "sha256": "75c12462efed12798658589c3800b8bac19ea8b2651c005ea0fa8fb5391c1946",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-line-tables\\symbols\\uv.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:34 (0x6ACE7906)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x1F\n    AddressOfRawData: 0x1F380A0\n    PointerToRawData: 0x1F374A0\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {B023A591-BD69-4D0C-9826-2992A52709E9}\n      PDBAge: 1\n      PDBFileName: uv.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:34 (0x6ACE7906)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x1F380C0\n    PointerToRawData: 0x1F374C0\n    RawData (\n      0000: 07000000 5F010000 5F010000 00000000  |...._..._.......|\n      0010: 06010000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:34 (0x6ACE7906)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x4B4\n    AddressOfRawData: 0x1F380D4\n    PointerToRawData: 0x1F374D4\n    RawData (\n      0000: 00000000 00100000 60416000 2E746578  |........`A`..tex|\n      0010: 74000000 60516000 90F43000 2E746578  |t...`Q`...0..tex|\n      0020: 7424686F 74000000 F0459100 10FF1200  |t$hot....E......|\n      0030: 2E746578 74246D6E 00000000 0045A400  |.text$mn.....E..|\n      0040: 60000000 2E746578 74246D6E 24303000  |`....text$mn$00.|\n      0050: 6045A400 B00D0000 2E746578 74246D6E  |`E.......text$mn|\n      0060: 24323100 1053A400 30450C01 2E746578  |$21..S..0E...tex|\n      0070: 7424756E 6C696B65 6C790000 4098B001  |t$unlikely..@...|\n      0080: 50070000 2E746578 74247800 00A0B001  |P....text$x.....|\n      0090: 88080000 2E696461 74612435 00000000  |.....idata$5....|\n      00A0: 88A8B001 38000000 2E303063 66670000  |....8....00cfg..|\n      00B0: C0A8B001 08000000 2E435254 24584341  |.........CRT$XCA|\n      00C0: 00000000 C8A8B001 08000000 2E435254  |.............CRT|\n      00D0: 24584341 41000000 D0A8B001 18000000  |$XCAA...........|\n      00E0: 2E435254 24584355 00000000 E8A8B001  |.CRT$XCU........|\n      00F0: 08000000 2E435254 24584356 00000000  |.....CRT$XCV....|\n      0100: F0A8B001 08000000 2E435254 2458435A  |.........CRT$XCZ|\n      0110: 00000000 F8A8B001 08000000 2E435254  |.............CRT|\n      0120: 24584441 00000000 00A9B001 08000000  |$XDA............|\n      0130: 2E435254 2458445A 00000000 08A9B001  |.CRT$XDZ........|\n      0140: 08000000 2E435254 24584941 00000000  |.....CRT$XIA....|\n      0150: 10A9B001 08000000 2E435254 24584941  |.........CRT$XIA|\n      0160: 41000000 18A9B001 08000000 2E435254  |A............CRT|\n      0170: 24584941 43000000 20A9B001 08000000  |$XIAC... .......|\n      0180: 2E435254 24584942 00000000 28A9B001  |.CRT$XIB....(...|\n      0190: 28000000 2E435254 24584943 00000000  |(....CRT$XIC....|\n      01A0: 50A9B001 08000000 2E435254 2458495A  |P........CRT$XIZ|\n      01B0: 00000000 58A9B001 08000000 2E435254  |....X........CRT|\n      01C0: 24584C41 00000000 60A9B001 08000000  |$XLA....`.......|\n      01D0: 2E435254 24584C42 00000000 68A9B001  |.CRT$XLB....h...|\n      01E0: 10000000 2E435254 24584C43 00000000  |.....CRT$XLC....|\n      01F0: 78A9B001 08000000 2E435254 24584C59  |x........CRT$XLY|\n      0200: 00000000 80A9B001 08000000 2E435254  |.............CRT|\n      0210: 24584C5A 00000000 88A9B001 08000000  |$XLZ............|\n      0220: 2E435254 24585041 00000000 90A9B001  |.CRT$XPA........|\n      0230: 10000000 2E435254 24585058 00000000  |.....CRT$XPX....|\n      0240: A0A9B001 08000000 2E435254 24585058  |.........CRT$XPX|\n      0250: 41000000 A8A9B001 08000000 2E435254  |A............CRT|\n      0260: 2458505A 00000000 B0A9B001 08000000  |$XPZ............|\n      0270: 2E435254 24585441 00000000 B8A9B001  |.CRT$XTA........|\n      0280: 48060000 2E435254 2458545A 00000000  |H....CRT$XTZ....|\n      0290: 00B0B001 E0C14200 2E726461 74610000  |......B..rdata..|\n      02A0: E071F301 A0010000 2E726461 74612430  |.q.......rdata$0|\n      02B0: 30000000 8073F301 28000000 2E726461  |0....s..(....rda|\n      02C0: 74612454 00000000 A873F301 6C010000  |ta$T.....s..l...|\n      02D0: 2E726461 74612472 00000000 1475F301  |.rdata$r.....u..|\n      02E0: 8C0B0000 2E726461 74612476 6F6C746D  |.....rdata$voltm|\n      02F0: 64000000 A080F301 20050000 2E726461  |d....... ....rda|\n      0300: 7461247A 7A7A6462 67000000 C085F301  |ta$zzzdbg.......|\n      0310: 08000000 2E727463 24494141 00000000  |.....rtc$IAA....|\n      0320: C885F301 08000000 2E727463 24495A5A  |.........rtc$IZZ|\n      0330: 00000000 D085F301 08000000 2E727463  |.............rtc|\n      0340: 24544141 00000000 D885F301 08000000  |$TAA............|\n      0350: 2E727463 24545A5A 00000000 E085F301  |.rtc$TZZ........|\n      0360: 08000000 2E746C73 00000000 E885F301  |.....tls........|\n      0370: D9020000 2E746C73 24000000 C188F301  |.....tls$.......|\n      0380: 07000000 2E746C73 245A5A5A 00000000  |.....tls$ZZZ....|\n      0390: C888F301 B8760200 2E786461 74610000  |.....v...xdata..|\n      03A0: 80FFF501 90000000 2E786461 74612478  |.........xdata$x|\n      03B0: 00000000 1000F601 DC010000 2E656461  |.............eda|\n      03C0: 74610000 EC01F601 40010000 2E696461  |ta......@....ida|\n      03D0: 74612432 00000000 2C03F601 2C010000  |ta$2....,...,...|\n      03E0: 2E696461 74612433 00000000 5804F601  |.idata$3....X...|\n      03F0: 88080000 2E696461 74612434 00000000  |.....idata$4....|\n      0400: E00CF601 B2140000 2E696461 74612436  |.........idata$6|\n      0410: 00000000 0030F601 50FD0000 2E646174  |.....0..P....dat|\n      0420: 61000000 502DF701 50000000 2E646174  |a...P-..P....dat|\n      0430: 61247200 A02DF701 60000000 2E646174  |a$r..-..`....dat|\n      0440: 61247273 00000000 002EF701 C4C00000  |a$rs............|\n      0450: 2E627373 00000000 00F0F701 D4910600  |.bss............|\n      0460: 2E706461 74610000 0090FE01 AA260000  |.pdata.......&..|\n      0470: 2E646570 2D763000 00C0FE01 00010000  |.dep-v0.........|\n      0480: 2E667074 61626C65 00000000 00D0FE01  |.fptable........|\n      0490: 60000000 2E727372 63243031 00000000  |`....rsrc$01....|\n      04A0: 60D0FE01 90060000 2E727372 63243032  |`........rsrc$02|\n      04B0: 00000000                             |....|\n    )\n  }\n]\n"
+          },
+          "uvx.exe": {
+            "stripped_executable_bytes": 331264,
+            "symbol_bytes": 4501504,
+            "sha256": "390299b3c9656996ccf2f02da4a3647267d0bbe812736ee5addbd56d1cf86eb2",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-line-tables\\symbols\\uvx.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:39 (0x6ACE790B)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x20\n    AddressOfRawData: 0x45288\n    PointerToRawData: 0x44088\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {840DA756-A723-4C7D-8BC3-B7D6C1C4EA13}\n      PDBAge: 1\n      PDBFileName: uvx.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:39 (0x6ACE790B)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x452A8\n    PointerToRawData: 0x440A8\n    RawData (\n      0000: 02000000 D2000000 D2000000 00000000  |................|\n      0010: D2000000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:39 (0x6ACE790B)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x3F0\n    AddressOfRawData: 0x452BC\n    PointerToRawData: 0x440BC\n    RawData (\n      0000: 00000000 00100000 E0560200 2E746578  |.........V...tex|\n      0010: 74000000 E0660200 C0D00000 2E746578  |t....f.......tex|\n      0020: 74246D6E 00000000 A0370300 60000000  |t$mn.....7..`...|\n      0030: 2E746578 74246D6E 24303000 00380300  |.text$mn$00..8..|\n      0040: 100D0000 2E746578 74246D6E 24323100  |.....text$mn$21.|\n      0050: 10450300 A0200000 2E746578 7424756E  |.E... ...text$un|\n      0060: 6C696B65 6C790000 B0650300 20040000  |likely...e.. ...|\n      0070: 2E746578 74247800 00700300 D8030000  |.text$x..p......|\n      0080: 2E696461 74612435 00000000 D8730300  |.idata$5.....s..|\n      0090: 38000000 2E303063 66670000 10740300  |8....00cfg...t..|\n      00A0: 08000000 2E435254 24584341 00000000  |.....CRT$XCA....|\n      00B0: 18740300 08000000 2E435254 24584341  |.t.......CRT$XCA|\n      00C0: 41000000 20740300 08000000 2E435254  |A... t.......CRT|\n      00D0: 2458435A 00000000 28740300 08000000  |$XCZ....(t......|\n      00E0: 2E435254 24584941 00000000 30740300  |.CRT$XIA....0t..|\n      00F0: 08000000 2E435254 24584941 41000000  |.....CRT$XIAA...|\n      0100: 38740300 08000000 2E435254 24584941  |8t.......CRT$XIA|\n      0110: 43000000 40740300 20000000 2E435254  |C...@t.. ....CRT|\n      0120: 24584943 00000000 60740300 08000000  |$XIC....`t......|\n      0130: 2E435254 2458495A 00000000 68740300  |.CRT$XIZ....ht..|\n      0140: 08000000 2E435254 24584C41 00000000  |.....CRT$XLA....|\n      0150: 70740300 08000000 2E435254 24584C5A  |pt.......CRT$XLZ|\n      0160: 00000000 78740300 08000000 2E435254  |....xt.......CRT|\n      0170: 24585041 00000000 80740300 10000000  |$XPA.....t......|\n      0180: 2E435254 24585058 00000000 90740300  |.CRT$XPX.....t..|\n      0190: 08000000 2E435254 24585058 41000000  |.....CRT$XPXA...|\n      01A0: 98740300 08000000 2E435254 2458505A  |.t.......CRT$XPZ|\n      01B0: 00000000 A0740300 08000000 2E435254  |.....t.......CRT|\n      01C0: 24585441 00000000 A8740300 08000000  |$XTA.....t......|\n      01D0: 2E435254 2458545A 00000000 B0740300  |.CRT$XTZ.....t..|\n      01E0: E0D90000 2E726461 74610000 904E0400  |.....rdata...N..|\n      01F0: 70010000 2E726461 74612430 30000000  |p....rdata$00...|\n      0200: 00500400 28000000 2E726461 74612454  |.P..(....rdata$T|\n      0210: 00000000 28500400 6C010000 2E726461  |....(P..l....rda|\n      0220: 74612472 00000000 94510400 F4000000  |ta$r.....Q......|\n      0230: 2E726461 74612476 6F6C746D 64000000  |.rdata$voltmd...|\n      0240: 88520400 50040000 2E726461 7461247A  |.R..P....rdata$z|\n      0250: 7A7A6462 67000000 D8560400 08000000  |zzdbg....V......|\n      0260: 2E727463 24494141 00000000 E0560400  |.rtc$IAA.....V..|\n      0270: 08000000 2E727463 24495A5A 00000000  |.....rtc$IZZ....|\n      0280: E8560400 08000000 2E727463 24544141  |.V.......rtc$TAA|\n      0290: 00000000 F0560400 08000000 2E727463  |.....V.......rtc|\n      02A0: 24545A5A 00000000 F8560400 08000000  |$TZZ.....V......|\n      02B0: 2E746C73 00000000 00570400 51000000  |.tls.....W..Q...|\n      02C0: 2E746C73 24000000 51570400 07000000  |.tls$...QW......|\n      02D0: 2E746C73 245A5A5A 00000000 58570400  |.tls$ZZZ....XW..|\n      02E0: C84A0000 2E786461 74610000 20A20400  |.J...xdata.. ...|\n      02F0: 84000000 2E786461 74612478 00000000  |.....xdata$x....|\n      0300: A4A20400 64000000 2E696461 74612432  |....d....idata$2|\n      0310: 00000000 08A30400 68000000 2E696461  |........h....ida|\n      0320: 74612433 00000000 70A30400 D8030000  |ta$3....p.......|\n      0330: 2E696461 74612434 00000000 48A70400  |.idata$4....H...|\n      0340: 2C090000 2E696461 74612436 00000000  |,....idata$6....|\n      0350: 00C00400 D80A0000 2E646174 61000000  |.........data...|\n      0360: D8CA0400 50000000 2E646174 61247200  |....P....data$r.|\n      0370: 28CB0400 28000000 2E646174 61247273  |(...(....data$rs|\n      0380: 00000000 50CB0400 84110000 2E627373  |....P........bss|\n      0390: 00000000 00E00400 C0240000 2E706461  |.........$...pda|\n      03A0: 74610000 00100500 AA260000 2E646570  |ta.......&...dep|\n      03B0: 2D763000 00400500 00010000 2E667074  |-v0..@.......fpt|\n      03C0: 61626C65 00000000 00500500 60000000  |able.....P..`...|\n      03D0: 2E727372 63243031 00000000 60500500  |.rsrc$01....`P..|\n      03E0: 90060000 2E727372 63243032 00000000  |.....rsrc$02....|\n    )\n  }\n]\n"
+          },
+          "uvw.exe": {
+            "stripped_executable_bytes": 331264,
+            "symbol_bytes": 4501504,
+            "sha256": "9a640e4357b85efa26d519834a72ac897b516cafcc9b1a6854d5ef1648ffc215",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+            "identity": "\nFile: D:\\a\\uv\\uv\\target\\debug-symbols-all-debug-pilot\\variants\\thin-line-tables\\symbols\\uvw.exe\nFormat: COFF-x86-64\nArch: x86_64\nAddressSize: 64bit\nDebugDirectory [\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:37 (0x6ACE7909)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: CodeView (0x2)\n    SizeOfData: 0x20\n    AddressOfRawData: 0x45290\n    PointerToRawData: 0x44090\n    PDBInfo {\n      PDBSignature: 0x53445352\n      PDBGUID: {A7A9812D-8A4A-49B7-86E2-807AFBA7A7B5}\n      PDBAge: 1\n      PDBFileName: uvw.pdb\n    }\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:37 (0x6ACE7909)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: VCFeature (0xC)\n    SizeOfData: 0x14\n    AddressOfRawData: 0x452B0\n    PointerToRawData: 0x440B0\n    RawData (\n      0000: 02000000 D2000000 D2000000 00000000  |................|\n      0010: D2000000                             |....|\n    )\n  }\n  DebugEntry {\n    Characteristics: 0x0\n    TimeDateStamp: 2026-10-13 18:31:37 (0x6ACE7909)\n    MajorVersion: 0x0\n    MinorVersion: 0x0\n    Type: POGO (0xD)\n    SizeOfData: 0x3F0\n    AddressOfRawData: 0x452C4\n    PointerToRawData: 0x440C4\n    RawData (\n      0000: 00000000 00100000 00570200 2E746578  |.........W...tex|\n      0010: 74000000 00670200 B0D00000 2E746578  |t....g.......tex|\n      0020: 74246D6E 00000000 B0370300 60000000  |t$mn.....7..`...|\n      0030: 2E746578 74246D6E 24303000 10380300  |.text$mn$00..8..|\n      0040: 100D0000 2E746578 74246D6E 24323100  |.....text$mn$21.|\n      0050: 20450300 F01F0000 2E746578 7424756E  | E.......text$un|\n      0060: 6C696B65 6C790000 10650300 30040000  |likely...e..0...|\n      0070: 2E746578 74247800 00700300 D8030000  |.text$x..p......|\n      0080: 2E696461 74612435 00000000 D8730300  |.idata$5.....s..|\n      0090: 38000000 2E303063 66670000 10740300  |8....00cfg...t..|\n      00A0: 08000000 2E435254 24584341 00000000  |.....CRT$XCA....|\n      00B0: 18740300 08000000 2E435254 24584341  |.t.......CRT$XCA|\n      00C0: 41000000 20740300 08000000 2E435254  |A... t.......CRT|\n      00D0: 2458435A 00000000 28740300 08000000  |$XCZ....(t......|\n      00E0: 2E435254 24584941 00000000 30740300  |.CRT$XIA....0t..|\n      00F0: 08000000 2E435254 24584941 41000000  |.....CRT$XIAA...|\n      0100: 38740300 08000000 2E435254 24584941  |8t.......CRT$XIA|\n      0110: 43000000 40740300 20000000 2E435254  |C...@t.. ....CRT|\n      0120: 24584943 00000000 60740300 08000000  |$XIC....`t......|\n      0130: 2E435254 2458495A 00000000 68740300  |.CRT$XIZ....ht..|\n      0140: 08000000 2E435254 24584C41 00000000  |.....CRT$XLA....|\n      0150: 70740300 08000000 2E435254 24584C5A  |pt.......CRT$XLZ|\n      0160: 00000000 78740300 08000000 2E435254  |....xt.......CRT|\n      0170: 24585041 00000000 80740300 10000000  |$XPA.....t......|\n      0180: 2E435254 24585058 00000000 90740300  |.CRT$XPX.....t..|\n      0190: 08000000 2E435254 24585058 41000000  |.....CRT$XPXA...|\n      01A0: 98740300 08000000 2E435254 2458505A  |.t.......CRT$XPZ|\n      01B0: 00000000 A0740300 08000000 2E435254  |.....t.......CRT|\n      01C0: 24585441 00000000 A8740300 08000000  |$XTA.....t......|\n      01D0: 2E435254 2458545A 00000000 B0740300  |.CRT$XTZ.....t..|\n      01E0: C0D90000 2E726461 74610000 704E0400  |.....rdata..pN..|\n      01F0: 90010000 2E726461 74612430 30000000  |.....rdata$00...|\n      0200: 00500400 28000000 2E726461 74612454  |.P..(....rdata$T|\n      0210: 00000000 28500400 6C010000 2E726461  |....(P..l....rda|\n      0220: 74612472 00000000 94510400 FC000000  |ta$r.....Q......|\n      0230: 2E726461 74612476 6F6C746D 64000000  |.rdata$voltmd...|\n      0240: 90520400 50040000 2E726461 7461247A  |.R..P....rdata$z|\n      0250: 7A7A6462 67000000 E0560400 08000000  |zzdbg....V......|\n      0260: 2E727463 24494141 00000000 E8560400  |.rtc$IAA.....V..|\n      0270: 08000000 2E727463 24495A5A 00000000  |.....rtc$IZZ....|\n      0280: F0560400 08000000 2E727463 24544141  |.V.......rtc$TAA|\n      0290: 00000000 F8560400 08000000 2E727463  |.....V.......rtc|\n      02A0: 24545A5A 00000000 00570400 08000000  |$TZZ.....W......|\n      02B0: 2E746C73 00000000 08570400 51000000  |.tls.....W..Q...|\n      02C0: 2E746C73 24000000 59570400 07000000  |.tls$...YW......|\n      02D0: 2E746C73 245A5A5A 00000000 60570400  |.tls$ZZZ....`W..|\n      02E0: D04A0000 2E786461 74610000 30A20400  |.J...xdata..0...|\n      02F0: 84000000 2E786461 74612478 00000000  |.....xdata$x....|\n      0300: B4A20400 64000000 2E696461 74612432  |....d....idata$2|\n      0310: 00000000 18A30400 68000000 2E696461  |........h....ida|\n      0320: 74612433 00000000 80A30400 D8030000  |ta$3............|\n      0330: 2E696461 74612434 00000000 58A70400  |.idata$4....X...|\n      0340: 2C090000 2E696461 74612436 00000000  |,....idata$6....|\n      0350: 00C00400 D80A0000 2E646174 61000000  |.........data...|\n      0360: D8CA0400 50000000 2E646174 61247200  |....P....data$r.|\n      0370: 28CB0400 28000000 2E646174 61247273  |(...(....data$rs|\n      0380: 00000000 50CB0400 88110000 2E627373  |....P........bss|\n      0390: 00000000 00E00400 B4240000 2E706461  |.........$...pda|\n      03A0: 74610000 00100500 AA260000 2E646570  |ta.......&...dep|\n      03B0: 2D763000 00400500 00010000 2E667074  |-v0..@.......fpt|\n      03C0: 61626C65 00000000 00500500 60000000  |able.....P..`...|\n      03D0: 2E727372 63243031 00000000 60500500  |.rsrc$01....`P..|\n      03E0: 90060000 2E727372 63243032 00000000  |.....rsrc$02....|\n    )\n  }\n]\n"
+          }
+        }
+      },
+      "thin-none": {
+        "training_lto": "thin",
+        "debug_level": "none",
+        "stages_seconds": {
+          "train_uv": 29.65599999999995,
+          "prepare_corpus": 0.01599999999962165,
+          "instrumented_build": 460.75,
+          "merge_profiles": 0.7970000000004802
+        },
+        "training_seconds": 491.45300000000043,
+        "final_seconds": 504.1869999999999,
+        "total_seconds": 995.6400000000003,
+        "resources": {
+          "training": {
+            "wall_seconds": 491.45300000000043,
+            "samples": 484,
+            "coverage_seconds": 490.78099999999995,
+            "max_sample_gap_seconds": 1.094000000000051,
+            "sampled_peak_tree_rss_bytes": 5306302464,
+            "minimum_host_available_memory_bytes": 26743521280,
+            "median_host_cpu_percent": 24.9,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 1264.734375,
+              "cpu_system_seconds": 36.09375,
+              "num_page_faults": 21233137,
+              "read_bytes": 1100282743,
+              "write_bytes": 2550705602
+            },
+            "reaped_children_rusage_delta": null,
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 10106.421875,
+                "system": 889.3124999999927,
+                "idle": 56172.765625,
+                "interrupt": 4.609375,
+                "dpc": 7.140625
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 637964288,
+                "free": 4730744832,
+                "percent": 11.9,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 126157,
+                "write_count": 982028,
+                "read_bytes": 2578307072,
+                "write_bytes": 56422150656,
+                "read_time": 51,
+                "write_time": 212
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 11539.624999999998,
+                "system": 992.296875,
+                "idle": 62489.078125,
+                "interrupt": 5.203125,
+                "dpc": 7.9375
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 636755968,
+                "free": 4731953152,
+                "percent": 11.9,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 126210,
+                "write_count": 1124148,
+                "read_bytes": 2579666944,
+                "write_bytes": 62614947328,
+                "read_time": 51,
+                "write_time": 263
+              }
+            },
+            "collection_errors": {
+              "NoSuchProcess": 1
+            }
+          },
+          "final": {
+            "wall_seconds": 504.1869999999999,
+            "samples": 497,
+            "coverage_seconds": 503.8590000000004,
+            "max_sample_gap_seconds": 1.125,
+            "sampled_peak_tree_rss_bytes": 5670457344,
+            "minimum_host_available_memory_bytes": 26350092288,
+            "median_host_cpu_percent": 6.2,
+            "sampled_tree_counters_lower_bound": {
+              "cpu_user_seconds": 830.34375,
+              "cpu_system_seconds": 21.546875,
+              "num_page_faults": 19330402,
+              "read_bytes": 742098614,
+              "write_bytes": 528875205
+            },
+            "reaped_children_rusage_delta": null,
+            "host_counter_first": {
+              "host_cpu_times": {
+                "user": 11541.046874999998,
+                "system": 1004.4687499999927,
+                "idle": 62673.734375,
+                "interrupt": 5.296875,
+                "dpc": 8.21875
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 636416000,
+                "free": 4732293120,
+                "percent": 11.9,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 126210,
+                "write_count": 1198146,
+                "read_bytes": 2579666944,
+                "write_bytes": 64466195968,
+                "read_time": 51,
+                "write_time": 281
+              }
+            },
+            "host_counter_last": {
+              "host_cpu_times": {
+                "user": 12524.515624999998,
+                "system": 1075.796875,
+                "idle": 69680.6875,
+                "interrupt": 5.4375,
+                "dpc": 8.265625
+              },
+              "host_swap": {
+                "total": 5368709120,
+                "used": 635592704,
+                "free": 4733116416,
+                "percent": 11.8,
+                "sin": 0,
+                "sout": 0
+              },
+              "host_disk_io": {
+                "read_count": 126231,
+                "write_count": 1208357,
+                "read_bytes": 2580207104,
+                "write_bytes": 66613024768,
+                "read_time": 51,
+                "write_time": 283
+              }
+            },
+            "collection_errors": {}
+          }
+        },
+        "profile_sha256": "5fe699411f6e8430b48058b894fcda6794399521f260c359d285e2659fcfc168",
+        "profile_bytes": 32426888,
+        "profile_functions": 91097,
+        "pgo_diagnostics": {
+          "warnings": 19,
+          "missing": 19,
+          "mismatch": 0,
+          "examples": [
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs89r4j2vouvF_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtNtCsljvfXcM3w8L_3std3sys7process7windows6EnvKeyINtNtCs9rw95XCWuke_4core6option6OptionNtNtNtB1A_3ffi6os_str8OsStringENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECs3B6H5W67jp2_3uvw Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters4skip4SkipNtNtCsljvfXcM3w8L_3std3env6ArgsOsEECs3B6H5W67jp2_3uvw Hash = 798733566801274259 up to 0 count discarded",
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECs3B6H5W67jp2_3uvw Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB4_7process8ExitCodeECs3B6H5W67jp2_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RINvNtNtCsljvfXcM3w8L_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECs3B6H5W67jp2_3uvw Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Cs3B6H5W67jp2_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RNSNvYNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceuE9call_once6vtableCs3B6H5W67jp2_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RNvCs3B6H5W67jp2_3uvw4main Hash = 904365845180631687 up to 0 count discarded",
+            "warning: uvw.29ea05197b42bd06-cgu.0: no profile data available for function _RNvXs1i_NtCs9rw95XCWuke_4core3fmtReNtB6_7Display3fmtCs3B6H5W67jp2_3uvw Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RINvMsh_NtNtNtCs89r4j2vouvF_5alloc11collections5btree4nodeINtB6_7NodeRefNtNtB6_6marker5DyingNtNtNtNtCsljvfXcM3w8L_3std3sys7process7windows6EnvKeyINtNtCs9rw95XCWuke_4core6option6OptionNtNtNtB1A_3ffi6os_str8OsStringENtB1a_14LeafOrInternalE21deallocate_and_ascendNtNtBc_5alloc6GlobalECs77iOKPCoAP0_3uvx Hash = 1096621590013681508 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueINtNtNtNtB4_4iter8adapters5chain5ChainINtNtBG_3map3MapINtNtNtB4_5slice4iter4IterReENvYNtNtNtCsljvfXcM3w8L_3std3ffi6os_str8OsStringINtNtB4_7convert4FromRB1T_E4fromEINtNtBG_4skip4SkipNtNtB25_3env6ArgsOsEEECs77iOKPCoAP0_3uvx Hash = 1096621589489675600 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RINvNtCs9rw95XCWuke_4core3ptr9drop_glueNtNtNtB4_2io5error5ErrorECs77iOKPCoAP0_3uvx Hash = 1035741150190249699 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB4_7process8ExitCodeECs77iOKPCoAP0_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RINvNtNtCsljvfXcM3w8L_3std3sys9backtrace28___rust_begin_short_backtraceFENtNtB6_7process8ExitCodeB19_ECs77iOKPCoAP0_3uvx Hash = 170957022131388415 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RINvNvMs2_NtCs89r4j2vouvF_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECs77iOKPCoAP0_3uvx Hash = 753202733449284396 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtB6_7process8ExitCodeE0Cs77iOKPCoAP0_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RNSNvYNCINvNtCsljvfXcM3w8L_3std2rt10lang_startNtNtBb_7process8ExitCodeE0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceuE9call_once6vtableCs77iOKPCoAP0_3uvx Hash = 742261418966908927 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RNvCs77iOKPCoAP0_3uvx4main Hash = 65450789262851566 up to 0 count discarded",
+            "warning: uvx.52e7c8a22f4c4aac-cgu.0: no profile data available for function _RNvXs1i_NtCs9rw95XCWuke_4core3fmtReNtB6_7Display3fmtCs77iOKPCoAP0_3uvx Hash = 742261418966908927 up to 0 count discarded"
+          ]
+        },
+        "wheel_bytes": 15914179,
+        "wheel_sha256": "3b1d94c433c951bb06226eafd517aaeb8931c27821328eed8838f7779ba04a66",
+        "executables": {
+          "uv.exe": {
+            "stripped_executable_bytes": 33539584,
+            "sha256": "fc59aa430162d78c871bb3009a0b51aa5393a976ff261ef6394ac62c9cb31a21",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+          },
+          "uvx.exe": {
+            "stripped_executable_bytes": 331776,
+            "sha256": "7f5b4d79ad94d30995fab10bef984dca7e67f22db0dd2ee78c0f66597dea8546",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+          },
+          "uvw.exe": {
+            "stripped_executable_bytes": 331264,
+            "sha256": "3a69c76de8f8273889ce2305078b0a2758341452557e31b54e0d4e694d8367c5",
+            "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd"
+          }
+        }
+      }
+    },
+    "benchmarks": {
+      "jupyter": {
+        "requirements_sha256": "ce72f0b7a376799ffbbb57931dceab5c9e1cea2254ce6855d4d37bdc7ba54e44",
+        "resolution_sha256": "2a6df03c2f7587e7e7588d1b4aba651e5488dec383541967d09b5b661c820da7",
+        "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+        "orders": [
+          ["thin-full", "thin-none", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-full", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-full", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-limited", "thin-full"],
+          ["thin-full", "thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited", "thin-full"],
+          ["thin-none", "thin-limited", "thin-full", "thin-line-tables"],
+          ["thin-limited", "thin-full", "thin-line-tables", "thin-none"],
+          ["thin-limited", "thin-line-tables", "thin-full", "thin-none"],
+          ["thin-none", "thin-limited", "thin-line-tables", "thin-full"],
+          ["thin-line-tables", "thin-full", "thin-none", "thin-limited"],
+          ["thin-full", "thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-full", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-full", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables", "thin-full"],
+          ["thin-full", "thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-limited", "thin-none", "thin-line-tables", "thin-full"],
+          ["thin-none", "thin-line-tables", "thin-full", "thin-limited"],
+          ["thin-line-tables", "thin-full", "thin-limited", "thin-none"],
+          ["thin-full", "thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-limited", "thin-full", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-full", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited", "thin-full"],
+          ["thin-full", "thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none", "thin-full"],
+          ["thin-none", "thin-full", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-full", "thin-limited"],
+          ["thin-full", "thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-limited", "thin-line-tables", "thin-none", "thin-full"],
+          ["thin-full", "thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-full", "thin-limited"],
+          ["thin-none", "thin-full", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none", "thin-full"],
+          ["thin-full", "thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-full", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-full", "thin-line-tables"],
+          ["thin-line-tables", "thin-full", "thin-limited", "thin-none"],
+          ["thin-full", "thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-full", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables", "thin-full"],
+          ["thin-full", "thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-full", "thin-line-tables"],
+          ["thin-limited", "thin-full", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-limited", "thin-full"]
+        ],
+        "warmups_per_treatment": 4,
+        "samples_seconds": {
+          "thin-none": [
+            0.05823760000021139, 0.03531219999968016, 0.06227599999965605,
+            0.049776800000472576, 0.08124680000037188, 0.06899350000003324,
+            0.07353899999998248, 0.05917279999994207, 0.05904939999982162,
+            0.05990529999962746, 0.05277899999964575, 0.034669799999392126,
+            0.05162209999980405, 0.054764999999861175, 0.06107780000002094,
+            0.0597883999998885, 0.05758790000072622, 0.06528469999921072,
+            0.03886789999978646, 0.046514599999682105, 0.04081999999925756,
+            0.05793240000002697, 0.0640203000002657, 0.05331980000028125,
+            0.06396979999954056, 0.06690570000046137, 0.0485582000001159,
+            0.04414379999980156, 0.04770250000001397, 0.051526400000511785,
+            0.05755890000000363, 0.03281590000005963, 0.043780500000139,
+            0.050455699999474746, 0.030277400000159105, 0.047183200000290526,
+            0.07078240000009828, 0.06400600000051782, 0.058914399999594025,
+            0.06757740000011836
+          ],
+          "thin-line-tables": [
+            0.04704310000033729, 0.04759509999985312, 0.09034719999999652,
+            0.05286769999929675, 0.08225450000009005, 0.04803110000011657,
+            0.07426380000015342, 0.05686029999924358, 0.04453109999940352,
+            0.05781139999999141, 0.04835610000009183, 0.05237799999940762,
+            0.05191159999958472, 0.04832590000023629, 0.03969189999952505,
+            0.072524400000475, 0.06274709999979677, 0.05981930000052671,
+            0.03388159999940399, 0.046166099999936705, 0.04980330000034883,
+            0.04260749999957625, 0.05986719999964407, 0.07381270000041695,
+            0.055753299999196315, 0.06743300000016461, 0.05076459999963845,
+            0.05876220000027388, 0.07514220000030036, 0.04569309999988036,
+            0.06234539999968547, 0.05747220000012021, 0.043277300000227115,
+            0.03132220000043162, 0.03559740000036982, 0.04613199999948847,
+            0.06067389999952866, 0.06547669999963546, 0.06275110000024142,
+            0.045823700000255485
+          ],
+          "thin-limited": [
+            0.07143429999996442, 0.03792340000018157, 0.08157680000022083,
+            0.08390760000020236, 0.0707206999995833, 0.05378800000016781,
+            0.062681700000212, 0.06169120000049588, 0.04409040000064124,
+            0.04373669999949925, 0.04831280000053084, 0.03605969999989611,
+            0.05438120000053459, 0.03724199999942357, 0.056434600000102364,
+            0.04493670000010752, 0.07309739999982412, 0.05473760000040784,
+            0.04456220000065514, 0.047561100000166334, 0.04757640000025276,
+            0.030690599999616097, 0.05563979999988078, 0.05819100000007893,
+            0.05601429999933316, 0.059065699999337085, 0.06132309999975405,
+            0.053139700000429, 0.04982870000003459, 0.07430999999996857,
+            0.05869849999999133, 0.0436067999999068, 0.03798399999959656,
+            0.045240299999932176, 0.02817750000031083, 0.0346335000003819,
+            0.06912610000017594, 0.05321150000054331, 0.06332209999982297,
+            0.06801009999981034
+          ],
+          "thin-full": [
+            0.04180980000001, 0.07423689999995986, 0.0642812000005506,
+            0.05954290000045148, 0.0743291999997382, 0.047509899999568006,
+            0.07264309999936813, 0.06021659999987605, 0.039311600000473845,
+            0.04642330000024231, 0.05859070000042266, 0.06485560000055557,
+            0.0554772999994384, 0.03948290000062116, 0.04036290000021836,
+            0.04786450000028708, 0.06305419999989681, 0.04893939999965369,
+            0.055205300000125135, 0.06774649999988469, 0.058270599999559636,
+            0.03482680000070104, 0.05608029999984865, 0.05214660000001459,
+            0.03843750000032742, 0.04158159999951749, 0.06490260000009584,
+            0.04091160000007221, 0.032308800000464544, 0.03354880000006233,
+            0.05418889999964449, 0.03381149999950139, 0.04675229999975272,
+            0.04794020000008459, 0.0304785999996966, 0.039935800000421295,
+            0.03699210000013409, 0.05768900000020949, 0.0606777000002694,
+            0.0937528000004022
+          ]
+        },
+        "median_seconds": {
+          "thin-none": 0.05757340000036493,
+          "thin-line-tables": 0.052622849999352184,
+          "thin-limited": 0.0540846000003512,
+          "thin-full": 0.05054299999983414
+        }
+      },
+      "trio": {
+        "requirements_sha256": "81c0b52237c94983dac704d4ddae59ab13c399c0d6c664e6088da4dff4395679",
+        "resolution_sha256": "018e043108f7238918ad58b3322853afd5006d30d967281d9c7453e31feededf",
+        "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+        "orders": [
+          ["thin-none", "thin-limited", "thin-line-tables", "thin-full"],
+          ["thin-full", "thin-none", "thin-limited", "thin-line-tables"],
+          ["thin-limited", "thin-line-tables", "thin-full", "thin-none"],
+          ["thin-line-tables", "thin-full", "thin-none", "thin-limited"],
+          ["thin-none", "thin-line-tables", "thin-full", "thin-limited"],
+          ["thin-line-tables", "thin-full", "thin-limited", "thin-none"],
+          ["thin-full", "thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-limited", "thin-none", "thin-line-tables", "thin-full"],
+          ["thin-line-tables", "thin-none", "thin-limited", "thin-full"],
+          ["thin-full", "thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-full", "thin-line-tables"],
+          ["thin-limited", "thin-full", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-full", "thin-limited"],
+          ["thin-limited", "thin-line-tables", "thin-none", "thin-full"],
+          ["thin-none", "thin-full", "thin-limited", "thin-line-tables"],
+          ["thin-full", "thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-full", "thin-limited"],
+          ["thin-full", "thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-line-tables", "thin-full", "thin-limited", "thin-none"],
+          ["thin-limited", "thin-none", "thin-line-tables", "thin-full"],
+          ["thin-full", "thin-line-tables", "thin-limited", "thin-none"],
+          ["thin-none", "thin-full", "thin-line-tables", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-full", "thin-line-tables"],
+          ["thin-line-tables", "thin-limited", "thin-none", "thin-full"],
+          ["thin-limited", "thin-none", "thin-line-tables", "thin-full"],
+          ["thin-line-tables", "thin-full", "thin-limited", "thin-none"],
+          ["thin-full", "thin-limited", "thin-none", "thin-line-tables"],
+          ["thin-none", "thin-line-tables", "thin-full", "thin-limited"],
+          ["thin-none", "thin-limited", "thin-full", "thin-line-tables"],
+          ["thin-line-tables", "thin-none", "thin-limited", "thin-full"],
+          ["thin-full", "thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-limited", "thin-full", "thin-line-tables", "thin-none"],
+          ["thin-none", "thin-limited", "thin-full", "thin-line-tables"],
+          ["thin-limited", "thin-full", "thin-line-tables", "thin-none"],
+          ["thin-full", "thin-line-tables", "thin-none", "thin-limited"],
+          ["thin-line-tables", "thin-none", "thin-limited", "thin-full"],
+          ["thin-limited", "thin-line-tables", "thin-none", "thin-full"],
+          ["thin-full", "thin-limited", "thin-line-tables", "thin-none"],
+          ["thin-line-tables", "thin-none", "thin-full", "thin-limited"],
+          ["thin-none", "thin-full", "thin-limited", "thin-line-tables"],
+          ["thin-line-tables", "thin-full", "thin-limited", "thin-none"],
+          ["thin-none", "thin-line-tables", "thin-full", "thin-limited"],
+          ["thin-limited", "thin-none", "thin-line-tables", "thin-full"],
+          ["thin-full", "thin-limited", "thin-none", "thin-line-tables"]
+        ],
+        "warmups_per_treatment": 4,
+        "samples_seconds": {
+          "thin-none": [
+            0.06025899999985995, 0.03823790000024019, 0.041681900000185124,
+            0.04969199999959528, 0.049323500000355125, 0.031236200000421377,
+            0.03726329999972222, 0.034028699999907985, 0.04197340000064287,
+            0.021158700000341923, 0.023304100000132166, 0.03599560000020574,
+            0.04242919999978767, 0.025510399999802758, 0.02375789999950939,
+            0.03173220000007859, 0.03001979999953619, 0.0408582000000024,
+            0.02337580000039452, 0.019873500000358035, 0.02898670000013226,
+            0.03638279999995575, 0.04763679999996384, 0.032248900000013236,
+            0.025727700000061304, 0.03992839999955322, 0.02028969999992114,
+            0.0428554999998596, 0.041561600000022736, 0.05834670000058395,
+            0.04264899999998306, 0.05741680000028282, 0.04655279999951745,
+            0.03880060000028607, 0.04381110000031185, 0.0355810000000929,
+            0.05179549999957089, 0.026457599999957893, 0.03982369999994262,
+            0.03793700000005629
+          ],
+          "thin-line-tables": [
+            0.050231999999596155, 0.05654969999977766, 0.04199460000018007,
+            0.04530419999991864, 0.0475006000006033, 0.032057099999292404,
+            0.0367247000003772, 0.039178699999865785, 0.038701700000274286,
+            0.022109599999566854, 0.030426499999521184, 0.028155400000287045,
+            0.058197000000291155, 0.022154999999656866, 0.02218689999972412,
+            0.033054900000024645, 0.03287909999926342, 0.044416499999897496,
+            0.02177990000018326, 0.023105600000235427, 0.02964239999982965,
+            0.028405399999428482, 0.04394299999967188, 0.025333900000077847,
+            0.03712040000027628, 0.029179499999372638, 0.023823600000469014,
+            0.025851200000033714, 0.03985700000066572, 0.06320859999959794,
+            0.04135489999953279, 0.04538479999973788, 0.051533699999708915,
+            0.0401361000003817, 0.037540399999670626, 0.0284484000003431,
+            0.02910139999949024, 0.03595590000077209, 0.04388040000048932,
+            0.03244840000024851
+          ],
+          "thin-limited": [
+            0.0510418000003483, 0.049941999999646214, 0.051267900000311784,
+            0.043570000000727305, 0.0519096999996691, 0.029808500000399363,
+            0.04487870000048133, 0.039614199999959965, 0.023225300000376592,
+            0.02411579999989044, 0.02137700000002951, 0.02954829999998765,
+            0.04076749999967433, 0.024983399999655376, 0.02357930000016495,
+            0.026509299999815994, 0.03893930000049295, 0.028023200000461657,
+            0.02066259999992326, 0.020000700000309735, 0.03110140000080719,
+            0.029886399999668356, 0.042215200000100594, 0.02139530000022205,
+            0.03807460000007268, 0.04633179999927961, 0.02711170000020502,
+            0.025484900000265043, 0.04145399999924848, 0.04288339999948221,
+            0.052953899999920395, 0.056675199999517645, 0.05275380000057339,
+            0.04122639999968669, 0.03382379999948171, 0.04733279999982187,
+            0.03714380000019446, 0.040757599999778904, 0.04015079999953741,
+            0.04085610000038287
+          ],
+          "thin-full": [
+            0.06672880000041914, 0.05358370000067225, 0.036867800000436546,
+            0.04071010000006936, 0.04334110000036162, 0.03278109999973822,
+            0.04148460000033083, 0.042521400000623544, 0.03747320000002219,
+            0.02256429999943066, 0.022969900000134658, 0.03176340000027267,
+            0.055512500000077125, 0.03806689999964874, 0.021560900000622496,
+            0.03418580000015936, 0.03128999999989901, 0.03991039999982604,
+            0.021497800000361167, 0.020708799999738403, 0.03143830000044545,
+            0.029318899999452697, 0.04050490000008722, 0.023407700000461773,
+            0.03558569999950123, 0.04112819999954809, 0.02649730000030104,
+            0.027385300000787538, 0.036706199999571254, 0.06076329999996233,
+            0.04223149999961606, 0.060727699999915785, 0.04938200000015058,
+            0.045775000000503496, 0.036813900000197464, 0.03205000000070868,
+            0.03301210000063293, 0.040051199999652454, 0.044425500000215834,
+            0.0505035999995016
+          ]
+        },
+        "median_seconds": {
+          "thin-none": 0.03808745000014824,
+          "thin-line-tables": 0.036340300000574643,
+          "thin-limited": 0.03927675000022646,
+          "thin-full": 0.03717050000022937
+        }
+      }
+    },
+    "verified": true,
+    "pe_import_audit": "windows-pe-imports.json",
+    "provenance": {
+      "run_id": 38437984289,
+      "job_id": 115436950574,
+      "attempt": 1,
+      "artifact_id": 11839503781,
+      "digest": "sha256:e9cd1b02bf86d78ed8c907b332fc75fb011bf51a46c1096b5cd81a6a1ac03b4e",
+      "created_at": "2026-10-13T18:50:15Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950574",
+      "report_sha256": "c82aecd0e8d7c55d958eb4a4384ed2c2f9fc85b417b3f4cd06eb80d18a9002b8",
+      "verified_at": "2026-10-13T18:55:34.494941+00:00"
+    }
   }
 }

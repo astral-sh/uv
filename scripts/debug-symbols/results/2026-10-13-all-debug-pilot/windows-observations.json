@@ -1,0 +1,75 @@
+{
+  "full_debug_repeat": {
+    "source_tools_benchmark_signatures_match": true,
+    "earlier_run_id": 38403298996,
+    "earlier_baseline_seconds": 978.22,
+    "earlier_full_seconds": 1532.4990000000007,
+    "earlier_overhead_percent": 56.66199832348558,
+    "current_baseline_seconds": 995.6400000000003,
+    "current_full_seconds": 1590.374,
+    "current_overhead_percent": 59.73383954039608,
+    "caveat": "Separate allocations, randomized orders and independently trained profiles; no pooled baseline or statistical inference."
+  },
+  "runtime_sample_spread": {
+    "jupyter": {
+      "thin-none": {
+        "minimum_seconds": 0.030277400000159105,
+        "q1_seconds": 0.04757267500008311,
+        "median_seconds": 0.05757340000036493,
+        "q3_seconds": 0.06269944999962718,
+        "maximum_seconds": 0.08124680000037188
+      },
+      "thin-line-tables": {
+        "minimum_seconds": 0.03132220000043162,
+        "q1_seconds": 0.046157574999824647,
+        "median_seconds": 0.052622849999352184,
+        "q3_seconds": 0.062445824999713295,
+        "maximum_seconds": 0.09034719999999652
+      },
+      "thin-limited": {
+        "minimum_seconds": 0.02817750000031083,
+        "q1_seconds": 0.044444250000651664,
+        "median_seconds": 0.0540846000003512,
+        "q3_seconds": 0.06193882500042491,
+        "maximum_seconds": 0.08390760000020236
+      },
+      "thin-full": {
+        "minimum_seconds": 0.0304785999996966,
+        "q1_seconds": 0.040256125000269094,
+        "median_seconds": 0.05054299999983414,
+        "q3_seconds": 0.06033187499997439,
+        "maximum_seconds": 0.0937528000004022
+      }
+    },
+    "trio": {
+      "thin-none": {
+        "minimum_seconds": 0.019873500000358035,
+        "q1_seconds": 0.029761524999685207,
+        "median_seconds": 0.03808745000014824,
+        "q3_seconds": 0.0427006249999522,
+        "maximum_seconds": 0.06025899999985995
+      },
+      "thin-line-tables": {
+        "minimum_seconds": 0.02177990000018326,
+        "q1_seconds": 0.028437650000114445,
+        "median_seconds": 0.036340300000574643,
+        "q3_seconds": 0.04389605000028496,
+        "maximum_seconds": 0.06320859999959794
+      },
+      "thin-limited": {
+        "minimum_seconds": 0.020000700000309735,
+        "q1_seconds": 0.026961100000107763,
+        "median_seconds": 0.03927675000022646,
+        "q3_seconds": 0.04389717500066581,
+        "maximum_seconds": 0.056675199999517645
+      },
+      "thin-full": {
+        "minimum_seconds": 0.020708799999738403,
+        "q1_seconds": 0.03140122500030884,
+        "median_seconds": 0.03717050000022937,
+        "q3_seconds": 0.04272632500055806,
+        "maximum_seconds": 0.06672880000041914
+      }
+    }
+  }
+}

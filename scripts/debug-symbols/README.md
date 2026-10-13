@@ -2,9 +2,10 @@
 
 The [all-debug thin-LTO results](results/2026-10-13-all-debug-pilot/README.md) include fresh
 no-debug, line-table, limited and full-debug builds on the pinned October 13 source. Full debug adds
-52.9% on Linux x86-64, 44.3% on Linux ARM64 and 78.0% on macOS in these single-allocation pilots;
-Windows is still running. See the [methods](ALL_DEBUG_PILOT.md) and recorded runner differences
-before comparing absolute times with earlier runs.
+52.9% on Linux x86-64, 44.3% on Linux ARM64, 78.0% on macOS and 59.7% on Windows in these
+single-allocation pilots. All four allocations passed. Windows line-table build time and runtime
+samples varied more in this repeat. See the [methods](ALL_DEBUG_PILOT.md) and recorded runner
+differences before comparing absolute times with earlier runs.
 
 The [lower-debug thin-LTO results](results/2026-10-13-lower-debug-pilot/README.md) show combined
 build/training overhead of 10.4–18.0% for line tables and 12.6–18.5% for limited debug across Linux

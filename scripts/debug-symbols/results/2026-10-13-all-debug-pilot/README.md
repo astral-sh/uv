@@ -1,6 +1,6 @@
 # All-debug thin-LTO pilot: October 13, 2026
 
-Verified results are available for 3 of four native allocations. Still running: Windows x86-64.
+All four native allocations completed successfully and passed artifact verification.
 
 All builds use thin-LTO instrumentation and fat-LTO final compilation. Each platform has one fresh
 no-debug control, one line-table, one limited-debug and one full-debug build, with independent PGO
@@ -26,7 +26,7 @@ verification and upload are excluded.
 | Linux x86-64   | 8m 29s → 9m 37s (+13.5%)   | 8m 29s → 9m 42s (+14.4%)   | 8m 29s → 12m 58s (+52.9%)  |
 | Linux ARM64    | 10m 45s → 11m 53s (+10.5%) | 10m 45s → 12m 15s (+14.1%) | 10m 45s → 15m 30s (+44.3%) |
 | macOS ARM64    | 9m 13s → 10m 18s (+11.7%)  | 9m 13s → 10m 23s (+12.6%)  | 9m 13s → 16m 24s (+78.0%)  |
-| Windows x86-64 | Pending                    | Pending                    | Pending                    |
+| Windows x86-64 | 16m 36s → 21m 39s (+30.5%) | 16m 36s → 19m 36s (+18.1%) | 16m 36s → 26m 30s (+59.7%) |
 
 ## Raw wall times
 
@@ -34,20 +34,32 @@ Seconds, rounded to three decimals; machine-readable measurements retain full pr
 helper includes preparation, instrumented compilation, training workloads, profile merging and small
 helper overhead. Final compilation remains fat LTO for every treatment.
 
-| Platform     | Debug       | Preparation | Instrumented | Training | Merge | PGO helper | Final   | Total   |
-| ------------ | ----------- | ----------- | ------------ | -------- | ----- | ---------- | ------- | ------- |
-| Linux x86-64 | No debug    | 0.004       | 188.705      | 26.541   | 0.844 | 216.170    | 292.457 | 508.627 |
-| Linux x86-64 | Line tables | 0.004       | 214.811      | 28.537   | 0.842 | 244.271    | 332.876 | 577.146 |
-| Linux x86-64 | Limited     | 0.004       | 214.699      | 29.746   | 0.818 | 245.345    | 336.687 | 582.031 |
-| Linux x86-64 | Full        | 0.004       | 273.829      | 29.238   | 0.854 | 304.002    | 473.927 | 777.929 |
-| Linux ARM64  | No debug    | 0.005       | 248.208      | 21.118   | 0.864 | 270.296    | 374.549 | 644.844 |
-| Linux ARM64  | Line tables | 0.005       | 270.975      | 21.428   | 0.851 | 293.356    | 419.519 | 712.875 |
-| Linux ARM64  | Limited     | 0.006       | 273.287      | 40.023   | 0.823 | 314.236    | 421.252 | 735.488 |
-| Linux ARM64  | Full        | 0.006       | 333.591      | 20.469   | 0.839 | 355.004    | 575.336 | 930.340 |
-| macOS ARM64  | No debug    | 0.014       | 230.916      | 50.172   | 0.434 | 281.629    | 271.391 | 553.020 |
-| macOS ARM64  | Line tables | 0.009       | 263.721      | 46.523   | 0.449 | 310.823    | 306.867 | 617.691 |
-| macOS ARM64  | Limited     | 0.012       | 262.703      | 48.094   | 0.408 | 311.323    | 311.456 | 622.779 |
-| macOS ARM64  | Full        | 0.013       | 339.914      | 55.667   | 0.400 | 396.098    | 588.368 | 984.466 |
+| Platform       | Debug       | Preparation | Instrumented | Training | Merge | PGO helper | Final   | Total    |
+| -------------- | ----------- | ----------- | ------------ | -------- | ----- | ---------- | ------- | -------- |
+| Linux x86-64   | No debug    | 0.004       | 188.705      | 26.541   | 0.844 | 216.170    | 292.457 | 508.627  |
+| Linux x86-64   | Line tables | 0.004       | 214.811      | 28.537   | 0.842 | 244.271    | 332.876 | 577.146  |
+| Linux x86-64   | Limited     | 0.004       | 214.699      | 29.746   | 0.818 | 245.345    | 336.687 | 582.031  |
+| Linux x86-64   | Full        | 0.004       | 273.829      | 29.238   | 0.854 | 304.002    | 473.927 | 777.929  |
+| Linux ARM64    | No debug    | 0.005       | 248.208      | 21.118   | 0.864 | 270.296    | 374.549 | 644.844  |
+| Linux ARM64    | Line tables | 0.005       | 270.975      | 21.428   | 0.851 | 293.356    | 419.519 | 712.875  |
+| Linux ARM64    | Limited     | 0.006       | 273.287      | 40.023   | 0.823 | 314.236    | 421.252 | 735.488  |
+| Linux ARM64    | Full        | 0.006       | 333.591      | 20.469   | 0.839 | 355.004    | 575.336 | 930.340  |
+| macOS ARM64    | No debug    | 0.014       | 230.916      | 50.172   | 0.434 | 281.629    | 271.391 | 553.020  |
+| macOS ARM64    | Line tables | 0.009       | 263.721      | 46.523   | 0.449 | 310.823    | 306.867 | 617.691  |
+| macOS ARM64    | Limited     | 0.012       | 262.703      | 48.094   | 0.408 | 311.323    | 311.456 | 622.779  |
+| macOS ARM64    | Full        | 0.013       | 339.914      | 55.667   | 0.400 | 396.098    | 588.368 | 984.466  |
+| Windows x86-64 | No debug    | 0.016       | 460.750      | 29.656   | 0.797 | 491.453    | 504.187 | 995.640  |
+| Windows x86-64 | Line tables | 0.031       | 681.672      | 35.344   | 1.406 | 718.671    | 580.203 | 1298.874 |
+| Windows x86-64 | Limited     | 0.016       | 533.578      | 53.594   | 1.187 | 588.609    | 587.640 | 1176.249 |
+| Windows x86-64 | Full        | 0.015       | 616.797      | 32.750   | 1.125 | 650.843    | 939.531 | 1590.374 |
+
+Windows line-table instrumentation took 681.672s, versus 533.578s for limited and 616.797s for full
+debug. Its final build was 580.203s, close to limited's 587.640s. The earlier line-table pilot's
+instrumentation took 566.297s; the slower instrumented stage dominates this repeat's higher
+line-table overhead. During that PGO phase, sampled process-tree RSS peaked at 7.219 GB and the
+minimum sampled available RAM was 24.900 GB. This is not evidence of a memory-capacity failure and
+it does not identify a CPU, paging or I/O cause. One observation does not establish that line tables
+consistently cost more than limited debug.
 
 ## Shipped sizes and separate symbols
 
@@ -61,7 +73,7 @@ Main `uv` executable:
 | Linux x86-64   | 39540512 | 39814032 (+273520; +0.692%) | 39550384 (+9872; +0.025%)   | 39833456 (+292944; +0.741%) |
 | Linux ARM64    | 33467664 | 33686488 (+218824; +0.654%) | 33703736 (+236072; +0.705%) | 33499832 (+32168; +0.096%)  |
 | macOS ARM64    | 29274128 | 29327040 (+52912; +0.181%)  | 29542240 (+268112; +0.916%) | 29558976 (+284848; +0.973%) |
-| Windows x86-64 | Pending  | Pending                     | Pending                     | Pending                     |
+| Windows x86-64 | 33539584 | 33537024 (-2560; -0.008%)   | 33556480 (+16896; +0.050%)  | 33581056 (+41472; +0.124%)  |
 
 Processed wheel:
 
@@ -70,21 +82,21 @@ Processed wheel:
 | Linux x86-64   | 17397903 | 17532355 (+134452; +0.773%) | 17410983 (+13080; +0.075%)  | 17516255 (+118352; +0.680%) |
 | Linux ARM64    | 16469085 | 16589666 (+120581; +0.732%) | 16587544 (+118459; +0.719%) | 16488398 (+19313; +0.117%)  |
 | macOS ARM64    | 14953280 | 14968460 (+15180; +0.102%)  | 15080383 (+127103; +0.850%) | 15094949 (+141669; +0.947%) |
-| Windows x86-64 | Pending  | Pending                     | Pending                     | Pending                     |
+| Windows x86-64 | 15914179 | 15910510 (-3669; -0.023%)   | 15919134 (+4955; +0.031%)   | 15917017 (+2838; +0.018%)   |
 
 Separate companion files, decimal MB. Values in each cell are `uv / uvx / uvw`; uvw is only present
 on Windows. Exact bytes and executable identities are in the measurements.
 
-| Platform       | Line tables     | Limited         | Full            |
-| -------------- | --------------- | --------------- | --------------- |
-| Linux x86-64   | 169.656 / 1.953 | 263.628 / 1.995 | 587.440 / 2.115 |
-| Linux ARM64    | 180.666 / 2.127 | 277.048 / 2.168 | 593.957 / 2.283 |
-| macOS ARM64    | 187.153 / 2.558 | 300.758 / 2.608 | 581.238 / 2.728 |
-| Windows x86-64 | Pending         | Pending         | Pending         |
+| Platform       | Line tables             | Limited                 | Full                    |
+| -------------- | ----------------------- | ----------------------- | ----------------------- |
+| Linux x86-64   | 169.656 / 1.953         | 263.628 / 1.995         | 587.440 / 2.115         |
+| Linux ARM64    | 180.666 / 2.127         | 277.048 / 2.168         | 593.957 / 2.283         |
+| macOS ARM64    | 187.153 / 2.558         | 300.758 / 2.608         | 581.238 / 2.728         |
+| Windows x86-64 | 120.107 / 4.502 / 4.502 | 120.246 / 4.510 / 4.502 | 443.585 / 4.927 / 4.911 |
 
 Profile-driven code generation can produce different shipped bytes and sizes. These observations do
-not establish byte-identical binaries, and the small runtime changes below cannot be assigned solely
-to debug metadata.
+not establish byte-identical binaries, and the runtime changes below cannot be assigned solely to
+debug metadata.
 
 ## Resolver runtime
 
@@ -95,21 +107,29 @@ independent build or host replications.
 
 Jupyter:
 
-| Platform       | No debug | Line tables     | Limited         | Full            |
-| -------------- | -------- | --------------- | --------------- | --------------- |
-| Linux x86-64   | 8.763    | 8.793 (+0.33%)  | 8.673 (-1.03%)  | 8.705 (-0.67%)  |
-| Linux ARM64    | 10.388   | 10.337 (-0.50%) | 10.323 (-0.63%) | 10.371 (-0.16%) |
-| macOS ARM64    | 11.034   | 11.076 (+0.38%) | 11.037 (+0.03%) | 11.098 (+0.59%) |
-| Windows x86-64 | Pending  | Pending         | Pending         | Pending         |
+| Platform       | No debug | Line tables     | Limited         | Full             |
+| -------------- | -------- | --------------- | --------------- | ---------------- |
+| Linux x86-64   | 8.763    | 8.793 (+0.33%)  | 8.673 (-1.03%)  | 8.705 (-0.67%)   |
+| Linux ARM64    | 10.388   | 10.337 (-0.50%) | 10.323 (-0.63%) | 10.371 (-0.16%)  |
+| macOS ARM64    | 11.034   | 11.076 (+0.38%) | 11.037 (+0.03%) | 11.098 (+0.59%)  |
+| Windows x86-64 | 57.573   | 52.623 (-8.60%) | 54.085 (-6.06%) | 50.543 (-12.21%) |
 
 Trio:
 
-| Platform       | No debug | Line tables    | Limited        | Full           |
-| -------------- | -------- | -------------- | -------------- | -------------- |
-| Linux x86-64   | 7.298    | 6.993 (-4.19%) | 7.119 (-2.46%) | 7.040 (-3.53%) |
-| Linux ARM64    | 8.019    | 7.971 (-0.60%) | 7.957 (-0.76%) | 7.910 (-1.35%) |
-| macOS ARM64    | 9.253    | 9.211 (-0.46%) | 9.251 (-0.02%) | 9.163 (-0.97%) |
-| Windows x86-64 | Pending  | Pending        | Pending        | Pending        |
+| Platform       | No debug | Line tables     | Limited         | Full            |
+| -------------- | -------- | --------------- | --------------- | --------------- |
+| Linux x86-64   | 7.298    | 6.993 (-4.19%)  | 7.119 (-2.46%)  | 7.040 (-3.53%)  |
+| Linux ARM64    | 8.019    | 7.971 (-0.60%)  | 7.957 (-0.76%)  | 7.910 (-1.35%)  |
+| macOS ARM64    | 9.253    | 9.211 (-0.46%)  | 9.251 (-0.02%)  | 9.163 (-0.97%)  |
+| Windows x86-64 | 38.087   | 36.340 (-4.59%) | 39.277 (+3.12%) | 37.171 (-2.41%) |
+
+Windows runtime samples were variable: no-debug Jupyter ranged from 30.277 to 81.247ms, while full
+debug ranged from 30.479 to 93.753ms. The full/no-debug Jupyter median difference was −12.21%;
+limited/no-debug Trio was +3.12%. Balanced ordering and identical outputs passed, but this single
+allocation does not establish a repeatable speedup, regression or equivalence bound. All forty
+samples and their [descriptive spread](windows-observations.json) are retained. Resources were
+sampled during builds, not during these runtime measurements, so they cannot identify the cause of
+this scatter.
 
 ## Sampled memory and runner evidence
 
@@ -122,15 +142,16 @@ consumption. PGO-phase memory includes instrumentation and workload training.
 | Linux x86-64   | 11.569 / 12.094 | 16.302 / 15.544 | 16.565 / 12.614 | 24.247 / 23.603 |
 | Linux ARM64    | 10.939 / 11.059 | 16.677 / 15.659 | 16.628 / 15.656 | 24.850 / 22.352 |
 | macOS ARM64    | 6.489 / 8.069   | 8.439 / 10.194  | 8.707 / 10.263  | 12.469 / 19.493 |
-| Windows x86-64 | Pending         | Pending         | Pending         | Pending         |
+| Windows x86-64 | 5.306 / 5.670   | 7.219 / 12.651  | 7.451 / 13.157  | 11.019 / 25.077 |
 
-| Platform     | Logical CPUs | CPU model              | Reported physical RAM (bytes) | Cargo jobs | Job                                                                               |
-| ------------ | ------------ | ---------------------- | ----------------------------- | ---------- | --------------------------------------------------------------------------------- |
-| Linux x86-64 | 16           | AMD EPYC 9R45          | 66149724160                   | 8          | [Logs](https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950535) |
-| Linux ARM64  | 16           | Neoverse-V2            | 66192830464                   | 8          | [Logs](https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950528) |
-| macOS ARM64  | 12           | Apple M5 Max (Virtual) | 30064771072                   | 4          | [Logs](https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950470) |
+| Platform       | Logical CPUs | CPU model              | Reported physical RAM (bytes) | Cargo jobs | Job                                                                               |
+| -------------- | ------------ | ---------------------- | ----------------------------- | ---------- | --------------------------------------------------------------------------------- |
+| Linux x86-64   | 16           | AMD EPYC 9R45          | 66149724160                   | 8          | [Logs](https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950535) |
+| Linux ARM64    | 16           | Neoverse-V2            | 66192830464                   | 8          | [Logs](https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950528) |
+| macOS ARM64    | 12           | Apple M5 Max (Virtual) | 30064771072                   | 4          | [Logs](https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950470) |
+| Windows x86-64 | 16           | AMD EPYC-v4 Processor  | 34359107584                   | 4          | [Logs](https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950574) |
 
-Maximum sampling gap in collected phases: 1.110s. Resource series retain sampled child CPU/I/O
+Maximum sampling gap in collected phases: 1.156s. Resource series retain sampled child CPU/I/O
 counters, host memory and disk counters, and unavailable-counter errors. macOS process I/O counters
 are unavailable; short-lived-process errors also occur. These measurements do not establish a
 paging, throttling or I/O-pressure explanation for any timing difference. All collected builds
@@ -140,12 +161,12 @@ completed without compiler OOM.
 
 Missing-profile warnings, no debug / line tables / limited / full:
 
-| Platform       | No debug | Line tables | Limited | Full    |
-| -------------- | -------- | ----------- | ------- | ------- |
-| Linux x86-64   | 18       | 18          | 18      | 18      |
-| Linux ARM64    | 18       | 18          | 18      | 18      |
-| macOS ARM64    | 3787     | 3823        | 3819    | 3845    |
-| Windows x86-64 | Pending  | Pending     | Pending | Pending |
+| Platform       | No debug | Line tables | Limited | Full |
+| -------------- | -------- | ----------- | ------- | ---- |
+| Linux x86-64   | 18       | 18          | 18      | 18   |
+| Linux ARM64    | 18       | 18          | 18      | 18   |
+| macOS ARM64    | 3787     | 3823        | 3819    | 3845 |
+| Windows x86-64 | 19       | 19          | 19      | 19   |
 
 All collected profile mismatch counts are zero. macOS still has substantial missing-profile
 diagnostics, including dependencies; fewer warnings alone do not demonstrate better coverage. Each
@@ -157,8 +178,10 @@ lookup for every executable, AWS-LC and linked jitterentropy lookup in uv, and n
 companions hidden. SBOM hashes match across treatments within each platform. Artifact digest and
 upload-job/attempt/time provenance, source/plan/order, executable/profile/wheel hashes and sizes,
 companion sizes, both stages' effective compiler flags, resource summaries, and benchmark
-order/samples/medians/output hashes were verified. Downloaded macOS signatures passed locally. Linux
-and Windows binaries were not executed on the collecting Mac.
+order/samples/medians/output hashes were verified. Downloaded macOS signatures passed locally.
+Windows native static-CRT checks and an independent read of downloaded PE import tables passed. All
+twelve Windows binaries also have independently decoded, valid embedded SBOMs; all nine PDB sizes
+and hashes are retained. Linux and Windows binaries were not executed on the collecting Mac.
 
 ## Comparison with the earlier October 13 pilots
 
@@ -168,11 +191,12 @@ overhead observations; neither run borrows the other allocation's baseline. Runt
 from three warmups/thirty timings to four/forty, and build orders and independently trained profiles
 differ.
 
-| Platform     | No-debug total: earlier → current | Line overhead: earlier → current | Limited overhead: earlier → current |
-| ------------ | --------------------------------- | -------------------------------- | ----------------------------------- |
-| Linux x86-64 | 10m 22s → 8m 29s                  | +13.3% → +13.5%                  | +12.7% → +14.4%                     |
-| Linux ARM64  | 10m 17s → 10m 45s                 | +10.4% → +10.5%                  | +12.6% → +14.1%                     |
-| macOS ARM64  | 9m 15s → 9m 13s                   | +12.5% → +11.7%                  | +13.5% → +12.6%                     |
+| Platform       | No-debug total: earlier → current | Line overhead: earlier → current | Limited overhead: earlier → current |
+| -------------- | --------------------------------- | -------------------------------- | ----------------------------------- |
+| Linux x86-64   | 10m 22s → 8m 29s                  | +13.3% → +13.5%                  | +12.7% → +14.4%                     |
+| Linux ARM64    | 10m 17s → 10m 45s                 | +10.4% → +10.5%                  | +12.6% → +14.1%                     |
+| macOS ARM64    | 9m 15s → 9m 13s                   | +12.5% → +11.7%                  | +13.5% → +12.6%                     |
+| Windows x86-64 | 16m 47s → 16m 36s                 | +18.0% → +30.5%                  | +18.5% → +18.1%                     |
 
 Linux x86-64 used the same requested Depot profile in both runs, but reported different machines:
 Intel(R) Xeon(R) 6975P-C with 132,916,703,232 bytes RAM earlier, and AMD EPYC 9R45 with
@@ -181,9 +205,12 @@ This is direct evidence of allocation differences, not proof of a single cause f
 change; retain each run's baseline and avoid interpreting absolute speed differences as debug-level
 effects.
 
-The earlier Windows no/full-debug pilot also used this pinned source, but its full-debug observation
-came from another allocation. Older all-platform full-debug results use fat instrumentation and an
-earlier source revision; they are historical context, not current thin-LTO full-debug measurements.
+The earlier Windows no/full-debug pilot used this pinned source and matching tool/input/output
+signatures: no debug 978.220s → full 1532.499s (+56.7%). This allocation measured 995.640s →
+1590.374s (+59.7%). Both observations are retained with their own controls; they are separate
+allocations, build orders and independently trained profiles, not a statistical estimate. Older
+all-platform full-debug results use fat instrumentation and an earlier source revision; they are
+historical context, not current thin-LTO full-debug measurements.
 
 ## Interpretation and limits
 
@@ -203,15 +230,17 @@ statistical study was changed or dispatched for this pilot.
 
 [Normalized measurements and all timed samples](measurements.json),
 [paired differences](comparison.json), [historical comparisons](historical-comparison.json) and
-[provenance manifest](manifest.json) accompany this report. Raw authoritative reports, archives,
-metadata, job logs, binaries, profiles, symbols and resource series are retained under
-`target/debug-symbols-experiment/all-debug-pilot-2026-10-13/`. Top-level report.json contains final
-verification; per-variant reports are earlier build snapshots.
+[provenance manifest](manifest.json) accompany this report. The
+[Windows binary audit](windows-audit.json) retains PE imports, SBOM checks and PDB hashes. Raw
+authoritative reports, archives, metadata, job logs, binaries, profiles, symbols and resource series
+are retained under `target/debug-symbols-experiment/all-debug-pilot-2026-10-13/`. Top-level
+report.json contains final verification; per-variant reports are earlier build snapshots.
 
 Canonical plan SHA256: `2549e7992ccfb59b2f9dde8d07b752d6a0a53982e52a06323da57a78ce9b7cae`.
 
-| Platform     | Artifact ID | Uploaded UTC         | Archive SHA256                                                     |
-| ------------ | ----------- | -------------------- | ------------------------------------------------------------------ |
-| Linux x86-64 | 11836463891 | 2026-10-13T18:04:48Z | `f46b314eb2dcb6ce2a5ae975f92aa113393d024a5b355e2e09f761674456d6b3` |
-| Linux ARM64  | 11837663272 | 2026-10-13T18:14:47Z | `2ac1dd86c4708003f04439271517c69ebba557ccdabf2fa11427b8042edd31ba` |
-| macOS ARM64  | 11837727586 | 2026-10-13T18:10:16Z | `b33c1ff825af17591519142db6083ae86286c7160b19c86556bb192e15b9ea31` |
+| Platform       | Artifact ID | Uploaded UTC         | Archive SHA256                                                     |
+| -------------- | ----------- | -------------------- | ------------------------------------------------------------------ |
+| Linux x86-64   | 11836463891 | 2026-10-13T18:04:48Z | `f46b314eb2dcb6ce2a5ae975f92aa113393d024a5b355e2e09f761674456d6b3` |
+| Linux ARM64    | 11837663272 | 2026-10-13T18:14:47Z | `2ac1dd86c4708003f04439271517c69ebba557ccdabf2fa11427b8042edd31ba` |
+| macOS ARM64    | 11837727586 | 2026-10-13T18:10:16Z | `b33c1ff825af17591519142db6083ae86286c7160b19c86556bb192e15b9ea31` |
+| Windows x86-64 | 11839503781 | 2026-10-13T18:50:15Z | `e9cd1b02bf86d78ed8c907b332fc75fb011bf51a46c1096b5cd81a6a1ac03b4e` |

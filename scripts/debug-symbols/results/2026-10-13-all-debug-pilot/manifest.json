@@ -7,8 +7,8 @@
   "independent_allocations_per_platform": 1,
   "build_variants_per_platform": 4,
   "statistical_inference": false,
-  "completed_platforms": ["linux", "linux-arm64", "macos"],
-  "pending_platforms": ["windows"],
+  "completed_platforms": ["linux", "linux-arm64", "macos", "windows"],
+  "pending_platforms": [],
   "provenance": {
     "linux": {
       "run_id": 38437984289,
@@ -42,6 +42,30 @@
       "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950470",
       "report_sha256": "0926f4e274efbf666e39e7bb07b2df732ab439f54fd3493d38669769b6913a4f",
       "verified_at": "2026-10-13T18:15:18.630501+00:00"
+    },
+    "windows": {
+      "run_id": 38437984289,
+      "job_id": 115436950574,
+      "attempt": 1,
+      "artifact_id": 11839503781,
+      "digest": "sha256:e9cd1b02bf86d78ed8c907b332fc75fb011bf51a46c1096b5cd81a6a1ac03b4e",
+      "created_at": "2026-10-13T18:50:15Z",
+      "job_url": "https://github.com/astral-sh/uv/actions/runs/38437984289/job/115436950574",
+      "report_sha256": "c82aecd0e8d7c55d958eb4a4384ed2c2f9fc85b417b3f4cd06eb80d18a9002b8",
+      "verified_at": "2026-10-13T18:55:34.494941+00:00"
     }
-  }
+  },
+  "validation": {
+    "all_native_jobs_successful": true,
+    "artifact_digest_and_upload_provenance": true,
+    "both_compilation_stage_flags_verified": true,
+    "profiles_executables_wheels_and_symbol_sizes_verified": true,
+    "resource_series_verified": true,
+    "source_negative_sbom_crt_signature_install_smoke_checks_passed": true,
+    "balanced_benchmark_orders_samples_outputs_and_medians_verified": true,
+    "downloaded_linux_or_windows_binaries_executed_locally": false,
+    "authoritative_reports": "Final top-level report.json for each artifact; per-variant reports are earlier build snapshots."
+  },
+  "windows_audit": "windows-audit.json",
+  "windows_descriptive_observations": "windows-observations.json"
 }

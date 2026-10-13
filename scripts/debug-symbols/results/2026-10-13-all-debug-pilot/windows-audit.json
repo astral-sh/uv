@@ -1,0 +1,275 @@
+{
+  "pe_imports": {
+    "artifact_digest": "sha256:e9cd1b02bf86d78ed8c907b332fc75fb011bf51a46c1096b5cd81a6a1ac03b4e",
+    "method": "Read PE imports with llvm-objdump without executing Windows binaries; reject release and debug CRT DLLs.",
+    "binaries": {
+      "thin-limited/uv.exe": {
+        "sha256": "52b6f19b7fe8e33aa2fecb92a2c1bb62ad95816b98cbd890839d8086a6f44b97",
+        "imports": [
+          "ntdll.dll",
+          "advapi32.dll",
+          "kernel32.dll",
+          "bcryptprimitives.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "shell32.dll",
+          "ole32.dll",
+          "userenv.dll",
+          "oleaut32.dll",
+          "user32.dll",
+          "cfgmgr32.dll",
+          "bcrypt.dll",
+          "ws2_32.dll",
+          "crypt32.dll",
+          "KERNEL32.dll",
+          "ADVAPI32.dll"
+        ]
+      },
+      "thin-limited/uvx.exe": {
+        "sha256": "54a8c8773ca0793321e5ec270f23610d05eb0e157f2e6af25ff19e50802e0bca",
+        "imports": [
+          "kernel32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "ntdll.dll",
+          "oleaut32.dll",
+          "KERNEL32.dll"
+        ]
+      },
+      "thin-limited/uvw.exe": {
+        "sha256": "03359fdd71d9d354dfa11743e23c2587142633b1c233b9322f469eea9e9572e0",
+        "imports": [
+          "kernel32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "ntdll.dll",
+          "oleaut32.dll",
+          "KERNEL32.dll"
+        ]
+      },
+      "thin-full/uv.exe": {
+        "sha256": "aa672fc9db86cea6f2ca85496af7a1820964f8f75c8239bb2cb846dbb188676f",
+        "imports": [
+          "ntdll.dll",
+          "advapi32.dll",
+          "kernel32.dll",
+          "bcryptprimitives.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "shell32.dll",
+          "ole32.dll",
+          "userenv.dll",
+          "oleaut32.dll",
+          "user32.dll",
+          "cfgmgr32.dll",
+          "bcrypt.dll",
+          "ws2_32.dll",
+          "crypt32.dll",
+          "KERNEL32.dll",
+          "ADVAPI32.dll"
+        ]
+      },
+      "thin-full/uvx.exe": {
+        "sha256": "e3c0554866977e9a788b35eef431aa5b70c650969def9b42dd9622f5f316745f",
+        "imports": [
+          "kernel32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "ntdll.dll",
+          "oleaut32.dll",
+          "KERNEL32.dll"
+        ]
+      },
+      "thin-full/uvw.exe": {
+        "sha256": "fd45d298daaa78ab9fbe0b7c9a290d9f017a9598b1da0e3248fd364771dcdeee",
+        "imports": [
+          "kernel32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "ntdll.dll",
+          "oleaut32.dll",
+          "KERNEL32.dll"
+        ]
+      },
+      "thin-line-tables/uv.exe": {
+        "sha256": "75c12462efed12798658589c3800b8bac19ea8b2651c005ea0fa8fb5391c1946",
+        "imports": [
+          "ntdll.dll",
+          "advapi32.dll",
+          "kernel32.dll",
+          "bcryptprimitives.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "shell32.dll",
+          "ole32.dll",
+          "userenv.dll",
+          "oleaut32.dll",
+          "user32.dll",
+          "cfgmgr32.dll",
+          "bcrypt.dll",
+          "ws2_32.dll",
+          "crypt32.dll",
+          "KERNEL32.dll",
+          "ADVAPI32.dll"
+        ]
+      },
+      "thin-line-tables/uvx.exe": {
+        "sha256": "390299b3c9656996ccf2f02da4a3647267d0bbe812736ee5addbd56d1cf86eb2",
+        "imports": [
+          "kernel32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "ntdll.dll",
+          "oleaut32.dll",
+          "KERNEL32.dll"
+        ]
+      },
+      "thin-line-tables/uvw.exe": {
+        "sha256": "9a640e4357b85efa26d519834a72ac897b516cafcc9b1a6854d5ef1648ffc215",
+        "imports": [
+          "kernel32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "ntdll.dll",
+          "oleaut32.dll",
+          "KERNEL32.dll"
+        ]
+      },
+      "thin-none/uv.exe": {
+        "sha256": "fc59aa430162d78c871bb3009a0b51aa5393a976ff261ef6394ac62c9cb31a21",
+        "imports": [
+          "ntdll.dll",
+          "advapi32.dll",
+          "kernel32.dll",
+          "bcryptprimitives.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "shell32.dll",
+          "ole32.dll",
+          "userenv.dll",
+          "oleaut32.dll",
+          "user32.dll",
+          "cfgmgr32.dll",
+          "bcrypt.dll",
+          "ws2_32.dll",
+          "crypt32.dll",
+          "KERNEL32.dll",
+          "ADVAPI32.dll"
+        ]
+      },
+      "thin-none/uvx.exe": {
+        "sha256": "7f5b4d79ad94d30995fab10bef984dca7e67f22db0dd2ee78c0f66597dea8546",
+        "imports": [
+          "kernel32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "ntdll.dll",
+          "oleaut32.dll",
+          "KERNEL32.dll"
+        ]
+      },
+      "thin-none/uvw.exe": {
+        "sha256": "3a69c76de8f8273889ce2305078b0a2758341452557e31b54e0d4e694d8367c5",
+        "imports": [
+          "kernel32.dll",
+          "api-ms-win-core-synch-l1-2-0.dll",
+          "ntdll.dll",
+          "oleaut32.dll",
+          "KERNEL32.dll"
+        ]
+      }
+    }
+  },
+  "sbom_and_symbols": {
+    "method": "Read PE section headers and decompress embedded SBOM JSON without executing binaries; hash every retained PDB.",
+    "binaries": {
+      "thin-limited/uv.exe": {
+        "sha256": "52b6f19b7fe8e33aa2fecb92a2c1bb62ad95816b98cbd890839d8086a6f44b97",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-limited/uvx.exe": {
+        "sha256": "54a8c8773ca0793321e5ec270f23610d05eb0e157f2e6af25ff19e50802e0bca",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-limited/uvw.exe": {
+        "sha256": "03359fdd71d9d354dfa11743e23c2587142633b1c233b9322f469eea9e9572e0",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-full/uv.exe": {
+        "sha256": "aa672fc9db86cea6f2ca85496af7a1820964f8f75c8239bb2cb846dbb188676f",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-full/uvx.exe": {
+        "sha256": "e3c0554866977e9a788b35eef431aa5b70c650969def9b42dd9622f5f316745f",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-full/uvw.exe": {
+        "sha256": "fd45d298daaa78ab9fbe0b7c9a290d9f017a9598b1da0e3248fd364771dcdeee",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-line-tables/uv.exe": {
+        "sha256": "75c12462efed12798658589c3800b8bac19ea8b2651c005ea0fa8fb5391c1946",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-line-tables/uvx.exe": {
+        "sha256": "390299b3c9656996ccf2f02da4a3647267d0bbe812736ee5addbd56d1cf86eb2",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-line-tables/uvw.exe": {
+        "sha256": "9a640e4357b85efa26d519834a72ac897b516cafcc9b1a6854d5ef1648ffc215",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-none/uv.exe": {
+        "sha256": "fc59aa430162d78c871bb3009a0b51aa5393a976ff261ef6394ac62c9cb31a21",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-none/uvx.exe": {
+        "sha256": "7f5b4d79ad94d30995fab10bef984dca7e67f22db0dd2ee78c0f66597dea8546",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      },
+      "thin-none/uvw.exe": {
+        "sha256": "3a69c76de8f8273889ce2305078b0a2758341452557e31b54e0d4e694d8367c5",
+        "sbom_sha256": "d161beb3b377244b45327c0f02f95e468389add3d9d6b15595ef6e266e7e0dbd",
+        "packages": 594
+      }
+    },
+    "symbols": {
+      "thin-limited/uv.pdb": {
+        "bytes": 120246272,
+        "sha256": "a349c3f7623cce80edc7a231321453da38983bcf748a8f3fe9c3ddf792aad50a"
+      },
+      "thin-limited/uvx.pdb": {
+        "bytes": 4509696,
+        "sha256": "5db3a17cc71bdd8f023f51b9dc43c7152014243ac23ff6414925000d0189e789"
+      },
+      "thin-limited/uvw.pdb": {
+        "bytes": 4501504,
+        "sha256": "fe1bdcf7f9bdc205726b39366cd56d185fe2c6669aa919cfcaccb9feeb10fb3c"
+      },
+      "thin-full/uv.pdb": {
+        "bytes": 443584512,
+        "sha256": "6b22cbe299ceae870bcff45881ea671485c945b1ea8f9ab5dfdfdfea1013c1b2"
+      },
+      "thin-full/uvx.pdb": {
+        "bytes": 4927488,
+        "sha256": "e5851e4a2b8aeac0d981ee3bc21f2398d7a5f7ce853d040396435de129192403"
+      },
+      "thin-full/uvw.pdb": {
+        "bytes": 4911104,
+        "sha256": "46d619f77528817cd9995512f64093792dd48fd264f157c7143ce0281bde673d"
+      },
+      "thin-line-tables/uv.pdb": {
+        "bytes": 120107008,
+        "sha256": "6aaa2c119ff4f1c857e6db4bbbc316445e2cfb75129eb335dc2626bb8ffa02a2"
+      },
+      "thin-line-tables/uvx.pdb": {
+        "bytes": 4501504,
+        "sha256": "b20f65c56f596cd512b8ecb1fb6e956e179788fff347a36e89085a9c88648415"
+      },
+      "thin-line-tables/uvw.pdb": {
+        "bytes": 4501504,
+        "sha256": "71cc2ba84c61db36a01b76a4d3ced38fa68f72a6f7b77d819c4f6cc8f0f752ed"
+      }
+    }
+  }
+}

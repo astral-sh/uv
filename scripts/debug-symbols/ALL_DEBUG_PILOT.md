@@ -1,7 +1,7 @@
 # All debug levels with thin-LTO instrumentation
 
 [Results and retained measurements](results/2026-10-13-all-debug-pilot/README.md) are available for
-Linux x86-64, Linux ARM64 and macOS. Windows remains in progress.
+all four platforms: Linux x86-64, Linux ARM64, macOS and Windows. All allocations passed.
 
 Run one fresh native allocation on each of Linux x86-64, Linux ARM64, macOS ARM64 and Windows
 x86-64. Each allocation builds no debug information, Rust line tables, limited Rust debug and full
