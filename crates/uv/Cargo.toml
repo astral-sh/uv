@@ -120,6 +120,7 @@ uv-platform = { workspace = true }
 uv-publish = { workspace = true, features = ["test"] }
 uv-test = { workspace = true }
 uv-trampoline-builder = { workspace = true }
+uv-variants = { workspace = true }
 
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }

@@ -5881,6 +5881,7 @@ dependencies = [
  "uv-trampoline-builder",
  "uv-types",
  "uv-unix",
+ "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",
@@ -6376,6 +6377,7 @@ dependencies = [
  "uv-static",
  "uv-threads",
  "uv-torch",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "webpki-root-certs",
@@ -6548,6 +6550,7 @@ dependencies = [
  "uv-git",
  "uv-install-wheel",
  "uv-installer",
+ "uv-pep508",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
@@ -6556,6 +6559,8 @@ dependencies = [
  "uv-resolver",
  "uv-static",
  "uv-types",
+ "uv-variant-frontend",
+ "uv-variants",
  "uv-version",
  "uv-workspace",
 ]
@@ -6573,6 +6578,7 @@ dependencies = [
  "http-content-range",
  "indoc",
  "insta",
+ "itertools 0.14.0",
  "owo-colors",
  "rayon",
  "reqwest",
@@ -6604,6 +6610,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-metadata",
  "uv-normalize",
+ "uv-once-map",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
@@ -6614,6 +6621,7 @@ dependencies = [
  "uv-static",
  "uv-threads",
  "uv-types",
+ "uv-variants",
  "uv-workspace",
  "walkdir",
 ]
@@ -6673,6 +6681,8 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
+ "uv-static",
+ "uv-variants",
  "uv-warnings",
 ]
 
@@ -6970,6 +6980,7 @@ dependencies = [
  "rayon",
  "rustc-hash",
  "same-file",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
@@ -6999,6 +7010,7 @@ dependencies = [
  "uv-static",
  "uv-threads",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "walkdir",
 ]
@@ -7034,17 +7046,20 @@ dependencies = [
  "owo-colors",
  "percent-encoding",
  "petgraph",
+ "reqwest",
  "rustc-hash",
  "serde",
  "serde_json",
  "smallvec",
  "thiserror",
+ "tokio-util",
  "toml",
  "toml_edit",
  "toml_parser",
  "toml_writer",
  "tracing",
  "url",
+ "uv-cache",
  "uv-cache-key",
  "uv-client",
  "uv-configuration",
@@ -7057,6 +7072,7 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-git-types",
+ "uv-metadata",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -7068,7 +7084,9 @@ dependencies = [
  "uv-redacted",
  "uv-resolver-types",
  "uv-small-str",
+ "uv-static",
  "uv-types",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "uv-workspace",
@@ -7297,6 +7315,7 @@ dependencies = [
  "uv-tool",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -7787,6 +7806,7 @@ dependencies = [
  "uv-resolver",
  "uv-scripts",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -7856,6 +7876,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python-interpreter",
  "uv-python-types",
@@ -7907,6 +7928,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python-interpreter",
  "uv-python-types",
@@ -7916,6 +7938,7 @@ dependencies = [
  "uv-static",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
 ]
 
@@ -8064,6 +8087,7 @@ dependencies = [
  "hex",
  "http",
  "ignore",
+ "indexmap",
  "indoc",
  "insta",
  "itertools 0.14.0",
@@ -8093,6 +8117,7 @@ dependencies = [
  "uv-python-managed",
  "uv-python-types",
  "uv-static",
+ "uv-variants",
  "uv-version",
  "walkdir",
  "wiremock",
@@ -8262,10 +8287,12 @@ dependencies = [
  "uv-normalize",
  "uv-once-map",
  "uv-pep440",
+ "uv-pep508",
  "uv-pypi-types",
  "uv-python-interpreter",
  "uv-redacted",
  "uv-static",
+ "uv-variants",
  "uv-workspace",
 ]
 
@@ -8275,6 +8302,50 @@ version = "0.0.92"
 dependencies = [
  "nix 0.31.3",
  "thiserror",
+]
+
+[[package]]
+name = "uv-variant-frontend"
+version = "0.0.92"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "fs-err",
+ "indoc",
+ "owo-colors",
+ "rustc-hash",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-python-interpreter",
+ "uv-static",
+ "uv-types",
+ "uv-variants",
+ "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-variants"
+version = "0.0.92"
+dependencies = [
+ "indexmap",
+ "insta",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-normalize",
+ "uv-once-map",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
 ]
 
 [[package]]

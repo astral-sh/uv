@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
@@ -10,14 +11,16 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, Index, IndexLocations, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel,
-    RegistrySourceDist,
+    File, Index, IndexEntryFilename, IndexLocations, IndexUrl, MinimumLibcVersion,
+    RegistryBuiltWheel, RegistrySourceDist, RegistryVariantsJson,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_platform_tags::{TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
+use uv_variants::VariantPriority;
 
 use crate::prioritized_distribution::{
     HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
@@ -93,6 +96,11 @@ impl FlatDistributions {
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
+            if entry.filename().is_variant()
+                && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            {
+                continue;
+            }
             let (filename, file, index) = entry.into_parts();
             distributions.add_file(
                 file,
@@ -116,7 +124,7 @@ impl FlatDistributions {
     fn add_file(
         &mut self,
         file: File,
-        filename: DistFilename,
+        filename: IndexEntryFilename,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
@@ -126,7 +134,7 @@ impl FlatDistributions {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
         match filename {
-            DistFilename::WheelFilename(filename) => {
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(filename)) => {
                 let version = filename.version.clone();
 
                 let compatibility = Self::wheel_compatibility(
@@ -149,7 +157,7 @@ impl FlatDistributions {
                     minimum_libc_version,
                 );
             }
-            DistFilename::SourceDistFilename(filename) => {
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(filename)) => {
                 let compatibility = Self::source_dist_compatibility(
                     &filename,
                     file.hashes.as_slice(),
@@ -170,6 +178,22 @@ impl FlatDistributions {
                     vec![],
                     compatibility,
                 );
+            }
+            IndexEntryFilename::VariantJson(variants_json) => {
+                let version = variants_json.version.clone();
+                let registry_variants_json = RegistryVariantsJson {
+                    filename: variants_json,
+                    file: Box::new(file),
+                    index,
+                };
+                match self.0.entry(version) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().insert_variant_json(registry_variants_json);
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(PrioritizedDist::from_variant_json(registry_variants_json));
+                    }
+                }
             }
         }
     }
@@ -217,19 +241,13 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
-        // TODO(konsti): Check variant compatibility for flat-index wheels.
-        if filename.variant().is_some() {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
-                IncompatibleTag::Variant,
-            ));
-        }
         // Check if binaries are allowed for this package.
         if build_options.no_binary_package(&filename.name) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match tags {
+        let tag_priority = match tags {
             Some(tags) => match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
@@ -237,6 +255,13 @@ impl FlatDistributions {
                 TagCompatibility::Compatible(priority) => Some(priority),
             },
             None => None,
+        };
+
+        // Variant compatibility is determined later, when target properties are known.
+        let variant_priority = if filename.variant().is_none() {
+            VariantPriority::NonVariant
+        } else {
+            VariantPriority::Unknown
         };
 
         // Check if hashes line up.
@@ -256,7 +281,12 @@ impl FlatDistributions {
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::Compatible {
+            hash,
+            variant_priority,
+            tag_priority,
+            build_tag,
+        }
     }
 }
 

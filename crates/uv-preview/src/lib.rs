@@ -460,8 +460,7 @@ pub enum PreviewFeature {
     /// project resolution, and installation. See [project build dependency
     /// hashes](./projects/build.md#project-build-dependency-hashes) for configuration and exceptions.
     BuildDependencyHashes,
-    /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
-    /// Variant wheels are not yet selectable.
+    /// Allows resolving and installing [wheel variants](https://peps.python.org/pep-0825/), including running variant providers.
     WheelVariants,
 }
 

@@ -10,7 +10,12 @@ pub fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode
     };
 
     resolution.map(|dist| {
-        let ResolvedDist::Installable { dist, version } = dist else {
+        let ResolvedDist::Installable {
+            dist,
+            version,
+            variants_json,
+        } = dist
+        else {
             return None;
         };
         let Dist::Source(SourceDist::Directory(DirectorySourceDist {
@@ -31,6 +36,7 @@ pub fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode
         }
 
         Some(ResolvedDist::Installable {
+            variants_json: variants_json.clone(),
             dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
                 name: name.clone(),
                 install_path: install_path.clone(),

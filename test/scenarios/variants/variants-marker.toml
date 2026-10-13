@@ -1,0 +1,53 @@
+# Adapted from https://github.com/astral-sh/packse/pull/292 (f00a08fa16f60eb5b7c39409ce62cb9e2632ffed).
+name = "variants-marker"
+description = "Basic tests for dependency selection depending on variant markers"
+
+# These tests vary provider output and inspect installed variant metadata.
+# See crates/uv/tests/pip_install/variants_packse.rs.
+[testgen]
+disable = true
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+a = "1.0.0"
+cpu-v1 = "1.0.0"
+cpu-v3 = "1.0.0"
+namespace-cpu = "1.0.0"
+feature-cpu-level = "1.0.0"
+
+[packages.a.versions."1.0.0".variants.default_priorities]
+namespace = ["cpu"]
+
+[packages.a.versions."1.0.0".variants.properties]
+selected = { cpu = { level = ["v1", "v3"] } }
+other = { cpu = { level = ["v2"] } }
+extension_only = { cpu = { extension = ["avx512"] } }
+
+[packages.a.versions."1.0.0"]
+sdist = false
+requires = [
+  "cpu-v1==1.0.0; 'cpu :: level :: v1' in variant_properties",
+  "cpu-v2==1.0.0; 'cpu :: level :: v2' in variant_properties",
+  "cpu-v3==1.0.0; 'cpu :: level :: v3' in variant_properties",
+  "namespace-cpu==1.0.0; 'cpu' in variant_namespaces",
+  "namespace-gpu==1.0.0; 'gpu' in variant_namespaces",
+  "feature-cpu-level==1.0.0; 'cpu :: level' in variant_features",
+  "feature-cpu-extension==1.0.0; 'cpu :: extension' in variant_features",
+]
+
+[packages.a.versions."1.0.0".variants.providers.cpu]
+requires = ["cpu_provider >= 0.1, <0.2"]
+plugin-api = "cpu_provider.plugin"
+
+[packages.cpu-v1.versions."1.0.0"]
+[packages.cpu-v2.versions."1.0.0"]
+[packages.cpu-v3.versions."1.0.0"]
+[packages.namespace-cpu.versions."1.0.0"]
+[packages.namespace-gpu.versions."1.0.0"]
+[packages.feature-cpu-level.versions."1.0.0"]
+[packages.feature-cpu-extension.versions."1.0.0"]

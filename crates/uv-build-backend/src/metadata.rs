@@ -19,8 +19,8 @@ use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Operator, Version, VersionSpecifiers};
 use uv_pep508::{
-    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement,
-    VersionOrUrl,
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueExtra,
+    MarkerVariantsUniversal, Requirement, VersionOrUrl,
 };
 use uv_pypi_types::{
     BuildKind, Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls,
@@ -335,7 +335,7 @@ pub fn check_direct_build(
         Some(VersionOrUrl::VersionSpecifier(_)) => {}
     }
 
-    if !uv_requirement.evaluate_markers(marker_env, &[]) {
+    if !uv_requirement.evaluate_markers(marker_env, &MarkerVariantsUniversal, &[]) {
         return Ok(());
     }
 
@@ -345,7 +345,7 @@ pub fn check_direct_build(
             .into_iter()
             .filter(|constraint| constraint.name == uv_requirement.name),
     ) {
-        if requirement.evaluate_markers(marker_env, &[])
+        if requirement.evaluate_markers(marker_env, &MarkerVariantsUniversal, &[])
             && let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url
             && let Some(specifier) = specifiers.iter().find(|specifier| {
                 *specifier.operator() == Operator::Equal && !specifier.contains(&uv_version)

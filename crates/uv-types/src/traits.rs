@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use rustc_hash::FxHashSet;
-
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
 use uv_distribution_filename::DistFilename;
@@ -18,6 +17,9 @@ use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_static::TarBackend;
+use uv_variants::VariantProviderOutput;
+use uv_variants::cache::VariantProviderCache;
+use uv_variants::variants_json::Provider;
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation, HashStrategy, ResolvedRequirements};
@@ -91,6 +93,7 @@ impl SourceTreeEditablePolicy {
 /// them.
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
+    type VariantsBuilder: VariantsTrait;
 
     /// The tar implementation used for source archives.
     fn tar_backend(&self) -> TarBackend;
@@ -105,6 +108,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return a reference to the variant cache.
+    fn variants(&self) -> &VariantProviderCache;
 
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
@@ -210,6 +216,15 @@ pub trait BuildContext {
         build_kind: BuildKind,
         version_id: Option<&'a str>,
     ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;
+
+    /// Set up the variants for the given provider.
+    fn setup_variants<'a>(
+        &'a self,
+        backend_name: String,
+        provider: &'a Provider,
+        build_output: BuildOutput,
+        build_stack: BuildStack,
+    ) -> impl Future<Output = Result<Self::VariantsBuilder, anyhow::Error>> + 'a;
 }
 
 /// A wrapper for `uv_build_frontend::SourceBuild` to avoid cyclical crate dependencies.
@@ -236,6 +251,10 @@ pub trait SourceBuildTrait {
         &'a self,
         wheel_dir: &'a Path,
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
+}
+
+pub trait VariantsTrait {
+    fn query(&self) -> impl Future<Output = Result<VariantProviderOutput>>;
 }
 
 /// Provides access to installed distributions during resolution.
@@ -333,17 +352,31 @@ impl Deref for AnyErrorBuild {
     }
 }
 
-/// The stack of packages being built.
+/// The packages being built, variant providers being initialized, and source cache locks held.
 #[derive(Debug, Clone, Default)]
-pub struct BuildStack(FxHashSet<DistributionId>);
+pub struct BuildStack {
+    distributions: FxHashSet<DistributionId>,
+    providers: FxHashSet<Provider>,
+    source_locks: FxHashSet<PathBuf>,
+}
 
 impl BuildStack {
     pub fn contains(&self, id: &DistributionId) -> bool {
-        self.0.contains(id)
+        self.distributions.contains(id)
     }
 
     /// Push a package onto the stack.
     pub fn insert(&mut self, id: DistributionId) -> bool {
-        self.0.insert(id)
+        self.distributions.insert(id)
+    }
+
+    /// Push a provider onto the stack, returning false if it is already being initialized.
+    pub fn insert_provider(&mut self, provider: Provider) -> bool {
+        self.providers.insert(provider)
+    }
+
+    /// Record a source cache lock, returning false if an ancestor build already holds it.
+    pub fn insert_source_lock(&mut self, path: PathBuf) -> bool {
+        self.source_locks.insert(path)
     }
 }
