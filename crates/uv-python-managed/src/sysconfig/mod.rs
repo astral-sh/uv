@@ -41,7 +41,7 @@ mod parser;
 mod replacements;
 
 /// Update the `sysconfig` data in a Python installation.
-pub(crate) fn update_sysconfig(
+pub(crate) async fn update_sysconfig(
     install_root: &Path,
     major: u8,
     minor: u8,
@@ -63,17 +63,7 @@ pub(crate) fn update_sysconfig(
 
     // Python processes can import this module while the installation is being patched.
     if contents != new_contents {
-        let permissions = fs_err::metadata(&sysconfigdata)?.permissions();
-        let mut file = uv_fs::tempfile_in_with_permissions(
-            sysconfigdata
-                .parent()
-                .expect("The sysconfig data file is in the Python lib directory"),
-            Some(permissions.clone()),
-        )?;
-        file.write_all(new_contents.as_bytes())?;
-        file.as_file().set_permissions(permissions)?;
-        file.as_file().sync_data()?;
-        uv_fs::persist_with_retry_sync(file, &sysconfigdata)?;
+        uv_fs::write_atomic_preserve(&sysconfigdata, new_contents).await?;
     }
 
     // Find the `pkgconfig` files in the Python installation.
