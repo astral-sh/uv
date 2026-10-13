@@ -9,9 +9,10 @@ use uv_normalize::PackageName;
 use uv_once_map::Registration;
 use uv_pep440::Version;
 
+use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
-use crate::resolver::index::FxRegisteredEntry;
+use crate::resolver::index::{FxRegisteredEntry, VariantsJsonResponse};
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};
 
@@ -193,6 +194,27 @@ impl MetadataRequests {
             Registration::Existing(entry) => entry,
         };
         Ok(RegisteredMetadata(entry))
+    }
+
+    /// Request variant metadata once for the selected package version.
+    pub(crate) fn request_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<FxRegisteredEntry<'_, RegistryVariantsJson, Arc<VariantsJsonResponse>>, ResolveError>
+    {
+        let entry = match self
+            .index
+            .variants_json()
+            .register_entry(variants_json.clone())
+        {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::VariantsJson(variants_json.clone()))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(entry)
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

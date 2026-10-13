@@ -507,6 +507,13 @@ impl<'a> IndexLocations {
             .and_then(Index::artifact_cache_control)
     }
 
+    /// Return the explicitly configured file cache control header for an [`IndexUrl`].
+    pub fn configured_files_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
+        self.index_for_url(url)
+            .and_then(|index| index.cache_control.as_ref())
+            .and_then(|cache_control| cache_control.files.clone())
+    }
+
     /// Return the hash algorithm required for distributions resolved from a given index.
     pub fn hash_algorithm_for(&self, url: &IndexUrl) -> Option<HashAlgorithm> {
         self.index_for_url(url)
@@ -833,10 +840,18 @@ mod tests {
             index_locations.artifact_cache_control_for(&url1),
             Some(HeaderValue::from_static("max-age=1800"))
         );
+        assert_eq!(
+            index_locations.configured_files_cache_control_for(&url1),
+            Some(HeaderValue::from_static("max-age=1800"))
+        );
 
         let url2 = IndexUrl::from_str("https://index2.example.com/simple").unwrap();
         assert_eq!(index_locations.simple_api_cache_control_for(&url2), None);
         assert_eq!(index_locations.artifact_cache_control_for(&url2), None);
+        assert_eq!(
+            index_locations.configured_files_cache_control_for(&url2),
+            None
+        );
 
         let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
         assert_eq!(index_locations.simple_api_cache_control_for(&url3), None);
@@ -875,6 +890,10 @@ mod tests {
                 "max-age=365000000, immutable, public",
             ))
         );
+        assert_eq!(
+            index_locations.configured_files_cache_control_for(&pytorch_url),
+            None
+        );
     }
 
     #[test]
@@ -908,6 +927,10 @@ mod tests {
         );
         assert_eq!(
             index_locations.artifact_cache_control_for(&pytorch_url),
+            Some(HeaderValue::from_static("max-age=3600"))
+        );
+        assert_eq!(
+            index_locations.configured_files_cache_control_for(&pytorch_url),
             Some(HeaderValue::from_static("max-age=3600"))
         );
     }
