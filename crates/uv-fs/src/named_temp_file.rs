@@ -28,7 +28,7 @@ pub fn tempfile_in(path: &Path) -> io::Result<NamedTempFile> {
 /// On Unix, the umask can further restrict the initial permissions. Set the final permissions
 /// after writing when replacing an existing file whose mode must be retained.
 /// Without explicit permissions, use the defaults from [`tempfile_in`].
-pub fn tempfile_in_with_permissions(
+pub(crate) fn tempfile_in_with_permissions(
     path: &Path,
     permissions: Option<Permissions>,
 ) -> io::Result<NamedTempFile> {
