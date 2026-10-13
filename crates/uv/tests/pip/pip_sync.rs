@@ -11,11 +11,11 @@ use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use uv_fs::{Simplified, copy_dir_all};
+use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::PackseServer;
-use uv_test::{download_to_disk, site_packages_path, uv_snapshot};
+use uv_test::{copy_dir_ignore, download_to_disk, site_packages_path, uv_snapshot};
 
 #[test]
 fn missing_requirements_txt() {
@@ -2356,7 +2356,7 @@ fn sync_editable() -> Result<()> {
     let poetry_editable = context.temp_dir.child("poetry_editable");
 
     // Copy into the temporary directory so we can mutate it.
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/poetry_editable"),
         &poetry_editable,
     )?;
@@ -2502,7 +2502,7 @@ fn sync_editable_and_registry() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // Copy the black test editable into the "current" directory
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         context.temp_dir.join("black_editable"),
     )?;
@@ -2603,7 +2603,7 @@ fn sync_editable_and_local() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // Copy the black test editable into the "current" directory
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         context.temp_dir.join("black_editable"),
     )?;

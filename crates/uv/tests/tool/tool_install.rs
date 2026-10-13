@@ -19,13 +19,12 @@ use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use uv_fs::Simplified;
-use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
 use uv_test::packse::{
     PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
 };
-use uv_test::uv_snapshot;
+use uv_test::{copy_dir_ignore, uv_snapshot};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -715,7 +714,7 @@ fn tool_install_with_editable() -> Result<()> {
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
