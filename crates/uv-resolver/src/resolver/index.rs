@@ -7,6 +7,7 @@ use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
 
+use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::resolver::provider::VersionsResponse;
 
 /// In-memory index of package metadata.
@@ -23,6 +24,9 @@ struct SharedInMemoryIndex {
 
     /// A map from a concrete distribution to its metadata.
     distributions: DistributionMetadataIndex,
+
+    /// A map from an index variant metadata file to its contents.
+    variants_json: FxOnceMap<RegistryVariantsJson, Arc<Vec<u8>>>,
 }
 
 pub(crate) type FxOnceMap<K, V> = RegisteredOnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -43,6 +47,10 @@ impl InMemoryIndex {
     /// Returns a reference to the distribution metadata map.
     pub fn distributions(&self) -> &DistributionMetadataIndex {
         &self.0.distributions
+    }
+
+    pub(crate) fn variants_json(&self) -> &FxOnceMap<RegistryVariantsJson, Arc<Vec<u8>>> {
+        &self.0.variants_json
     }
 
     /// Return exclusive access to distribution metadata when no cloned index can use it.

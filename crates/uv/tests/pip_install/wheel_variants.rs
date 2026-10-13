@@ -1,13 +1,411 @@
 use anyhow::Result;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use predicates::prelude::predicate;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
 use uv_test::uv_snapshot;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+
+/// Only the selected version's variant metadata is fetched, and configured caching works offline.
+#[tokio::test]
+async fn selected_variant_metadata_is_cached() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(&formatdoc! {r#"
+        [[index]]
+        url = "{}/simple/"
+        default = true
+        cache-control = {{ files = "max-age=3600" }}
+    "#, server.uri()})?;
+
+    let simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "ok",
+        "files": [
+            {
+                "filename": "ok-1.0.0-py3-none-any.whl",
+                "url": format!("{}/files/ok-1.0.0-py3-none-any.whl", server.uri()),
+                "hashes": {},
+                "core-metadata": true,
+            },
+            {
+                "filename": "ok-1.0.0-variants.json",
+                "url": format!("{}/files/ok-1.0.0-variants.json", server.uri()),
+                "hashes": {},
+            },
+            {
+                "filename": "ok-2.0.0-py3-none-any.whl",
+                "url": format!("{}/files/ok-2.0.0-py3-none-any.whl", server.uri()),
+                "hashes": {},
+            },
+            {
+                "filename": "ok-2.0.0-variants.json",
+                "url": format!("{}/files/ok-2.0.0-variants.json", server.uri()),
+                "hashes": {},
+            },
+        ],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(
+                    simple_index.to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                )
+                .insert_header("cache-control", "max-age=3600"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any.whl.metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n")
+                .insert_header("cache-control", "max-age=3600"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({
+                    "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+                    "default-priorities": { "namespace": ["x86_64"] },
+                    "variants": { "null": {} },
+                }))
+                .insert_header("cache-control", "no-store"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-2.0.0-variants.json"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let requests = server
+        .received_requests()
+        .await
+        .ok_or_else(|| anyhow::anyhow!("Request recording is disabled"))?;
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.url.path() != "/files/ok-1.0.0-variants.json")
+    );
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--offline")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// A changed advertised hash invalidates cached metadata, and mismatched bytes are not cached.
+#[tokio::test]
+async fn variant_metadata_hashes_are_verified() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+    let first_sidecar = json!({
+        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "default-priorities": { "namespace": ["x86_64"] },
+        "variants": { "null": {} },
+    })
+    .to_string();
+    let second_sidecar = format!("{first_sidecar}\n");
+    let first_hash = hex::encode(Sha256::digest(first_sidecar.as_bytes()));
+    let second_hash = hex::encode(Sha256::digest(second_sidecar.as_bytes()));
+    let mut simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "ok",
+        "files": [
+            {
+                "filename": "ok-1.0.0-py3-none-any.whl",
+                "url": format!("{}/files/ok-1.0.0-py3-none-any.whl", server.uri()),
+                "hashes": {},
+                "core-metadata": true,
+            },
+            {
+                "filename": "ok-1.0.0-variants.json",
+                "url": format!("{}/files/ok-1.0.0-variants.json", server.uri()),
+                "hashes": { "sha256": first_hash },
+            },
+        ],
+    });
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any.whl.metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n")
+                .insert_header("cache-control", "max-age=3600"),
+        )
+        .mount(&server)
+        .await;
+    let index_mock = Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(
+                    simple_index.to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                )
+                .insert_header("cache-control", "no-store"),
+        )
+        .expect(1)
+        .mount_as_scoped(&server)
+        .await;
+    let sidecar_mock = Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(first_sidecar.clone())
+                .insert_header("cache-control", "max-age=3600"),
+        )
+        .expect(1)
+        .mount_as_scoped(&server)
+        .await;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    drop(index_mock);
+    drop(sidecar_mock);
+
+    simple_index["files"][1]["hashes"]["sha256"] = second_hash.into();
+    let index_mock = Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(
+                    simple_index.to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                )
+                .insert_header("cache-control", "no-store"),
+        )
+        .expect(1)
+        .mount_as_scoped(&server)
+        .await;
+    let sidecar_mock = Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(second_sidecar)
+                .insert_header("cache-control", "max-age=3600"),
+        )
+        .expect(1)
+        .mount_as_scoped(&server)
+        .await;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    drop(index_mock);
+    drop(sidecar_mock);
+
+    simple_index["files"][1]["hashes"]["sha256"] = "0".repeat(64).into();
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(
+                    simple_index.to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                )
+                .insert_header("cache-control", "no-store"),
+        )
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(first_sidecar)
+                .insert_header("cache-control", "max-age=3600"),
+        )
+        .expect(2)
+        .mount(&server)
+        .await;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/ok-1.0.0-variants.json`
+
+    Expected:
+      sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+    Computed:
+      sha256:d5dd2ecf5be76b72a82f0e739b73a0fd5b26f137c91d9a1074181f0749fa4bba
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/ok-1.0.0-variants.json`
+
+    Expected:
+      sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+    Computed:
+      sha256:d5dd2ecf5be76b72a82f0e739b73a0fd5b26f137c91d9a1074181f0749fa4bba
+    ");
+    Ok(())
+}
+
+/// A retryable HTTP error while fetching variant metadata is reported to the user.
+#[tokio::test]
+async fn unavailable_variant_metadata_is_an_error() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    let simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "ok",
+        "files": [
+            {
+                "filename": "ok-1.0.0-py3-none-any.whl",
+                "url": format!("{}/files/ok-1.0.0-py3-none-any.whl", server.uri()),
+                "hashes": {},
+                "core-metadata": true,
+            },
+            {
+                "filename": "ok-1.0.0-variants.json",
+                "url": format!("{}/files/ok-1.0.0-variants.json", server.uri()),
+                "hashes": {},
+            },
+        ],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any.whl.metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(4)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Request failed after 3 retries in [TIME]
+      cause: Failed to fetch: http://[LOCALHOST]/files/ok-1.0.0-variants.json
+      cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/files/ok-1.0.0-variants.json)
+    ");
+    Ok(())
+}
 
 #[test]
 fn variant_wheels_cannot_be_installed() -> Result<()> {

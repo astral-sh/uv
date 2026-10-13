@@ -9,6 +9,7 @@ use uv_normalize::PackageName;
 use uv_once_map::Registration;
 use uv_pep440::Version;
 
+use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
 use crate::resolver::index::FxRegisteredEntry;
@@ -193,6 +194,18 @@ impl MetadataRequests {
             Registration::Existing(entry) => entry,
         };
         Ok(RegisteredMetadata(entry))
+    }
+
+    /// Schedule variant metadata retrieval once for the selected package version.
+    pub(crate) fn enqueue_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<(), ResolveError> {
+        if self.index.variants_json().register(variants_json.clone()) {
+            self.sender
+                .blocking_send(Request::VariantsJson(variants_json.clone()))?;
+        }
+        Ok(())
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

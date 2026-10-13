@@ -7,8 +7,8 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    MinimumLibcVersion, RequestedDist, RequiresPython,
+    Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
+    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -59,6 +59,14 @@ pub trait ResolverProvider {
         &'io self,
         dist: &'io InstalledDist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
+
+    /// Fetch the index-level variant metadata for a package version.
+    fn fetch_variants_json<'io>(
+        &'io self,
+        package_name: &'io PackageName,
+        file: &'io File,
+        index: &'io IndexUrl,
+    ) -> impl Future<Output = Result<Vec<u8>, uv_client::Error>> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -319,6 +327,18 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                 Arc::new(err),
             )),
         }
+    }
+
+    async fn fetch_variants_json<'io>(
+        &'io self,
+        package_name: &'io PackageName,
+        file: &'io File,
+        index: &'io IndexUrl,
+    ) -> Result<Vec<u8>, uv_client::Error> {
+        self.fetcher
+            .client()
+            .managed(|client| client.fetch_variants_json(package_name, file, index))
+            .await
     }
 
     /// Set the [`Reporter`] to use for this installer.

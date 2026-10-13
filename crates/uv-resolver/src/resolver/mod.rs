@@ -33,6 +33,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_resolver_types::PackageNodeKind;
 use uv_static::EnvVars;
@@ -50,7 +51,7 @@ use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PythonRequirementKind,
-    implied_markers,
+    RegistryVariantsJson, implied_markers,
 };
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
@@ -1699,6 +1700,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins<'index>,
         requests: &'index MetadataRequests,
     ) -> Result<(), ResolveError> {
+        let index = match dist {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. }
+            | CompatibleDist::IncompatibleWheel { sdist, .. } => Some(&sdist.index),
+            CompatibleDist::CompatibleWheel { wheel, .. } => Some(&wheel.index),
+        };
+        if let Some(index) = index
+            && let Some(variants_json) = candidate.prioritized().and_then(|prioritized| {
+                prioritized
+                    .variants_json()
+                    .iter()
+                    .find(|variants_json| &variants_json.index == index)
+            })
+            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        {
+            requests.enqueue_variants_json(variants_json)?;
+        }
+
         let request = if matches!(&**package, PubGrubPackageInner::Package { .. })
             && self.dependency_mode.is_transitive()
         {
@@ -2073,6 +2092,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .distributions()
                         .done(dist.distribution_id(), Arc::new(metadata));
                 }
+                Some(Response::VariantsJson {
+                    variants_json,
+                    contents,
+                }) => {
+                    trace!("Received variant metadata for: {}", variants_json.filename);
+                    self.index
+                        .variants_json()
+                        .done(variants_json, Arc::new(contents));
+                }
                 None => {}
             }
         }
@@ -2087,6 +2115,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         provider: &Provider,
     ) -> Result<Option<Response>, ResolveError> {
         match request {
+            Request::VariantsJson(variants_json) => {
+                let contents = provider
+                    .fetch_variants_json(
+                        &variants_json.filename.name,
+                        &variants_json.file,
+                        &variants_json.index,
+                    )
+                    .boxed_local()
+                    .await
+                    .map_err(ResolveError::Client)?;
+                Ok(Some(Response::VariantsJson {
+                    variants_json,
+                    contents,
+                }))
+            }
             // Fetch package metadata from the registry.
             Request::Package(package_name, index) => {
                 let package_versions = provider
@@ -3296,6 +3339,8 @@ pub(crate) enum Request {
     Dist(Dist),
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
+    /// A request to fetch variant metadata for a selected version.
+    VariantsJson(RegistryVariantsJson),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
@@ -3349,6 +3394,9 @@ impl Display for Request {
             Self::Installed(dist) => {
                 write!(f, "Installed metadata `{dist}`")
             }
+            Self::VariantsJson(variants_json) => {
+                write!(f, "Variant metadata `{}`", variants_json.filename)
+            }
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
@@ -3370,6 +3418,11 @@ enum Response {
     Installed {
         dist: InstalledDist,
         metadata: MetadataResponse,
+    },
+    /// The contents of a variant metadata file.
+    VariantsJson {
+        variants_json: RegistryVariantsJson,
+        contents: Vec<u8>,
     },
 }
 
