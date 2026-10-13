@@ -65,6 +65,10 @@ impl VersionMap {
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
         for (datum_index, datum) in simple_metadata.iter().enumerate() {
+            // Index metadata alone does not provide an installable distribution.
+            if datum.files.wheels.is_empty() && datum.files.source_dists.is_empty() {
+                continue;
+            }
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
 

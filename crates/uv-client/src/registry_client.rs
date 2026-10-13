@@ -400,7 +400,10 @@ impl RegistryClient {
                         }
                         IndexFormat::Flat => {
                             let entries = self.flat_single_index(package_name, index.url).await?;
-                            if !entries.is_empty() {
+                            if entries.iter().any(|entry| match entry.filename() {
+                                IndexEntryFilename::DistFilename(_) => true,
+                                IndexEntryFilename::VariantJson(_) => false,
+                            }) {
                                 results.push((index.url, MetadataFormat::Flat(entries)));
                                 break;
                             }
@@ -1991,6 +1994,40 @@ mod tests {
 
         assert_no_index(&registry_client, "validation", None).await?;
         assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    /// A metadata file alone must not prevent searching a later flat index.
+    #[tokio::test]
+    async fn flat_index_with_only_variant_metadata() -> Result<(), Error> {
+        let first = tempfile::tempdir()?;
+        fs_err::write(first.path().join("example-1.0-variants.json"), "{}")?;
+        let second = tempfile::tempdir()?;
+        fs_err::write(second.path().join("example-1.0-py3-none-any.whl"), "")?;
+
+        let first_url = IndexUrl::parse(first.path().to_string_lossy().as_ref(), None)?;
+        let second_url = IndexUrl::parse(second.path().to_string_lossy().as_ref(), None)?;
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(IndexLocations::new(
+                vec![
+                    Index::from_find_links(first_url),
+                    Index::from_find_links(second_url.clone()),
+                ],
+                vec![],
+                false,
+            ))
+            .build()?;
+        let results = client
+            .simple_detail(
+                &PackageName::from_str("example")?,
+                None,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await?;
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, &second_url);
         Ok(())
     }
 
