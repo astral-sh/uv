@@ -1723,6 +1723,7 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
     uv = [UV_VERSION]
     version_info = 3.12.[X]
     include-system-site-packages = false
+    uv-base-executable = [BASE_PYTHON]
     extends-environment = [PARENT_VENV]/
 
 

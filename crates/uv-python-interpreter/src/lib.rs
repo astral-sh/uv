@@ -1,5 +1,6 @@
 //! Query Python interpreters and inspect their environments.
 
+mod base_executable;
 mod environment;
 mod interpreter;
 mod pointer_size;

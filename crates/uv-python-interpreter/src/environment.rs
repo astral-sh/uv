@@ -369,10 +369,15 @@ impl PythonEnvironment {
     /// Cache the interpreter metadata for this venv.
     ///
     /// Derive the metadata from the base interpreter without running the venv's Python.
-    pub fn cache_virtualenv(&self, system_site_packages: bool, cache: &Cache) -> Result<(), Error> {
-        // Launcher overrides can change `sys.executable` and `sys.prefix`, while
-        // `sys._base_executable` isn't affected. Instead of trying to stitch together this edge
-        // case, query the actual metadata on the next run.
+    /// `base_python` is the selected executable before applying a minor-version link.
+    pub fn cache_virtualenv(
+        &self,
+        base_python: &Path,
+        system_site_packages: bool,
+        cache: &Cache,
+    ) -> Result<(), Error> {
+        // Launcher overrides can change `sys.executable` and `sys.prefix`. Query the actual
+        // metadata on the next run when an override is present.
         if env::var_os(EnvVars::PYTHONEXECUTABLE).is_some()
             || env::var_os(EnvVars::PYVENV_LAUNCHER).is_some()
         {
@@ -387,15 +392,10 @@ impl PythonEnvironment {
             return Ok(());
         }
 
-        // An upgradeable venv can use a minor-version link instead of the selected base
-        // interpreter. Python may report different base paths when started through that link.
-        if let Some(home) = self.cfg()?.home
-            && self
-                .interpreter()
-                .to_base_python()?
-                .parent()
-                .is_some_and(|base| base.simplified() != home.simplified())
-        {
+        // A minor-version link can change the base prefix reported by Python. Only derive
+        // metadata when the venv uses the executable selected from the parent interpreter.
+        let cfg = self.cfg()?;
+        if cfg.base_executable() != Some(base_python.simplified()) {
             Interpreter::clear_cache(self.interpreter().sys_executable(), cache)?;
             return Ok(());
         }

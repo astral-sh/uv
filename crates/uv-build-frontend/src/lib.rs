@@ -375,6 +375,9 @@ impl SourceBuild {
         let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
             venv.clone()
         } else {
+            let base_python = interpreter
+                .resolve_base_executable(build_context.cache())
+                .map_err(uv_virtualenv::Error::from)?;
             uv_virtualenv::create_venv(
                 temp_dir.path(),
                 interpreter.clone(),
@@ -386,6 +389,7 @@ impl SourceBuild {
                 false,
                 uv_virtualenv::Seed::Disabled,
                 UpgradePolicy::Fixed,
+                &base_python,
             )?
         };
 

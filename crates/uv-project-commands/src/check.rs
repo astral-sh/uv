@@ -343,6 +343,9 @@ pub async fn check(
         };
 
         temp_dir = cache.venv_dir()?;
+        let base_python = interpreter
+            .resolve_base_executable(cache)
+            .map_err(uv_virtualenv::Error::from)?;
         Some(uv_virtualenv::create_venv(
             temp_dir.path(),
             interpreter,
@@ -352,6 +355,7 @@ pub async fn check(
             false,
             uv_virtualenv::Seed::Disabled,
             UpgradePolicy::Fixed,
+            &base_python,
         )?)
     } else {
         None

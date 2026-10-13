@@ -1287,7 +1287,7 @@ fn tool_upgrade_with() {
 }
 
 #[test]
-fn tool_upgrade_python() {
+fn tool_upgrade_python() -> Result<()> {
     let old_index = old_tool_index();
 
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
@@ -1328,17 +1328,22 @@ fn tool_upgrade_python() {
     "
     );
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        let content = context.read("tools/babel/pyvenv.cfg");
-        let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
+    let content = context.read("tools/babel/pyvenv.cfg");
+    let Some(version_info) = content
+        .lines()
+        .find(|line| line.starts_with("version_info = "))
+    else {
+        bail!("Missing `version_info` in tool environment")
+    };
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(version_info, @"version_info = 3.12.[X]");
     });
+
+    Ok(())
 }
 
 #[test]
-fn tool_upgrade_python_with_all() {
+fn tool_upgrade_python_with_all() -> Result<()> {
     let old_index = old_tool_index();
 
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
@@ -1398,21 +1403,29 @@ fn tool_upgrade_python_with_all() {
     "
     );
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        let content = context.read("tools/babel/pyvenv.cfg");
-        let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
+    let content = context.read("tools/babel/pyvenv.cfg");
+    let Some(version_info) = content
+        .lines()
+        .find(|line| line.starts_with("version_info = "))
+    else {
+        bail!("Missing `version_info` in tool environment")
+    };
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(version_info, @"version_info = 3.12.[X]");
     });
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        let content = context.read("tools/python-dotenv/pyvenv.cfg");
-        let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
+    let content = context.read("tools/python-dotenv/pyvenv.cfg");
+    let Some(version_info) = content
+        .lines()
+        .find(|line| line.starts_with("version_info = "))
+    else {
+        bail!("Missing `version_info` in tool environment")
+    };
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(version_info, @"version_info = 3.12.[X]");
     });
+
+    Ok(())
 }
 
 /// Upgrade a tool together with any additional entrypoints from other

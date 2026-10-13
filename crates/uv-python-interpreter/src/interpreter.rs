@@ -52,7 +52,6 @@ pub struct Interpreter {
     manylinux_compatible: bool,
     sys_prefix: PathBuf,
     sys_base_prefix: PathBuf,
-    sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
@@ -90,7 +89,6 @@ impl Interpreter {
             gil_disabled: info.gil_disabled,
             debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
-            sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
             site_packages: info.site_packages,
             stdlib: info.stdlib,
@@ -148,7 +146,6 @@ impl Interpreter {
         }
         Self {
             scheme: virtualenv.scheme,
-            sys_base_executable: Some(virtualenv.base_executable),
             sys_executable: virtualenv.executable,
             sys_prefix: virtualenv.root,
             target: None,
@@ -176,19 +173,15 @@ impl Interpreter {
         })
     }
 
-    /// Return the base Python executable; that is, the Python executable that should be
-    /// considered the "base" for the virtual environment. This is typically the Python executable
-    /// from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
-    /// the base Python executable is the Python executable of the interpreter's base interpreter.
+    /// Resolve the executable to use as the base of a virtual environment.
     ///
-    /// This routine relies on `sys._base_executable`, falling back to `sys.executable` if unset.
-    /// Broadly, this routine should be used when attempting to determine the "base Python
-    /// executable" in a way that is consistent with the CPython standard library, such as when
-    /// determining the `home` key for a virtual environment.
-    pub fn to_base_python(&self) -> Result<PathBuf, io::Error> {
-        let base_executable = self.sys_base_executable().unwrap_or(self.sys_executable());
-        let base_python = std::path::absolute(base_executable)?;
-        Ok(base_python)
+    /// Inspect the environment's configuration and executable links independently of cached
+    /// interpreter metadata. Copied executables may require querying a candidate base interpreter.
+    pub fn resolve_base_executable(&self, cache: &Cache) -> Result<PathBuf, io::Error> {
+        if cfg!(unix) && self.standalone {
+            return self.find_base_python(cache);
+        }
+        crate::base_executable::resolve(self, cache)
     }
 
     /// Determine the base Python executable; that is, the Python executable that should be
@@ -201,11 +194,10 @@ impl Interpreter {
     /// attempting to determine the "true" base executable for a Python interpreter by resolving
     /// symlinks until a valid Python installation is found. In particular, we tend to use this
     /// routine for our own managed (or standalone) Python installations.
-    pub fn find_base_python(&self) -> Result<PathBuf, io::Error> {
-        let base_executable = self.sys_base_executable().unwrap_or(self.sys_executable());
-        // In `python-build-standalone`, a symlinked interpreter will return its own executable path
-        // as `sys._base_executable`. Using the symlinked path as the base Python executable can be
-        // incorrect, since it could cause `home` to point to something that is _not_ a Python
+    pub fn find_base_python(&self, cache: &Cache) -> Result<PathBuf, io::Error> {
+        let base_executable = crate::base_executable::resolve(self, cache)?;
+        // A symlinked standalone interpreter can have an executable path outside its installation.
+        // Using that path as the base executable can cause `home` to point outside the Python
         // installation. Specifically, if the interpreter _itself_ is symlinked to an arbitrary
         // location, we need to fully resolve it to the actual Python executable; however, if the
         // entire standalone interpreter is symlinked, then we can use the symlinked path.
@@ -213,7 +205,7 @@ impl Interpreter {
         // We emulate CPython's `getpath.py` to ensure that the base executable results in a valid
         // Python prefix when converted into the `home` key for `pyvenv.cfg`.
         let base_python = match find_base_python(
-            base_executable,
+            &base_executable,
             self.python_major(),
             self.python_minor(),
             self.variant().executable_suffix(),
@@ -221,7 +213,7 @@ impl Interpreter {
             Ok(path) => path,
             Err(err) => {
                 warn!("Failed to find base Python executable: {err}");
-                canonicalize_executable(base_executable)?
+                canonicalize_executable(&base_executable)?
             }
         };
         Ok(base_python)
@@ -433,12 +425,6 @@ impl Interpreter {
         &self.sys_prefix
     }
 
-    /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
-    /// have this attribute, so it may be `None`.
-    fn sys_base_executable(&self) -> Option<&Path> {
-        self.sys_base_executable.as_deref()
-    }
-
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
@@ -533,19 +519,6 @@ impl Interpreter {
     /// Return the `--prefix` directory for this interpreter, if any.
     fn prefix(&self) -> Option<&Prefix> {
         self.prefix.as_ref()
-    }
-
-    /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
-    ///
-    /// This method may return false positives, but it should not return false negatives. In other
-    /// words, if this method returns `true`, the interpreter _may_ be from
-    /// `python-build-standalone`; if it returns `false`, the interpreter is definitely _not_ from
-    /// `python-build-standalone`.
-    ///
-    /// See: <https://github.com/astral-sh/python-build-standalone/issues/382>
-    #[cfg(unix)]
-    pub fn is_standalone(&self) -> bool {
-        self.standalone
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -839,29 +812,22 @@ impl Interpreter {
                     return true;
                 }
                 // ...or if it is the base interpreter the venv was created from.
-                if self
-                    .sys_base_executable()
-                    .is_some_and(|sys_base_executable| {
-                        is_same_executable(sys_base_executable, file)
-                    })
-                {
+                let Ok(base_executable) = self.resolve_base_executable(cache) else {
+                    return false;
+                };
+                if is_same_executable(&base_executable, file) {
                     return true;
                 }
                 // ...or, on Windows, if both interpreters have the same base executable. On
                 // Windows, interpreters are copied rather than symlinked, so a virtual environment
                 // created from within a virtual environment will _not_ evaluate to the same
-                // `sys.executable`, but will have the same `sys._base_executable`.
-                if cfg!(windows) {
-                    if let Ok(file_interpreter) = Self::query(file, cache) {
-                        if let (Some(file_base), Some(interpreter_base)) = (
-                            file_interpreter.sys_base_executable(),
-                            self.sys_base_executable(),
-                        ) {
-                            if is_same_executable(file_base, interpreter_base) {
-                                return true;
-                            }
-                        }
-                    }
+                // `sys.executable`, but will have the same base executable.
+                if cfg!(windows)
+                    && let Ok(file_interpreter) = Self::query(file, cache)
+                    && let Ok(file_base) = file_interpreter.resolve_base_executable(cache)
+                    && is_same_executable(&file_base, &base_executable)
+                {
+                    return true;
                 }
                 false
             }
@@ -874,12 +840,12 @@ impl Interpreter {
                 {
                     return true;
                 }
-                // ... or the venv's base interpreter (without performing IO), if that fails, ...
-                if self
-                    .sys_base_executable()
-                    .and_then(|executable| executable.file_name())
-                    .is_some_and(|file_name| file_name == name.as_str())
-                {
+                // ... or the venv's base interpreter, if that fails, ...
+                if self.resolve_base_executable(cache).is_ok_and(|executable| {
+                    executable
+                        .file_name()
+                        .is_some_and(|file_name| file_name == name.as_str())
+                }) {
                     return true;
                 }
                 // ... check in `PATH`. The name we find here does not need to be the
@@ -1154,7 +1120,6 @@ pub(crate) struct InterpreterInfo {
     sys_prefix: PathBuf,
     sys_base_exec_prefix: PathBuf,
     sys_base_prefix: PathBuf,
-    sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
@@ -1189,7 +1154,6 @@ impl InterpreterInfo {
             sys_base_exec_prefix: PathBuf::new(),
             sys_path: Vec::new(),
             sys_base_prefix: interpreter.sys_base_prefix.clone(),
-            sys_base_executable: interpreter.sys_base_executable.clone(),
             sys_executable: std::path::absolute(interpreter.sys_executable())?
                 .simplified()
                 .to_path_buf(),

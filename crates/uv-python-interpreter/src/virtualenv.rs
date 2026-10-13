@@ -22,9 +22,6 @@ pub struct VirtualEnvironment {
     /// (Unix, Python 3.11).
     pub executable: PathBuf,
 
-    /// The path to the base executable for the environment, within the `home` directory.
-    pub base_executable: PathBuf,
-
     /// The [`Scheme`] paths for the virtualenv, as returned by (e.g.) `sysconfig.get_paths()`.
     pub scheme: Scheme,
 }
@@ -34,16 +31,20 @@ pub struct VirtualEnvironment {
 pub struct PyVenvConfiguration {
     /// The `PYTHONHOME` directory containing the base Python executable.
     pub(super) home: Option<PathBuf>,
+    /// The executable selected by uv when creating the environment.
+    base_executable: Option<PathBuf>,
+    /// An executable recorded by Python's `venv` module or `virtualenv`.
+    pub(super) executable: Option<PathBuf>,
     /// Was the virtual environment created with the `virtualenv` package?
-    pub(super) virtualenv: bool,
+    virtualenv: bool,
     /// Was the virtual environment created with the `uv` package?
-    pub(super) uv: bool,
+    uv: bool,
     /// Is the virtual environment relocatable?
-    pub(super) relocatable: bool,
+    relocatable: bool,
     /// Was the virtual environment populated with seed packages?
-    pub(super) seed: bool,
+    seed: bool,
     /// Should the virtual environment include system site packages?
-    pub(super) include_system_site_packages: bool,
+    include_system_site_packages: bool,
     /// The Python version the virtual environment was created with
     pub(super) version: Option<PythonVersion>,
 }
@@ -105,6 +106,8 @@ impl PyVenvConfiguration {
     /// Parse a `pyvenv.cfg` file into a [`PyVenvConfiguration`].
     pub fn parse(cfg: impl AsRef<Path>) -> Result<Self, Error> {
         let mut home = None;
+        let mut base_executable = None;
+        let mut executable = None;
         let mut virtualenv = false;
         let mut uv = false;
         let mut relocatable = false;
@@ -124,6 +127,12 @@ impl PyVenvConfiguration {
             match key.trim() {
                 "home" => {
                     home = Some(PathBuf::from(value.trim()));
+                }
+                "uv-base-executable" => {
+                    base_executable = Some(PathBuf::from(value.trim()));
+                }
+                "executable" | "base-executable" => {
+                    executable = Some(PathBuf::from(value.trim()));
                 }
                 "virtualenv" => {
                     virtualenv = true;
@@ -152,6 +161,8 @@ impl PyVenvConfiguration {
 
         Ok(Self {
             home,
+            base_executable,
+            executable,
             virtualenv,
             uv,
             relocatable,
@@ -169,6 +180,17 @@ impl PyVenvConfiguration {
     /// Returns true if the virtual environment was created with the uv package.
     pub fn is_uv(&self) -> bool {
         self.uv
+    }
+
+    /// Return uv's recorded base executable when it agrees with the environment's `home`.
+    pub(crate) fn base_executable(&self) -> Option<&Path> {
+        let executable = self.base_executable.as_deref()?;
+        let home = self.home.as_deref()?;
+        if self.uv && executable.is_absolute() && executable.parent() == Some(home) {
+            Some(executable)
+        } else {
+            None
+        }
     }
 
     /// Returns true if the virtual environment is relocatable.

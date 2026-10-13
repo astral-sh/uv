@@ -242,6 +242,10 @@ pub(crate) async fn venv(
         None
     };
 
+    let base_python = interpreter
+        .resolve_base_executable(cache)
+        .map_err(|err| VenvError::Creation(err.into()))?;
+
     let on_existing = match on_existing {
         OnExisting::Prompt | OnExisting::Remove(_) if centralized_workspace.is_some() => {
             // Centralized environments are managed by uv, so replace them without prompting.
@@ -276,9 +280,10 @@ pub(crate) async fn venv(
         relocatable,
         seed,
         upgrade_policy,
+        &base_python,
     )
     .map_err(VenvError::Creation)?;
-    venv.cache_virtualenv(system_site_packages, cache)?;
+    venv.cache_virtualenv(&base_python, system_site_packages, cache)?;
 
     // Install seed packages.
     if let Seed::Enabled = seed {

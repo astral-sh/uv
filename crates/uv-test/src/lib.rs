@@ -524,6 +524,10 @@ impl TestContext {
         let added_filters = [
             (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
             (
+                r"uv-base-executable = .+".to_string(),
+                "uv-base-executable = [BASE_PYTHON]".to_string(),
+            ),
+            (
                 r"uv = \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?".to_string(),
                 "uv = [UV_VERSION]".to_string(),
             ),

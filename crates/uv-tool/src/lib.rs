@@ -331,6 +331,9 @@ impl InstalledTools {
         cache: &Cache,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
+        let base_python = interpreter
+            .resolve_base_executable(cache)
+            .map_err(uv_virtualenv::Error::from)?;
 
         // Remove any existing environment.
         match uv_fs::remove_virtualenv(&environment_path) {
@@ -359,8 +362,9 @@ impl InstalledTools {
             false,
             uv_virtualenv::Seed::Disabled,
             UpgradePolicy::Fixed,
+            &base_python,
         )?;
-        venv.cache_virtualenv(false, cache)?;
+        venv.cache_virtualenv(&base_python, false, cache)?;
 
         Ok(venv)
     }
