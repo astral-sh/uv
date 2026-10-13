@@ -1,6 +1,8 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+use serde::{Deserialize, Deserializer};
+
 use uv_small_str::SmallString;
 
 /// An invalid wheel variant label.
@@ -23,12 +25,20 @@ pub enum InvalidVariantLabel {
     Hash,
     Ord,
     PartialOrd,
+    serde::Serialize,
     rkyv::Archive,
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
+#[serde(transparent)]
 pub struct VariantLabel(SmallString);
+
+impl VariantLabel {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 impl FromStr for VariantLabel {
     type Err = InvalidVariantLabel;
@@ -44,6 +54,16 @@ impl FromStr for VariantLabel {
         }
 
         Ok(Self(SmallString::from(label)))
+    }
+}
+
+impl<'de> Deserialize<'de> for VariantLabel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let label = String::deserialize(deserializer)?;
+        Self::from_str(&label).map_err(serde::de::Error::custom)
     }
 }
 

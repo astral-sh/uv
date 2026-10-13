@@ -24,7 +24,7 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SourceDist, VersionOrUrlRef,
+    ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -72,6 +72,7 @@ use crate::resolver::environment::{
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub use crate::resolver::index::InMemoryIndex;
+use crate::resolver::index::VariantsJsonResponse;
 use crate::resolver::indexes::Indexes;
 use crate::resolver::package_source::PackageSource;
 pub use crate::resolver::provider::{
@@ -2134,6 +2135,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         None
                     }
                 };
+                let contents = contents.map(|contents| VariantsJsonContent::from_slice(&contents));
+                if let Some(Err(err)) = &contents {
+                    warn_user_once!(
+                        "Failed to parse variant metadata for `{}`: {err}",
+                        variants_json.filename
+                    );
+                }
                 Ok(Some(Response::VariantsJson {
                     variants_json,
                     contents,
@@ -3431,7 +3439,7 @@ enum Response {
     /// The contents of a variant metadata file, if variant support is enabled.
     VariantsJson {
         variants_json: RegistryVariantsJson,
-        contents: Option<Vec<u8>>,
+        contents: VariantsJsonResponse,
     },
 }
 

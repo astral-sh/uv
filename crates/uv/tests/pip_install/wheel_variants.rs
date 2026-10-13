@@ -466,6 +466,38 @@ fn unavailable_variant_metadata_is_nonfatal() -> Result<()> {
     Ok(())
 }
 
+/// Invalid variant metadata does not prevent the use of an ordinary wheel.
+#[test]
+fn invalid_variant_metadata_is_nonfatal() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    links.child("ok-1.0.0-variants.json").write_str("{}")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Failed to parse variant metadata for `ok-1.0.0-variants.json`: missing field `$schema` at line 1 column 2
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
 #[test]
 fn variant_wheels_cannot_be_installed() -> Result<()> {
     let context = uv_test::test_context!("3.12");

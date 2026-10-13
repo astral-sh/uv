@@ -2,7 +2,7 @@ use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 use rustc_hash::FxHasher;
-use uv_distribution_types::IndexUrl;
+use uv_distribution_types::{IndexUrl, VariantsJsonContent, VariantsJsonParseError};
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
@@ -25,11 +25,11 @@ struct SharedInMemoryIndex {
     /// A map from a concrete distribution to its metadata.
     distributions: DistributionMetadataIndex,
 
-    /// A map from an index variant metadata file to its contents.
+    /// A map from an index variant metadata file to its parsed contents.
     variants_json: FxOnceMap<RegistryVariantsJson, Arc<VariantsJsonResponse>>,
 }
 
-pub(crate) type VariantsJsonResponse = Option<Vec<u8>>;
+pub(crate) type VariantsJsonResponse = Option<Result<VariantsJsonContent, VariantsJsonParseError>>;
 pub(crate) type FxOnceMap<K, V> = RegisteredOnceMap<K, V, BuildHasherDefault<FxHasher>>;
 pub(crate) type FxRegisteredEntry<'a, K, V> =
     RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
