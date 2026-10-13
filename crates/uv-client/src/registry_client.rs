@@ -1421,7 +1421,8 @@ impl VersionFiles {
             })
     }
 
-    pub fn all_entries(
+    #[cfg(test)]
+    fn all_entries(
         self,
         package_name: &PackageName,
     ) -> impl Iterator<Item = (IndexEntryFilename, File)> {
