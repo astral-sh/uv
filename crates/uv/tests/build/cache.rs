@@ -445,9 +445,9 @@ fn binary_payloads_stay_in_archive_without_preview_local() -> Result<()> {
         .iter()
         .find(|path| path.ends_with("binary_payload/native.so"))
         .context("binary payload is missing from the archive")?;
-    assert_eq!(fs_err::read(archive_binary)?, BINARY_PAYLOAD_CONTENTS);
+    assert_eq!(context.read_bytes(archive_binary), BINARY_PAYLOAD_CONTENTS);
     assert_eq!(
-        fs_err::read(context.site_packages().join("binary_payload/native.so"))?,
+        context.read_bytes(context.site_packages().join("binary_payload/native.so")),
         BINARY_PAYLOAD_CONTENTS,
     );
     Ok(())
@@ -459,7 +459,9 @@ async fn binary_payloads_stay_in_archive_without_preview_streaming() -> Result<(
     let filename = "binary_payload-0.1.0-py3-none-any.whl";
     let context = uv_test::test_context!("3.12");
     let wheel = binary_payload_wheel(&context)?;
-    server.serve(filename, &fs_err::read(&wheel)?, None).await;
+    server
+        .serve(filename, &context.read_bytes(&wheel), None)
+        .await;
 
     uv_snapshot!(context.filters(), context.pip_install().arg(server.file_url(filename)), @"
     exit_code: 0 (success)
@@ -476,9 +478,9 @@ async fn binary_payloads_stay_in_archive_without_preview_streaming() -> Result<(
         .iter()
         .find(|path| path.ends_with("binary_payload/native.so"))
         .context("binary payload is missing from the archive")?;
-    assert_eq!(fs_err::read(archive_binary)?, BINARY_PAYLOAD_CONTENTS);
+    assert_eq!(context.read_bytes(archive_binary), BINARY_PAYLOAD_CONTENTS);
     assert_eq!(
-        fs_err::read(context.site_packages().join("binary_payload/native.so"))?,
+        context.read_bytes(context.site_packages().join("binary_payload/native.so")),
         BINARY_PAYLOAD_CONTENTS,
     );
     Ok(())
@@ -590,7 +592,9 @@ async fn all_files_except_record_use_archive_file_store_streaming_serial() -> Re
     let filename = "binary_payload-0.1.0-py3-none-any.whl";
     let context = uv_test::test_context!("3.12").with_concurrent_installs("1");
     let wheel = binary_payload_wheel(&context)?;
-    server.serve(filename, &fs_err::read(&wheel)?, None).await;
+    server
+        .serve(filename, &context.read_bytes(&wheel), None)
+        .await;
     uv_snapshot!(context.filters(), context.pip_install().args(["--preview-features", "content-addressed-cache"]).arg(server.file_url(filename)), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -643,7 +647,9 @@ async fn all_files_except_record_use_archive_file_store_streaming_concurrent() -
     let filename = "binary_payload-0.1.0-py3-none-any.whl";
     let context = uv_test::test_context!("3.12").with_concurrent_installs("4");
     let wheel = binary_payload_wheel(&context)?;
-    server.serve(filename, &fs_err::read(&wheel)?, None).await;
+    server
+        .serve(filename, &context.read_bytes(&wheel), None)
+        .await;
     uv_snapshot!(context.filters(), context.pip_install().args(["--preview-features", "content-addressed-cache"]).arg(server.file_url(filename)), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -746,7 +752,7 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
      + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
     ");
     assert_eq!(
-        fs_err::read(target.join("binary_payload/native.so"))?,
+        context.read_bytes(target.join("binary_payload/native.so")),
         BINARY_PAYLOAD_CONTENTS
     );
     fs_err::hard_link(&archive_binary, object)?;
@@ -764,7 +770,10 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
         context.cache_files(CacheBucket::Files)?,
         vec![object.clone()]
     );
-    assert_eq!(fs_err::read(&retained_binary)?, BINARY_PAYLOAD_CONTENTS);
+    assert_eq!(
+        context.read_bytes(&retained_binary),
+        BINARY_PAYLOAD_CONTENTS
+    );
 
     fs_err::remove_file(&retained_binary)?;
     uv_snapshot!(context.filters(), context.prune(), @"
@@ -827,7 +836,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
     ");
 
     assert_eq!(
-        fs_err::read(target.path().join("binary_payload").join("native.so"))?,
+        context.read_bytes(target.path().join("binary_payload").join("native.so")),
         BINARY_PAYLOAD_CONTENTS,
     );
 

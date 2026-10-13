@@ -25,8 +25,8 @@ use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
-use uv_preview::PreviewFeature;
 use uv_pypi_types::BuildKind;
+use uv_static::TarBackend;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -36,6 +36,7 @@ pub fn build_source_dist(
     source_dist_directory: &Path,
     uv_version: &str,
     show_warnings: bool,
+    tar_backend: TarBackend,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
@@ -50,12 +51,15 @@ pub fn build_source_dist(
     }
 
     let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
-    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
-        let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
-        write_source_dist(source_tree, writer, uv_version, show_warnings)?;
-    } else {
-        let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
-        write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    match tar_backend {
+        TarBackend::TarCodec => {
+            let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
+            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+        }
+        TarBackend::TokioTar => {
+            let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
+            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+        }
     }
     temp_file
         .persist(&source_dist_path)

@@ -1516,7 +1516,19 @@ pub async fn resolve_environment(
 
             preferences
         }
-        Some(PreferenceLocation::Entries(entries)) => entries,
+        Some(PreferenceLocation::Entries(entries)) => {
+            // Drop preferences for any packages that are included in the upgrade strategy.
+            if upgrade.is_all() {
+                vec![]
+            } else if let Some(packages) = upgrade.packages() {
+                entries
+                    .into_iter()
+                    .filter(|preference| !packages.contains(preference.name()))
+                    .collect()
+            } else {
+                entries
+            }
+        }
         None => vec![],
     };
 

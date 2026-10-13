@@ -7251,7 +7251,7 @@ fn no_install_project_singular_interval_requires_dist() -> Result<()> {
     context.lock().assert().success();
 
     let lock_path = context.temp_dir.join("uv.lock");
-    let lock = fs_err::read_to_string(&lock_path)?;
+    let lock = context.read("uv.lock");
     let lock = lock.replacen(
         r#"requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0,<=2.0.0" }]"#,
         r#"requires-dist = [{ name = "iniconfig", specifier = "<=2.0.0,>=2.0.0" }]"#,
@@ -13427,7 +13427,7 @@ fn sync_build_tag() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let lock = fs_err::read_to_string(context.temp_dir.child("uv.lock")).unwrap();
+    let lock = context.read("uv.lock");
 
     insta::with_settings!({
         filters => context.filters(),
@@ -15164,8 +15164,8 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     // Simulate an incompatible `pyvenv.cfg:version` value created
     // by the venv module.
     let pyvenv_cfg = context.venv.child("pyvenv.cfg");
-    let contents = fs_err::read_to_string(&pyvenv_cfg)
-        .unwrap()
+    let contents = context
+        .read(".venv/pyvenv.cfg")
         .lines()
         .map(|line| {
             if line.trim_start().starts_with("version") {
@@ -15192,7 +15192,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let contents = context.read(".venv/pyvenv.cfg");
         let lines: Vec<&str> = contents.split('\n').collect();
         assert_snapshot!(lines[3], @"version_info = 3.12.[X]");
     });
@@ -15200,8 +15200,8 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     // Simulate an incompatible `pyvenv.cfg:version_info` value created
     // by uv or virtualenv.
     let pyvenv_cfg = context.venv.child("pyvenv.cfg");
-    let contents = fs_err::read_to_string(&pyvenv_cfg)
-        .unwrap()
+    let contents = context
+        .read(".venv/pyvenv.cfg")
         .lines()
         .map(|line| {
             if line.trim_start().starts_with("version") {
@@ -15228,7 +15228,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let contents = context.read(".venv/pyvenv.cfg");
         let lines: Vec<&str> = contents.split('\n').collect();
         assert_snapshot!(lines[3], @"version_info = 3.12.[X]");
     });
@@ -17370,7 +17370,7 @@ async fn sync_deprecated_zstd_wheel() -> Result<()> {
     // Only the ordinary wheel is available.
     Mock::given(method("GET"))
         .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(context.read_bytes(&wheel_path)))
         .expect(1)
         .mount(&server)
         .await;
@@ -17509,7 +17509,7 @@ async fn sync_non_pep625_sdist_with_compatible_wheel() -> Result<()> {
 
     Mock::given(method("GET"))
         .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(context.read_bytes(&wheel_path)))
         .mount(&server)
         .await;
 
@@ -19383,7 +19383,7 @@ fn project_build_hashes_add() -> Result<()> {
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     error: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     child
         .temp_dir
@@ -19424,7 +19424,7 @@ fn project_build_hashes_missing() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     Ok(())
 }
@@ -19452,7 +19452,7 @@ fn project_build_hashes_lock_dynamic_metadata() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -19467,7 +19467,7 @@ fn project_build_hashes_lock_dynamic_metadata() -> Result<()> {
     error: Failed to generate package metadata for `project @ editable+.`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     context
         .temp_dir
@@ -19541,11 +19541,11 @@ async fn project_build_hashes_static_url_dynamic_requirements() -> Result<()> {
     let wheel = context
         .temp_dir
         .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
-    let hash = hex::encode(Sha256::digest(fs_err::read(wheel.path())?));
+    let hash = hex::encode(Sha256::digest(context.read_bytes(wheel.path())));
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/build_dependency-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(wheel.path())?))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(context.read_bytes(wheel.path())))
         .mount(&server)
         .await;
     let url = format!("{}/build_dependency-1.0.0-py3-none-any.whl", server.uri());
@@ -19558,11 +19558,13 @@ async fn project_build_hashes_static_url_dynamic_requirements() -> Result<()> {
             ]
         "#, "0".repeat(64)},
     );
-    let dynamic_hash = hex::encode(Sha256::digest(fs_err::read(
-        context
-            .temp_dir
-            .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl"),
-    )?));
+    let dynamic_hash = hex::encode(Sha256::digest(
+        context.read_bytes(
+            context
+                .temp_dir
+                .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl"),
+        ),
+    ));
     context
         .temp_dir
         .child("pyproject.toml")
@@ -19618,7 +19620,7 @@ fn project_build_hashes_run_with() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/package`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
 
     pyproject.write_str(&formatdoc! {r#"
@@ -19665,7 +19667,7 @@ fn project_build_hashes_workspace_root_policy() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `build-dependency`
     ");
     Ok(())
 }
@@ -19678,7 +19680,7 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
     let child = context
         .temp_dir
         .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
-    let child_hash = hex::encode(Sha256::digest(fs_err::read(child.path())?));
+    let child_hash = hex::encode(Sha256::digest(context.read_bytes(child.path())));
     let child_url = Url::from_file_path(child.path()).expect("absolute wheel path");
     let (filename, wheel) = generate_wheel(
         &"build-dependency".parse()?,
@@ -19717,7 +19719,7 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl#sha256=[PARENT_HASH]`
       cause: Failed to resolve dependencies for package `build-dependency==1.0.0`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `dynamic-dependency`
     ");
     uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
     exit_code: 0 (success)

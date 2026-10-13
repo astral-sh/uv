@@ -159,7 +159,7 @@ fn install_http_wheel_hashes_trailing_bytes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let filename = "ok-1.0.0-py3-none-any.whl";
     let wheel = context.temp_dir.join(filename);
-    let mut bytes = fs::read(context.workspace_root.join("test/links").join(filename))?;
+    let mut bytes = context.read_bytes(context.workspace_root.join("test/links").join(filename));
     // Exceed the pipe capacity so some bytes must be hashed after extraction finishes.
     bytes.resize(bytes.len() + 1024 * 1024, b'x');
     let hash = hex::encode(Sha256::digest(&bytes));
@@ -224,6 +224,7 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
             Installed 1 package in [TIME]
              + uv==[VERSION]
             Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
              + large-wheel==1.0.0 (from file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl)
             ");
@@ -285,6 +286,87 @@ fn empty_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Checked in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Install using requirement-file options whose explicitly provided paths contain spaces.
+#[test]
+fn requirement_file_paths_with_spaces() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("requirements.txt").touch()?;
+
+    let requirements_dir = context.temp_dir.child("requirements with spaces");
+    requirements_dir.create_dir_all()?;
+    let constraints = requirements_dir.child("constraints.txt");
+    constraints.write_str("unused-constraint==1")?;
+    let overrides = requirements_dir.child("overrides.txt");
+    overrides.write_str("unused-override==1")?;
+    let excludes = requirements_dir.child("excludes.txt");
+    excludes.write_str("unused-exclude")?;
+    let build_constraints = requirements_dir.child("build-constraints.txt");
+    build_constraints.write_str("unused-build-constraint==1")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg(constraints.path())
+        .arg("--override")
+        .arg(overrides.path())
+        .arg("--exclude")
+        .arg(excludes.path())
+        .arg("--build-constraint")
+        .arg(build_constraints.path())
+        .env(EnvVars::UV_CONSTRAINT, "missing-constraint.txt")
+        .env(EnvVars::UV_OVERRIDE, "missing-override.txt")
+        .env(EnvVars::UV_EXCLUDE, "missing-exclude.txt")
+        .env(EnvVars::UV_BUILD_CONSTRAINT, "missing-build-constraint.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Checked in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Install using whitespace-delimited requirement-file options from the environment.
+#[test]
+fn requirement_file_paths_from_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("requirements.txt").touch()?;
+
+    for (path, content) in [
+        ("constraint-1.txt", "unused-constraint-1==1"),
+        ("constraint-2.txt", "unused-constraint-2==1"),
+        ("override-1.txt", "unused-override-1==1"),
+        ("override-2.txt", "unused-override-2==1"),
+        ("exclude-1.txt", "unused-exclude-1"),
+        ("exclude-2.txt", "unused-exclude-2"),
+        ("build-constraint-1.txt", "unused-build-constraint-1==1"),
+        ("build-constraint-2.txt", "unused-build-constraint-2==1"),
+    ] {
+        context.temp_dir.child(path).write_str(content)?;
+    }
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .env(EnvVars::UV_CONSTRAINT, "constraint-1.txt constraint-2.txt")
+        .env(EnvVars::UV_OVERRIDE, "override-1.txt override-2.txt")
+        .env(EnvVars::UV_EXCLUDE, "exclude-1.txt exclude-2.txt")
+        .env(
+            EnvVars::UV_BUILD_CONSTRAINT,
+            "build-constraint-1.txt build-constraint-2.txt",
+        ), @"
     exit_code: 0 (success)
     ----- stderr -----
     warning: Requirements file `requirements.txt` does not contain any dependencies
@@ -966,9 +1048,6 @@ dependencies = ["flask==1.0.x"]
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/_distutils/core.py", line 159, in setup
                  dist.parse_config_files()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/_virtualenv.py", line 21, in parse_config_files
-                 result = old_parse_config_files(self, *args, **kwargs)
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/dist.py", line 631, in parse_config_files
                  pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
                File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 68, in apply_configuration
@@ -1404,6 +1483,35 @@ fn install_require_hashes_in_requirements_txt() -> Result<()> {
         .arg("requirements.txt")
         .arg("--no-require-hashes")
         .arg("--strict"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Enable `--require-hashes` from a constraints file included by the requirements file.
+#[test]
+fn install_require_hashes_in_nested_constraints_txt() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        -c constraints.txt
+        iniconfig==2.0.0
+    "})?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc! {r"
+        --require-hashes
+        iniconfig==2.0.0
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: iniconfig==2.0.0
@@ -2276,6 +2384,58 @@ fn install_editable_compatible_constraint() -> Result<()> {
 }
 
 #[test]
+fn install_reject_nested_editable_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-c constraints.txt")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(&formatdoc! {r"
+        -e black @ file://{workspace_root}/test/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Editable requirements are not allowed as constraints in `constraints.txt`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_reject_unnamed_nested_editable_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-c constraints.txt")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(&formatdoc! {r"
+        -e file://{workspace_root}/test/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Editable requirements are not allowed as constraints in `constraints.txt`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn install_editable_incompatible_constraint_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -2938,7 +3098,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
 
     // A repository-controlled checkout marker must not truncate an external file; see
     // astral-sh/uv#21857.
-    assert_snapshot!(fs::read_to_string(victim.path())?, @"external contents");
+    assert_snapshot!(context.read("victim"), @"external contents");
 
     Ok(())
 }
@@ -3069,6 +3229,15 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
     ");
 
     context.assert_installed("example", "0.1.0");
+
+    // Full commit hashes identify the same installed commit regardless of hexadecimal case.
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg(format!("example @ git+{repository_url}@{}", trusted_commit.to_ascii_uppercase())), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
 
     // Short hexadecimal references remain ambiguous and can legitimately name a branch.
     uv_snapshot!(filters, context
@@ -3502,7 +3671,6 @@ fn install_git_public_https_exact_commit() {
         , @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
     ");
 }
@@ -4463,7 +4631,7 @@ fn install_copy_long_paths() -> Result<()> {
             Installed 1 package in [TIME]
              + long-paths==1.0.0 (from file://[TEMP_DIR]/long_paths-1.0.0-py3-none-any.whl)
             ");
-            assert_eq!(fs::read_to_string(&destination)?, "data");
+            assert_eq!(context.read(&destination), "data");
         }
         Ok::<(), anyhow::Error>(())
     }?;
@@ -8338,7 +8506,6 @@ fn already_installed_remote_url() {
     uv_snapshot!(context.filters(), context.pip_install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
     ");
 
@@ -8767,7 +8934,7 @@ async fn registry_wheel_size_is_advisory() -> Result<()> {
     server
         .serve_with(
             wheel_filename,
-            &fs::read(wheel_path)?,
+            &context.read_bytes(wheel_path),
             None,
             json!({ "size": 1, "core-metadata": true }),
         )
@@ -8814,7 +8981,7 @@ async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
     server
         .serve_with(
             wheel_filename,
-            &fs::read(wheel_path)?,
+            &context.read_bytes(wheel_path),
             None,
             json!({ "core-metadata": true }),
         )
@@ -8931,7 +9098,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
     error: Failed to download and build `a==1.0.0`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `hatchling`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+      cause: Hash-checking is required, but no trusted hash was provided for: `hatchling`
     ");
 
     uv_snapshot!(context.pip_install()
@@ -9094,7 +9261,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
+    error: Hash-checking is required, but no trusted hash was provided for: `markupsafe`
     "
     );
 
@@ -12473,7 +12640,7 @@ fn direct_url_json_git_preserves_repository_url() -> Result<()> {
     });
     direct_url.assert(predicates::path::is_file());
 
-    let direct_url_content = fs_err::read_to_string(direct_url.path())?;
+    let direct_url_content = context.read(direct_url.path());
     insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://github.com/astral-test/uv-public-pypackage.git","vcs_info":{"vcs":"git","commit_id":"b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"}}"#);
 
     Ok(())
@@ -12508,7 +12675,7 @@ fn direct_url_json_git_tag() -> Result<()> {
     });
     direct_url.assert(predicates::path::is_file());
 
-    let direct_url_content = fs_err::read_to_string(direct_url.path())?;
+    let direct_url_content = context.read(direct_url.path());
     insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://github.com/astral-test/uv-public-pypackage","vcs_info":{"vcs":"git","commit_id":"0dacfd662c64cb4ceb16e6cf65a157a8b715b979","requested_revision":"0.0.1"}}"#);
 
     Ok(())
@@ -12542,7 +12709,7 @@ fn direct_url_json_direct_url() -> Result<()> {
     });
     direct_url.assert(predicates::path::is_file());
 
-    let direct_url_content = fs_err::read_to_string(direct_url.path())?;
+    let direct_url_content = context.read(direct_url.path());
     insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz","archive_info":{}}"#);
 
     Ok(())
@@ -12575,7 +12742,7 @@ fn direct_url_json_query() -> Result<()> {
     });
     direct_url.assert(predicates::path::is_file());
 
-    let direct_url_content = fs_err::read_to_string(direct_url.path())?;
+    let direct_url_content = context.read(direct_url.path());
     insta::assert_snapshot!(direct_url_content, @r#"{"url":"https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D","archive_info":{}}"#);
 
     uv_snapshot!(context.pip_install()
@@ -14912,7 +15079,7 @@ fn pep_751_hash_mismatch() -> Result<()> {
     "
     );
 
-    pylock_toml.write_str(&fs::read_to_string(&pylock_toml)?.replace(
+    pylock_toml.write_str(&context.read("pylock.toml").replace(
         "c5185871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374",
         "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374",
     ))?;
@@ -15977,7 +16144,7 @@ fn repacked_wheel_with_entrypoint(
             block_on(writer.write_entry_whole(entry, &[]))?;
         } else {
             let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
-            block_on(writer.write_entry_whole(entry, &fs_err::read(path)?))?;
+            block_on(writer.write_entry_whole(entry, &context.read_bytes(path)))?;
         }
     }
     fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
@@ -16481,7 +16648,7 @@ fn strip_shebang_arguments() -> Result<()> {
 
     // Check the installed scripts have their shebangs stripped of arguments.
     let custom_script_path = venv_bin_path(&context.venv).join("custom_script");
-    let script_content = fs::read_to_string(&custom_script_path)?;
+    let script_content = context.read(&custom_script_path);
 
     insta::with_settings!({filters => context.filters()
     }, {
@@ -16495,7 +16662,7 @@ fn strip_shebang_arguments() -> Result<()> {
     });
 
     let custom_gui_script_path = venv_bin_path(&context.venv).join("custom_gui_script");
-    let gui_script_content = fs::read_to_string(&custom_gui_script_path)?;
+    let gui_script_content = context.read(&custom_gui_script_path);
 
     insta::with_settings!({filters => context.filters()
     }, {
@@ -17687,7 +17854,7 @@ fn install_missing_python_with_target() {
         .arg("--target").arg(target_dir.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.14.[LATEST]
+    Using CPython 3.15.[LATEST]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -17964,15 +18131,15 @@ fn install_editable_uv_build_data() -> Result<()> {
     ");
 
     assert_snapshot!(
-        fs::read_to_string(context.site_packages().join("project-data.txt"))?,
+        context.read(context.site_packages().join("project-data.txt")),
         @"project data"
     );
     assert_snapshot!(
-        fs::read_to_string(context.site_packages().join("project-platform-data.txt"))?,
+        context.read(context.site_packages().join("project-platform-data.txt")),
         @"project platform data"
     );
 
-    let project_script = fs::read_to_string(venv_bin_path(&context.venv).join("project-script"))?;
+    let project_script = context.read(venv_bin_path(&context.venv).join("project-script"));
     let normalized_project_script = if let Some(index) = project_script.find('\n') {
         format!("#![PYTHON]{}", &project_script[index..])
     } else {
@@ -17986,12 +18153,12 @@ fn install_editable_uv_build_data() -> Result<()> {
         "#
     );
 
-    let record = fs::read_to_string(
+    let record = context.read(
         context
             .site_packages()
             .join("project-0.1.0.dist-info")
             .join("RECORD"),
-    )?;
+    );
     assert!(record.lines().any(|line| line.contains("/project-script")));
     assert!(record.lines().any(|line| line.contains("/project.h")));
     assert!(
@@ -18049,7 +18216,7 @@ fn record_uses_forward_slashes() -> Result<()> {
         .join("project-0.1.0.dist-info")
         .join("RECORD");
 
-    let record = fs::read_to_string(&record_path)?;
+    let record = context.read(&record_path);
     let record_lines: Vec<_> = record
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -18481,7 +18648,7 @@ fn handle_record_mismatches() -> Result<()> {
 
     // Snapshot the current (correct) RECORD.
     let record = unpacked.join("foo-0.1.0.dist-info/RECORD");
-    let correct_record = fs_err::read_to_string(&record)?;
+    let correct_record = context.read(&record);
     let correct_record = apply_filters(correct_record, context.filters());
     assert_snapshot!(correct_record, @"
     foo/__init__.py,sha256=jv2QBpHSNajIRNeADSmtqOWL9QcdUddyMK277kbp06o,49
@@ -18520,7 +18687,7 @@ fn handle_record_mismatches() -> Result<()> {
             block_on(writer.write_entry_whole(entry, &[]))?;
         } else {
             let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
-            block_on(writer.write_entry_whole(entry, &fs_err::read(path)?))?;
+            block_on(writer.write_entry_whole(entry, &context.read_bytes(path)))?;
         }
     }
     fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
@@ -18576,11 +18743,13 @@ fn handle_record_mismatches() -> Result<()> {
         .join("archive-v0")
         .join(healed_digest.as_str())
         .join("foo-0.1.0.dist-info/RECORD");
-    assert_eq!(fs_err::read(cached_record)?, fs_err::read(healed_record)?);
+    assert_eq!(
+        context.read_bytes(cached_record),
+        context.read_bytes(healed_record)
+    );
 
     // Read the healed RECORD.
-    let installed_record =
-        fs_err::read_to_string(context.site_packages().join("foo-0.1.0.dist-info/RECORD"))?;
+    let installed_record = context.read(context.site_packages().join("foo-0.1.0.dist-info/RECORD"));
     let snapshot = apply_filters(installed_record, context.filters());
 
     // Ensure that all expected files are present.

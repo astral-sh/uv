@@ -36,7 +36,7 @@ pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
 /// No breaking changes were introduced to the uv build backend since these releases, so we can use
 /// the fast path for them too.
-const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12", "0.11.33"];
+const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12", "0.11.33", "0.12.24"];
 
 fn deserialize_optional_dependencies<'de, D, V>(
     deserializer: D,
@@ -2133,6 +2133,26 @@ mod tests {
     }
 
     #[test]
+    fn check_direct_build_uv_0_12() {
+        let temp_dir = TempDir::new().expect("create temporary directory");
+        fs_err::write(
+            temp_dir.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["uv_build>=0.12.0,<0.13"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .expect("write project metadata");
+        check_direct_build(temp_dir.path(), "0.13.0", &marker_environment(), [])
+            .expect("uv 0.13 can use its bundled backend for uv_build 0.12 requirements");
+    }
+
+    #[test]
     fn check_direct_build_parse_error() {
         let temp_dir = TempDir::new().unwrap();
         fs_err::write(
@@ -2276,11 +2296,11 @@ mod tests {
         let last_compatible =
             Version::from_str(COMPATIBLE_VERSIONS[COMPATIBLE_VERSIONS.len() - 1]).unwrap();
         // uv is versioned as `0.<minor>.<patch>`, so a breaking release bumps the minor segment.
-        // The list is kept one minor behind the current release, so if the newest compatible
-        // version isn't the immediately preceding minor, we likely missed updating the list on a
-        // breaking release.
+        // The newest compatible version belongs to the current or immediately preceding minor.
+        // Including the current minor lets us record compatibility before the version bump.
         assert!(
-            last_compatible.release()[1] + 1 == current_version.release()[1],
+            last_compatible.release()[1] == current_version.release()[1]
+                || last_compatible.release()[1] + 1 == current_version.release()[1],
             "Please update the list of compatible versions for the uv build backend: \
             If there was no breaking change in uv-build, add the last release before the \
             breaking release to `COMPATIBLE_VERSIONS`, otherwise reset `COMPATIBLE_VERSIONS` \

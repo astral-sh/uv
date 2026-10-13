@@ -133,7 +133,7 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
      + demo==1.0.0
     ");
     let wheel_metadata = context.site_packages().join("demo-1.0.0.dist-info/WHEEL");
-    assert_snapshot!(fs_err::read_to_string(&wheel_metadata)?, @"
+    assert_snapshot!(context.read(&wheel_metadata), @"
     Wheel-Version: 1.0
     Generator: uv-test
     Root-Is-Purelib: true
@@ -148,7 +148,7 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
     Installed 1 package in [TIME]
      ~ demo==1.0.0
     ");
-    assert_snapshot!(fs_err::read_to_string(&wheel_metadata)?, @"
+    assert_snapshot!(context.read(&wheel_metadata), @"
     Wheel-Version: 1.0
     Generator: uv-test
     Root-Is-Purelib: true

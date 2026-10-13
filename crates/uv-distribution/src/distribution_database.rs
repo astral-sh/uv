@@ -184,13 +184,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         wheel_entry: &CacheEntry,
         filename: &WheelFilename,
     ) -> Result<LockedFile, Error> {
-        // For backwards compatibility, we use the full wheel stem on Windows. Local wheel
-        // extraction and older uv versions use the same key, so changing it would prevent them
-        // from coordinating through a shared cache.
-        #[cfg(windows)]
-        let lock_key = filename.stem();
-        // On other platforms, we use the bounded cache key to avoid filesystem filename limits.
-        #[cfg(not(windows))]
+        // Use the bounded cache key to avoid filesystem filename limits.
         let lock_key = filename.cache_key();
 
         let lock_entry = wheel_entry.with_file(format!("{lock_key}.lock"));
@@ -227,6 +221,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // TODO(konsti): Support fetching wheel variants.
+        if let Dist::Built(built) = dist
+            && built.wheel_filename().variant().is_some()
+        {
+            return Err(Error::UnsupportedWheelVariant(Box::new(
+                built.wheel_filename().clone(),
+            )));
+        }
         match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
@@ -265,6 +267,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // TODO(konsti): Support reading metadata from wheel variants.
+        if let Dist::Built(built) = dist
+            && built.wheel_filename().variant().is_some()
+        {
+            return Err(Error::UnsupportedWheelVariant(Box::new(
+                built.wheel_filename().clone(),
+            )));
+        }
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {
@@ -1834,7 +1844,7 @@ impl HttpArchivePointer {
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::File::open(path.as_ref()) {
             Ok(file) => {
-                let data = DataWithCachePolicy::from_reader(file)?.data;
+                let data = DataWithCachePolicy::from_reader(file)?.into_data();
                 let archive = rmp_serde::from_slice::<Archive>(&data)?;
                 Ok(Some(Self { archive }))
             }

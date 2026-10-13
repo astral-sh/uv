@@ -1341,7 +1341,7 @@ fn build_dependency_check_constraints_and_extra_build_dependencies() -> Result<(
     ");
     project.child("pyproject.toml").write_str(&format!(
         "{}\n{}",
-        fs_err::read_to_string(project.child("pyproject.toml"))?,
+        context.read("project/pyproject.toml"),
         "[tool.uv.extra-build-dependencies]\nproject = ['extra-build-dependency>=1']\n",
     ))?;
     uv_snapshot!(context.filters(), context.build().args([
@@ -2020,7 +2020,7 @@ fn build_sha() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/project`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `hatchling`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+      cause: Hash-checking is required, but no trusted hash was provided for: `hatchling`
     ");
 
     project
@@ -2096,12 +2096,16 @@ async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
     let validation_wheel_url = validation_server.file_url(validation_filename);
 
     ok_server
-        .serve(ok_filename, &fs_err::read(links.join(ok_filename))?, None)
+        .serve(
+            ok_filename,
+            &context.read_bytes(links.join(ok_filename)),
+            None,
+        )
         .await;
     validation_server
         .serve(
             validation_filename,
-            &fs_err::read(links.join(validation_filename))?,
+            &context.read_bytes(links.join(validation_filename)),
             None,
         )
         .await;
@@ -2775,8 +2779,8 @@ fn build_fast_path_require_hashes() -> Result<()> {
     Building source distribution...
     error: Failed to build `[WORKSPACE]/test/packages/built-by-uv`
       cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `uv-build>=0.8.0, <0.13`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
+      cause: No solution found when resolving: `uv-build>=0.8.0, <0.14`
+      cause: Hash-checking is required, but no trusted hash was provided for: `uv-build`
     ");
 
     Ok(())
@@ -3642,14 +3646,14 @@ fn venv_included_in_sdist() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
 
-    // The default astral-tokio-tar backend recognizes the external virtual-environment link.
-    uv_snapshot!(context.filters(), context.build(), @"
+    // The astral-tokio-tar fallback recognizes the external virtual-environment link.
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_LEGACY_TAR_BACKEND, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
       cause: Invalid tar file
-      cause: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
+      cause: failed to unpack `[CACHE_DIR]/sdists-v10/[TMP]/project-0.1.0/.venv/bin/python`
       cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
@@ -3661,12 +3665,9 @@ fn venv_included_in_sdist() -> Result<()> {
     fs_err::remove_file(&venv_python)?;
     venv_python.symlink_to_file(context.root.child("python").child("3.12").child("python3"))?;
 
-    // The preview tar-codec backend reports a structured unsafe-link error and preserves the same
+    // The default tar-codec backend reports a structured unsafe-link error with the same
     // user-facing hint, regardless of the base interpreter's installation layout.
-    uv_snapshot!(context.filters(), context
-        .build()
-        .arg("--preview-features")
-        .arg("tar-codec"), @r#"
+    uv_snapshot!(context.filters(), context.build().env_remove(EnvVars::UV_LEGACY_TAR_BACKEND), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -3677,12 +3678,12 @@ fn venv_included_in_sdist() -> Result<()> {
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     "#);
 
-    uv_snapshot!(context.filters(), context.build().arg("-q"), @"
+    uv_snapshot!(context.filters(), context.build().arg("-q").env(EnvVars::UV_LEGACY_TAR_BACKEND, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/`
       cause: Invalid tar file
-      cause: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
+      cause: failed to unpack `[CACHE_DIR]/sdists-v10/[TMP]/project-0.1.0/.venv/bin/python`
       cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
@@ -3801,6 +3802,164 @@ fn build_clear() -> Result<()> {
     project
         .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test that `uv build --clear` does not remove the build source.
+#[test]
+fn build_clear_preserves_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let sources = context.temp_dir.child("sources");
+    let project = sources.child("project");
+    context.init().arg(project.path()).assert().success();
+    project.child("marker.txt").write_str("marker")?;
+
+    uv_snapshot!(context.filters(), context.build().arg("sources/project").arg("--clear").arg("--out-dir").arg("sources/project"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/sources/project`
+      cause: Refusing to clear output directory `[TEMP_DIR]/sources/project` because it contains the build source `[TEMP_DIR]/sources/project`
+    ");
+    project
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    project
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.filters(), context.build().arg("sources/project").arg("--clear").arg("--out-dir").arg("sources"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/sources/project`
+      cause: Refusing to clear output directory `[TEMP_DIR]/sources` because it contains the build source `[TEMP_DIR]/sources/project`
+    ");
+    project
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    project
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test that `uv build --all --clear` validates every workspace source before clearing.
+#[test]
+fn build_clear_preserves_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    let first = workspace.child("packages/first");
+    first.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "first"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    first.child("src/first/__init__.py").touch()?;
+
+    let second = workspace.child("packages/second");
+    second.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "second"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    second.child("src/second/__init__.py").touch()?;
+    second.child("marker.txt").write_str("marker")?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--clear").arg("--out-dir").arg(second.path()).current_dir(workspace.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `second @ [TEMP_DIR]/workspace/packages/second`
+      cause: Refusing to clear output directory `[TEMP_DIR]/workspace/packages/second` because it contains the build source `[TEMP_DIR]/workspace/packages/second`
+    ");
+    first
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    second
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    second
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test that `uv build --clear` recognizes a source directory behind a symlink.
+#[cfg(unix)]
+#[test]
+fn build_clear_preserves_symlinked_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let sources = context.temp_dir.child("sources");
+    let project = sources.child("project");
+    context.init().arg(project.path()).assert().success();
+    project.child("marker.txt").write_str("marker")?;
+    fs_err::os::unix::fs::symlink(project.path(), context.temp_dir.child("project-link"))?;
+
+    uv_snapshot!(context.filters(), context.build().arg("project-link").arg("--clear").arg("--out-dir").arg("sources"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/project-link`
+      cause: Refusing to clear output directory `[TEMP_DIR]/sources` because it contains the build source `[TEMP_DIR]/project-link`
+    ");
+    project
+        .child("pyproject.toml")
+        .assert(predicate::path::is_file());
+    project
+        .child("marker.txt")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Test that `uv build --clear` rejects an output directory containing the input source distribution.
+#[test]
+fn build_clear_rejects_output_containing_input_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    context.init().arg(project.path()).assert().success();
+    context
+        .build()
+        .arg("project")
+        .arg("--sdist")
+        .arg("--out-dir")
+        .arg("artifacts")
+        .assert()
+        .success();
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.child("marker.txt").write_str("marker")?;
+    let sdist = artifacts.child("project-0.1.0.tar.gz");
+    sdist.assert(predicate::path::is_file());
+
+    // Without `--out-dir`, the wheel is written beside the input sdist. Clearing that directory
+    // would remove the input before it is read.
+    uv_snapshot!(context.filters(), context.build().arg("artifacts/project-0.1.0.tar.gz").arg("--wheel").arg("--clear"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/artifacts/project-0.1.0.tar.gz`
+      cause: Refusing to clear output directory `[TEMP_DIR]/artifacts` because it contains the build source `[TEMP_DIR]/artifacts/project-0.1.0.tar.gz`
+    ");
+    sdist.assert(predicate::path::is_file());
+    artifacts
+        .child("marker.txt")
         .assert(predicate::path::is_file());
 
     Ok(())
@@ -4063,7 +4222,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     let dynamic_wheel = context
         .temp_dir
         .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
-    let dynamic_hash = hex::encode(Sha256::digest(fs_err::read(dynamic_wheel.path())?));
+    let dynamic_hash = hex::encode(Sha256::digest(context.read_bytes(dynamic_wheel.path())));
     let context = context.with_filter((dynamic_hash.clone(), "[DYNAMIC_HASH]"));
     let dynamic_url =
         Url::from_file_path(dynamic_wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
@@ -4102,7 +4261,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/`
       cause: Failed to resolve requirements from `build-system.requires`
       cause: No solution found when resolving: `build-dependency==1.0.0`, `dynamic-dependency @ file://[TEMP_DIR]/wheels/dynamic_dependency-1.0.0-py3-none-any.whl#sha256=[DYNAMIC_HASH]`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+      cause: Hash-checking is required, but no trusted hash was provided for: `dynamic-dependency`
     ");
     Ok(())
 }

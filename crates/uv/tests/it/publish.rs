@@ -508,7 +508,7 @@ async fn read_index_credential_env_vars_for_check_url() {
 
     let filename = "astral_test_private-0.1.0-py3-none-any.whl";
     let wheel = context.temp_dir.join("dist").join(filename);
-    let sha256 = hex::encode(Sha256::digest(fs_err::read(&wheel).unwrap()));
+    let sha256 = hex::encode(Sha256::digest(context.read_bytes(&wheel)));
 
     let simple_index = json! ({
           "files": [
@@ -1073,9 +1073,7 @@ async fn trusted_publishing_all_skipped() {
         .mount(&server)
         .await;
 
-    let sha256 = hex::encode(Sha256::digest(
-        fs_err::read(dummy_wheel()).expect("Failed to read wheel"),
-    ));
+    let sha256 = hex::encode(Sha256::digest(context.read_bytes(dummy_wheel())));
     Mock::given(method("GET"))
         .and(path("/simple/ok/"))
         .respond_with(

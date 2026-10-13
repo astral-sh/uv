@@ -2453,7 +2453,7 @@ fn sync_editable() -> Result<()> {
 
     // Modify the `pyproject.toml` file.
     let pyproject_toml = poetry_editable.path().join("pyproject.toml");
-    let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
+    let pyproject_toml_contents = context.read("poetry_editable/pyproject.toml");
     fs_err::write(
         &pyproject_toml,
         pyproject_toml_contents.replace("0.1.0", "0.1.1"),
@@ -2475,7 +2475,7 @@ fn sync_editable() -> Result<()> {
 
     // Modify the `pyproject.toml` file.
     let pyproject_toml = poetry_editable.path().join("pyproject.toml");
-    let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
+    let pyproject_toml_contents = context.read("poetry_editable/pyproject.toml");
     fs_err::write(
         &pyproject_toml,
         pyproject_toml_contents.replace("0.1.0", "0.1.1"),
@@ -3271,7 +3271,7 @@ fn compile() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-    Bytecode compiled 3 files in [TIME]
+    Bytecode compiled 2 files in [TIME]
      + markupsafe==2.1.3
     "
     );
@@ -3317,7 +3317,7 @@ fn recompile() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Bytecode compiled 3 files in [TIME]
+    Bytecode compiled 2 files in [TIME]
     "
     );
 

@@ -1123,7 +1123,7 @@ impl PubGrubReportFormatter<'_> {
         let prioritized = candidate.prioritized()?;
 
         match tag {
-            IncompatibleTag::Invalid => None,
+            IncompatibleTag::Invalid | IncompatibleTag::Variant => None,
             IncompatibleTag::Python => {
                 let best = tags.and_then(Tags::python_tag);
                 let tags = prioritized.python_tags().collect::<BTreeSet<_>>();

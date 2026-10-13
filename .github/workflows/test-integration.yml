@@ -269,8 +269,8 @@ jobs:
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
 
-  integration-test-windows-aarch64-implicit:
-    name: "aarch64 windows implicit"
+  integration-test-windows-aarch64-native:
+    name: "aarch64 python on aarch64 windows"
     timeout-minutes: 10
     runs-on: windows-11-arm
 
@@ -280,7 +280,53 @@ jobs:
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
-      - name: "Install Python via uv (implicitly select x64)"
+      - name: "Install Python via uv (implicitly select aarch64)"
+        run: |
+          ./uv python install -v 3.13
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          & (./uv python find 3.13) -m venv .venv
+
+      - name: "Check version (stdlib)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -c -p 3.13 --managed-python
+
+      - name: "Check version (uv)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Check is aarch64"
+        run: |
+          .venv/Scripts/python -c "import sys; exit(1) if 'ARM64' not in sys.version else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13 python -c ""
+
+  integration-test-windows-aarch64-emulated:
+    name: "x86-64 python on aarch64 windows"
+    timeout-minutes: 10
+    runs-on: windows-11-arm
+    env:
+      UV_PYTHON_ARCH: x86_64
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-windows-aarch64-${{ inputs.sha }}
+
+      - name: "Install Python via uv (select x64 from environment)"
         run: |
           ./uv python install -v 3.13
 
@@ -303,50 +349,6 @@ jobs:
       - name: "Check is x64"
         run: |
           .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' not in sys.version else exit(0)"
-
-      - name: "Check install"
-        run: |
-          ./uv pip install -v anyio
-
-      - name: "Check uv run"
-        run: |
-          ./uv run python -c ""
-          ./uv run -p 3.13 python -c ""
-
-  integration-test-windows-aarch64-explicit:
-    name: "aarch64 windows explicit"
-    timeout-minutes: 10
-    runs-on: windows-11-arm
-
-    steps:
-      - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: uv-windows-aarch64-${{ inputs.sha }}
-
-      - name: "Install Python via uv (explicitly select aarch64)"
-        run: |
-          ./uv python install -v cpython-3.13-windows-aarch64-none
-
-      - name: "Create a virtual environment (stdlib)"
-        run: |
-          & (./uv python find 3.13) -m venv .venv
-
-      - name: "Check version (stdlib)"
-        run: |
-          .venv/Scripts/python --version
-
-      - name: "Create a virtual environment (uv)"
-        run: |
-          ./uv venv -c -p 3.13 --managed-python
-
-      - name: "Check version (uv)"
-        run: |
-          .venv/Scripts/python --version
-
-      - name: "Check is NOT x64"
-        run: |
-          .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' in sys.version else exit(0)"
 
       - name: "Check install"
         run: |
@@ -812,6 +814,14 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Start Docker"
+        # Docker can fail to start during runner boot.
+        # https://github.com/actions/runner-images/issues/13729#issuecomment-4183956802
+        run: |
+          if ((Get-Service -Name docker).Status -ne 'Running') {
+            Start-Service -Name docker
+          }
 
       - name: "Run uv on Windows NanoServer"
         run: |

@@ -102,20 +102,20 @@ jobs:
 
       - name: "Install uv on Linux x64"
         if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.13.0"
+          checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
           enable-cache: false
 
       - name: "Install uv on macOS ARM64"
         if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
+          version: "0.13.0"
+          checksum: "a9c1b29002cf3c83f07fa9cd8a887a3be0107d90e23189721221e7257db8e3d6"
           enable-cache: false
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -310,7 +310,7 @@ jobs:
       - name: "Fix reproduced bug"
         id: fix-bug
         if: steps.prepare.outputs.existing != 'true'
-        uses: openai/codex-action@66a81490a2326ee818531f7021d77e6398ae7062
+        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
         env:
           CARGO_HOME: ${{ runner.temp }}/cargo-home
           GH_TOKEN: ${{ github.token }}
@@ -319,7 +319,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-fix-bug-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.153.4"
+          codex-version: "0.154.0"
           codex-home: "${{ runner.temp }}/codex-home"
           effort: high
           codex-args: >-

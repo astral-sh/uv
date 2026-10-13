@@ -23,7 +23,9 @@ use url::Url;
 use uv_client::retryable_on_request_failure;
 use uv_distribution_filename::LegacySourceDistExtension;
 use uv_distribution_filename::SourceDistExtension;
-use uv_static::{astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url};
+use uv_static::{
+    TarBackend, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
+};
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
 use uv_client::{BaseClient, RetriableError, fetch_with_url_fallback};
@@ -701,6 +703,7 @@ pub async fn bin_install(
         retry_policy,
         cache,
         reporter,
+        TarBackend::from_env(),
     )
     .await
 }
@@ -716,6 +719,7 @@ async fn bin_install_from_urls(
     retry_policy: &ExponentialBackoff,
     cache: &Cache,
     reporter: &dyn Reporter,
+    tar_backend: TarBackend,
 ) -> Result<PathBuf, Error> {
     let cache_entry = CacheEntry::new(
         cache
@@ -750,6 +754,7 @@ async fn bin_install_from_urls(
                 format,
                 url,
                 &cache_entry,
+                tar_backend,
             )
         },
     )
@@ -786,6 +791,7 @@ async fn download_and_unpack(
     format: ArchiveFormat,
     download_url: DisplaySafeUrl,
     cache_entry: &CacheEntry,
+    tar_backend: TarBackend,
 ) -> Result<PathBuf, Error> {
     // Create a temporary directory for extraction
     let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::Binaries))?;
@@ -842,7 +848,7 @@ async fn download_and_unpack(
 
     let id = reporter.on_download_start(binary.name(), version, size);
     let mut progress_reader = ProgressReader::new(reader, id, reporter);
-    let (temp_dir, _) = stream::archive(&mut progress_reader, format.into(), temp_dir)
+    let (temp_dir, _) = stream::archive(&mut progress_reader, format.into(), temp_dir, tar_backend)
         .await
         .map_err(|e| Error::Extract { source: e })?;
     reporter.on_download_complete(id);

@@ -304,7 +304,7 @@ fn tool_audit_unsupported_lockfile_version() -> Result<()> {
     install_tool(&context, "simple-launcher", true);
 
     let lock_path = tool_dir.join("simple-launcher").join("uv.lock");
-    let contents = fs_err::read_to_string(&lock_path)?;
+    let contents = context.read(&lock_path);
     fs_err::write(
         &lock_path,
         contents.replacen("version = 1\n", "version = 2\n", 1),
@@ -339,7 +339,8 @@ fn tool_audit_unparsable_unsupported_lockfile_version() -> Result<()> {
     install_tool(&context, "simple-launcher", true);
 
     let lock_path = tool_dir.join("simple-launcher").join("uv.lock");
-    let contents = fs_err::read_to_string(&lock_path)?
+    let contents = context
+        .read(&lock_path)
         .replacen("version = 1\n", "version = 2\n", 1)
         .replacen("version = \"0.1.0\"\n", "version = false\n", 1);
     fs_err::write(&lock_path, contents)?;
@@ -889,12 +890,12 @@ async fn tool_audit_persisted_index_and_project_status() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_tool_dirs();
     let server = MockServer::start().await;
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
-    let wheel = fs_err::read(
+    let wheel = context.read_bytes(
         context
             .workspace_root
             .join("test/links")
             .join(wheel_filename),
-    )?;
+    );
 
     let simple_index = json!({
         "meta": { "api-version": "1.1" },

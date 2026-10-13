@@ -34,8 +34,8 @@ jobs:
       runner: depot-ubuntu-24.04-16
       helper-runner: github-ubuntu-24.04-x86_64-4
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      uv-version: "0.12.13"
-      uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+      uv-version: "0.13.0"
+      uv-checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
       # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
       # Keep the environment outside the checkout when switching to the PR head.
       setup-command: |
@@ -88,7 +88,7 @@ jobs:
 
   check-release:
     needs: plan
-    if: ${{ needs.plan.outputs.run-checks == 'true' }}
+    if: ${{ needs.plan.outputs.run-checks == 'true' || needs.plan.outputs.require-check-release == 'true' }}
     uses: $/.github/workflows/check-release.yml
 
   check-crates-policies:
@@ -333,11 +333,16 @@ jobs:
       - check-fmt
       - check-lint
       - check-docs
+      - check-lock
       - check-crates-policies
+      - check-release
       - check-generated-files
       - test
+      - test-integration
       - test-system
       - build-dev-binaries
+      - build-release-artifacts
+      - build-docker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
       - name: "Check required jobs passed"
@@ -359,5 +364,8 @@ jobs:
           # Jobs not listed here are always required.
           CONDITIONAL_JOBS: >-
             {
+              "build-release-artifacts": ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }},
+              "check-release": ${{ needs.plan.outputs.require-check-release == 'true' }},
+              "test-integration": ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }},
               "test-system": ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
             }

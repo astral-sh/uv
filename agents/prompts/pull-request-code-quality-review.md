@@ -19,12 +19,22 @@ defaults with the repository's instructions and concrete constraints:
    functions, inherent methods, and enums for closed sets of implementations. Do not force
    superficially similar operations to share an abstraction when their semantics differ.
 3. **Put behavior and invariants where they belong.** Keep domain operations on their owning type or
-   layer and shared operations outside command-specific code. Prefer validated construction over
-   checks every caller must remember. Use explicit modes instead of ambiguous booleans, types that
-   express cardinality and ownership, and resolved configuration passed through appropriate
-   boundaries. Keep domain values structured in internal APIs and error types; defer formatting to
-   `Display` or another presentation boundary where practical. Look for premature conversion to
-   `String` that discards useful structure or makes callers responsible for diagnostic formatting.
+   layer and shared operations outside command-specific code. For each added or moved validation
+   check, inspect constructors, factories, public mutation, and consumers of the checked value. If
+   the inputs are available at construction and normal consumers require the invariant, prefer
+   fallible construction or a validated type over a required later `validate()` call. Check whether
+   public mutation can invalidate that guarantee. All current callers remembering the check does not
+   remove the maintenance hazard of an API that permits skipping it. Identify deliberate exceptions,
+   such as warning-only commands or reuse of an existing object, and look for explicit boundaries
+   that keep the normal path checked. Checks depending on state only available later, or on mutable
+   external state, may belong at use instead.
+
+   Use explicit modes instead of ambiguous booleans, types that express cardinality and ownership,
+   and resolved configuration passed through appropriate boundaries. Keep domain values structured
+   in internal APIs and error types; defer formatting to `Display` or another presentation boundary
+   where practical. Look for premature conversion to `String` that discards useful structure or
+   makes callers responsible for diagnostic formatting.
+
 4. **Prefer readable Rust.** Favor direct matching, exhaustive handling, early returns, and
    established library operations. Look for unnecessary wrappers, buffers, hidden clones, and
    duplicated representations. Follow local naming, import, and error conventions. Explain the
@@ -57,10 +67,11 @@ defaults with the repository's instructions and concrete constraints:
    Flag unsupported causal claims, conversation history, and distracting implementation detail when
    there is a concrete improvement to make.
 
-Before reporting, check whether the issue is handled by a caller, constructor, platform contract, or
-deliberate tradeoff. Respect corrections and withdrawn suggestions. Traits, clones, globals,
-duplication, and small helpers are contextual choices, not automatic findings. Do not repeat an
-existing finding or report unrelated pre-existing problems. No findings is a valid result.
+Before reporting a behavior defect, check whether the issue is handled by a caller, constructor,
+platform contract, or deliberate tradeoff. For design findings, distinguish guarantees enforced by
+the API from required call ordering. Respect corrections and withdrawn suggestions. Traits, clones,
+globals, duplication, and small helpers are contextual choices, not automatic findings. Do not
+repeat an existing finding or report unrelated pre-existing problems. No findings is a valid result.
 
 Return only JSON matching `$REVIEW_CONFIG/schema.json`. Each finding needs a precise diff location,
 triggering condition or concrete maintenance cost, evidence, and the smallest useful correction.

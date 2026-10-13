@@ -1,6 +1,6 @@
 [package]
 name = "uv-pypi-types"
-version = "0.0.91"
+version = "0.0.92"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -25,11 +25,11 @@ uv-pep508 = { workspace = true, features = ["rkyv"] }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 
+astral-mail-headers = { workspace = true }
 hashbrown = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
-mailparse = { workspace = true }
 petgraph = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true }

@@ -1890,12 +1890,10 @@
             "centralized-project-envs",
             "tool-install-locks",
             "workspace-list-scripts",
-            "no-distutils-patch",
             "index-hash-algorithm",
             "lockfile-format-check",
             "lockfile-normalization",
             "lock-without-metadata",
-            "tar-codec",
             "index-by-name",
             "artifact-hash-filtering",
             "content-addressed-cache",
@@ -1906,7 +1904,8 @@
             "minimum-libc-version",
             "build-dependency-check",
             "build-lazy-imports",
-            "build-dependency-hashes"
+            "build-dependency-hashes",
+            "wheel-variants"
           ]
         },
         {

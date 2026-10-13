@@ -3,6 +3,7 @@ use std::env;
 use std::io::Write;
 use std::path::Path;
 use uv_command_support::ExitStatus;
+use uv_static::TarBackend;
 
 /// PEP 517 hook to build a source distribution.
 pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
@@ -11,6 +12,7 @@ pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
         sdist_directory,
         uv_version::version(),
         false,
+        TarBackend::from_env(),
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

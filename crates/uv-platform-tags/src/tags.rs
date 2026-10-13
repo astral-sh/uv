@@ -35,6 +35,8 @@ pub struct TagsOptions {
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
 pub enum IncompatibleTag {
+    /// The wheel has a variant label, which is not supported yet.
+    Variant,
     /// The tag is invalid and cannot be used.
     Invalid,
     /// The Python implementation tag is incompatible.

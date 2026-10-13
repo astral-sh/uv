@@ -651,7 +651,7 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
         .success();
 
     // The minor-only `version_info` allows compatibility checks to accept a newer patch.
-    let pyvenv_cfg = fs_err::read_to_string(context.venv.child("pyvenv.cfg"))?;
+    let pyvenv_cfg = context.read(".venv/pyvenv.cfg");
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(pyvenv_cfg, @r"
         home = [PYTHON_HOME]
@@ -734,7 +734,7 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
     ");
 
     // An exact-patch environment must retain the patch in `version_info`.
-    let pyvenv_cfg = fs_err::read_to_string(context.venv.child("pyvenv.cfg"))?;
+    let pyvenv_cfg = context.read(".venv/pyvenv.cfg");
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(pyvenv_cfg, @r"
         home = [PYTHON_HOME]

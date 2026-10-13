@@ -821,7 +821,7 @@ async fn perform_install(
                         not_explicit.download_request.clone().with_arch(native_arch);
                     writeln!(
                         printer.stderr(),
-                        "{} uv selected a Python distribution with an emulated architecture ({}) for your platform because support for the native architecture ({}) is not yet mature; to override this behaviour, request the native architecture explicitly with: {}",
+                        "{} uv selected a Python distribution with an emulated architecture ({}) for your platform ({}); to require the native architecture, use: {}",
                         "note:".bold(),
                         install_key.arch(),
                         native_arch,

@@ -1,6 +1,6 @@
 [package]
 name = "uv-build"
-version = "0.12.24"
+version = "0.13.0"
 description = "A Python build backend"
 edition = { workspace = true }
 rust-version = { workspace = true }

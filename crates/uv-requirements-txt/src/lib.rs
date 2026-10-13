@@ -458,6 +458,12 @@ impl RequirementsTxt {
                         end,
                     })?;
 
+                    if !sub_constraints.editables.is_empty() {
+                        return Err(RequirementsTxtParserError::EditableConstraint {
+                            file: sub_file,
+                        });
+                    }
+
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
                     // _requirements_, but we don't want to support that.
@@ -477,6 +483,7 @@ impl RequirementsTxt {
                     for constraint in sub_constraints.constraints {
                         data.constraints.push(constraint);
                     }
+                    data.require_hashes |= sub_constraints.require_hashes;
                 }
                 RequirementsTxtStatement::RequirementEntry(requirement_entry) => {
                     data.requirements.push(requirement_entry);
@@ -1183,6 +1190,9 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
+    EditableConstraint {
+        file: RequirementsInput,
+    },
     Parser {
         message: String,
         line: usize,
@@ -1262,6 +1272,13 @@ impl Display for RequirementsTxtParserError {
             Self::UnnamedConstraint { .. } => {
                 write!(f, "Unnamed requirements are not allowed as constraints")
             }
+            Self::EditableConstraint { file } => {
+                write!(
+                    f,
+                    "Editable requirements are not allowed as constraints in `{}`",
+                    file.user_display(),
+                )
+            }
             Self::Parser {
                 message,
                 line,
@@ -1308,6 +1325,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::NoBinary { source, .. } => Some(source),
             Self::OnlyBinary { source, .. } => Some(source),
             Self::UnnamedConstraint { .. } => None,
+            Self::EditableConstraint { .. } => None,
             Self::UnsupportedRequirement { source, .. } => Some(source),
             Self::Pep508 { source, .. } => Some(source),
             Self::ParsedUrl { source, .. } => Some(source),
@@ -1380,6 +1398,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Unnamed requirements are not allowed as constraints in `{file}`",
+                )
+            }
+            RequirementsTxtParserError::EditableConstraint { file } => {
+                write!(
+                    f,
+                    "Editable requirements are not allowed as constraints in `{}`",
+                    file.user_display(),
                 )
             }
             RequirementsTxtParserError::Parser {
