@@ -18,7 +18,8 @@ use uv_cache::{Cache, CacheBucket, CacheEntry, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
 use uv_fs::{
-    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
+    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, normalize_absolute_path,
+    write_atomic_sync,
 };
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
@@ -1168,7 +1169,48 @@ pub(crate) struct InterpreterInfo {
 
 impl InterpreterInfo {
     /// Build metadata for virtual environment discovery without querying Python or using the cache.
-    pub(crate) fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
+    ///
+    /// Return [`None`] when the interpreter's venv metadata cannot be inferred.
+    pub(crate) fn from_virtualenv(interpreter: &Interpreter) -> Result<Option<Self>, Error> {
+        let sys_executable = std::path::absolute(interpreter.sys_executable())?
+            .simplified()
+            .to_path_buf();
+        // Pyodide reports its underlying CPython implementation name.
+        let implementation = if interpreter.matches_implementation(ImplementationName::Pyodide) {
+            LenientImplementationName::Known(ImplementationName::Pyodide)
+        } else {
+            LenientImplementationName::from(interpreter.implementation_name())
+        };
+        let sys_base_executable = match implementation {
+            // macOS framework launchers can derive the base executable from the runtime library.
+            // https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.py#L303-L314
+            LenientImplementationName::Known(ImplementationName::CPython)
+                if cfg!(target_os = "macos") && !interpreter.standalone =>
+            {
+                return Ok(None);
+            }
+            LenientImplementationName::Known(ImplementationName::CPython) => {
+                match interpreter.python_tuple() {
+                    // Older CPython on Unix reports the venv executable itself.
+                    // https://github.com/python/cpython/blob/v3.10.16/Python/pathconfig.c#L457-L461
+                    (3, 8..=10) if cfg!(unix) => Some(sys_executable.clone()),
+                    // CPython 3.11+ follows executable symlinks inside a venv.
+                    // https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.py#L366-L375
+                    (3, 11..) if cfg!(unix) => Some(resolve_executable_symlinks(&sys_executable)?),
+                    // Windows venv launchers report the selected base interpreter.
+                    (3, 8..) if cfg!(windows) => interpreter.sys_base_executable.clone(),
+                    _ => return Ok(None),
+                }
+            }
+            // Other implementations have different startup rules. Query their metadata on first use.
+            LenientImplementationName::Known(
+                ImplementationName::PyPy
+                | ImplementationName::GraalPy
+                | ImplementationName::Pyodide,
+            )
+            | LenientImplementationName::Unknown(_) => return Ok(None),
+        };
+
         // Python reports ordinary Windows paths even when the venv was created with a verbatim path.
         let scheme = Scheme {
             purelib: interpreter.scheme.purelib.simplified().to_path_buf(),
@@ -1178,7 +1220,7 @@ impl InterpreterInfo {
             data: interpreter.scheme.data.simplified().components().collect(),
             include: interpreter.scheme.include.simplified().to_path_buf(),
         };
-        Ok(Self {
+        Ok(Some(Self {
             platform: interpreter.platform.clone(),
             markers: (*interpreter.markers).clone(),
             scheme,
@@ -1189,10 +1231,8 @@ impl InterpreterInfo {
             sys_base_exec_prefix: PathBuf::new(),
             sys_path: Vec::new(),
             sys_base_prefix: interpreter.sys_base_prefix.clone(),
-            sys_base_executable: interpreter.sys_base_executable.clone(),
-            sys_executable: std::path::absolute(interpreter.sys_executable())?
-                .simplified()
-                .to_path_buf(),
+            sys_base_executable,
+            sys_executable,
             site_packages: interpreter
                 .site_packages
                 .iter()
@@ -1204,7 +1244,7 @@ impl InterpreterInfo {
             pointer_size: interpreter.pointer_size,
             gil_disabled: interpreter.gil_disabled,
             debug_enabled: interpreter.debug_enabled,
-        })
+        }))
     }
 
     /// Cache already prepared metadata for this executable.
@@ -1508,6 +1548,30 @@ impl InterpreterInfo {
 
         Ok(info)
     }
+}
+
+/// Follow executable symlinks without resolving symlinks in the containing directories.
+///
+/// CPython retains directory aliases in `sys._base_executable`, including aliases used for
+/// Python patch upgrades. Relative link targets are normalized without resolving directory links.
+/// See <https://github.com/python/cpython/blob/v3.12.9/Modules/getpath.c#L419-L473>.
+fn resolve_executable_symlinks(executable: &Path) -> io::Result<PathBuf> {
+    let mut executable = executable.to_path_buf();
+    // CPython caps this at 40 links, citing the Linux 4.2 kernel's symlink limit.
+    for _ in 0..40 {
+        // CPython stops on any readlink error, including when the path is not a symlink.
+        let Ok(target) = fs::read_link(&executable) else {
+            return Ok(executable);
+        };
+        executable = if target.is_absolute() {
+            target
+        } else {
+            executable.pop();
+            executable.push(target);
+            normalize_absolute_path(&executable)?
+        };
+    }
+    Err(io::Error::other("maximum number of symbolic links reached"))
 }
 
 /// Find the Python executable that should be considered the "base" for a virtual environment.
