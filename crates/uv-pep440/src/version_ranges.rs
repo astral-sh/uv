@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::Bound;
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::LazyLock;
 use version_ranges::Ranges;
@@ -652,6 +653,63 @@ impl From<UpperBound> for Bound<Version> {
     }
 }
 
+/// Display a single version in `Ranges` as `==1.2.3` instead of `1.2.3`.
+pub fn display_version_ranges(ranges: &Ranges<Version>) -> impl Display + '_ {
+    VersionRangesDisplay(ranges)
+}
+
+struct VersionRangesDisplay<'a>(&'a Ranges<Version>);
+
+impl Display for VersionRangesDisplay<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return formatter.write_str("∅");
+        }
+        for (index, (lower, upper)) in self.0.iter().enumerate() {
+            if index > 0 {
+                formatter.write_str(" | ")?;
+            }
+            if let (Bound::Included(lower), Bound::Included(upper)) = (lower, upper)
+                && lower == upper
+            {
+                write!(formatter, "=={lower}")?;
+                continue;
+            }
+            let has_lower = match lower {
+                Bound::Unbounded => false,
+                Bound::Included(version) => {
+                    write!(formatter, ">={version}")?;
+                    true
+                }
+                Bound::Excluded(version) => {
+                    write!(formatter, ">{version}")?;
+                    true
+                }
+            };
+            match upper {
+                Bound::Unbounded => {
+                    if !has_lower {
+                        formatter.write_str("*")?;
+                    }
+                }
+                Bound::Included(version) => {
+                    if has_lower {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "<={version}")?;
+                }
+                Bound::Excluded(version) => {
+                    if has_lower {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "<{version}")?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -662,6 +720,18 @@ mod tests {
 
     fn version(version: &str) -> Version {
         version.parse().unwrap()
+    }
+
+    #[test]
+    fn display_singletons_in_union() {
+        let range = Ranges::singleton(version("1.0"))
+            .union(&Ranges::from_range_bounds(version("2.0")..version("3.0")))
+            .union(&Ranges::singleton(version("4.0")));
+
+        assert_eq!(
+            display_version_ranges(&range).to_string(),
+            "==1.0 | >=2.0, <3.0 | ==4.0"
+        );
     }
 
     #[test]
