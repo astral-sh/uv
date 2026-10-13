@@ -18,6 +18,7 @@ use url::Url;
 
 use uv_auth::{CredentialsCache, Indexes};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_cache_key::cache_digest;
 use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
@@ -925,6 +926,81 @@ impl RegistryClient {
         OwnedArchive::from_unarchived(&metadata)
     }
 
+    /// Fetch an index-level variant metadata file from the cache, a URL, or a local path.
+    pub async fn fetch_variants_json(
+        &self,
+        package_name: &PackageName,
+        file: &File,
+        index: &IndexUrl,
+    ) -> Result<Vec<u8>, Error> {
+        let url = file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+
+        if url.scheme() == "file" {
+            let path = url
+                .to_file_path()
+                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+            let bytes = fs_err::tokio::read(path).await.map_err(ErrorKind::Io)?;
+            verify_metadata_hashes(&url, &bytes, &file.hashes)?;
+            return Ok(bytes);
+        }
+
+        let cache_key = format!(
+            "variants-json-{}",
+            cache_digest(&(
+                url.as_str(),
+                file.hashes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            ))
+        );
+        let cache_entry = self.cache.entry(
+            CacheBucket::Wheels,
+            WheelCache::Index(index).wheel_dir(package_name.as_ref()),
+            format!("{cache_key}.msgpack"),
+        );
+        // TODO: Can variant metadata change after publication? It's still a bit fuzzy, be conservative for now.
+        let cache_control = match self.connectivity {
+            Connectivity::Online
+                if let Some(header) = self.indexes.configured_files_cache_control_for(index) =>
+            {
+                CacheControl::Override(header)
+            }
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, Some(package_name), None)
+                    .map_err(ErrorKind::Io)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
+
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = cache_entry.with_file(format!("{cache_key}.lock"));
+            lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
+        };
+
+        let response_callback = async |response: Response, _: &mut RetryState| {
+            let bytes = response.bytes().await.map_err(|err| {
+                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+            })?;
+            verify_metadata_hashes(&url, &bytes, &file.hashes)?;
+            Ok::<Vec<u8>, Error>(bytes.to_vec())
+        };
+        let request = self
+            .uncached_client(&url)
+            .get(Url::from(url.clone()))
+            .build()
+            .map_err(|err| {
+                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+            })?;
+        Ok(self
+            .cached_client()
+            .get_serde_with_retry(request, &cache_entry, cache_control, response_callback)
+            .await?)
+    }
+
     /// Fetch the metadata for a remote wheel file.
     ///
     /// For a remote wheel, we try the following ways to fetch the metadata:
@@ -1116,18 +1192,7 @@ impl RegistryClient {
                 })?;
 
                 // Verify the downloaded bytes before parsing or caching the metadata.
-                for expected in hashes.iter() {
-                    let mut hasher = Hasher::from(expected.algorithm());
-                    hasher.update(&bytes);
-                    let actual = HashDigest::from(hasher);
-                    if &actual != expected {
-                        return Err(Error::from(ErrorKind::MetadataHashMismatch {
-                            url: url.clone(),
-                            expected: expected.clone(),
-                            actual,
-                        }));
-                    }
-                }
+                verify_metadata_hashes(&url, &bytes, hashes)?;
 
                 info_span!("parse_metadata21")
                     .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
@@ -1385,6 +1450,27 @@ impl FlatIndexCache {
     }
 }
 
+/// Verify all hashes advertised for a metadata file.
+fn verify_metadata_hashes(
+    url: &DisplaySafeUrl,
+    bytes: &[u8],
+    hashes: &HashDigests,
+) -> Result<(), Error> {
+    for expected in hashes.iter() {
+        let mut hasher = Hasher::from(expected.algorithm());
+        hasher.update(bytes);
+        let actual = HashDigest::from(hasher);
+        if &actual != expected {
+            return Err(Error::from(ErrorKind::MetadataHashMismatch {
+                url: url.clone(),
+                expected: expected.clone(),
+                actual,
+            }));
+        }
+    }
+    Ok(())
+}
+
 type FlatIndexEntriesByPackage = FxHashMap<PackageName, Vec<FlatIndexEntry>>;
 type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 
@@ -1421,8 +1507,7 @@ impl VersionFiles {
             })
     }
 
-    #[cfg(test)]
-    fn all_entries(
+    pub fn all_entries(
         self,
         package_name: &PackageName,
     ) -> impl Iterator<Item = (IndexEntryFilename, File)> {

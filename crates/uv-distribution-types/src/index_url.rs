@@ -507,6 +507,13 @@ impl<'a> IndexLocations {
             .and_then(Index::artifact_cache_control)
     }
 
+    /// Return the explicitly configured file cache control header for an [`IndexUrl`].
+    pub fn configured_files_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
+        self.index_for_url(url)
+            .and_then(|index| index.cache_control.as_ref())
+            .and_then(|cache_control| cache_control.files.clone())
+    }
+
     /// Return the hash algorithm required for distributions resolved from a given index.
     pub fn hash_algorithm_for(&self, url: &IndexUrl) -> Option<HashAlgorithm> {
         self.index_for_url(url)
