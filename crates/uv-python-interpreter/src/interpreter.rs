@@ -521,19 +521,6 @@ impl Interpreter {
         self.prefix.as_ref()
     }
 
-    /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
-    ///
-    /// This method may return false positives, but it should not return false negatives. In other
-    /// words, if this method returns `true`, the interpreter _may_ be from
-    /// `python-build-standalone`; if it returns `false`, the interpreter is definitely _not_ from
-    /// `python-build-standalone`.
-    ///
-    /// See: <https://github.com/astral-sh/python-build-standalone/issues/382>
-    #[cfg(unix)]
-    pub fn is_standalone(&self) -> bool {
-        self.standalone
-    }
-
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
     pub fn layout(&self) -> Layout {
         Layout {
