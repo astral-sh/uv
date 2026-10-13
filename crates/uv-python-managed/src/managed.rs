@@ -518,38 +518,30 @@ impl ManagedPythonInstallation {
         let installation = self.clone();
         spawn_blocking(move || {
             let python = installation.executable(false);
+            let executable =
+                python.with_file_name(format!("python{exe}", exe = std::env::consts::EXE_SUFFIX));
 
-            let canonical_names = &["python"];
-
-            for name in canonical_names {
-                let executable = python
-                    .with_file_name(format!("{name}{exe}", exe = std::env::consts::EXE_SUFFIX));
-
-                // Do not attempt to perform same-file copies — this is fine on Unix but fails on
-                // Windows with a permission error instead of 'already exists'
-                if executable == python {
-                    continue;
-                }
-
-                match symlink_or_copy_file(&python, &executable) {
-                    Ok(()) => {
-                        debug!(
-                            "Created link `{}` -> `{}`",
-                            executable.user_display(),
-                            python.user_display(),
-                        );
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                        return Err(Error::MissingExecutable(python.clone()));
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-                    Err(err) => {
-                        return Err(Error::CanonicalizeExecutable(err));
-                    }
-                }
+            // Do not attempt to perform same-file copies — this is fine on Unix but fails on
+            // Windows with a permission error instead of 'already exists'
+            if executable == python {
+                return Ok(());
             }
 
-            Ok(())
+            match symlink_or_copy_file(&python, &executable) {
+                Ok(()) => {
+                    debug!(
+                        "Created link `{}` -> `{}`",
+                        executable.user_display(),
+                        python.user_display(),
+                    );
+                    Ok(())
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    Err(Error::MissingExecutable(python))
+                }
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+                Err(err) => Err(Error::CanonicalizeExecutable(err)),
+            }
         })
         .await?
     }

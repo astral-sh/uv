@@ -207,9 +207,7 @@ fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
 #[cfg(unix)]
 #[test]
 fn python_install_pkgconfig() -> anyhow::Result<()> {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_filtered_python_keys()
-        .with_managed_python_dirs();
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
     let installation = context
         .temp_dir
         .child("managed")

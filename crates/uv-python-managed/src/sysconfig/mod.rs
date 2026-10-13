@@ -74,7 +74,8 @@ pub(crate) async fn update_sysconfig(
             Err(err) => return Err(err.into()),
         };
     while let Some(entry) = pkgconfigs.next_entry().await? {
-        if entry.path().extension().is_none_or(|ext| ext != "pc")
+        let pkgconfig = entry.path();
+        if pkgconfig.extension().is_none_or(|ext| ext != "pc")
             || !entry
                 .file_type()
                 .await
@@ -82,7 +83,6 @@ pub(crate) async fn update_sysconfig(
         {
             continue;
         }
-        let pkgconfig = entry.path();
         trace!("Discovered `pkgconfig` data at: {}", pkgconfig.display());
 
         // Update the `pkgconfig` file in-memory.
@@ -116,26 +116,18 @@ async fn find_sysconfigdata(
     // Probe the `lib` directory for `_sysconfigdata_`.
     let mut entries = fs_err::tokio::read_dir(&lib).await?;
     while let Some(entry) = entries.next_entry().await? {
-        if entry.path().extension().is_none_or(|ext| ext != "py") {
-            continue;
-        }
-
-        if !entry
-            .path()
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .is_some_and(|stem| stem.starts_with("_sysconfigdata_"))
+        let path = entry.path();
+        if path.extension().is_none_or(|ext| ext != "py")
+            || !path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .is_some_and(|stem| stem.starts_with("_sysconfigdata_"))
         {
             continue;
         }
 
-        let metadata = entry.metadata().await?;
-        if metadata.is_symlink() {
-            continue;
-        }
-
-        if metadata.is_file() {
-            return Ok(entry.path());
+        if entry.metadata().await?.is_file() {
+            return Ok(path);
         }
     }
 
