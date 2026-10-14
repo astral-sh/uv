@@ -4,7 +4,7 @@
 set -euo pipefail
 
 install_maturin_fork() {
-    local revision=93fc4fb83077a05666b714289fff8fae82b4e026
+    local revision=2e501fa4b49e517e500d9ded9b9c800e64d9b27f
     local install_root="$PWD/target/maturin-fork-tool"
     local host
     host=$(rustc -vV | sed -n 's/^host: //p')
@@ -18,7 +18,7 @@ install_maturin_fork() {
         local variable
         while IFS= read -r variable; do unset "$variable"; done < <(compgen -v CARGO_TARGET_ || true)
         export CARGO_PROFILE_DEV_DEBUG=0
-        cargo install --debug --locked --jobs 4 --bin maturin \
+        cargo install maturin --debug --locked --jobs 4 --bin maturin \
             --git https://github.com/ewdurbin/maturin --rev "$revision" \
             --target "$host" --root "$install_root"
     )
@@ -37,7 +37,7 @@ install_maturin_fork() {
         local tool_cache="$RUNNER_TOOL_CACHE"
         if [[ "$RUNNER_OS" == Windows ]]; then tool_cache=$(cygpath -u "$tool_cache"); fi
         # maturin-action uses the literal x64 cache key on both native platforms.
-        local cached="$tool_cache/maturin/1.15.0-fork.93fc4fb8/x64"
+        local cached="$tool_cache/maturin/1.15.0-fork.2e501fa4/x64"
         mkdir -p "$cached"
         cp "$install_root/bin/$executable" "$cached/$executable"
         touch "$cached.complete"
