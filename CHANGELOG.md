@@ -3,6 +3,53 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.13.1
+
+Released on 2026-10-14.
+
+### Enhancements
+
+- Ignore `Requires-Python` upper bounds in `uv pip check` and `uv pip install --strict`, consistent with resolution ([#22500](https://github.com/astral-sh/uv/pull/22500))
+- Support Linux SPARC by falling back when filesystem cloning and detailed cache accounting are unavailable ([#22463](https://github.com/astral-sh/uv/pull/22463))
+- Report missing trusted hashes in resolution errors ([#22241](https://github.com/astral-sh/uv/pull/22241))
+
+### Python
+
+- Add CPython 3.16.0a1 ([#22527](https://github.com/astral-sh/uv/pull/22527))
+
+### Preview features
+
+- Allow `uv tool upgrade` to upgrade installed tools when `tool-install-locks` is enabled ([#22498](https://github.com/astral-sh/uv/pull/22498))
+- Add preliminary support for parsing PEP 825 variant labels in wheel filenames with `wheel-variants` ([#22039](https://github.com/astral-sh/uv/pull/22039))
+
+### Performance
+
+- Reduce uv's binary size ([#22429](https://github.com/astral-sh/uv/pull/22429), [#22430](https://github.com/astral-sh/uv/pull/22430), [#22432](https://github.com/astral-sh/uv/pull/22432))
+- Speed up Simple API parsing ([#22429](https://github.com/astral-sh/uv/pull/22429))
+- Reduce package metadata parsing overhead ([#22239](https://github.com/astral-sh/uv/pull/22239))
+
+### Bug fixes
+
+- Prevent tool and managed Python uninstalls from deleting unrelated files beside their storage directories ([#22495](https://github.com/astral-sh/uv/pull/22495))
+- Restore support for source distributions containing hard links or full-length tar user or group names ([#22516](https://github.com/astral-sh/uv/pull/22516), [#22522](https://github.com/astral-sh/uv/pull/22522))
+- Preserve device files and FIFOs used as `uv pip compile` or `uv export` output destinations ([#22496](https://github.com/astral-sh/uv/pull/22496))
+- Fix `sys._base_executable` detection for environments created from symlinked interpreters ([#22520](https://github.com/astral-sh/uv/pull/22520))
+- Prevent concurrent readers from observing partially written lockfiles, Python version files, or managed Python sysconfig files ([#22399](https://github.com/astral-sh/uv/pull/22399), [#22402](https://github.com/astral-sh/uv/pull/22402), [#22403](https://github.com/astral-sh/uv/pull/22403))
+- Serialize concurrent project commands that reach the same environment through real and symlinked paths ([#22390](https://github.com/astral-sh/uv/pull/22390))
+- Prevent installs, syncs, and environment creation from failing when they race with `uv cache clean` ([#22387](https://github.com/astral-sh/uv/pull/22387))
+- Prevent concurrent tool installations from corrupting an environment when the last tool is uninstalled ([#22391](https://github.com/astral-sh/uv/pull/22391))
+- Persist changed upgrade settings even when `uv tool upgrade` leaves the tool version unchanged ([#22499](https://github.com/astral-sh/uv/pull/22499))
+- Reuse environments with installed Git dependencies pinned to full commit hashes without resolving again ([#22464](https://github.com/astral-sh/uv/pull/22464))
+
+### Documentation
+
+- Explain how to select an emulated Python interpreter on Windows ARM64 when native wheels are unavailable ([#22424](https://github.com/astral-sh/uv/pull/22424))
+- Fix the `.netrc` format documentation link ([#22514](https://github.com/astral-sh/uv/pull/22514))
+
+### Other changes
+
+- Publish Python 3.15-based uv Docker images under stable tags ([#22503](https://github.com/astral-sh/uv/pull/22503))
+
 ## 0.13.0
 
 Released on 2026-10-09.
