@@ -250,6 +250,7 @@ impl GitRemote {
     /// is given (tag, branch, refs/*). Thus, network connection is involved.
     ///
     /// When `locked_rev` is provided, it takes precedence over `reference`.
+    /// An exact commit reference must resolve to that same commit.
     ///
     /// If we have a previous instance of [`GitDatabase`] then fetch into that
     /// if we can. If that can successfully load our revision then we've
@@ -272,6 +273,7 @@ impl GitRemote {
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             if let Ok(rev) = db.repo.resolve(reference) {
+                reference.validate_resolved_commit(&rev, &self.url)?;
                 if with_lfs {
                     let lfs_ready = fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
@@ -298,6 +300,7 @@ impl GitRemote {
         fetch(&mut repo, &self.url, reference, disable_ssl, offline)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = repo.resolve(reference)?;
+        reference.validate_resolved_commit(&rev, &self.url)?;
         let lfs_ready = with_lfs
             .then(|| {
                 fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)

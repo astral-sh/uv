@@ -12415,6 +12415,125 @@ fn sync_stale_egg_info() -> Result<()> {
     Ok(())
 }
 
+/// A SHA-256 repository can have a tag named after a locked SHA-1 commit. Fetching that tag
+/// into a SHA-256 cache succeeds, but syncing must reject the substituted commit.
+#[test]
+#[cfg(feature = "test-git")]
+fn sync_git_locked_commit_rejects_tag_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let locked_commit = "0123456789abcdef0123456789abcdef01234567";
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    repository.child("backend.py").write_str(indoc! {r#"
+        import pathlib
+        import shutil
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "dependency-0.1.0-py3-none-any.whl"
+            shutil.copy(pathlib.Path(__file__).parent / filename, wheel_directory)
+            return filename
+    "#})?;
+    let (filename, wheel) = generate_wheel(
+        &"dependency".parse()?,
+        &"0.1.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    repository.child(filename).write_binary(&wheel)?;
+
+    Command::new("git")
+        .args(["init", "--object-format=sha256", "--initial-branch=main"])
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Substituted commit",
+        ])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["tag", locked_commit])
+        .assert()
+        .success();
+    let commit = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "HEAD"])
+        .assert()
+        .success();
+    let commit = std::str::from_utf8(&commit.get_output().stdout)?.trim();
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = {{ git = "{repository_url}", branch = "main" }}
+    "#})?;
+
+    // Populate the cache with the SHA-256 repository before using a lockfile with a SHA-1 pin.
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&context.read("uv.lock").replace(commit, locked_commit))?;
+
+    let mut filters = context.filters();
+    filters.push((locked_commit, "[LOCKED_COMMIT]"));
+    filters.push((commit, "[SUBSTITUTED_COMMIT]"));
+    uv_snapshot!(filters, context.sync().args(["--frozen", "--offline"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `dependency @ git+file://[TEMP_DIR]/repository/@[LOCKED_COMMIT]`
+      cause: Git operation failed
+      cause: Exact Git revision `[LOCKED_COMMIT]` does not match precise commit `[SUBSTITUTED_COMMIT]` for `file://[TEMP_DIR]/repository/`
+
+    hint: `dependency` was included because `project` (v0.1.0) depends on `dependency`
+    ");
+
+    Ok(())
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
 #[cfg(feature = "test-git")]
