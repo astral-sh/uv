@@ -29,11 +29,14 @@ defaults with the repository's instructions and concrete constraints:
    that keep the normal path checked. Checks depending on state only available later, or on mutable
    external state, may belong at use instead.
 
-   Review `bool` fields and parameters that select domain modes or policies. Prefer an enum with
-   meaningful variants when it makes the choice explicit at construction and call sites, even for
-   two alternatives. Reuse an existing enum when it expresses the same concept. Keep booleans for
-   clear predicates, and identify the ambiguity or invariant an enum would clarify before reporting
-   a finding.
+   Review `bool` fields and parameters that select domain modes or collapse distinct kinds. Identify
+   the relevant domain states in the current code, and prefer an enum that represents those states
+   when it clarifies construction and use. Derive policies from those states, using exhaustive
+   matching where appropriate; distinct kinds can share a policy without being collapsed into one
+   variant. Replacing a boolean with `Yes` and `No` variants alone may leave the same distinctions
+   hidden. Reuse an existing type only when it represents the same distinctions. Keep booleans for
+   clear predicates, and identify the ambiguity or invariant the model clarifies before reporting a
+   finding.
 
    Use types that express cardinality and ownership, and pass resolved configuration through
    appropriate boundaries. Keep domain values structured in internal APIs and error types; defer
