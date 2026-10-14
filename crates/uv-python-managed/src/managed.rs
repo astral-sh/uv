@@ -115,12 +115,20 @@ impl ManagedPythonInstallations {
     /// Grab a file lock for the managed Python distribution directory to prevent concurrent access
     /// across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(
-            self.root.join(".lock"),
-            LockedFileMode::Exclusive,
-            self.root.user_display(),
-        )
-        .await?)
+        let path = self.root.join(".lock");
+        loop {
+            let lock =
+                LockedFile::acquire(&path, LockedFileMode::Exclusive, self.root.user_display())
+                    .await?;
+            // Older uv versions can remove the directory while another process waits on its lock.
+            if lock.is_current()? {
+                return Ok(lock);
+            }
+            debug!(
+                "Python installation lock at `{}` was replaced",
+                path.user_display()
+            );
+        }
     }
 
     /// Lock the installation directory and reclaim abandoned temporary installations.

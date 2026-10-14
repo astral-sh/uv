@@ -280,6 +280,16 @@ impl LockedFile {
         Self::lock_file(file, mode, &resource).await
     }
 
+    /// Return whether the locked file is still the file at the path used to acquire it.
+    pub fn is_current(&self) -> Result<bool, io::Error> {
+        let current = match same_file::Handle::from_path(self.0.path()) {
+            Ok(current) => current,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(err) => return Err(err),
+        };
+        Ok(same_file::Handle::from_file(self.0.try_clone()?.into_file())? == current)
+    }
+
     /// Acquire a cross-process lock for a resource using a file at the provided path
     ///
     /// Unlike [`LockedFile::acquire`] this function will not wait for the lock to become available.

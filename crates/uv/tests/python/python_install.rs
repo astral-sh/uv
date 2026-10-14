@@ -187,6 +187,27 @@ fn python_install_does_not_clean_redirected_scratch_directory() -> anyhow::Resul
     Ok(())
 }
 
+/// Uninstall must retain the lock path even when a redirected scratch directory is the only entry.
+#[test]
+fn python_uninstall_retains_installation_lock() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let redirected = context.temp_dir.child("redirected");
+    redirected.create_dir_all()?;
+    let managed = context.temp_dir.child("managed");
+    managed.create_dir_all()?;
+    uv_fs::replace_symlink(redirected.path(), managed.child(".temp").path())?;
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Searching for Python installations
+    No Python installations found
+    ");
+    managed.child(".lock").assert(predicate::path::exists());
+    managed.child(".temp").assert(predicate::path::exists());
+    Ok(())
+}
+
 /// Regression test for a panic when `/install` in a sysconfig value is followed by a non-ASCII
 /// character.
 #[cfg(unix)]
