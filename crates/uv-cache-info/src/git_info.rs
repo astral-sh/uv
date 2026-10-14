@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::warn;
 use uv_fs::find_git_repository_root;
+use uv_git_types::{GitOid, OidParseError};
 use walkdir::WalkDir;
 
 #[derive(Debug, thiserror::Error)]
@@ -16,15 +17,16 @@ pub(crate) enum GitInfoError {
     MissingRef(PathBuf, String),
     #[error("The repository at `{0}` has an invalid reference: {1}")]
     InvalidRef(PathBuf, String),
-    #[error("The discovered commit has an invalid length (expected 40 characters): {0}")]
-    WrongLength(String),
-    #[error("The discovered commit has an invalid character (expected hexadecimal): {0}")]
-    WrongDigit(String),
+    #[error("Invalid Git commit `{commit}`: {source}")]
+    InvalidCommit {
+        commit: String,
+        source: OidParseError,
+    },
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
 
-/// The current commit for a repository (i.e., a 40-character hexadecimal string).
+/// The current commit for a repository.
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub(crate) struct Commit(String);
 
@@ -216,14 +218,13 @@ fn resolve_relative_path(base: &Path, path: &str) -> PathBuf {
 }
 
 fn validate_commit(commit: &str) -> Result<(), GitInfoError> {
-    // The commit should be 40 hexadecimal characters.
-    if commit.len() != 40 {
-        return Err(GitInfoError::WrongLength(commit.to_string()));
-    }
-    if commit.chars().any(|c| !c.is_ascii_hexdigit()) {
-        return Err(GitInfoError::WrongDigit(commit.to_string()));
-    }
-    Ok(())
+    commit
+        .parse::<GitOid>()
+        .map(|_| ())
+        .map_err(|source| GitInfoError::InvalidCommit {
+            commit: commit.to_string(),
+            source,
+        })
 }
 
 #[cfg(test)]

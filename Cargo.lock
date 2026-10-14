@@ -6134,6 +6134,7 @@ dependencies = [
  "toml",
  "tracing",
  "uv-fs",
+ "uv-git-types",
  "walkdir",
 ]
 

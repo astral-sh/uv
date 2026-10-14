@@ -96,23 +96,10 @@ impl UnresolvedRequirement {
     #[must_use]
     pub fn augment_requirement(
         self,
-        rev: Option<&str>,
-        tag: Option<&str>,
-        branch: Option<&str>,
+        git_reference: Option<GitReference>,
         lfs: Option<bool>,
         marker: Option<MarkerTree>,
     ) -> Self {
-        #[expect(clippy::manual_map)]
-        let git_reference = if let Some(rev) = rev {
-            Some(GitReference::from_rev(rev.to_string()))
-        } else if let Some(tag) = tag {
-            Some(GitReference::Tag(tag.to_string()))
-        } else if let Some(branch) = branch {
-            Some(GitReference::Branch(branch.to_string()))
-        } else {
-            None
-        };
-
         match self {
             Self::Named(mut requirement) => Self::Named(Requirement {
                 marker: marker
