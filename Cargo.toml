@@ -179,7 +179,6 @@ fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
 flate2 = { version = "1.0.33", default-features = false, features = [
   "zlib-rs",
 ] }
-fluent-uri = { version = "0.4.1", default-features = false }
 fs-err = { version = "3.2.2", default-features = false, features = ["tokio"] }
 futures = { version = "0.3.30", default-features = false, features = ["async-await", "executor"] }
 futures-lite = { version = "2.6.1", default-features = false, features = ["std"] }
@@ -205,6 +204,7 @@ http-content-range = { version = "0.2.4", default-features = false }
 indexmap = { version = "2.5.0", default-features = false, features = ["std"] }
 indicatif = { version = "0.18.0", default-features = false, features = ["unicode-width"] }
 indoc = { version = "2.0.5", default-features = false }
+iri-string = { version = "0.7.10", default-features = false }
 itertools = { version = "0.14.0", default-features = false, features = ["use_std"] }
 jiff = { version = "0.2.0", default-features = false, features = [
   "perf-inline",

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use fluent_uri::UriRef;
+use iri_string::types::UriReferenceStr;
 use itertools::Itertools;
 use jiff::Timestamp;
 use percent_encoding::{AsciiSet, CONTROLS, percent_encode};
@@ -298,7 +298,7 @@ impl<'a> ComponentBuilder<'a> {
             });
 
             for (url, hash) in source_dist.chain(wheels) {
-                if UriRef::parse(url.as_ref()).is_ok() {
+                if UriReferenceStr::new(url.as_ref()).is_ok() {
                     let alg = match hash.algorithm() {
                         HashAlgorithm::Md5 => "MD5",
                         HashAlgorithm::Sha256 => "SHA-256",

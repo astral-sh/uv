@@ -46,9 +46,9 @@ uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 either = { workspace = true }
-fluent-uri = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+iri-string = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
 memchr = { workspace = true }
