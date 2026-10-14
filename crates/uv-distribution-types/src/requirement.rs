@@ -1017,11 +1017,9 @@ impl From<RequirementSource> for RequirementSourceWire {
                     GitReference::DefaultBranch => {}
                 }
 
-                // A full commit revision already identifies the precise commit in the query.
-                if git.reference().as_commit().is_none()
-                    && let Some(precise) = git.precise()
-                {
-                    url.set_fragment(Some(&precise.to_string()));
+                // Put the resolved commit in the fragment.
+                if let Some(commit) = git.resolved_commit() {
+                    url.set_fragment(Some(commit.as_str()));
                 }
 
                 Self::Git {
@@ -1072,11 +1070,9 @@ impl From<RequirementSource> for RequirementSourceWire {
                     url.query_pairs_mut().append_pair("lfs", "true");
                 }
 
-                // A full commit revision already identifies the precise commit in the query.
-                if git.reference().as_commit().is_none()
-                    && let Some(precise) = git.precise()
-                {
-                    url.set_fragment(Some(&precise.to_string()));
+                // Put the resolved commit in the fragment.
+                if let Some(commit) = git.resolved_commit() {
+                    url.set_fragment(Some(commit.as_str()));
                 }
 
                 Self::Git {

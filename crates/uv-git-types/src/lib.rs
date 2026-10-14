@@ -206,7 +206,14 @@ impl GitUrl {
 
     /// Return the precise commit, whether requested directly or resolved from a named reference.
     pub fn precise(&self) -> Option<GitOid> {
-        self.reference.as_commit().or(self.resolved)
+        self.reference.as_commit().or(self.resolved_commit())
+    }
+
+    /// Return the commit obtained by resolving a reference, if known.
+    ///
+    /// Returns `None` when the reference is itself a full commit.
+    pub fn resolved_commit(&self) -> Option<GitOid> {
+        self.resolved
     }
 
     /// Return the Git LFS configuration.
