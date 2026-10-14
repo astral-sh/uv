@@ -78,7 +78,6 @@ jobs:
             apt-get install -y --no-install-recommends cmake
             # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
             # we run the risk that pip pull uv from PyPI instead.
-            # Constrain isolated builds with both older and newer versions of pip.
             printf "maturin==1.15.0\n" > /tmp/build-constraints.txt
             PIP_CONSTRAINT=/tmp/build-constraints.txt PIP_BUILD_CONSTRAINT=/tmp/build-constraints.txt pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME} --help
@@ -112,7 +111,6 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            # Constrain isolated builds with both older and newer versions of pip.
             printf "maturin==1.15.0\n" > /tmp/build-constraints.txt
             PIP_CONSTRAINT=/tmp/build-constraints.txt PIP_BUILD_CONSTRAINT=/tmp/build-constraints.txt pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall --config-settings=maturin.build-args=--locked
             ${MODULE_NAME}-build --help
