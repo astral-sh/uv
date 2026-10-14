@@ -61,8 +61,8 @@ use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolved::ResolvedDistRef;
 pub(crate) use crate::resolver::availability::{
-    ResolverVersion, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
-    UnavailableVersion, UnsatisfiableRequirement,
+    ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    UnsatisfiableRequirement,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 use crate::resolver::derivation::DerivationChainBuilder;

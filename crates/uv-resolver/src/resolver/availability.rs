@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::iter;
 use std::sync::Arc;
 
 use reqwest::StatusCode;
@@ -204,34 +203,8 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
     }
 }
 
-/// Display the error chain for unavailable packages.
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum UnavailableErrorChain {
-    InvalidMetadata(#[source] Arc<MetadataError>),
-    InconsistentMetadata(#[source] Arc<DistributionError>),
-    InvalidStructure(#[source] Arc<WheelMetadataError>),
-}
-
-impl Display for UnavailableErrorChain {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for source in iter::successors(self.source(), |&err| err.source()) {
-            writeln!(f, "Caused by: {}", source.to_string().trim())?;
-        }
-        Ok(())
-    }
-}
-
-impl PartialEq for UnavailableErrorChain {
-    /// Whether we can collapse two reasons into one because they would be rendered the same.
-    fn eq(&self, other: &Self) -> bool {
-        self.to_string() == other.to_string()
-    }
-}
-
-impl Eq for UnavailableErrorChain {}
-
 /// The package is unavailable and cannot be used.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum UnavailablePackage {
     /// Index lookups were disabled (i.e., `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`).
     NoIndex,
@@ -240,9 +213,11 @@ pub enum UnavailablePackage {
     /// The package was not found in the registry.
     NotFound,
     /// The package metadata was found, but could not be parsed.
-    InvalidMetadata(UnavailableErrorChain),
+    InvalidMetadata(#[source] Arc<MetadataError>),
+    /// The package metadata was found, but the metadata was inconsistent.
+    InconsistentMetadata(#[source] Arc<DistributionError>),
     /// The package has an invalid structure.
-    InvalidStructure(UnavailableErrorChain),
+    InvalidStructure(#[source] Arc<WheelMetadataError>),
     /// The network request failed with the given status code.
     Network(StatusCode),
 }
@@ -253,7 +228,9 @@ impl UnavailablePackage {
             Self::NoIndex => Cow::Borrowed("not found in the provided package locations"),
             Self::Offline => Cow::Borrowed("not found in the cache"),
             Self::NotFound => Cow::Borrowed("not found in the package registry"),
-            Self::InvalidMetadata(_) => Cow::Borrowed("invalid metadata"),
+            Self::InvalidMetadata(_) | Self::InconsistentMetadata(_) => {
+                Cow::Borrowed("invalid metadata")
+            }
             Self::InvalidStructure(_) => Cow::Borrowed("an invalid package format"),
             Self::Network(status) => Cow::Owned(status.to_string()),
         }
@@ -264,7 +241,7 @@ impl UnavailablePackage {
             Self::NoIndex => format!("was {self}"),
             Self::Offline => format!("was {self}"),
             Self::NotFound => format!("was {self}"),
-            Self::InvalidMetadata(_) => format!("has {self}"),
+            Self::InvalidMetadata(_) | Self::InconsistentMetadata(_) => format!("has {self}"),
             Self::InvalidStructure(_) => format!("has {self}"),
             Self::Network(_) => format!("could not be fetched from the network (`{self}`)"),
         }
@@ -277,19 +254,37 @@ impl Display for UnavailablePackage {
     }
 }
 
+impl PartialEq for UnavailablePackage {
+    /// Collapse reasons with the same category and cause messages.
+    fn eq(&self, other: &Self) -> bool {
+        if self.message() != other.message() {
+            return false;
+        }
+
+        let mut source = self.source();
+        let mut other_source = other.source();
+        while let (Some(error), Some(other_error)) = (source, other_source) {
+            if error.to_string().trim() != other_error.to_string().trim() {
+                return false;
+            }
+            source = error.source();
+            other_source = other_error.source();
+        }
+        source.is_none() && other_source.is_none()
+    }
+}
+
+impl Eq for UnavailablePackage {}
+
 impl From<&MetadataUnavailable> for UnavailablePackage {
     fn from(reason: &MetadataUnavailable) -> Self {
         match reason {
             MetadataUnavailable::Offline => Self::Offline,
-            MetadataUnavailable::InvalidMetadata(err) => {
-                Self::InvalidMetadata(UnavailableErrorChain::InvalidMetadata(err.clone()))
-            }
+            MetadataUnavailable::InvalidMetadata(err) => Self::InvalidMetadata(err.clone()),
             MetadataUnavailable::InconsistentMetadata(err) => {
-                Self::InvalidMetadata(UnavailableErrorChain::InconsistentMetadata(err.clone()))
+                Self::InconsistentMetadata(err.clone())
             }
-            MetadataUnavailable::InvalidStructure(err) => {
-                Self::InvalidStructure(UnavailableErrorChain::InvalidStructure(err.clone()))
-            }
+            MetadataUnavailable::InvalidStructure(err) => Self::InvalidStructure(err.clone()),
             MetadataUnavailable::RequiresPython(..) => {
                 unreachable!("`requires-python` is only known upfront for registry distributions")
             }
