@@ -1,9 +1,10 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -17,11 +18,15 @@ use uv_environment_operations::install_target::{InstallTarget, PackageSelection}
 use uv_environment_operations::malware::MalwareCheckContext;
 use uv_environment_operations::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
-    ProjectInterpreter, sync_from_lock,
+    ProjectInterpreter, sync_from_lock_with_prune,
 };
 use uv_fs::Simplified;
 use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_lock_operations::{LockMode, LockOperation, LockTarget};
+use uv_install_operations::{PrunePolicy, RemovalRoot};
+use uv_lock::{
+    DependencySection, reachable_declared_package_names, reachable_direct_dependency_names,
+};
+use uv_lock_operations::{LockMode, LockOperation, LockResult, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_project_edit::{DependencyTarget, PyProjectTomlMut};
@@ -124,69 +129,18 @@ pub async fn remove(
         ),
     }?;
 
+    let mut removed_requirements = Vec::new();
     for package in packages {
-        match dependency_type {
-            DependencyType::Production => {
-                let deps = toml.remove_dependency(&package)?;
-                if deps.is_empty() {
-                    return Err(DependencyNotFoundError {
-                        package: package.clone(),
-                        dependency_type: dependency_type.clone(),
-                        found_in: toml.find_dependency(&package, None),
-                    }
-                    .into());
-                }
+        let requirements = toml.remove_dependencies(&package, &dependency_type)?;
+        if requirements.is_empty() {
+            return Err(DependencyNotFoundError {
+                package: package.clone(),
+                dependency_type: dependency_type.clone(),
+                found_in: toml.find_dependency(&package, None),
             }
-            DependencyType::Dev => {
-                let dev_deps = toml.remove_dev_dependency(&package)?;
-                let group_deps =
-                    toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
-                if dev_deps.is_empty() && group_deps.is_empty() {
-                    return Err(DependencyNotFoundError {
-                        package: package.clone(),
-                        dependency_type: dependency_type.clone(),
-                        found_in: toml.find_dependency(&package, None),
-                    }
-                    .into());
-                }
-            }
-            DependencyType::Optional(ref extra) => {
-                let deps = toml.remove_optional_dependency(&package, extra)?;
-                if deps.is_empty() {
-                    return Err(DependencyNotFoundError {
-                        package: package.clone(),
-                        dependency_type: dependency_type.clone(),
-                        found_in: toml.find_dependency(&package, None),
-                    }
-                    .into());
-                }
-            }
-            DependencyType::Group(ref group) => {
-                if group == &*DEV_DEPENDENCIES {
-                    let dev_deps = toml.remove_dev_dependency(&package)?;
-                    let group_deps =
-                        toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
-                    if dev_deps.is_empty() && group_deps.is_empty() {
-                        return Err(DependencyNotFoundError {
-                            package: package.clone(),
-                            dependency_type: dependency_type.clone(),
-                            found_in: toml.find_dependency(&package, None),
-                        }
-                        .into());
-                    }
-                } else {
-                    let deps = toml.remove_dependency_group_requirement(&package, group)?;
-                    if deps.is_empty() {
-                        return Err(DependencyNotFoundError {
-                            package: package.clone(),
-                            dependency_type: dependency_type.clone(),
-                            found_in: toml.find_dependency(&package, None),
-                        }
-                        .into());
-                    }
-                }
-            }
+            .into());
         }
+        removed_requirements.extend(requirements);
     }
 
     let content = toml.to_string();
@@ -337,7 +291,7 @@ pub async fn remove(
     let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match Box::pin(
+    let lock_result = match Box::pin(
         LockOperation::new(
             mode,
             &settings.resolver,
@@ -354,7 +308,7 @@ pub async fn remove(
     )
     .await
     {
-        Ok(result) => result.into_lock(),
+        Ok(result) => result,
         Err(err) => return Err(UvError::from(err).into()),
     };
 
@@ -370,7 +324,78 @@ pub async fn remove(
         return Ok(ExitStatus::Success);
     };
 
-    // Identify the installation target.
+    let marker_environment = venv.interpreter().to_resolver_marker_environment();
+    let marker_extras = match &dependency_type {
+        DependencyType::Optional(extra) => std::slice::from_ref(extra),
+        DependencyType::Production | DependencyType::Dev | DependencyType::Group(_) => &[],
+    };
+    let removed_roots = removed_requirements
+        .into_iter()
+        .filter(|requirement| {
+            requirement
+                .marker
+                .evaluate(&marker_environment, marker_extras)
+        })
+        .map(|requirement| RemovalRoot {
+            name: requirement.name,
+            extras: requirement.extras,
+        })
+        .collect::<Vec<_>>();
+    let removed_names = removed_roots
+        .iter()
+        .map(|root| root.name.clone())
+        .collect::<BTreeSet<_>>();
+
+    // Retain every package reachable from the edited project's declarations for this interpreter.
+    // Conflict selections are conservatively unioned so every compatible extra/group combination
+    // remains owned.
+    let current_target = InstallTarget::from_project(
+        &project,
+        lock_result.lock(),
+        PackageSelection::from_args(false, &[], project.project_name()),
+    );
+    let retained = reachable_declared_package_names(&current_target, &marker_environment)?;
+
+    // Scope lock-derived candidates to the exact removed declaration edges. Installed metadata is
+    // also walked during planning, both to reflect the actual environment and to support missing
+    // or unreadable previous lockfiles.
+    let candidates = if let LockResult::Changed(Some(previous), _) = &lock_result {
+        let previous_target = InstallTarget::from_project(
+            &project,
+            previous,
+            PackageSelection::from_args(false, &[], project.project_name()),
+        );
+        let section = match &dependency_type {
+            DependencyType::Production => DependencySection::Production,
+            DependencyType::Dev => DependencySection::Group(&DEV_DEPENDENCIES),
+            DependencyType::Optional(extra) => DependencySection::Optional(extra),
+            DependencyType::Group(group) => DependencySection::Group(group),
+        };
+        match reachable_direct_dependency_names(
+            &previous_target,
+            &marker_environment,
+            section,
+            &removed_names,
+        ) {
+            Ok(candidates) => candidates,
+            Err(error) => {
+                debug!(
+                    %error,
+                    "Ignoring an inapplicable previous lockfile while computing removal candidates"
+                );
+                BTreeSet::new()
+            }
+        }
+    } else {
+        BTreeSet::new()
+    };
+    let prune = PrunePolicy {
+        roots: removed_roots,
+        candidates,
+        retained,
+    };
+
+    let lock = lock_result.into_lock();
     let target = InstallTarget::from_project(
         &project,
         &lock,
@@ -379,7 +404,7 @@ pub async fn remove(
 
     let state = state.fork();
 
-    match sync_from_lock(
+    match sync_from_lock_with_prune(
         target,
         venv,
         &extras,
@@ -387,6 +412,7 @@ pub async fn remove(
         None,
         InstallOptions::default(),
         Modifications::Exact,
+        Some(prune),
         None,
         (&settings).into(),
         &client_builder,
