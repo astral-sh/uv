@@ -2539,7 +2539,7 @@ impl Lock {
                 package.metadata = PackageMetadata::from_distribution(
                     metadata,
                     root,
-                    dist.is_project_or_workspace_member,
+                    dist.project_or_workspace_member,
                 )?;
             }
             let mut wheel_marker = dist.marker;
@@ -6663,7 +6663,7 @@ impl Package {
             PackageMetadata::from_distribution(
                 metadata,
                 root,
-                annotated_dist.is_project_or_workspace_member,
+                annotated_dist.project_or_workspace_member,
             )?
         };
         Ok(Self {
@@ -7456,7 +7456,7 @@ impl PackageMetadata {
     fn from_distribution(
         metadata: &DistributionMetadata,
         root: &Path,
-        preserve_path_preference: bool,
+        project_or_workspace_member: FirstParty,
     ) -> Result<Self, LockError> {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
         // We normally write dependency paths relative to the lockfile. For the current project and
@@ -7465,8 +7465,9 @@ impl PackageMetadata {
         // Apply the path policy to the cloned requirements so shared metadata remains unchanged.
         let relative_requirement = |requirement: &Requirement| {
             let mut requirement = requirement.clone();
-            if preserve_path_preference {
-                requirement.set_force_relative(false);
+            match project_or_workspace_member {
+                FirstParty::Yes => requirement.set_force_relative(false),
+                FirstParty::No => {}
             }
             requirement.relative_to(root)
         };

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, ResolvedDist, SourceDist,
+    BuiltDist, Dist, DistributionMetadata, FirstParty, IndexUrl, Name, ResolvedDist, SourceDist,
     VersionOrUrlRef,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -56,7 +56,7 @@ pub struct AnnotatedDist {
     pub hashes: HashDigests,
     pub metadata: Option<Arc<MetadataResponse>>,
     /// Whether this distribution is the current project or a workspace member.
-    pub is_project_or_workspace_member: bool,
+    pub project_or_workspace_member: FirstParty,
     /// The "full" marker for this distribution. It precisely describes all
     /// marker environments for which this distribution _can_ be installed.
     /// That is, when doing a traversal over all of the distributions in a

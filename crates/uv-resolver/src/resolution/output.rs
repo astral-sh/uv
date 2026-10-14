@@ -9,7 +9,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
-    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
+    DistributionId, FirstParty, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
     ResolutionDiagnostic, parse_url_hashes,
 };
 use uv_normalize::PackageName;
@@ -65,6 +65,12 @@ pub(crate) fn from_state(
                 continue;
             };
             let package = &entry.key().package;
+            let project_or_workspace_member =
+                if project == Some(&package.name) || workspace_members.contains(&package.name) {
+                    FirstParty::Yes
+                } else {
+                    FirstParty::No
+                };
             let node = add_version(
                 &mut graph,
                 &mut diagnostics,
@@ -73,7 +79,7 @@ pub(crate) fn from_state(
                 index,
                 package,
                 selected,
-                project == Some(&package.name) || workspace_members.contains(&package.name),
+                project_or_workspace_member,
             );
             entry.insert(node);
         }
@@ -225,7 +231,7 @@ fn add_version(
     in_memory: &InMemoryIndex,
     package: &ResolutionPackage,
     selected: SelectedDistribution,
-    is_project_or_workspace_member: bool,
+    project_or_workspace_member: FirstParty,
 ) -> NodeIndex {
     let ResolutionPackage {
         name,
@@ -291,7 +297,7 @@ fn add_version(
         kind: kind.clone(),
         hashes,
         metadata,
-        is_project_or_workspace_member,
+        project_or_workspace_member,
         marker: UniversalMarker::TRUE,
     }))
 }
