@@ -72,6 +72,27 @@ fn create_venv() {
 }
 
 #[test]
+#[cfg(unix)]
+fn create_venv_ksh() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    // OpenBSD ksh requires `.` to source the activation script.
+    // See astral-sh/uv#22537.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--python")
+        .arg("3.12")
+        .env(EnvVars::SHELL, "/bin/ksh"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: . .venv/bin/activate
+    ");
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
 fn create_venv_skips_distutils_patch_on_py310() {
     let context = uv_test::test_context_with_versions!(&["3.10"]);
 
