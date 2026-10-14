@@ -24,8 +24,9 @@ url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>/simple/"
 
 ## Authenticate with a Google access token
 
-Credentials can be provided via "Basic" HTTP authentication scheme. Include access token in the
-password field of the URL. Username must be `oauth2accesstoken`, otherwise authentication will fail.
+Credentials can be provided via the "Basic" HTTP authentication scheme. Include the access token in
+the password field of the URL. The username must be `oauth2accesstoken`, otherwise authentication
+will fail.
 
 Generate a token with `gcloud`:
 
@@ -37,8 +38,8 @@ export ARTIFACT_REGISTRY_TOKEN=$(
 
 !!! note
 
-    You might need to pass extra parameters to properly generate the token (like `--project`), this
-    is a basic example.
+    This is a basic example; you might need to pass extra parameters to generate the token, such as
+    `--project`.
 
 Then set credentials for the index with:
 

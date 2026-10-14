@@ -92,7 +92,7 @@ See the documentation on [locking environments](../pip/compile.md) for details.
 
 ## Utility
 
-Managing and inspecting uv's state, such as the cache, storage directories, or performing a
+Managing and inspecting uv's state, such as the cache and storage directories, or performing a
 self-update:
 
 - `uv cache clean`: Remove cache entries.

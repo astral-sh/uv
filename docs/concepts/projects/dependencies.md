@@ -13,7 +13,7 @@ Dependencies of the project are defined in several fields:
 !!! note
 
     The `project.dependencies` and `project.optional-dependencies` fields can be used even if
-    project isn't going to be published. `dependency-groups` are a recently standardized feature
+    the project isn't going to be published. `dependency-groups` are a recently standardized feature
     and may not be supported by all tools yet.
 
 uv supports modifying the project's dependencies with `uv add` and `uv remove`, but dependency
@@ -69,7 +69,7 @@ dependencies = [
 httpx = { git = "https://github.com/encode/httpx" }
 ```
 
-If a dependency cannot be used, uv will display an error.:
+If a dependency cannot be used, uv will display an error:
 
 ```console
 $ uv add "httpx>9999"
@@ -175,9 +175,9 @@ syntax, and the table follows the
 [PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/) standard.
 
 `project.dependencies` defines the list of packages that are required for the project, along with
-the version constraints that should be used when installing them. Each entry includes a dependency
-name and version. An entry may include extras or environment markers for platform-specific packages.
-For example:
+any version constraints to use when installing them. Each entry includes a dependency name and may
+include version constraints, extras, or environment markers for platform-specific packages. For
+example:
 
 ```toml title="pyproject.toml"
 [project]
@@ -232,7 +232,7 @@ The following dependency sources are supported by uv:
 
 ### Index
 
-To add Python package from a specific index, use the `--index` option:
+To add a Python package from a specific index, use the `--index` option:
 
 ```console
 $ uv add torch --index pytorch=https://download.pytorch.org/whl/cpu
@@ -474,7 +474,7 @@ bar = { path = "../projects/bar", editable = true }
 
 To declare a dependency on a workspace member, add the member name with `{ workspace = true }`. All
 workspace members must be explicitly stated. Workspace members are always
-[editable](#editable-dependencies) . See the [workspace](./workspaces.md) documentation for more
+[editable](#editable-dependencies). See the [workspace](./workspaces.md) documentation for more
 details on workspaces.
 
 To source a dependency from a different workspace, `workspace` can also be a path string:
@@ -745,7 +745,7 @@ By default, uv includes the `dev` dependency group in the environment (e.g., dur
 default-groups = ["dev", "foo"]
 ```
 
-To enable all dependencies groups by default, use `"all"` instead of listing group names:
+To enable all dependency groups by default, use `"all"` instead of listing group names:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -799,7 +799,7 @@ Dependencies declared in this section will be combined with the contents in the
 
 ## Build dependencies
 
-If a project is structured as [Python package](./config.md#build-systems), it may declare
+If a project is structured as a [Python package](./config.md#build-systems), it may declare
 dependencies that are required to build the project, but not required to run it. These dependencies
 are specified in the `[build-system]` table under `build-system.requires`, following
 [PEP 518](https://peps.python.org/pep-0518/).
@@ -965,7 +965,7 @@ A star can be used for the last digit with equals, e.g., `foo ==2.1.*` will acce
 the 2.1 series. Similarly, `~=` matches where the last digit is equal or higher, e.g., `foo ~=1.2`
 is equal to `foo >=1.2,<2`, and `foo ~=1.2.3` is equal to `foo >=1.2.3,<1.3`.
 
-Extras are comma-separated in square bracket between name and version, e.g.,
+Extras are comma-separated in square brackets between the name and version, e.g.,
 `pandas[excel,plot] ==2.2`. Whitespace between extra names is ignored.
 
 Some dependencies are only required in specific environments, e.g., a specific Python version or

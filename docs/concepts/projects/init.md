@@ -19,11 +19,11 @@ confusion with the Python import system. Use of a build system can be disabled b
 
 ## Target directory
 
-uv will create a project in the working directory, or, in a target directory by providing a name,
-e.g., `uv init foo`. The working directory can be modified with the `--directory` option, which will
-cause the target directory path to be interpreted relative to the specified working directory. If
-there's already a project in the target directory, i.e., if there's a `pyproject.toml`, uv will exit
-with an error.
+uv will create a project in the working directory. To create one in a target directory, provide a
+name, e.g., `uv init foo`. The working directory can be modified with the `--directory` option,
+which will cause the target directory path to be interpreted relative to the specified working
+directory. If there's already a project in the target directory, i.e., if there's a
+`pyproject.toml`, uv will exit with an error.
 
 ## Applications
 
@@ -279,8 +279,8 @@ example-app/
 └── pyproject.toml
 ```
 
-The `pyproject.toml` includes basic metadata. It does not include a build system, it is not a
-[package](./config.md#project-packaging), and will not be installed into the environment:
+The `pyproject.toml` includes basic metadata but does not define a build system. The project is not
+a [package](./config.md#project-packaging) and will not be installed into the environment:
 
 ```toml title="pyproject.toml"
 [project]
