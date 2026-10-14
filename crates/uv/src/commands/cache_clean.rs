@@ -31,31 +31,36 @@ pub(crate) async fn cache_clean(
     let cache = cache.with_removal_accounting(removal_accounting);
 
     let mut summary = cache.removal();
+    let python_summary = cache.removal();
+    let mut errors = Vec::new();
     // Release the cache lock before acquiring the Python installation lock.
-    let cache_result = clean_cache(packages, force, cache.clone(), printer).await;
-    let found_cache = cache_result.as_ref().is_ok_and(Option::is_some);
-    let python_result = if packages.is_empty() {
-        clean_python_downloads(cache, printer).await.map(Some)
-    } else {
-        Ok(None)
+    let found_cache = match clean_cache(packages, force, cache, printer).await {
+        Ok(Some(removal)) => {
+            summary += removal;
+            true
+        }
+        Ok(None) => false,
+        Err(error) => {
+            errors.push(error);
+            false
+        }
     };
-
-    let mut error = None;
-    for result in [cache_result, python_result] {
-        match result {
-            Ok(Some(removal)) => summary += removal,
-            Ok(None) => {}
-            Err(err) => {
-                if let Some(previous) = error.replace(err) {
-                    write_error_chain(&previous, printer)?;
-                }
+    if packages.is_empty() {
+        match clean_python_downloads(python_summary, printer).await {
+            Ok((removal, python_errors)) => {
+                summary += removal;
+                errors.extend(python_errors);
             }
+            Err(error) => errors.push(error),
         }
     }
-    if summary.num_files > 0 || summary.num_dirs > 0 || (found_cache && error.is_none()) {
+    if summary.num_files > 0 || summary.num_dirs > 0 || (found_cache && errors.is_empty()) {
         write_removal_summary(&summary, printer)?;
     }
-    if let Some(error) = error {
+    if let Some(error) = errors.pop() {
+        for previous in errors {
+            write_error_chain(&previous, printer)?;
+        }
         return Err(error);
     }
     Ok(ExitStatus::Success)
@@ -159,28 +164,30 @@ async fn clean_cache(
 }
 
 /// Remove abandoned managed Python downloads outside the cache directory.
-async fn clean_python_downloads(cache: Cache, printer: Printer) -> Result<Removal> {
+async fn clean_python_downloads(
+    mut summary: Removal,
+    printer: Printer,
+) -> Result<(Removal, Vec<anyhow::Error>)> {
     let installations = ManagedPythonInstallations::from_settings(None)?;
     let scratch = installations.scratch();
     if !scratch.try_exists()? {
-        return Ok(cache.removal());
+        return Ok((summary, Vec::new()));
     }
 
     let lock = installations.lock().await?;
-    let summary = tokio::task::spawn_blocking(move || {
-        let mut summary = cache.removal();
-        installations.clear_scratch(&lock, |directory, name| {
-            summary.remove_dir_at(directory, name)
-        })?;
-        Ok::<_, std::io::Error>(summary)
+    let (summary, errors) = tokio::task::spawn_blocking(move || {
+        let mut errors = Vec::new();
+        if let Err(error) = installations.clear_scratch(&lock, |directory, name| {
+            if let Err(error) = summary.remove_dir_at(directory, name) {
+                errors.push(error);
+            }
+            Ok(())
+        }) {
+            errors.push(error);
+        }
+        (summary, errors)
     })
-    .await?
-    .with_context(|| {
-        format!(
-            "Failed to clear temporary Python installation files at: {}",
-            scratch.user_display()
-        )
-    })?;
+    .await?;
     if summary.num_files > 0 || summary.num_dirs > 0 {
         writeln!(
             printer.stderr(),
@@ -188,5 +195,14 @@ async fn clean_python_downloads(cache: Cache, printer: Printer) -> Result<Remova
             scratch.user_display().cyan()
         )?;
     }
-    Ok(summary)
+    let errors = errors
+        .into_iter()
+        .map(|error| {
+            anyhow::Error::new(error).context(format!(
+                "Failed to clear temporary Python installation files at: {}",
+                scratch.user_display()
+            ))
+        })
+        .collect();
+    Ok((summary, errors))
 }

@@ -18,9 +18,9 @@ use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_python_managed::ManagedPythonInstallations;
 use uv_static::EnvVars;
 
-#[cfg(unix)]
-use uv_test::assert_path_missing;
 use uv_test::uv_snapshot;
+#[cfg(unix)]
+use uv_test::{ReadOnlyDirectoryGuard, assert_path_missing};
 
 /// `cache clean` should remove all packages.
 #[test]
@@ -83,6 +83,34 @@ fn clean_python_staging() -> Result<()> {
     ");
     stale.assert(predicates::path::missing());
     installed.assert(predicates::path::exists());
+    Ok(())
+}
+
+/// An inaccessible staging entry should not prevent cleanup of other abandoned downloads.
+#[cfg(unix)]
+#[test]
+fn clean_python_staging_after_partial_failure() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let scratch = context.temp_dir.child("managed/.temp");
+    let blocked = scratch.child(".tmp-blocked");
+    blocked.create_dir_all()?;
+    blocked.child("marker").touch()?;
+    let _guard = ReadOnlyDirectoryGuard::new(blocked.path())?;
+    let removable = scratch.child(".tmp-removable");
+    removable.create_dir_all()?;
+    removable.child("marker").touch()?;
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Cleared temporary Python installation files at: managed/.temp
+    Removed 1 file (0B)
+    error: Failed to clear temporary Python installation files at: managed/.temp
+      cause: failed to remove `[TEMP_DIR]/managed/.temp/[TMP]`: Permission denied (os error 13)
+    ");
+    blocked.child("marker").assert(predicates::path::exists());
+    removable.assert(predicates::path::missing());
     Ok(())
 }
 
