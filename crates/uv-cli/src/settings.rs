@@ -3509,7 +3509,7 @@ impl PipCompileSettings {
                     "require-build-hashes",
                 )?,
                 filesystem.as_ref(),
-                &environment,
+                environment,
             ),
             overrides: requirement_files(overrides, environment.overrides.clone()),
             excludes: requirement_files(excludes, environment.excludes.clone()),
@@ -3650,7 +3650,7 @@ impl PipSyncSettings {
                     "require-build-hashes",
                 )?,
                 filesystem.as_ref(),
-                &environment,
+                environment,
             ),
             dry_run: if check {
                 DryRun::Check
@@ -3845,7 +3845,7 @@ impl PipInstallSettings {
                     "require-build-hashes",
                 )?,
                 filesystem.as_ref(),
-                &environment,
+                environment,
             ),
             dry_run: if check {
                 DryRun::Check
