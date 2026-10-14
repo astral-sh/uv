@@ -49,6 +49,7 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
+const LATEST_PYTHON_3_16: &str = "3.16.0a1";
 const LATEST_PYTHON_3_15: &str = "3.15.0";
 const LATEST_PYTHON_3_14: &str = "3.14.8";
 const LATEST_PYTHON_3_13: &str = "3.13.16";
@@ -640,6 +641,7 @@ impl TestContext {
         // Filter the latest patch versions with [LATEST] placeholder
         // The order matters - we want to match the full version first
         for (minor, patch) in [
+            ("3.16", LATEST_PYTHON_3_16.strip_prefix("3.16.").unwrap()),
             ("3.15", LATEST_PYTHON_3_15.strip_prefix("3.15.").unwrap()),
             ("3.14", LATEST_PYTHON_3_14.strip_prefix("3.14.").unwrap()),
             ("3.13", LATEST_PYTHON_3_13.strip_prefix("3.13.").unwrap()),

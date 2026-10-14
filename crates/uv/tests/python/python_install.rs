@@ -2530,7 +2530,6 @@ fn python_install_patch_dylib() {
 }
 
 #[test]
-#[ignore = "Update when 3.16a1 comes out"]
 fn python_install_prerelease() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
@@ -2540,34 +2539,33 @@ fn python_install_prerelease() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    // Install 3.15
-    // For now, this provides test coverage of pre-release handling
-    uv_snapshot!(context.filters(), context.python_install().arg("3.15"), @"
+    // Python 3.16 is only available as a prerelease.
+    uv_snapshot!(context.filters(), context.python_install().arg("3.16"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.15.[LATEST] in [TIME]
-     + cpython-3.15.[LATEST]-[PLATFORM] (python3.15)
+    Installed Python 3.16.[LATEST] in [TIME]
+     + cpython-3.16.[LATEST]-[PLATFORM] (python3.16)
     ");
 
     // We should be able to find this version without opt-in, because there is no stable release
     // installed
-    uv_snapshot!(context.filters(), context.python_find().arg("3.15"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.16"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.16-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
     // This also applies to `>=` requests, even though pre-releases aren't technically in the range
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.15"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.16"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.16-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.16-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
     // If we install a stable version, that should be preferred though
