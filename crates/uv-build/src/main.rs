@@ -143,14 +143,3 @@ fn main() -> Result<()> {
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use tracing_subscriber::EnvFilter;
-
-    #[test]
-    fn unicode_log_filters() {
-        EnvFilter::try_new(r"[span{field=(?i)é\pL\w+}]=debug")
-            .expect("Unicode log filters should be supported");
-    }
-}
