@@ -1184,6 +1184,8 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use crate::ManagedPythonInstallation;
     #[cfg(target_arch = "aarch64")]
     use uv_python_types::ArchRequest;
     use uv_python_types::VersionRequest;
@@ -1359,6 +1361,30 @@ mod tests {
             sha256: Some(Digest::from_bytes([0xab; 32])),
             build: Some("20240713"),
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn relative_installation_minor_link_resolves() -> anyhow::Result<()> {
+        let root = tempfile::tempdir_in(std::env::current_dir()?)?;
+        let download = cpython_download_for_url("https://example.com/python.tar.gz");
+        let installed = root.path().join(download.key().to_string());
+        fs_err::create_dir_all(installed.join("bin"))?;
+        fs_err::write(installed.join("bin/python3.12"), b"interpreter")?;
+        let relative = uv_fs::relative_to(&installed, std::env::current_dir()?)?;
+        let installation = ManagedPythonInstallation::new(relative, &download)?;
+
+        installation.ensure_minor_version_link()?;
+
+        let minor = root
+            .path()
+            .join(installation.minor_version_key().to_string());
+        assert_eq!(fs_err::read(minor.join("bin/python3.12"))?, b"interpreter");
+        assert_eq!(
+            fs_err::canonicalize(minor)?,
+            fs_err::canonicalize(installed)?
+        );
+        Ok(())
     }
 
     #[test]
