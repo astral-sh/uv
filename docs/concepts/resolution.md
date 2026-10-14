@@ -85,7 +85,7 @@ uv supports both [platform-specific](#platform-specific-resolution) and
 
 By default, uv's pip interface, i.e., [`uv pip compile`](../pip/compile.md), produces a resolution
 that is platform-specific, like `pip-tools`. There is no way to use platform-specific resolution in
-the uv's project interface.
+uv's project interface.
 
 uv also supports resolving for specific, alternate platforms and Python versions with the
 `--python-platform` and `--python-version` options. For example, if using Python 3.12 on macOS,
@@ -129,8 +129,8 @@ supported range. In other words, the project's `requires-python` must be a subse
 When selecting the compatible version for a given dependency, uv will
 ([by default](#multi-version-resolution)) attempt to choose the latest compatible version for each
 supported Python version. For example, if a project's `requires-python` is `>=3.8`, and the latest
-version of a dependency requires Python 3.9 or later, while all prior versions supporting Python
-3.8, the resolver will select the latest version for users running Python 3.9 or later, and previous
+version of a dependency requires Python 3.9 or later, while all prior versions support Python 3.8,
+the resolver will select the latest version for users running Python 3.9 or later, and previous
 versions for users running Python 3.8.
 
 When evaluating `requires-python` ranges for dependencies, uv only considers lower bounds and
@@ -436,7 +436,7 @@ rather than upgrading to `numpy==2.0.2` for Python 3.9 and `numpy==2.2.0` for Py
 
 Like pip, uv supports constraint files (`--constraint constraints.txt`) which narrow the set of
 acceptable versions for the given packages. Constraint files are similar to requirements files, but
-being listed as a constraint alone will not cause a package to be included to the resolution.
+being listed as a constraint alone will not cause a package to be included in the resolution.
 Instead, constraints only take effect if a requested package is already pulled in as a direct or
 transitive dependency. Constraints are useful for reducing the range of available versions for a
 transitive dependency. They can also be used to keep a resolution in sync with some other set of
@@ -568,8 +568,8 @@ requires-dist = ["numpy>=1.8.1", "scipy>=0.13.0", "six>=1.11.0"]
 
 These declarations are intended for cases in which a package does _not_ declare static metadata
 upfront, though they are also useful for packages that require
-[disabling build isolation](./projects/config.md#build-isolation) In such cases, it may be easier to
-declare the package metadata upfront, rather than creating a custom build environment prior to
+[disabling build isolation](./projects/config.md#build-isolation). In such cases, it may be easier
+to declare the package metadata upfront, rather than creating a custom build environment prior to
 resolving the package.
 
 For example, past versions of `flash-attn` did not declare static metadata. By declaring metadata
@@ -859,8 +859,8 @@ The package option also accepts `<package>=false` to opt a package out of the re
 exclude-newer-package = { setuptools = false }
 ```
 
-This is useful to temporarily use a newer version of package or to allow resolving a package from an
-index that does not publish upload times.
+This is useful to temporarily use a newer version of a package or to allow resolving a package from
+an index that does not publish upload times.
 
 Package-specific values will take precedence over both global and index-specific values.
 
@@ -936,7 +936,7 @@ formats, which need to be supported for backward compatibility, were also allowe
 
 !!! important
 
-    As of 0.12, uv rejects source distributions that do not confirm to
+    As of 0.12, uv rejects source distributions that do not conform to
     [PEP 625]'s extension requirements with the exception of `.zip` archives,
     which are still accepted for backward compatibility.
 

@@ -1,6 +1,6 @@
 # Internals
 
-The internals section provides details about uv's internal components and implementation details.
+The internals section describes uv's internal components and implementation.
 
 - [Resolver](./resolver.md)
 - [Workspace Metadata](./metadata.md)

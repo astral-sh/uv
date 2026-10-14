@@ -42,8 +42,8 @@ self-contained. This means that the state from the reproducer's system does not 
 !!! note
 
     Using a Docker image is only feasible if the issue is reproducible on Linux. When using macOS,
-    it's prudent to ensure your image is not reproducible on Linux but some bugs _are_ specific
-    to the operating system. While using Docker to run Windows containers is feasible, it's not
+    first check whether the issue also occurs on Linux. Some bugs are specific to the operating
+    system. While using Docker to run Windows containers is feasible, it's not
     commonplace. These sorts of bugs are expected to be reported as a [script](#script) instead.
 
 When writing a Docker MRE with uv, it's best to start with one of

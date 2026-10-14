@@ -281,7 +281,7 @@ If using the `uv pip` interface instead of the uv project interface, uv requires
 environment by default. To allow installing packages into the system environment, use the `--system`
 flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
 
-The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes.
+The `UV_SYSTEM_PYTHON` variable can be defined at different scopes.
 
 Opt-in for the entire workflow by defining it at the top level:
 

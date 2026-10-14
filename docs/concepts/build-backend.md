@@ -230,8 +230,9 @@ When building a wheel, the following files and directories are included:
 From these,
 [`tool.uv.build-backend.source-exclude`](../reference/settings.md#build-backend_source-exclude),
 [`tool.uv.build-backend.wheel-exclude`](../reference/settings.md#build-backend_wheel-exclude) and
-the default excludes are removed. The source dist excludes are applied to avoid source tree to wheel
-builds including more files than source tree to source distribution to wheel build.
+the default excludes are removed. The source distribution excludes are applied to prevent a wheel
+built directly from the source tree from including more files than one built from a source
+distribution.
 
 There are no specific wheel includes. There must only be one top level module, and all data files
 must either be under the module root or in the appropriate

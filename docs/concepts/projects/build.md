@@ -43,7 +43,7 @@ distribution with `uv build --wheel`, or build both distributions from source wi
 
 `uv build` accepts `--build-constraint`, which can be used to constrain the versions of any build
 requirements during the build process. When coupled with `--require-hashes`, uv will enforce that
-the requirement used to build the project match specific, known hashes, for reproducibility.
+the requirements used to build the project match specific, known hashes, for reproducibility.
 
 For example, given the following `constraints.txt`:
 
