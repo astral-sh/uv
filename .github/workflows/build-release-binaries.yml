@@ -2,7 +2,7 @@
 #
 # Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
 # Creates wheels, sdists, executable archives, and separate full debug symbol archives.
-# TODO: update the Maturin pin to a release with --debug-symbols-dir support.
+# Validation branch: native jobs cache a pinned Maturin fork; Linux containers build it before uv.
 #
 # Called from:
 # - .github/workflows/ci.yml (when release-relevant files change)
@@ -167,11 +167,14 @@ jobs:
         run: scripts/install-cargo-extensions.sh
 
       # uv
+      - name: "Install pinned Maturin fork"
+        shell: bash
+        run: bash scripts/install-maturin-fork.sh
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.15.0
+          maturin-version: v1.15.0-fork.93fc4fb8
           target: x86_64
           args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
         env:
@@ -269,11 +272,14 @@ jobs:
           RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
 
       # uv
+      - name: "Install pinned Maturin fork"
+        shell: bash
+        run: bash scripts/install-maturin-fork.sh
       - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.15.0
+          maturin-version: v1.15.0-fork.93fc4fb8
           target: aarch64
           manylinux: 2_17
           args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
@@ -415,11 +421,14 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
           AWS_LC_SYS_PREBUILT_NASM: "0"
       # uv
+      - name: "Install pinned Maturin fork"
+        shell: bash
+        run: bash scripts/install-maturin-fork.sh
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.15.0
+          maturin-version: v1.15.0-fork.93fc4fb8
           target: ${{ matrix.platform.target }}
           args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
@@ -597,6 +606,7 @@ jobs:
                 apt update -y && apt-get install -y pkg-config
             fi
             # Install cargo extensions as a static musl binary so it runs in any container.
+            source scripts/install-maturin-fork.sh
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
 
@@ -743,6 +753,7 @@ jobs:
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
+            source scripts/install-maturin-fork.sh
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
 
@@ -883,6 +894,7 @@ jobs:
           args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
+            source scripts/install-maturin-fork.sh
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
             # Install the s390x cross target on x86_64
@@ -1022,6 +1034,7 @@ jobs:
                 yum repolist
                 yum install -y gcc-powerpc64-linux-gnu
             fi
+            source scripts/install-maturin-fork.sh
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
         env:
@@ -1141,6 +1154,7 @@ jobs:
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
+            source scripts/install-maturin-fork.sh
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
         env:
@@ -1264,6 +1278,7 @@ jobs:
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
           args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
+            source scripts/install-maturin-fork.sh
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
         env:
@@ -1402,6 +1417,7 @@ jobs:
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
+            source scripts/install-maturin-fork.sh
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
         env:
