@@ -73,7 +73,7 @@ RequirementsTxt {
                                                 with_lfs: None,
                                             },
                                             reference: DefaultBranch,
-                                            precise: None,
+                                            resolved: None,
                                             lfs: Disabled,
                                         },
                                         subdirectory: None,

@@ -1000,6 +1000,9 @@ impl From<RequirementSource> for RequirementSourceWire {
 
                 // Put the requested reference in the query.
                 match git.reference() {
+                    GitReference::Commit(commit) => {
+                        url.query_pairs_mut().append_pair("rev", commit.as_str());
+                    }
                     GitReference::Branch(branch) => {
                         url.query_pairs_mut().append_pair("branch", branch.as_str());
                     }
@@ -1014,9 +1017,9 @@ impl From<RequirementSource> for RequirementSourceWire {
                     GitReference::DefaultBranch => {}
                 }
 
-                // Put the precise commit in the fragment.
-                if let Some(precise) = git.precise() {
-                    url.set_fragment(Some(&precise.to_string()));
+                // Put the resolved commit in the fragment.
+                if let Some(commit) = git.resolved_commit() {
+                    url.set_fragment(Some(commit.as_str()));
                 }
 
                 Self::Git {
@@ -1045,6 +1048,9 @@ impl From<RequirementSource> for RequirementSourceWire {
 
                 // Put the requested reference in the query.
                 match git.reference() {
+                    GitReference::Commit(commit) => {
+                        url.query_pairs_mut().append_pair("rev", commit.as_str());
+                    }
                     GitReference::Branch(branch) => {
                         url.query_pairs_mut().append_pair("branch", branch.as_str());
                     }
@@ -1064,9 +1070,9 @@ impl From<RequirementSource> for RequirementSourceWire {
                     url.query_pairs_mut().append_pair("lfs", "true");
                 }
 
-                // Put the precise commit in the fragment.
-                if let Some(precise) = git.precise() {
-                    url.set_fragment(Some(&precise.to_string()));
+                // Put the resolved commit in the fragment.
+                if let Some(commit) = git.resolved_commit() {
+                    url.set_fragment(Some(commit.as_str()));
                 }
 
                 Self::Git {
@@ -1259,6 +1265,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::path::PathBuf;
 
     use uv_pep508::{MarkerTree, VerbatimUrl};
@@ -1308,6 +1315,21 @@ mod tests {
         let raw = toml::to_string(&requirement).unwrap();
         let deserialized: Requirement = toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
+    }
+
+    #[test]
+    fn roundtrip_git_commit() -> Result<(), Box<dyn Error>> {
+        let raw = "git = \"https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979\"\n";
+        let source: RequirementSource = toml::from_str(raw)?;
+        assert_eq!(toml::to_string(&source)?, raw);
+
+        // A redundant precise fragment denotes the same requirement as the full commit revision.
+        let resolved: RequirementSource = toml::from_str(
+            "git = \"https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979\"",
+        )?;
+        assert_eq!(source, resolved);
+
+        Ok(())
     }
 
     #[test]

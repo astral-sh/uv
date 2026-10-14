@@ -13,7 +13,7 @@ use uv_distribution_types::{
     ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
     PackageConfigSettings, RequirementSource,
 };
-use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl};
+use uv_git_types::GitLfs;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{AbiTag, IncompatibleTag, TagCompatibility, Tags};
@@ -226,7 +226,13 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !git_commit_matches(installed_precise.as_deref(), requested_git) {
+                if !installed_precise
+                    .as_deref()
+                    .zip(requested_git.precise())
+                    .is_some_and(|(installed, requested)| {
+                        installed.eq_ignore_ascii_case(requested.as_str())
+                    })
+                {
                     debug!(
                         "Precise mismatch: {:?} vs. {:?}",
                         installed_precise,
@@ -291,7 +297,13 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !git_commit_matches(installed_precise.as_deref(), requested_git) {
+                if !installed_precise
+                    .as_deref()
+                    .zip(requested_git.precise())
+                    .is_some_and(|(installed, requested)| {
+                        installed.eq_ignore_ascii_case(requested.as_str())
+                    })
+                {
                     debug!(
                         "Precise mismatch: {:?} vs. {:?}",
                         installed_precise,
@@ -452,27 +464,6 @@ impl RequirementSatisfaction {
 
         // Otherwise, assume the requirement is up-to-date.
         Self::Satisfied
-    }
-}
-
-/// Check an installed Git commit against a resolved commit or a full commit revision.
-/// Branches, tags, and abbreviated revisions require resolution before they can be compared.
-fn git_commit_matches(installed_commit: Option<&str>, requested_git: &GitUrl) -> bool {
-    let requested_commit = requested_git
-        .precise()
-        .or_else(|| match requested_git.reference() {
-            GitReference::BranchOrTagOrCommit(revision) => revision.parse::<GitOid>().ok(),
-            GitReference::Branch(_)
-            | GitReference::Tag(_)
-            | GitReference::BranchOrTag(_)
-            | GitReference::NamedRef(_)
-            | GitReference::DefaultBranch => None,
-        });
-
-    if let (Some(installed_commit), Some(requested_commit)) = (installed_commit, requested_commit) {
-        installed_commit.eq_ignore_ascii_case(requested_commit.as_str())
-    } else {
-        false
     }
 }
 

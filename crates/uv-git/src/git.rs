@@ -1,7 +1,6 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
-use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self};
 use std::sync::LazyLock;
@@ -74,83 +73,6 @@ enum RefspecStrategy {
     First,
 }
 
-/// A Git reference (like a tag or branch) or a specific commit.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum ReferenceOrOid<'reference> {
-    /// A Git reference, like a tag or branch.
-    Reference(&'reference GitReference),
-    /// A specific commit.
-    Oid(GitOid),
-}
-
-impl ReferenceOrOid<'_> {
-    /// Resolves the [`ReferenceOrOid`] to an object ID with objects the `repo` currently has.
-    fn resolve(&self, repo: &GitRepository) -> Result<GitOid> {
-        let refkind = self.kind_str();
-        let result = match self {
-            // Resolve the commit pointed to by the tag.
-            //
-            // `^0` recursively peels away from the revision to the underlying commit object.
-            // This also verifies that the tag indeed refers to a commit.
-            Self::Reference(GitReference::Tag(s)) => {
-                repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))
-            }
-
-            // Resolve the commit pointed to by the branch.
-            Self::Reference(GitReference::Branch(s)) => repo.rev_parse(&format!("origin/{s}^0")),
-
-            // Attempt to resolve the branch, then the tag.
-            Self::Reference(GitReference::BranchOrTag(s)) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))),
-
-            // Attempt to resolve the branch, then the tag, then the commit.
-            Self::Reference(GitReference::BranchOrTagOrCommit(s)) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0")))
-                .or_else(|_| repo.rev_parse(&format!("{s}^0"))),
-
-            // We'll be using the HEAD commit.
-            Self::Reference(GitReference::DefaultBranch) => {
-                repo.rev_parse("refs/remotes/origin/HEAD")
-            }
-
-            // Resolve a named reference.
-            Self::Reference(GitReference::NamedRef(s)) => repo.rev_parse(&format!("{s}^0")),
-
-            // Resolve a specific commit.
-            Self::Oid(s) => repo.rev_parse(&format!("{s}^0")),
-        };
-
-        result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
-    }
-
-    /// Returns the kind of this [`ReferenceOrOid`].
-    fn kind_str(&self) -> &str {
-        match self {
-            Self::Reference(reference) => reference.kind_str(),
-            Self::Oid(_) => "commit",
-        }
-    }
-
-    /// Converts the [`ReferenceOrOid`] to a `str` that can be used as a revision.
-    fn as_rev(&self) -> &str {
-        match self {
-            Self::Reference(r) => r.as_rev(),
-            Self::Oid(rev) => rev.as_str(),
-        }
-    }
-}
-
-impl Display for ReferenceOrOid<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Reference(reference) => write!(f, "{reference}"),
-            Self::Oid(oid) => write!(f, "{oid}"),
-        }
-    }
-}
-
 /// A remote repository. It gets cloned into a local [`GitDatabase`].
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) struct GitRemote {
@@ -218,6 +140,27 @@ impl GitRepository {
         Ok(Self {
             path: path.to_path_buf(),
         })
+    }
+
+    /// Resolve a [`GitReference`] using the objects already in this repository.
+    fn resolve(&self, reference: &GitReference) -> Result<GitOid> {
+        let result = match reference {
+            // `^0` peels tags and verifies that the object refers to a commit.
+            GitReference::Tag(tag) => self.rev_parse(&format!("refs/remotes/origin/tags/{tag}^0")),
+            GitReference::Branch(branch) => self.rev_parse(&format!("origin/{branch}^0")),
+            GitReference::BranchOrTag(reference) => self
+                .rev_parse(&format!("origin/{reference}^0"))
+                .or_else(|_| self.rev_parse(&format!("refs/remotes/origin/tags/{reference}^0"))),
+            GitReference::BranchOrTagOrCommit(reference) => self
+                .rev_parse(&format!("origin/{reference}^0"))
+                .or_else(|_| self.rev_parse(&format!("refs/remotes/origin/tags/{reference}^0")))
+                .or_else(|_| self.rev_parse(&format!("{reference}^0"))),
+            GitReference::DefaultBranch => self.rev_parse("refs/remotes/origin/HEAD"),
+            GitReference::NamedRef(reference) => self.rev_parse(&format!("{reference}^0")),
+            GitReference::Commit(commit) => self.rev_parse(&format!("{commit}^0")),
+        };
+
+        result.with_context(|| format!("failed to find {} `{reference}`", reference.kind_str()))
     }
 
     /// Parses the object ID of the given `refname`.
@@ -306,26 +249,13 @@ impl GitRemote {
         offline: bool,
         with_lfs: bool,
     ) -> Result<(GitDatabase, GitOid)> {
-        let reference = locked_rev
-            .or_else(|| {
-                if let GitReference::BranchOrTagOrCommit(revision) = reference {
-                    revision.parse::<GitOid>().ok()
-                } else {
-                    None
-                }
-            })
-            .map(ReferenceOrOid::Oid)
-            .unwrap_or(ReferenceOrOid::Reference(reference));
+        let locked_reference = locked_rev.map(GitReference::Commit);
+        let reference = locked_reference.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, &self.url, reference, disable_ssl, offline)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
-            let resolved_commit_hash = match locked_rev {
-                Some(rev) => db.contains(rev).then_some(rev),
-                None => reference.resolve(&db.repo).ok(),
-            };
-
-            if let Some(rev) = resolved_commit_hash {
+            if let Ok(rev) = db.repo.resolve(reference) {
                 if with_lfs {
                     let lfs_ready = fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
@@ -348,10 +278,7 @@ impl GitRemote {
         let mut repo = GitRepository::init(into)?;
         fetch(&mut repo, &self.url, reference, disable_ssl, offline)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
-        let rev = match locked_rev {
-            Some(rev) => rev,
-            None => reference.resolve(&repo)?,
-        };
+        let rev = repo.resolve(reference)?;
         let lfs_ready = with_lfs
             .then(|| {
                 fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
@@ -414,9 +341,11 @@ impl GitDatabase {
         Ok(result)
     }
 
-    /// Checks if `oid` resolves to a commit in this database.
+    /// Checks if `oid` identifies a commit object in this database.
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
-        self.repo.rev_parse(&format!("{oid}^0")).is_ok()
+        self.repo
+            .rev_parse(&format!("{oid}^0"))
+            .is_ok_and(|commit| commit == oid)
     }
 
     /// Checks if `oid` contains necessary LFS artifacts in this database.
@@ -689,17 +618,16 @@ fn remote_url_root(mut url: Url) -> Url {
 fn fetch(
     repo: &mut GitRepository,
     remote_url: &DisplaySafeUrl,
-    reference: ReferenceOrOid<'_>,
+    reference: &GitReference,
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
-    if let ReferenceOrOid::Oid(rev) = reference {
-        let local_object = reference.resolve(repo).ok();
-        if let Some(local_object) = local_object {
-            if rev == local_object {
-                return Ok(());
-            }
-        }
+    if let GitReference::Commit(commit) = reference
+        && repo
+            .resolve(reference)
+            .is_ok_and(|local_commit| *commit == local_commit)
+    {
+        return Ok(());
     }
 
     // Translate the reference desired here into an actual list of refspecs
@@ -713,15 +641,15 @@ fn fetch(
     match reference {
         // For branches and tags we can fetch simply one reference and copy it
         // locally, no need to fetch other branches/tags.
-        ReferenceOrOid::Reference(GitReference::Branch(branch)) => {
+        GitReference::Branch(branch) => {
             refspecs.push(format!("+refs/heads/{branch}:refs/remotes/origin/{branch}"));
         }
 
-        ReferenceOrOid::Reference(GitReference::Tag(tag)) => {
+        GitReference::Tag(tag) => {
             refspecs.push(format!("+refs/tags/{tag}:refs/remotes/origin/tags/{tag}"));
         }
 
-        ReferenceOrOid::Reference(GitReference::BranchOrTag(branch_or_tag)) => {
+        GitReference::BranchOrTag(branch_or_tag) => {
             refspecs.push(format!(
                 "+refs/heads/{branch_or_tag}:refs/remotes/origin/{branch_or_tag}"
             ));
@@ -733,21 +661,21 @@ fn fetch(
 
         // Fetch all branches and tags so ambiguous references can resolve to either a named
         // reference or a short commit hash.
-        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(_)) => {
+        GitReference::BranchOrTagOrCommit(_) => {
             refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
             refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
             tags = true;
         }
 
-        ReferenceOrOid::Reference(GitReference::DefaultBranch) => {
+        GitReference::DefaultBranch => {
             refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
         }
 
-        ReferenceOrOid::Reference(GitReference::NamedRef(rev)) => {
+        GitReference::NamedRef(rev) => {
             refspecs.push(format!("+{rev}:{rev}"));
         }
 
-        ReferenceOrOid::Oid(rev) => {
+        GitReference::Commit(rev) => {
             refspecs.push(format!("+{rev}:refs/commit/{rev}"));
         }
     }
@@ -802,8 +730,13 @@ fn fetch(
     };
     match reference {
         // With the default branch, adding context is confusing
-        ReferenceOrOid::Reference(GitReference::DefaultBranch) => result,
-        _ => result.with_context(|| {
+        GitReference::DefaultBranch => result,
+        GitReference::Commit(_)
+        | GitReference::Branch(_)
+        | GitReference::Tag(_)
+        | GitReference::BranchOrTag(_)
+        | GitReference::BranchOrTagOrCommit(_)
+        | GitReference::NamedRef(_) => result.with_context(|| {
             format!(
                 "failed to fetch {} `{}`",
                 reference.kind_str(),

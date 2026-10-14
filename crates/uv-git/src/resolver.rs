@@ -277,12 +277,10 @@ impl GitResolver {
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
     ///
-    /// This method will only return precise URLs for URLs that have already been resolved via
-    /// [`resolve_precise`], and will return `None` for URLs that have not been resolved _or_
-    /// already have a precise reference.
+    /// Returns a URL if its commit is already known or has been resolved by this resolver.
+    /// Returns `None` for unresolved named or ambiguous references.
     pub fn precise(&self, url: GitUrl) -> Option<GitUrl> {
-        let reference = RepositoryReference::from(&url);
-        let precise = self.get(&reference)?;
+        let precise = self.get_precise(&url)?;
         url.with_precise(precise).ok()
     }
 

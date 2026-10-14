@@ -1730,7 +1730,7 @@ impl PylockTomlVcs {
                 .requested_revision
                 .clone()
                 .map(GitReference::from_rev)
-                .unwrap_or_else(|| GitReference::BranchOrTagOrCommit(self.commit_id.to_string()));
+                .unwrap_or(GitReference::Commit(self.commit_id));
             let precise = self.commit_id;
 
             // TODO(samypr100): GitLfs::from_env() as pylock.toml spec doesn't specify how to label LFS support
