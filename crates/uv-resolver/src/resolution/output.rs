@@ -9,12 +9,13 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
-    DistributionId, FirstParty, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
+    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
     ResolutionDiagnostic, parse_url_hashes,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
+use uv_resolver_types::PackageRole;
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -65,12 +66,13 @@ pub(crate) fn from_state(
                 continue;
             };
             let package = &entry.key().package;
-            let project_or_workspace_member =
-                if project == Some(&package.name) || workspace_members.contains(&package.name) {
-                    FirstParty::Yes
-                } else {
-                    FirstParty::No
-                };
+            let package_role = if project == Some(&package.name) {
+                PackageRole::Project
+            } else if workspace_members.contains(&package.name) {
+                PackageRole::WorkspaceMember
+            } else {
+                PackageRole::Dependency
+            };
             let node = add_version(
                 &mut graph,
                 &mut diagnostics,
@@ -79,7 +81,7 @@ pub(crate) fn from_state(
                 index,
                 package,
                 selected,
-                project_or_workspace_member,
+                package_role,
             );
             entry.insert(node);
         }
@@ -231,7 +233,7 @@ fn add_version(
     in_memory: &InMemoryIndex,
     package: &ResolutionPackage,
     selected: SelectedDistribution,
-    project_or_workspace_member: FirstParty,
+    package_role: PackageRole,
 ) -> NodeIndex {
     let ResolutionPackage {
         name,
@@ -297,7 +299,7 @@ fn add_version(
         kind: kind.clone(),
         hashes,
         metadata,
-        project_or_workspace_member,
+        role: package_role,
         marker: UniversalMarker::TRUE,
     }))
 }

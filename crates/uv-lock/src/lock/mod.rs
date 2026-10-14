@@ -63,7 +63,7 @@ use uv_pypi_types::{
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_resolver_types::{
-    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse,
+    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse, PackageRole,
     ResolutionGraphNode, ResolverOutput, UniversalMarker,
 };
 use uv_small_str::SmallString;
@@ -2536,11 +2536,7 @@ impl Lock {
                 && matches!(package.id.source, Source::Git(..))
                 && let Some(metadata) = dist.metadata()
             {
-                package.metadata = PackageMetadata::from_distribution(
-                    metadata,
-                    root,
-                    dist.project_or_workspace_member,
-                )?;
+                package.metadata = PackageMetadata::from_distribution(metadata, root, dist.role)?;
             }
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
@@ -6660,11 +6656,7 @@ impl Package {
             PackageMetadata::default()
         } else {
             let metadata = annotated_dist.metadata().expect("metadata is present");
-            PackageMetadata::from_distribution(
-                metadata,
-                root,
-                annotated_dist.project_or_workspace_member,
-            )?
+            PackageMetadata::from_distribution(metadata, root, annotated_dist.role)?
         };
         Ok(Self {
             id,
@@ -7456,7 +7448,7 @@ impl PackageMetadata {
     fn from_distribution(
         metadata: &DistributionMetadata,
         root: &Path,
-        project_or_workspace_member: FirstParty,
+        package_role: PackageRole,
     ) -> Result<Self, LockError> {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
         // We normally write dependency paths relative to the lockfile. For the current project and
@@ -7465,9 +7457,11 @@ impl PackageMetadata {
         // Apply the path policy to the cloned requirements so shared metadata remains unchanged.
         let relative_requirement = |requirement: &Requirement| {
             let mut requirement = requirement.clone();
-            match project_or_workspace_member {
-                FirstParty::Yes => requirement.set_force_relative(false),
-                FirstParty::No => {}
+            match package_role {
+                PackageRole::Project | PackageRole::WorkspaceMember => {
+                    requirement.set_force_relative(false);
+                }
+                PackageRole::Dependency => {}
             }
             requirement.relative_to(root)
         };
