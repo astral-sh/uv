@@ -227,6 +227,51 @@ fn install_ascii_wheel_script_in_non_ascii_environment() -> Result<()> {
     Ok(())
 }
 
+/// UTF-7 decodes `+ACcAJwAn-` to three single quotes, so embedding this interpreter path in a
+/// triple-quoted Python string would execute code from the path.
+#[test]
+#[cfg(unix)]
+fn install_wheel_script_does_not_execute_decoded_interpreter_path() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let (filename, wheel) = generate_wheel_with_files(
+        &"encoded-script".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[(
+            "encoded_script-1.0.0.data/scripts/encoded-script",
+            "#!python\n# coding: utf-7\nprint('ok')\n",
+        )],
+    );
+    fs::write(context.temp_dir.join(&filename), wheel)?;
+
+    let venv = context
+        .temp_dir
+        .join("+ACcAJwAn-;print(1337);+ACcAJwAn- env");
+    context
+        .venv()
+        .arg("--no-relocatable")
+        .arg(&venv)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("--python")
+        .arg(&venv)
+        .arg(&filename)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.external_command(venv_bin_path(&venv).join("encoded-script")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok
+    ");
+    Ok(())
+}
+
 /// Hash the entire HTTP response even when extraction stops before trailing bytes.
 #[test]
 fn install_http_wheel_hashes_trailing_bytes() -> Result<()> {

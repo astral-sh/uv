@@ -29,6 +29,8 @@ use crate::record::RecordEntry;
 use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
 
+const SHELL_SHEBANG: &str = "#!/bin/sh\n";
+
 /// A Python source encoding declaration, as defined by <https://peps.python.org/pep-0263/#defining-the-encoding>.
 static SCRIPT_ENCODING: LazyLock<dense::DFA<Vec<u32>>> = LazyLock::new(|| {
     dense::Builder::new()
@@ -137,37 +139,40 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
         // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
         // (note: the Windows trampoline binaries natively support relative paths to executable)
         if shebang_length > 127 || executable.contains(' ') || relocatable {
-            let prefix = if relocatable {
-                r#""$(dirname -- "$(realpath -- "$0")")"/"#
-            } else {
-                ""
-            };
-            let executable = quote_python_executable(&executable);
-            return format!("#!/bin/sh\n'''exec' {prefix}{executable} \"$0\" \"$@\"\n' '''");
+            let executable = format!("'{}'", escape_posix_for_single_quotes(&executable));
+            return format_shell_shebang(&executable, relocatable);
         }
     }
 
     format!("#!{executable}")
 }
 
-/// Quote a Python executable for a shell launcher using only ASCII source characters.
-fn quote_python_executable(executable: &str) -> String {
-    if executable.is_ascii() {
-        return format!("'{}'", escape_posix_for_single_quotes(executable));
-    }
+fn format_shell_shebang(executable: &str, relocatable: bool) -> String {
+    let prefix = if relocatable {
+        r#""$(dirname -- "$(realpath -- "$0")")"/"#
+    } else {
+        ""
+    };
+    format!("{SHELL_SHEBANG}'''exec' {prefix}{executable} \"$0\" \"$@\"\n' '''")
+}
 
-    // Python decodes the launcher using the script's declared source encoding. Reconstruct
-    // non-ASCII path bytes in the shell, leaving any trailing ASCII characters outside the
-    // command substitution so it cannot strip trailing newlines from the path.
-    let encoded = executable.trim_end_matches(|character: char| character.is_ascii());
-    let suffix = &executable[encoded.len()..];
-    let octal = encoded.bytes().format_with("", |byte, formatter| {
-        formatter(&format_args!("\\{byte:03o}"))
-    });
-    format!(
-        "\"$(printf '{octal}')\"'{}'",
-        escape_posix_for_single_quotes(suffix)
-    )
+/// Quote a shell executable so its path cannot become Python syntax after source decoding.
+fn quote_executable_for_encoded_script(executable: &Path) -> String {
+    let path_bytes = executable.as_os_str().as_encoded_bytes();
+    // Command substitution removes trailing newlines, so leave them outside the substitution.
+    let trailing_newlines = path_bytes
+        .iter()
+        .rev()
+        .take_while(|&&byte| byte == b'\n')
+        .count();
+    // Only octal digits inside the substitution depend on the path. Quote the backslash
+    // separately so a source codec such as `unicode_escape` cannot decode the octal sequence.
+    let octal = path_bytes[..path_bytes.len() - trailing_newlines]
+        .iter()
+        .format_with(" ", |byte, formatter| {
+            formatter(&format_args!(r"'\'0{byte:03o}"))
+        });
+    format!("\"$(printf %b {octal}){}\"", "\n".repeat(trailing_newlines))
 }
 
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.
@@ -629,31 +634,33 @@ fn install_script(
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
         let mut shebang = format_shebang(&executable, &layout.os_name, relocatable);
-        let encoding = if let Some(newline) = shebang.find('\n') {
+        let encoding = if shebang.starts_with(SHELL_SHEBANG) {
             // A multi-line launcher displaces the script's second line. Copy any source
             // encoding declaration into the launcher so Python still recognizes it.
-            find_script_encoding(&mut script)?.map(|encoding| (newline + 1, encoding))
+            find_script_encoding(&mut script)?
         } else {
             None
         };
 
-        // Use appropriate line ending for the platform.
-        shebang.push_str(if layout.os_name == "nt" { "\r\n" } else { "\n" });
-
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
-        let size_and_encoded_hash = if let Some((newline, encoding)) = encoding {
+        let size_and_encoded_hash = if let Some(encoding) = encoding {
             let mut encoding_source = File::open(&path)?;
             encoding_source.seek(SeekFrom::Start(encoding.start))?;
-            let (first_line, launcher) = shebang.split_at(newline);
-            let mut contents = first_line
+            let executable = quote_executable_for_encoded_script(&executable);
+            let shebang = format_shell_shebang(&executable, relocatable);
+            let (shebang, launcher) = shebang.split_at(SHELL_SHEBANG.len());
+            let mut contents = shebang
                 .as_bytes()
                 .chain(b"# coding: ".as_slice())
                 .chain(encoding_source.take(encoding.end - encoding.start))
                 .chain(b"\n".as_slice())
                 .chain(launcher.as_bytes())
+                .chain(b"\n".as_slice())
                 .chain(script);
             copy_and_hash(&mut contents, &mut target)?
         } else {
+            // Use appropriate line ending for the platform.
+            shebang.push_str(if layout.os_name == "nt" { "\r\n" } else { "\n" });
             copy_and_hash(&mut shebang.as_bytes().chain(script), &mut target)?
         };
 
