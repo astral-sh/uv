@@ -54,7 +54,7 @@ jobs:
 
       - name: "Plan signed release targets"
         id: targets
-        uses: astral-sh/github-actions/plan-release-signing@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
+        uses: astral-sh/github-actions/plan-release-signing@6eda8a291d9e782f11e151f73cbb31587547f1a7 # shared release signing actions
         with:
           archive-package: uv
           packages: >-
@@ -105,7 +105,7 @@ jobs:
           done < <(jq -r '.[]' <<< "$TARGETS")
 
       - name: "Prepare release signing inputs"
-        uses: astral-sh/github-actions/prepare-release-signing@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
+        uses: astral-sh/github-actions/prepare-release-signing@6eda8a291d9e782f11e151f73cbb31587547f1a7 # shared release signing actions
         with:
           targets: ${{ steps.targets.outputs.artifacts }}
           output-directory: prepared
@@ -157,7 +157,7 @@ jobs:
           merge-multiple: true
 
       - name: "Sign and notarize macOS executables"
-        uses: astral-sh/github-actions/sign-macos@a30f3520f325da7fed035847afec51629d0ef4fa # shared release signing actions
+        uses: astral-sh/github-actions/sign-macos@6eda8a291d9e782f11e151f73cbb31587547f1a7 # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
@@ -201,7 +201,7 @@ jobs:
           merge-multiple: true
 
       - name: "Sign Windows executables"
-        uses: astral-sh/github-actions/sign-windows@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
+        uses: astral-sh/github-actions/sign-windows@6eda8a291d9e782f11e151f73cbb31587547f1a7 # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
@@ -261,7 +261,7 @@ jobs:
           merge-multiple: true
 
       - name: "Assemble signed release artifacts"
-        uses: astral-sh/github-actions/assemble-signed-release@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
+        uses: astral-sh/github-actions/assemble-signed-release@6eda8a291d9e782f11e151f73cbb31587547f1a7 # shared release signing actions
         with:
           targets: ${{ needs.prepare.outputs.artifacts }}
           # The complete release inputs retain the originals checked during preparation.
@@ -379,24 +379,22 @@ jobs:
           path: github-archives
           merge-multiple: true
 
+      - name: "Download unsigned executables"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.unsigned-macos }}
+          path: unsigned
+          merge-multiple: true
+
       - name: "Verify signed release artifacts"
-        uses: astral-sh/github-actions/verify-release@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
+        uses: astral-sh/github-actions/verify-release@6eda8a291d9e782f11e151f73cbb31587547f1a7 # shared release signing actions
         with:
           target: ${{ toJSON(matrix.platform) }}
           signed-directory: signed/${{ matrix.platform.target }}
           wheels-directory: wheels/${{ matrix.platform.target }}
           github-archives-directory: github-archives
-
-      - name: "Download matching debug symbols"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: build-debug-symbols-${{ matrix.platform.target }}
-          path: debug-symbols
-      - name: "Verify signed executable symbol identities"
-        shell: bash
-        run: |
-          rustup component add llvm-tools-preview
-          python scripts/release_symbols.py verify --target "$TARGET" --archive "debug-symbols/uv-$TARGET-debug.tar.gz" --binaries "signed/$TARGET"
+          unsigned-directory: unsigned/${{ matrix.platform.target }}
+          metadata-packages: '["uv"]'
 
       - name: "Install and run the signed wheels"
         run: ./scripts/test-release-wheels-macos.sh "./wheels/$TARGET"
@@ -445,24 +443,22 @@ jobs:
           path: github-archives
           merge-multiple: true
 
+      - name: "Download unsigned executables"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.unsigned-windows }}
+          path: unsigned
+          merge-multiple: true
+
       - name: "Verify signed release artifacts"
-        uses: astral-sh/github-actions/verify-release@b61c7106c7746375df8005eab240be92e4e450b2 # shared release signing actions
+        uses: astral-sh/github-actions/verify-release@6eda8a291d9e782f11e151f73cbb31587547f1a7 # shared release signing actions
         with:
           target: ${{ toJSON(matrix.platform) }}
           signed-directory: signed/${{ matrix.platform.target }}
           wheels-directory: wheels/${{ matrix.platform.target }}
           github-archives-directory: github-archives
-
-      - name: "Download matching debug symbols"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: build-debug-symbols-${{ matrix.platform.target }}
-          path: debug-symbols
-      - name: "Verify signed executable symbol identities"
-        shell: bash
-        run: |
-          rustup component add llvm-tools-preview
-          python scripts/release_symbols.py verify --target "$TARGET" --archive "debug-symbols/uv-$TARGET-debug.zip" --binaries "signed/$TARGET"
+          unsigned-directory: unsigned/${{ matrix.platform.target }}
+          metadata-packages: '["uv"]'
 
       - name: "Install and run the signed wheels"
         shell: pwsh

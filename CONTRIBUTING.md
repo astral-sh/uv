@@ -384,8 +384,7 @@ created on GitHub after everything else publishes.
 
 Each GitHub release includes a separate `uv-<target>-debug.tar.gz` (or `.zip` on Windows) with full
 Rust and native debug information for `uv`, `uvx`, and, on Windows, `uvw`. Wheels and executable
-archives contain stripped binaries. Symbol archives also include `symbols.json` with the build
-commit, symbol hashes, and executable/companion identities.
+archives contain stripped binaries. Each symbol archive has a SHA-256 checksum alongside it.
 
 Use the symbols for the exact release and target being debugged:
 
@@ -398,20 +397,20 @@ Use the symbols for the exact release and target being debugged:
 Optimization remains enabled, including PGO and LTO where configured. Some variables, fields and
 caller frames may be unavailable or incomplete even with full symbols.
 
-The release workflow sets full debug information only for uv's release builds. Maturin must use
-`--strip=false` so the packaging step can extract symbols before stripping. The packaging script
-rewrites wheel `RECORD` hashes, verifies embedded SBOM retention, and keeps the same executable
-bytes in the wheel and standalone archive. Release signing verifies companion identities again;
-pre-sign executable hashes in `symbols.json` are not hashes of the signed download.
+The release workflow sets full debug information only for uv's release builds. Maturin's
+`--strip --debug-symbols-dir symbols` exports companions under `symbols/<wheel-filename>.symbols/`
+while writing a stripped wheel. The packaging action archives those companions and extracts the
+finished wheel executables for standalone archives. Cargo-dist registers the archives and their
+checksum sidecars through `extra-artifacts`; installers continue to select only executable archives.
+Cargo's build outputs remain unstripped. Release signing checks that executable debug identities and
+embedded SBOMs remain unchanged.
 
-Run the packaging tests with:
+This integration requires a Maturin release that implements `--debug-symbols-dir`. The workflow's
+current 1.15.0 pin must be updated before these builds can run.
 
-```shell
-python -m unittest discover -s scripts/tests -p test_release_symbols.py
-```
-
-For the native Rust+C build, wheel-installation and symbol-matching test, first install
-`cargo-auditable` 0.7.6, Maturin 1.15.0, and `llvm-tools-preview`, then set
-`UV_TEST_RELEASE_SYMBOLS=1` when running the same command. `test-release-symbols.yml` runs this
-check on Linux x86-64/ARM64, macOS ARM64, and Windows x86-64. `build-release-binaries.yml` can also
-be manually dispatched to validate the complete release target matrix without publishing a release.
+Maturin owns symbol extraction, stripping, companion matching, and wheel `RECORD` generation. The
+shared `verify-release` action checks signed executable identities and SBOMs against the unsigned
+inputs for the `uv` package. Cargo-dist checks that all declared symbol archives exist and verifies
+their checksums before including them in the release manifest. Once the required Maturin version is
+available, `build-release-binaries.yml` can be manually dispatched to validate the complete release
+target matrix without publishing a release.

@@ -2,6 +2,7 @@
 #
 # Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
 # Creates wheels, sdists, executable archives, and separate full debug symbol archives.
+# TODO: update the Maturin pin to a release with --debug-symbols-dir support.
 #
 # Called from:
 # - .github/workflows/ci.yml (when release-relevant files change)
@@ -172,7 +173,7 @@ jobs:
           sccache: false
           maturin-version: v1.15.0
           target: x86_64
-          args: --release --strip=false --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO_PROFILE_RELEASE_DEBUG: full
           CARGO_PROFILE_RELEASE_STRIP: none
@@ -198,8 +199,8 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -275,7 +276,7 @@ jobs:
           maturin-version: v1.15.0
           target: aarch64
           manylinux: 2_17
-          args: --release --strip=false --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO_PROFILE_RELEASE_DEBUG: full
           CARGO_PROFILE_RELEASE_STRIP: none
@@ -309,8 +310,8 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -420,7 +421,7 @@ jobs:
           sccache: false
           maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
-          args: --release --strip=false --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
           CARGO_PROFILE_RELEASE_DEBUG: full
           CARGO_PROFILE_RELEASE_STRIP: none
@@ -443,7 +444,7 @@ jobs:
 
           for binary in uv uvx uvw; do
             IMPORTS_FILE="$RUNNER_TEMP/${binary}-coff-imports.txt"
-            "$LLVM_READOBJ" --coff-imports "target/${{ matrix.platform.target }}/release/${binary}.exe" > "$IMPORTS_FILE"
+            "$LLVM_READOBJ" --coff-imports "release-binaries/${binary}.exe" > "$IMPORTS_FILE"
 
             if grep -Eiq 'vcruntime[[:digit:]_]*\.dll|ucrtbase\.dll|api-ms-win-crt-' "$IMPORTS_FILE"; then
               echo "$binary must not dynamically link the Visual C++ runtime" >&2
@@ -469,9 +470,9 @@ jobs:
         shell: bash
         run: |
           ARCHIVE_FILE=uv-${PLATFORM_TARGET}.zip
-          7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uv.exe
-          7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uvx.exe
-          7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uvw.exe
+          7z a $ARCHIVE_FILE ./release-binaries/uv.exe
+          7z a $ARCHIVE_FILE ./release-binaries/uvx.exe
+          7z a $ARCHIVE_FILE ./release-binaries/uvw.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
           PLATFORM_TARGET: ${{ matrix.platform.target }}
@@ -574,7 +575,7 @@ jobs:
           container: quay.io/pypa/manylinux2014
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
-          args: --release --strip=false --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
             rustup target add ${{ matrix.target }}
@@ -596,10 +597,10 @@ jobs:
                 apt update -y && apt-get install -y pkg-config
             fi
             # Install cargo extensions as a static musl binary so it runs in any container.
+            rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
 
             if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
-                rustup component add llvm-tools-preview
                 python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
                     --target "${{ matrix.target }}" \
                     --target-dir "$PWD/target/uv-pgo" \
@@ -639,8 +640,8 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -740,8 +741,9 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
-          args: --release --strip=false --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
+            rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
 
             if [[ "${{ matrix.platform.pgo }}" == "true" ]]; then
@@ -750,7 +752,6 @@ jobs:
                 test -x "${bundled_lld_dir}/ld.lld"
                 export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld"
 
-                rustup component add llvm-tools-preview
                 python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
                     --target "${{ matrix.platform.target }}" \
                     --target-dir "$PWD/target/uv-pgo" \
@@ -797,8 +798,8 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -879,9 +880,10 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
-          args: --release --strip=false --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
+            rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
             # Install the s390x cross target on x86_64
             rustup target add ${{ matrix.platform.target }}
@@ -926,8 +928,8 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1012,7 +1014,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
-          args: --release --strip=false --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             if command -v yum &> /dev/null; then
                 yum update -y
@@ -1020,6 +1022,7 @@ jobs:
                 yum repolist
                 yum install -y gcc-powerpc64-linux-gnu
             fi
+            rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
         env:
           # Cross linkers do not consistently emit an ELF build ID by default.
@@ -1061,8 +1064,8 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1136,8 +1139,9 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
-          args: --release --strip=false --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
+            rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
         env:
           # Cross linkers do not consistently emit an ELF build ID by default.
@@ -1178,8 +1182,8 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1258,8 +1262,9 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
-          args: --release --strip=false --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
+            rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
         env:
           # Cross linkers do not consistently emit an ELF build ID by default.
@@ -1300,8 +1305,8 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
@@ -1393,10 +1398,11 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
-          args: --release --strip=false --locked --out dist --features self-update --compatibility ${{ matrix.platform.arch == 'riscv64' && '2_31' || '2_17'}} --compatibility pypi
+          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility ${{ matrix.platform.arch == 'riscv64' && '2_31' || '2_17'}} --compatibility pypi
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
+            rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
         env:
           # Cross linkers do not consistently emit an ELF build ID by default.
@@ -1452,13 +1458,12 @@ jobs:
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/$PROFILE/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/$PROFILE/uvx $ARCHIVE_NAME/uvx
+          cp release-binaries/uv $ARCHIVE_NAME/uv
+          cp release-binaries/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
         env:
           TARGET: ${{ matrix.platform.target }}
-          PROFILE: ${{ matrix.platform.arch == 'ppc64le' && 'release-no-lto' || 'release' }}
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1569,20 +1574,11 @@ jobs:
     outputs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-          cache: ""
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: build-debug-symbols-*
           path: debug-symbols
           merge-multiple: true
-      - name: Verify complete symbol inventory
-        run: python scripts/release_symbols.py collect debug-symbols
       - name: Upload release debug symbols
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

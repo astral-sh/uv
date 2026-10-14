@@ -1,5 +1,5 @@
 name: Package release symbols
-description: Separate full symbols before uploading or signing uv release executables
+description: Archive exported symbols and stage wheel executables for release signing
 inputs:
   target:
     description: Rust target triple
@@ -7,14 +7,59 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install LLVM tools
-      shell: bash
-      run: rustup component add llvm-tools-preview
-    - name: Extract and verify symbols
+    - name: Archive symbols and extract wheel executables
       shell: bash
       env:
         TARGET: ${{ inputs.target }}
-      run: python scripts/release_symbols.py package --target "$TARGET" --binaries "target/$TARGET/release"
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        wheels=(dist/uv-*.whl)
+        [[ ${#wheels[@]} == 1 ]]
+        wheel=${wheels[0]}
+        wheel_name=$(basename "$wheel")
+        exported="symbols/$wheel_name.symbols"
+        archive="uv-$TARGET-debug"
+        binaries=(uv uvx)
+        case "$TARGET" in
+          *-windows-msvc) binaries=(uv.exe uvx.exe uvw.exe); suffix=.pdb ;;
+          *-apple-darwin) suffix=.dSYM ;;
+          *-linux-*) suffix=.debug ;;
+          *) echo "Unsupported release target: $TARGET" >&2; exit 1 ;;
+        esac
+
+        # Cargo outputs are unstripped; standalone archives use finished wheel bytes.
+        extracted=$(mktemp -d)
+        trap 'rm -rf "$extracted"' EXIT
+        python -m zipfile -e "$wheel" "$extracted"
+        mkdir release-binaries debug-symbols
+        for binary in "${binaries[@]}"; do
+          members=("$extracted/"*.data/scripts/"$binary")
+          [[ ${#members[@]} == 1 ]]
+          cp "${members[0]}" "release-binaries/$binary"
+          chmod 755 "release-binaries/$binary"
+          companion="$exported/${binary%.exe}$suffix"
+          if [[ "$suffix" == .dSYM ]]; then
+            dwarf=("$companion/Contents/Resources/DWARF/"*)
+            [[ ${#dwarf[@]} -gt 0 ]]
+            for file in "${dwarf[@]}"; do test -s "$file"; done
+          else
+            test -s "$companion"
+          fi
+        done
+
+        mv "$exported" "symbols/$archive"
+        if [[ "$TARGET" == *-windows-msvc ]]; then
+          (cd symbols && python -m zipfile -c "../debug-symbols/$archive.zip" "$archive")
+          (cd debug-symbols && sha256sum "$archive.zip" > "$archive.zip.sha256")
+        else
+          tar -czf "debug-symbols/$archive.tar.gz" -C symbols "$archive"
+          if [[ "$TARGET" == *-apple-darwin ]]; then
+            (cd debug-symbols && shasum -a 256 "$archive.tar.gz" > "$archive.tar.gz.sha256")
+          else
+            (cd debug-symbols && sha256sum "$archive.tar.gz" > "$archive.tar.gz.sha256")
+          fi
+        fi
     - name: Upload symbols
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
@@ -30,7 +75,7 @@ runs:
         path: |
           dist/*.whl
           debug-symbols
-          target/${{ inputs.target }}/release/*.pdb
-          target/${{ inputs.target }}/release/*.dSYM
+          symbols
+          release-binaries
         if-no-files-found: warn
         compression-level: 0

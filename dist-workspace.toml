@@ -95,3 +95,45 @@ riscv64gc-unknown-linux-gnu = "2.31"
 aarch64-pc-windows-msvc = ["uv", "uvx", "uvw"]
 i686-pc-windows-msvc = ["uv", "uvx", "uvw"]
 x86_64-pc-windows-msvc = ["uv", "uvx", "uvw"]
+
+# Symbol archives are release assets; installers select executable archives only.
+[[dist.extra-artifacts]]
+build = ["sh", "-c", "cd debug-symbols && sha256sum -c *.sha256"]
+artifacts = [
+    "debug-symbols/uv-aarch64-apple-darwin-debug.tar.gz",
+    "debug-symbols/uv-aarch64-apple-darwin-debug.tar.gz.sha256",
+    "debug-symbols/uv-aarch64-unknown-linux-gnu-debug.tar.gz",
+    "debug-symbols/uv-aarch64-unknown-linux-gnu-debug.tar.gz.sha256",
+    "debug-symbols/uv-aarch64-unknown-linux-musl-debug.tar.gz",
+    "debug-symbols/uv-aarch64-unknown-linux-musl-debug.tar.gz.sha256",
+    "debug-symbols/uv-aarch64-pc-windows-msvc-debug.zip",
+    "debug-symbols/uv-aarch64-pc-windows-msvc-debug.zip.sha256",
+    "debug-symbols/uv-arm-unknown-linux-musleabihf-debug.tar.gz",
+    "debug-symbols/uv-arm-unknown-linux-musleabihf-debug.tar.gz.sha256",
+    "debug-symbols/uv-armv7-unknown-linux-gnueabihf-debug.tar.gz",
+    "debug-symbols/uv-armv7-unknown-linux-gnueabihf-debug.tar.gz.sha256",
+    "debug-symbols/uv-armv7-unknown-linux-musleabihf-debug.tar.gz",
+    "debug-symbols/uv-armv7-unknown-linux-musleabihf-debug.tar.gz.sha256",
+    "debug-symbols/uv-x86_64-apple-darwin-debug.tar.gz",
+    "debug-symbols/uv-x86_64-apple-darwin-debug.tar.gz.sha256",
+    "debug-symbols/uv-powerpc64le-unknown-linux-gnu-debug.tar.gz",
+    "debug-symbols/uv-powerpc64le-unknown-linux-gnu-debug.tar.gz.sha256",
+    "debug-symbols/uv-riscv64gc-unknown-linux-gnu-debug.tar.gz",
+    "debug-symbols/uv-riscv64gc-unknown-linux-gnu-debug.tar.gz.sha256",
+    "debug-symbols/uv-riscv64gc-unknown-linux-musl-debug.tar.gz",
+    "debug-symbols/uv-riscv64gc-unknown-linux-musl-debug.tar.gz.sha256",
+    "debug-symbols/uv-s390x-unknown-linux-gnu-debug.tar.gz",
+    "debug-symbols/uv-s390x-unknown-linux-gnu-debug.tar.gz.sha256",
+    "debug-symbols/uv-x86_64-unknown-linux-gnu-debug.tar.gz",
+    "debug-symbols/uv-x86_64-unknown-linux-gnu-debug.tar.gz.sha256",
+    "debug-symbols/uv-x86_64-unknown-linux-musl-debug.tar.gz",
+    "debug-symbols/uv-x86_64-unknown-linux-musl-debug.tar.gz.sha256",
+    "debug-symbols/uv-x86_64-pc-windows-msvc-debug.zip",
+    "debug-symbols/uv-x86_64-pc-windows-msvc-debug.zip.sha256",
+    "debug-symbols/uv-i686-unknown-linux-gnu-debug.tar.gz",
+    "debug-symbols/uv-i686-unknown-linux-gnu-debug.tar.gz.sha256",
+    "debug-symbols/uv-i686-unknown-linux-musl-debug.tar.gz",
+    "debug-symbols/uv-i686-unknown-linux-musl-debug.tar.gz.sha256",
+    "debug-symbols/uv-i686-pc-windows-msvc-debug.zip",
+    "debug-symbols/uv-i686-pc-windows-msvc-debug.zip.sha256",
+]

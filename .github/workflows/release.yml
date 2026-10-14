@@ -223,6 +223,12 @@ jobs:
           artifact-ids: ${{ needs.plan.outputs.artifact }},${{ needs.generate-local-dist-manifest.outputs.artifact }},${{ needs.assemble-release-artifacts.outputs.github-archives }}
           path: target/distrib/
           merge-multiple: true
+      - name: Fetch release debug symbols
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build-release-artifacts.outputs.debug-symbols }}
+          path: debug-symbols
+          merge-multiple: true
       - id: cargo-dist
         shell: bash
         run: |
@@ -275,7 +281,7 @@ jobs:
     runs-on: "depot-ubuntu-latest-4"
     outputs:
       val: ${{ steps.host.outputs.manifest }}
-      github-artifacts: ${{ needs.build-release-artifacts.outputs.debug-symbols }},${{ needs.assemble-release-artifacts.outputs.github-archives }},${{ needs.build-global-dist-artifacts.outputs.artifacts }},${{ steps.manifest.outputs.artifact-id }}
+      github-artifacts: ${{ needs.assemble-release-artifacts.outputs.github-archives }},${{ needs.build-global-dist-artifacts.outputs.artifacts }},${{ steps.manifest.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -294,18 +300,11 @@ jobs:
           artifact-ids: ${{ needs.plan.outputs.artifact }},${{ needs.generate-local-dist-manifest.outputs.artifact }},${{ needs.build-global-dist-artifacts.outputs.manifest }},${{ needs.assemble-release-artifacts.outputs.github-archives }},${{ needs.build-global-dist-artifacts.outputs.artifacts }}
           path: target/distrib/
           merge-multiple: true
-      - name: Fetch release debug symbols
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ needs.build-release-artifacts.outputs.debug-symbols }}
-          path: debug-symbols
-          merge-multiple: true
       # This is a harmless no-op for GitHub Releases, hosting for that happens in "publish-github"
       - id: host
         shell: bash
         run: |
           uv run --only-dev dist host ${DIST_TAG_FLAG} --steps=upload --steps=release --output-format=json > dist-manifest.json
-          python3 scripts/release_symbols.py manifest dist-manifest.json debug-symbols
           echo "artifacts uploaded and released successfully"
           cat dist-manifest.json
           echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
