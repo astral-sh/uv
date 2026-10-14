@@ -1,0 +1,31 @@
+[package]
+name = "uv"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[build-dependencies]
+cc = "=1.2.57"
+
+[[bin]]
+name = "uv"
+path = "src/main.rs"
+
+[[bin]]
+name = "uvx"
+path = "src/uvx.rs"
+
+[[bin]]
+name = "uvw"
+path = "src/uvw.rs"
+required-features = ["windows-gui-bin"]
+
+[features]
+windows-gui-bin = []
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"

@@ -379,3 +379,39 @@ After merging the pull request, run the
 reads the version from project metadata and rejects versions that already have a GitHub release.
 Enable `dry-run` to build artifacts without publishing. Otherwise, the release will automatically be
 created on GitHub after everything else publishes.
+
+### Debugging release binaries
+
+Each GitHub release includes a separate `uv-<target>-debug.tar.gz` (or `.zip` on Windows) with full
+Rust and native debug information for `uv`, `uvx`, and, on Windows, `uvw`. Wheels and executable
+archives contain stripped binaries. Symbol archives also include `symbols.json` with the build
+commit, symbol hashes, and executable/companion identities.
+
+Use the symbols for the exact release and target being debugged:
+
+- Linux: place `uv.debug` beside `uv`, or configure GDB's debug-file directory. The executable's GNU
+  debug link and ELF build ID identify the companion.
+- macOS: load `uv.dSYM` with LLDB's `target symbols add`. Its UUID must match the executable.
+- Windows: place `uv.pdb` beside `uv.exe`, or add the extracted directory to the debugger's symbol
+  search path. Both the PDB GUID and age must match.
+
+Optimization remains enabled, including PGO and LTO where configured. Some variables, fields and
+caller frames may be unavailable or incomplete even with full symbols.
+
+The release workflow sets full debug information only for uv's release builds. Maturin must use
+`--strip=false` so the packaging step can extract symbols before stripping. The packaging script
+rewrites wheel `RECORD` hashes, verifies embedded SBOM retention, and keeps the same executable
+bytes in the wheel and standalone archive. Release signing verifies companion identities again;
+pre-sign executable hashes in `symbols.json` are not hashes of the signed download.
+
+Run the packaging tests with:
+
+```shell
+python -m unittest discover -s scripts/tests -p test_release_symbols.py
+```
+
+For the native Rust+C build, wheel-installation and symbol-matching test, first install
+`cargo-auditable` 0.7.6, Maturin 1.15.0, and `llvm-tools-preview`, then set
+`UV_TEST_RELEASE_SYMBOLS=1` when running the same command. `test-release-symbols.yml` runs this
+check on Linux x86-64/ARM64, macOS ARM64, and Windows x86-64. `build-release-binaries.yml` can also
+be manually dispatched to validate the complete release target matrix without publishing a release.

@@ -1,0 +1,24 @@
+name: Package release symbols
+description: Separate full symbols before uploading or signing uv release executables
+inputs:
+  target:
+    description: Rust target triple
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install LLVM tools
+      shell: bash
+      run: rustup component add llvm-tools-preview
+    - name: Extract and verify symbols
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: python scripts/release_symbols.py package --target "$TARGET" --binaries "target/$TARGET/release"
+    - name: Upload symbols
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: build-debug-symbols-${{ inputs.target }}
+        path: debug-symbols
+        if-no-files-found: error
+        compression-level: 0

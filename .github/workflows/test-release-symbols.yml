@@ -1,0 +1,43 @@
+name: Test release symbol packaging
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  symbols:
+    name: ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          [
+            depot-ubuntu-24.04-8,
+            depot-ubuntu-24.04-arm-16,
+            namespace-profile-macos-15,
+            namespace-profile-windows-2022-x86-64-16x32,
+          ]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: ""
+      - name: Install build tools
+        shell: bash
+        run: |
+          rustup component add llvm-tools-preview clippy rustfmt
+          cargo install cargo-auditable --locked --version 0.7.6
+          python -m pip install maturin==1.15.0
+      - name: Check native fixture
+        run: |
+          cargo fmt --manifest-path scripts/tests/fixtures/release-symbols/Cargo.toml --check
+          cargo clippy --manifest-path scripts/tests/fixtures/release-symbols/Cargo.toml --all-features --locked -- -D warnings
+      - name: Test symbol packaging and wheel installation
+        env:
+          UV_TEST_RELEASE_SYMBOLS: "1"
+        run: python -m unittest discover -s scripts/tests -p test_release_symbols.py

@@ -175,6 +175,11 @@ jobs:
     with:
       sha: ${{ github.sha }}
 
+  test-release-symbols:
+    needs: plan
+    if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
+    uses: $/.github/workflows/test-release-symbols.yml
+
   build-release-artifacts:
     needs: plan
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
@@ -342,6 +347,7 @@ jobs:
       - test-system
       - build-dev-binaries
       - build-release-artifacts
+      - test-release-symbols
       - build-docker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
