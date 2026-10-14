@@ -170,17 +170,10 @@ impl GitUrl {
 
     /// Set the precise [`GitOid`] to use for this Git URL.
     pub fn with_precise(mut self, precise: GitOid) -> Result<Self, GitUrlParseError> {
-        match self.0.reference.as_commit() {
-            Some(commit) => {
-                if commit != precise {
-                    return Err(GitUrlParseError::MismatchedRevision {
-                        revision: commit.to_string(),
-                        precise,
-                        url: Box::new(self.0.url.clone()),
-                    });
-                }
-            }
-            None => Arc::make_mut(&mut self.0).resolved = Some(Arc::new(precise)),
+        self.0.reference
+            .validate_resolved_commit(&precise, &self.0.url)?;
+        if self.0.reference.as_commit().is_none() {
+            Arc::make_mut(&mut self.0).resolved = Some(Arc::new(precise));
         }
 
         Ok(self)

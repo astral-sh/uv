@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 
 use uv_fs::Simplified;
-use uv_git_types::{GitObjectFormat, GitOid, GitReference, GitUrlParseError};
+use uv_git_types::{GitObjectFormat, GitOid, GitReference};
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -141,7 +141,7 @@ impl GitRepository {
         })
     }
 
-    /// Return the repository's object format, if Git can determine it.
+    /// Return the repository's storage format, or [`None`] if Git cannot report a supported format.
     fn object_format(&self) -> Option<GitObjectFormat> {
         let output = GIT
             .as_ref()
@@ -778,16 +778,7 @@ fn fetch(
 
         // A successful fetch does not guarantee that the requested revision identifies a commit.
         let precise = replacement.resolve(reference)?;
-        if let Some(commit) = reference.as_commit()
-            && commit != precise
-        {
-            return Err(GitUrlParseError::MismatchedRevision {
-                revision: commit.to_string(),
-                precise,
-                url: Box::new(remote_url.clone()),
-            }
-            .into());
-        }
+        reference.validate_resolved_commit(&precise, remote_url)?;
 
         // Move the original database aside until the fetched replacement is in place.
         let original = temporary.path().join("original");
@@ -858,7 +849,8 @@ fn fetch_with_cli(
     Ok(())
 }
 
-/// Determine a remote repository's object format from an advertised object ID.
+/// Infer a remote repository's object format from `HEAD` or an explicitly requested named ref.
+/// Return [`None`] when no matching ref advertises a supported object ID or the probe fails.
 fn remote_object_format(
     repo: &GitRepository,
     url: &DisplaySafeUrl,
@@ -871,8 +863,7 @@ fn remote_object_format(
         .arg(url.as_str())
         .arg("HEAD")
         .cwd(&repo.path);
-    // Include requested named refs in case the remote does not have a default branch. Exclude
-    // wildcard refspecs so a failed fetch cannot cause a large ref listing.
+    // Exclude wildcard refspecs so a failed fetch cannot cause a large ref listing.
     for refspec in refspecs {
         if let Some((source, _)) = refspec
             .strip_prefix('+')
@@ -892,7 +883,7 @@ fn remote_object_format(
         .map(|oid| oid.object_format())
 }
 
-/// Prepare a Git command that can access a remote repository.
+/// Apply the same prompt, TLS, and offline settings to fetches and format probes.
 fn remote_command(disable_ssl: bool, offline: bool) -> Result<ProcessBuilder> {
     let mut cmd = GIT.as_ref().cloned()?;
     // Disable terminal prompts, which are erased by the progress bar. GUI prompts like SSH_ASKPASS
