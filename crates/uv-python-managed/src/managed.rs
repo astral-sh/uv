@@ -123,6 +123,42 @@ impl ManagedPythonInstallations {
         .await?)
     }
 
+    /// Lock the installation directory and reclaim abandoned temporary installations.
+    pub async fn lock_for_install(&self) -> Result<LockedFile, Error> {
+        let lock = self.lock().await?;
+        let scratch = self.scratch();
+        // Keep the lock in the blocking task so cancellation cannot release it during cleanup.
+        Ok(spawn_blocking(move || {
+            if let Err(err) = Self::clear_scratch(&scratch) {
+                warn!(
+                    "Failed to clean temporary Python installations at `{}`: {err}",
+                    scratch.user_display()
+                );
+            }
+            lock
+        })
+        .await?)
+    }
+
+    /// Remove temporary installation directories without following a redirected scratch path.
+    fn clear_scratch(scratch: &Path) -> io::Result<()> {
+        if !fs::symlink_metadata(scratch)?.is_dir() {
+            return Ok(());
+        }
+
+        // Another process may have initialized the scratch directory before waiting for the lock.
+        // Leave the directory itself in place, and only remove directories created by `tempfile`.
+        for path in uv_fs::directories(scratch)?.filter(|path| uv_fs::is_temporary(path)) {
+            if let Err(err) = fs::remove_dir_all(&path) {
+                warn!(
+                    "Failed to remove temporary Python installation at `{}`: {err}",
+                    path.user_display()
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Prefer, in order:
     ///
     /// 1. The specific Python directory passed via the `install_dir` argument.
