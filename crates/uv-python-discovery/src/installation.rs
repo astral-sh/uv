@@ -143,7 +143,7 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
-            && client_builder.connectivity.is_online();
+            && !client_builder.is_offline();
         let installation = find_best_python_installation(
             request,
             environments,
@@ -220,7 +220,7 @@ impl PythonInstallation {
 
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
-            && client_builder.connectivity.is_online();
+            && !client_builder.is_offline();
 
         let download = download_request
             .clone()
@@ -284,7 +284,7 @@ impl PythonInstallation {
                 | PythonPreference::System => {}
             }
 
-            if !client_builder.connectivity.is_online() {
+            if client_builder.is_offline() {
                 return Err(err.with_hint(MissingPythonHint::Offline(request.clone())));
             }
 

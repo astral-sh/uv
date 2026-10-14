@@ -106,7 +106,7 @@ pub struct BaseClientBuilder<'a> {
     system_certs: bool,
     custom_certificates: Option<Certificates>,
     retries: u32,
-    pub connectivity: Connectivity,
+    connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
