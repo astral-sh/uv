@@ -31,7 +31,6 @@ rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 smallvec = { workspace = true }
-temp-env = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
@@ -41,6 +40,7 @@ version-ranges = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true }
 serde_json = { workspace = true }
+temp-env = { workspace = true }
 tracing-test = { workspace = true }
 
 [features]
