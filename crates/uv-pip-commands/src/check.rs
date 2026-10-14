@@ -83,7 +83,7 @@ pub fn pip_check(
             "incompatibilities"
         };
         writeln!(
-            printer.stderr(),
+            printer.stderr_important(),
             "{}",
             format!(
                 "Found {}",
@@ -93,7 +93,11 @@ pub fn pip_check(
         )?;
 
         for diagnostic in &diagnostics {
-            writeln!(printer.stderr(), "{}", diagnostic.message().bold())?;
+            writeln!(
+                printer.stderr_important(),
+                "{}",
+                diagnostic.message().bold()
+            )?;
         }
 
         Ok(ExitStatus::Failure)
