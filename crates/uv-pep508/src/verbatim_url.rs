@@ -13,21 +13,55 @@ use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
+use uv_redacted::policy::{SerializationPolicy, Unserializable};
 use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
 ///
-/// The original string is not preserved after serialization/deserialization.
+/// The serialization policy is stored on the parsed URL. A [`VerbatimUrl`] with
+/// the default [`Unserializable`] policy does not implement [`serde::Serialize`].
+/// With the `serde` feature, URLs with [`uv_redacted::policy::Stripped`] or
+/// [`uv_redacted::policy::Raw`] serialize the normalized URL and omit the original input.
+///
+/// ```compile_fail
+/// use uv_pep508::VerbatimUrl;
+///
+/// fn require_serialize<T: serde::Serialize>() {}
+/// // `VerbatimUrl` uses the `Unserializable` policy by default.
+/// require_serialize::<VerbatimUrl>();
+/// ```
+///
+/// `serialize` method calls through [`Deref`] also require a serializing policy:
+///
+/// ```compile_fail
+/// use serde::Serialize;
+/// use uv_pep508::VerbatimUrl;
+///
+/// let url = VerbatimUrl::parse_url("https://user:password@example.com")?;
+/// url.serialize(serde_json::value::Serializer)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Internal serialization requires [`uv_redacted::policy::Raw`]:
+///
+/// ```compile_fail
+/// use uv_pep508::VerbatimUrl;
+/// use uv_redacted::policy::Stripped;
+///
+/// let url = VerbatimUrl::parse_url("https://user:password@example.com")?
+///     .with_policy(Stripped);
+/// url.serialize_internal(serde_json::value::Serializer)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Clone, Eq)]
-pub struct VerbatimUrl {
+pub struct VerbatimUrl<P: SerializationPolicy = Unserializable> {
     /// The parsed URL.
-    url: SafeUrl,
+    url: SafeUrl<P>,
     /// The URL as it was provided by the user.
     ///
-    /// Even if originally set, this will be [`None`] after
-    /// serialization/deserialization.
+    /// This is [`None`] when the URL is deserialized.
     given: Option<ArcStr>,
     /// Given value is a [`Pep508Url`] which contained variable references which were successfully
     /// expanded.
@@ -36,7 +70,7 @@ pub struct VerbatimUrl {
     force_relative: bool,
 }
 
-impl Debug for VerbatimUrl {
+impl<P: SerializationPolicy> Debug for VerbatimUrl<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let given = self.given.as_deref().map(|given| {
             SafeUrl::parse(given).map_or_else(
@@ -61,35 +95,25 @@ impl Debug for VerbatimUrl {
     }
 }
 
-impl Hash for VerbatimUrl {
+impl<P: SerializationPolicy> Hash for VerbatimUrl<P> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.url.hash(state);
     }
 }
 
-impl CacheKey for VerbatimUrl {
+impl<P: SerializationPolicy> CacheKey for VerbatimUrl<P> {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         self.url.as_str().cache_key(state);
     }
 }
 
-impl PartialEq for VerbatimUrl {
+impl<P: SerializationPolicy> PartialEq for VerbatimUrl<P> {
     fn eq(&self, other: &Self) -> bool {
         self.url == other.url
     }
 }
 
 impl VerbatimUrl {
-    /// Create a [`VerbatimUrl`] from a [`Url`].
-    pub fn from_url(url: SafeUrl) -> Self {
-        Self {
-            url,
-            given: None,
-            expanded: false,
-            force_relative: false,
-        }
-    }
-
     /// Parse a URL from a string.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
         let given = given.as_ref();
@@ -243,6 +267,29 @@ impl VerbatimUrl {
             force_relative: false,
         })
     }
+}
+
+impl<P: SerializationPolicy> VerbatimUrl<P> {
+    /// Create a [`VerbatimUrl`] from a [`SafeUrl`].
+    pub fn from_url(url: SafeUrl<P>) -> Self {
+        Self {
+            url,
+            given: None,
+            expanded: false,
+            force_relative: false,
+        }
+    }
+
+    /// Change the serialization policy while retaining the original input and path preferences.
+    #[must_use]
+    pub fn with_policy<Q: SerializationPolicy>(self, policy: Q) -> VerbatimUrl<Q> {
+        VerbatimUrl {
+            url: self.url.with_policy(policy),
+            given: self.given,
+            expanded: self.expanded,
+            force_relative: self.force_relative,
+        }
+    }
 
     /// Set a fragment that was provided as part of a URL.
     #[must_use]
@@ -315,17 +362,17 @@ impl VerbatimUrl {
     }
 
     /// Return the underlying [`SafeUrl`].
-    pub fn raw(&self) -> &SafeUrl {
+    pub fn raw(&self) -> &SafeUrl<P> {
         &self.url
     }
 
     /// Convert a [`VerbatimUrl`] into a [`SafeUrl`].
-    pub fn to_url(&self) -> SafeUrl {
+    pub fn to_url(&self) -> SafeUrl<P> {
         self.url.clone()
     }
 
     /// Convert the [`VerbatimUrl`] into a [`SafeUrl`].
-    pub fn into_url(self) -> SafeUrl {
+    pub fn into_url(self) -> SafeUrl<P> {
         self.url
     }
 
@@ -334,17 +381,17 @@ impl VerbatimUrl {
     pub fn as_path(&self) -> Result<PathBuf, VerbatimUrlError> {
         self.url
             .to_file_path()
-            .map_err(|()| VerbatimUrlError::PathConversion(Box::new(self.url.clone())))
+            .map_err(|()| VerbatimUrlError::PathConversion(Box::new(self.url.as_url().clone())))
     }
 }
 
-impl Ord for VerbatimUrl {
+impl<P: SerializationPolicy> Ord for VerbatimUrl<P> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.url.cmp(&other.url)
     }
 }
 
-impl PartialOrd for VerbatimUrl {
+impl<P: SerializationPolicy> PartialOrd for VerbatimUrl<P> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -358,14 +405,14 @@ impl std::str::FromStr for VerbatimUrl {
     }
 }
 
-impl std::fmt::Display for VerbatimUrl {
+impl<P: SerializationPolicy> std::fmt::Display for VerbatimUrl<P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.url, f)
     }
 }
 
-impl Deref for VerbatimUrl {
-    type Target = SafeUrl;
+impl<P: SerializationPolicy> Deref for VerbatimUrl<P> {
+    type Target = SafeUrl<P>;
 
     fn deref(&self) -> &Self::Target {
         &self.url
@@ -378,36 +425,39 @@ impl From<Url> for VerbatimUrl {
     }
 }
 
-impl From<SafeUrl> for VerbatimUrl {
-    fn from(url: SafeUrl) -> Self {
+impl<P: SerializationPolicy> From<SafeUrl<P>> for VerbatimUrl<P> {
+    fn from(url: SafeUrl<P>) -> Self {
         Self::from_url(url)
     }
 }
 
-impl From<VerbatimUrl> for Url {
-    fn from(url: VerbatimUrl) -> Self {
+impl<P: SerializationPolicy> From<VerbatimUrl<P>> for Url {
+    fn from(url: VerbatimUrl<P>) -> Self {
         Self::from(url.url)
     }
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for VerbatimUrl {
+impl<'de, P: SerializationPolicy> serde::Deserialize<'de> for VerbatimUrl<P> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let url = SafeUrl::<P>::deserialize(deserializer)?;
+        Ok(Self::from_url(url))
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<P: SerializationPolicy> serde::Serialize for VerbatimUrl<P>
+where
+    SafeUrl<P>: serde::Serialize,
+{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         self.url.serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for VerbatimUrl {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let url = SafeUrl::deserialize(deserializer)?;
-        Ok(Self::from_url(url))
     }
 }
 
@@ -796,8 +846,33 @@ impl std::fmt::Display for Scheme {
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
+    #[cfg(feature = "serde")]
+    use uv_redacted::policy::{Raw, Stripped};
 
     use super::*;
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn serialization_policy_retains_verbatim_input() -> Result<(), Box<dyn std::error::Error>> {
+        let input = "https://user:password@EXAMPLE.COM/file.whl?sig=abc%2Bdef%3D";
+        let url = VerbatimUrl::parse_url(input)?
+            .with_given(input)
+            .with_force_relative(true)
+            .with_policy(Stripped);
+        assert_eq!(url.given(), Some(input));
+        assert!(url.force_relative());
+        assert_eq!(url.password(), Some("password"));
+        assert_snapshot!(serde_json::to_string(&url)?, @r#""https://example.com/file.whl?sig=abc%2Bdef%3D""#);
+
+        let url = url.with_policy(Raw);
+        assert_eq!(url.given(), Some(input));
+        assert!(url.force_relative());
+        assert_snapshot!(serde_json::to_string(&url)?, @r#""https://user:password@example.com/file.whl?sig=abc%2Bdef%3D""#);
+        let roundtrip: VerbatimUrl<Raw> = serde_json::from_str(&serde_json::to_string(&url)?)?;
+        assert_eq!(roundtrip.raw(), url.raw());
+        assert_eq!(roundtrip.given(), None);
+        Ok(())
+    }
 
     #[test]
     #[cfg(feature = "non-pep508-extensions")]

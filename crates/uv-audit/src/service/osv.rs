@@ -22,6 +22,7 @@ use uv_client::{CacheControl, CachedClient, CachedClientError};
 use uv_configuration::Concurrency;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_redacted::policy::Raw;
 use uv_redacted::{SafeUrl, SafeUrlError};
 
 pub static API_BASE: LazyLock<SafeUrl> = LazyLock::new(|| {
@@ -148,7 +149,7 @@ enum ReferenceType {
 struct Reference {
     #[serde(rename = "type")]
     reference_type: ReferenceType,
-    url: SafeUrl,
+    url: SafeUrl<Raw>,
 }
 
 /// A full vulnerability record from OSV.
@@ -448,7 +449,7 @@ impl Osv {
                             matches!(reference.reference_type, ReferenceType::Web)
                         })
                     })
-                    .map(|reference| reference.url.clone())
+                    .map(|reference| reference.url.as_url().clone())
             })
             .unwrap_or_else(|| {
                 SafeUrl::parse(&format!("https://osv.dev/vulnerability/{}", vuln.id))

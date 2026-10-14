@@ -22,6 +22,7 @@ use uv_pypi_types::{
     ConflictItem, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl, ParsedUrlError,
     VerbatimParsedUrl,
 };
+use uv_redacted::policy::Raw;
 use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources, WorkspaceReference};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
@@ -195,7 +196,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                git,
+                                git.into_url(),
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -392,7 +393,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                git,
+                                git.into_url(),
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -752,12 +753,12 @@ fn git_source(
 /// Convert a URL source into a [`RequirementSource`].
 fn url_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    url: SafeUrl,
+    url: SafeUrl<Raw>,
     subdirectory: Option<Box<Path>>,
 ) -> Result<RequirementSource, LoweringError> {
-    let mut verbatim_url = url.clone();
+    let mut verbatim_url = url.as_url().clone();
     if verbatim_url.fragment().is_some() {
-        return Err(LoweringError::ForbiddenFragment(url));
+        return Err(LoweringError::ForbiddenFragment(url.into_url()));
     }
     if let Some(subdirectory) = subdirectory.as_ref() {
         let subdirectory = subdirectory
@@ -771,7 +772,7 @@ fn url_source(
         Err(..) if looks_like_git_repository(&url) => {
             return Err(LoweringError::MissingGitSource(
                 requirement.name.clone(),
-                url.clone(),
+                url.as_url().clone(),
             ));
         }
         Err(err) => {

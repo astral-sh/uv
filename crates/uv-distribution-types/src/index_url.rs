@@ -15,6 +15,7 @@ use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
 use uv_redacted::SafeUrl;
+use uv_redacted::policy::{SerializationPolicy, Stripped};
 use uv_warnings::warn_user;
 
 use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
@@ -24,16 +25,16 @@ pub static PYPI_URL: LazyLock<SafeUrl> =
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
-        PYPI_URL.clone(),
+        PYPI_URL.clone().with_policy(Stripped),
     ))))
 });
 
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexUrl {
-    Pypi(Arc<VerbatimUrl>),
-    Url(Arc<VerbatimUrl>),
-    Path(Arc<VerbatimUrl>),
+    Pypi(Arc<VerbatimUrl<Stripped>>),
+    Url(Arc<VerbatimUrl<Stripped>>),
+    Path(Arc<VerbatimUrl<Stripped>>),
 }
 
 impl IndexUrl {
@@ -85,7 +86,7 @@ impl schemars::JsonSchema for IndexUrl {
 
 impl IndexUrl {
     #[inline]
-    fn inner(&self) -> &VerbatimUrl {
+    fn inner(&self) -> &VerbatimUrl<Stripped> {
         match self {
             Self::Pypi(url) | Self::Url(url) | Self::Path(url) => url,
         }
@@ -93,11 +94,11 @@ impl IndexUrl {
 
     /// Return the raw URL for the index.
     pub fn url(&self) -> &SafeUrl {
-        self.inner().raw()
+        self.inner().raw().as_url()
     }
 
     /// Convert the index URL into a [`SafeUrl`].
-    pub fn into_url(self) -> SafeUrl {
+    pub fn into_url(self) -> SafeUrl<Stripped> {
         match self {
             Self::Pypi(url) | Self::Url(url) | Self::Path(url) => {
                 Arc::unwrap_or_clone(url).into_url()
@@ -201,7 +202,7 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.inner().without_credentials().serialize(serializer)
+        self.inner().serialize(serializer)
     }
 }
 
@@ -228,11 +229,12 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
     }
 }
 
-impl From<VerbatimUrl> for IndexUrl {
-    fn from(url: VerbatimUrl) -> Self {
+impl<P: SerializationPolicy> From<VerbatimUrl<P>> for IndexUrl {
+    fn from(url: VerbatimUrl<P>) -> Self {
+        let url = url.with_policy(Stripped);
         if url.scheme() == "file" {
             Self::Path(Arc::new(url))
-        } else if *url.raw() == *PYPI_URL {
+        } else if *url.raw().as_url() == *PYPI_URL {
             Self::Pypi(Arc::new(url))
         } else {
             Self::Url(Arc::new(url))
@@ -242,7 +244,7 @@ impl From<VerbatimUrl> for IndexUrl {
 
 impl From<IndexUrl> for SafeUrl {
     fn from(index: IndexUrl) -> Self {
-        index.into_url()
+        index.into_url().into_url()
     }
 }
 

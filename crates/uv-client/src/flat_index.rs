@@ -178,7 +178,7 @@ impl<'a> FlatIndexClient<'a> {
             IndexUrl::Path(url) => {
                 let path = url
                     .to_file_path()
-                    .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
+                    .map_err(|()| FlatIndexError::NonFileUrl(url.to_url().into_url()))?;
                 if path.is_file() {
                     self.read_from_file(&path, index)
                         .await
@@ -189,9 +189,9 @@ impl<'a> FlatIndexClient<'a> {
                 }
             }
             IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
-                .read_from_url(url, index)
+                .read_from_url(url.as_url(), index)
                 .await
-                .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err)),
+                .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url().into_url(), err)),
         }
     }
 

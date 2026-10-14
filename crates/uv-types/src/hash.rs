@@ -560,7 +560,7 @@ impl HashStrategy {
                 subdirectory,
                 ..
             } => Some(VersionId::from_archive(
-                location.clone(),
+                location.as_url().clone(),
                 subdirectory.clone().map(Path::into_path_buf),
             )),
             RequirementSource::GitDirectory {
@@ -721,6 +721,7 @@ mod tests {
     use uv_pep440::Version;
     use uv_pypi_types::HashDigest;
     use uv_redacted::SafeUrl;
+    use uv_redacted::policy::Raw;
 
     use super::{HashStrategy, HashVerification};
 
@@ -732,8 +733,9 @@ mod tests {
             marker: "python_version >= '3.8'".parse().unwrap(),
             source: RequirementSource::Url {
                 location: "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl"
-                    .parse()
-                    .unwrap(),
+                    .parse::<SafeUrl>()
+                    .unwrap()
+                    .with_policy(Raw),
                 subdirectory: None,
                 ext: DistExtension::Wheel,
                 url: url.parse().unwrap(),
