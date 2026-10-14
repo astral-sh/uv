@@ -32,7 +32,7 @@ goblin = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-async_zip = { workspace = true, features = ["zstd"] }
+async_zip = { workspace = true }
 editpe = { workspace = true }
 futures-lite = { workspace = true }
 windows = { workspace = true }
