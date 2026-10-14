@@ -344,6 +344,7 @@ pub struct ManagedPythonInstallation {
 impl ManagedPythonInstallation {
     pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
         let implementation = ImplementationName::try_from(&download.key().implementation)?;
+        let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
         Ok(Self {
             path,
             key: download.key().clone(),
