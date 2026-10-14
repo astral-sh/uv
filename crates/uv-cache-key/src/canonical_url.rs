@@ -41,9 +41,8 @@ impl CanonicalUrl {
         // almost certainly not using the same case conversion rules that GitHub
         // does. (See issue #84)
         if url.host_str() == Some("github.com") {
-            let scheme = url.scheme().to_lowercase();
-            url.set_scheme(&scheme).unwrap();
-            let path = url.path().to_lowercase();
+            // The scheme is already lowercase, and hierarchical paths are percent-encoded.
+            let path = url.path().to_ascii_lowercase();
             url.set_path(&path);
         }
 
@@ -340,6 +339,15 @@ mod tests {
         assert_eq!(
             CanonicalUrl::parse("https://github.com/pypa/sample%2Bnamespace%2Bpackages")?,
             CanonicalUrl::parse("https://github.com/pypa/sample+namespace+packages")?,
+        );
+
+        assert_eq!(
+            CanonicalUrl::parse("HTTPS://github.com/PYPA/Éxample")?,
+            CanonicalUrl::parse("https://github.com/pypa/%C3%89xample")?,
+        );
+        assert_ne!(
+            CanonicalUrl::parse("https://github.com/pypa/Éxample")?,
+            CanonicalUrl::parse("https://github.com/pypa/éxample")?,
         );
 
         // Two URLs should _not_ be considered equal based on percent-decoding slashes.
