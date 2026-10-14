@@ -114,16 +114,32 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
             } else {
                 ""
             };
-            let executable = format!(
-                "{}'{}'",
-                prefix,
-                escape_posix_for_single_quotes(&executable)
-            );
-            return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
+            let executable = quote_python_executable(&executable);
+            return format!("#!/bin/sh\n'''exec' {prefix}{executable} \"$0\" \"$@\"\n' '''");
         }
     }
 
     format!("#!{executable}")
+}
+
+/// Quote a Python executable for a shell launcher using only ASCII source characters.
+fn quote_python_executable(executable: &str) -> String {
+    if executable.is_ascii() {
+        return format!("'{}'", escape_posix_for_single_quotes(executable));
+    }
+
+    // Python decodes the launcher using the script's declared source encoding. Reconstruct
+    // non-ASCII path bytes in the shell, leaving any trailing ASCII characters outside the
+    // command substitution so it cannot strip trailing newlines from the path.
+    let encoded = executable.trim_end_matches(|character: char| character.is_ascii());
+    let suffix = &executable[encoded.len()..];
+    let octal = encoded.bytes().format_with("", |byte, formatter| {
+        formatter(&format_args!("\\{byte:03o}"))
+    });
+    format!(
+        "\"$(printf '{octal}')\"'{}'",
+        escape_posix_for_single_quotes(suffix)
+    )
 }
 
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.

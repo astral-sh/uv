@@ -36,9 +36,7 @@ use uv_test::archive::write_tar_gz;
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
-#[cfg(windows)]
-use uv_test::packse::generate_wheel_with_files;
-use uv_test::packse::{PackseServer, generate_wheel};
+use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, copy_dir_ignore, download_to_disk, get_bin,
     uv_snapshot, venv_bin_path,
@@ -183,6 +181,49 @@ fn install_wheel_script_with_shell_launcher_preserves_encoding_cookie() -> Resul
     café
     ");
 
+    Ok(())
+}
+
+/// The launcher must be valid in the script's declared encoding, even when the interpreter path
+/// contains non-ASCII characters.
+#[test]
+#[cfg(unix)]
+fn install_ascii_wheel_script_in_non_ascii_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let (filename, wheel) = generate_wheel_with_files(
+        &"ascii-script".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[(
+            "ascii_script-1.0.0.data/scripts/ascii-script",
+            "#!python\n# coding: ascii\nprint('ok')\n",
+        )],
+    );
+    fs::write(context.temp_dir.join(&filename), wheel)?;
+
+    let venv = context.temp_dir.join("café env");
+    context
+        .venv()
+        .arg("--no-relocatable")
+        .arg(&venv)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("--python")
+        .arg(&venv)
+        .arg(&filename)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.external_command(venv_bin_path(&venv).join("ascii-script")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok
+    ");
     Ok(())
 }
 
