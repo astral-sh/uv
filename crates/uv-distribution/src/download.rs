@@ -51,6 +51,17 @@ pub struct LocalWheel {
 }
 
 impl LocalWheel {
+    /// Check whether the wheel's variant properties are supported by the target system.
+    pub fn check_variant_compatibility(&self) -> Result<(), Error> {
+        if variant_compatible(&self.filename, &self.archive) {
+            Ok(())
+        } else {
+            Err(Error::IncompatibleWheelVariant(Box::new(
+                self.filename.clone(),
+            )))
+        }
+    }
+
     /// Return the [`Dist`] from which this wheel was downloaded.
     fn remote(&self) -> &Dist {
         &self.dist

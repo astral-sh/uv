@@ -69,6 +69,7 @@ impl IndexEntry<'_> {
         no_build: bool,
         no_binary: bool,
     ) -> bool {
+        // Source metadata does not select a variant, which may have different dependencies.
         self.matches_index_and_build_policy(index, no_build, no_binary)
             && self.dist.filename.variant().is_none()
             && self.dist.filename.name == *name

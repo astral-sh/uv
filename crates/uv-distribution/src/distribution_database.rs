@@ -44,7 +44,6 @@ use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
-use crate::download::variant_compatible;
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
@@ -232,14 +231,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 built.wheel_filename().clone(),
             )));
         }
-        let wheel = match dist {
+        match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
-        }?;
-        if !variant_compatible(&wheel.filename, &wheel.archive) {
-            return Err(Error::IncompatibleWheelVariant(Box::new(wheel.filename)));
         }
-        Ok(wheel)
     }
 
     /// Either fetch the only wheel metadata (directly from the index or with range requests) or
@@ -952,9 +947,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
             .filter(|archive| archive.exists(self.build_context.cache()))
-            .filter(|archive| {
-                variant_compatible(filename, &self.build_context.cache().archive(&archive.id))
-            })
             .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
         let archive = if let Some(archive) = archive {
@@ -1083,9 +1075,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
             .filter(|archive| archive.exists(self.build_context.cache()))
-            .filter(|archive| {
-                variant_compatible(filename, &self.build_context.cache().archive(&archive.id))
-            })
             .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
         let archive = if let Some(archive) = archive {
@@ -1435,10 +1424,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = pointer
             .filter(|pointer| pointer.is_up_to_date(modified))
             .map(PathArchivePointer::into_archive)
-            .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| {
-                variant_compatible(filename, &self.build_context.cache().archive(&archive.id))
-            });
+            .filter(|archive| archive.has_digests(hashes));
 
         // Index hashes may replace `Generate`, but the caller still needs its SHA-256.
         let caller_hashes = hashes;

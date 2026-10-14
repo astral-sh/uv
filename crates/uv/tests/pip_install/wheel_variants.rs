@@ -201,6 +201,53 @@ fn cached_variant_requires_compatible_properties() -> Result<()> {
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==1.0.0`
+      cause: Wheel variant has unsupported or invalid properties: `ok-1.0.0-py3-none-any-empty.whl`
+    ");
+    Ok(())
+}
+
+/// A source resolution must not reuse a cached variant that the resolver did not select.
+#[test]
+fn source_resolution_does_not_reuse_cached_variant() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let metadata = json!({
+        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "default-priorities": { "namespace": ["cuda"] },
+        "variants": { "empty": {} },
+    })
+    .to_string();
+    let (_, wheel) = generate_wheel_with_files(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[
+            ("ok/variant.txt", "variant"),
+            ("ok-1.0.0.dist-info/variant.json", &metadata),
+        ],
+    );
+    links
+        .child("ok-1.0.0-py3-none-any-empty.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&metadata)?;
+    let sdist = generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", None)?;
+    links.child("ok-1.0.0.tar.gz").write_binary(&sdist)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -208,16 +255,39 @@ fn cached_variant_requires_compatible_properties() -> Result<()> {
     Installed 1 package in [TIME]
      + ok==1.0.0
     ");
-    assert_snapshot!(context.read(context.site_packages().join("ok-1.0.0.dist-info/variant.json")), @r#"{"$schema":"https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json","default-priorities":{"namespace":["cuda"]},"variants":{"empty":{}}}"#);
+    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"variant");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall().arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - ok==1.0.0
+    ");
+    fs_err::remove_file(links.child("ok-1.0.0-variants.json"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert!(!context.site_packages().join("ok/variant.txt").exists());
     Ok(())
 }
 
 /// A wheel's properties must be supported even when its index metadata says otherwise.
-#[test]
-fn variant_with_unsupported_wheel_metadata() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
+#[tokio::test]
+async fn variant_with_unsupported_wheel_metadata() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
     let metadata = json!({
         "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
         "default-priorities": { "namespace": ["cuda"] },
@@ -233,22 +303,66 @@ fn variant_with_unsupported_wheel_metadata() -> Result<()> {
         "py3-none-any",
         &[("ok-1.0.0.dist-info/variant.json", &metadata)],
     );
-    links
-        .child("ok-1.0.0-py3-none-any-gpu.whl")
-        .write_binary(&wheel)?;
-    links.child("ok-1.0.0-variants.json").write_str(
-        &json!({
-            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
-            "default-priorities": { "namespace": ["cuda"] },
-            "variants": { "gpu": {} },
-        })
-        .to_string(),
-    )?;
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "meta": { "api-version": "1.0" },
+                    "name": "ok",
+                    "files": [
+                        {
+                            "filename": "ok-1.0.0-py3-none-any-gpu.whl",
+                            "url": format!("{}/files/ok-1.0.0-py3-none-any-gpu.whl", server.uri()),
+                            "hashes": {},
+                            "core-metadata": true,
+                        },
+                        {
+                            "filename": "ok-1.0.0-variants.json",
+                            "url": format!("{}/files/ok-1.0.0-variants.json", server.uri()),
+                            "hashes": {},
+                        },
+                    ],
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(
+                json!({
+                    "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+                    "default-priorities": { "namespace": ["cuda"] },
+                    "variants": { "gpu": {} },
+                })
+                .to_string(),
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any-gpu.whl.metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any-gpu.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .expect(1)
+        .mount(&server)
+        .await;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--preview-features")
         .arg("wheel-variants")
         .arg("ok==1.0.0"), @"

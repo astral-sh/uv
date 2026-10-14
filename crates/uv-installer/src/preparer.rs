@@ -180,16 +180,19 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .map_err(|err| Error::from_dist(dist.clone(), err, resolution))
                 .await
                 .and_then(|wheel: LocalWheel| {
-                    if wheel.satisfies(policy) {
-                        Ok(wheel)
-                    } else {
+                    if !wheel.satisfies(policy) {
                         let err = uv_distribution::Error::hash_mismatch(
                             dist.to_string(),
                             policy.digests(),
                             wheel.hashes(),
                         );
-                        Err(Error::from_dist(dist, err, resolution))
+                        return Err(Error::from_dist(dist, err, resolution));
                     }
+
+                    wheel
+                        .check_variant_compatibility()
+                        .map_err(|err| Error::from_dist(dist, err, resolution))?;
+                    Ok(wheel)
                 })
                 .map(CachedDist::from);
             match result {
