@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{self, Write};
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
@@ -11,6 +11,7 @@ use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python_managed::ManagedPythonInstallations;
 
+use crate::commands::diagnostics::write_error_chain;
 use crate::commands::human_readable_bytes;
 use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
 
@@ -29,17 +30,38 @@ pub(crate) async fn cache_clean(
     };
     let cache = cache.with_removal_accounting(removal_accounting);
 
-    let mut summary = if packages.is_empty() {
-        clean_python_downloads(&cache, printer).await?
+    let mut summary = cache.removal();
+    // Release the cache lock before acquiring the Python installation lock.
+    let cache_result = clean_cache(packages, force, cache.clone(), printer).await;
+    let found_cache = cache_result.as_ref().is_ok_and(Option::is_some);
+    let python_result = if packages.is_empty() {
+        clean_python_downloads(cache, printer).await.map(Some)
     } else {
-        cache.removal()
+        Ok(None)
     };
-    if let Some(cache_summary) = clean_cache(packages, force, cache, printer).await? {
-        summary += cache_summary;
-    } else if summary.num_files == 0 && summary.num_dirs == 0 {
-        return Ok(ExitStatus::Success);
-    }
 
+    let mut error = None;
+    for result in [cache_result, python_result] {
+        match result {
+            Ok(Some(removal)) => summary += removal,
+            Ok(None) => {}
+            Err(err) => {
+                if let Some(previous) = error.replace(err) {
+                    write_error_chain(&previous, printer)?;
+                }
+            }
+        }
+    }
+    if summary.num_files > 0 || summary.num_dirs > 0 || (found_cache && error.is_none()) {
+        write_removal_summary(&summary, printer)?;
+    }
+    if let Some(error) = error {
+        return Err(error);
+    }
+    Ok(ExitStatus::Success)
+}
+
+fn write_removal_summary(summary: &Removal, printer: Printer) -> fmt::Result {
     // Write a summary of the number of files and directories removed.
     match (summary.num_files, summary.num_dirs) {
         (0, 0) => {
@@ -70,9 +92,7 @@ pub(crate) async fn cache_clean(
         }
     }
 
-    writeln!(printer.stderr())?;
-
-    Ok(ExitStatus::Success)
+    writeln!(printer.stderr())
 }
 
 /// Remove cache entries, returning `None` if the cache directory does not exist.
@@ -139,7 +159,7 @@ async fn clean_cache(
 }
 
 /// Remove abandoned managed Python downloads outside the cache directory.
-async fn clean_python_downloads(cache: &Cache, printer: Printer) -> Result<Removal> {
+async fn clean_python_downloads(cache: Cache, printer: Printer) -> Result<Removal> {
     let installations = ManagedPythonInstallations::from_settings(None)?;
     let scratch = installations.scratch();
     if !scratch.try_exists()? {
@@ -147,7 +167,6 @@ async fn clean_python_downloads(cache: &Cache, printer: Printer) -> Result<Remov
     }
 
     let lock = installations.lock().await?;
-    let cache = cache.clone();
     let summary = tokio::task::spawn_blocking(move || {
         let mut summary = cache.removal();
         installations.clear_scratch(&lock, |path| {

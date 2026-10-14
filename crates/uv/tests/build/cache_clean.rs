@@ -75,8 +75,8 @@ fn clean_python_staging() -> Result<()> {
     uv_snapshot!(context.filters(), context.clean(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Cleared temporary Python installation files at: managed/.temp
     Clearing cache at: [CACHE_DIR]/
+    Cleared temporary Python installation files at: managed/.temp
     Removed 2 files ([SIZE])
     ");
     stale.assert(predicates::path::missing());
@@ -84,33 +84,46 @@ fn clean_python_staging() -> Result<()> {
     Ok(())
 }
 
-/// Python staging cleanup does not require a cache directory and respects the installation lock.
-#[tokio::test]
-async fn clean_python_staging_without_cache() -> Result<()> {
+/// Python staging cleanup does not require a cache directory.
+#[test]
+fn clean_python_staging_without_cache() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
     fs_err::remove_dir_all(context.cache_dir.path())?;
     let managed = context.temp_dir.child("managed");
     let stale = managed.child(".temp/.tmp-stale");
     stale.create_dir_all()?;
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    No cache found at: [CACHE_DIR]/
+    Cleared temporary Python installation files at: managed/.temp
+    Removed 1 directory (0B)
+    ");
+    stale.assert(predicates::path::missing());
+    Ok(())
+}
+
+/// A Python staging failure must not prevent removal of the package cache.
+#[tokio::test]
+async fn clean_cache_when_python_staging_locked() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let cached = context.cache_dir.child("cached");
+    cached.touch()?;
+    let managed = context.temp_dir.child("managed");
+    let stale = managed.child(".temp/.tmp-stale");
+    stale.create_dir_all()?;
     let installations = ManagedPythonInstallations::from_settings(Some(managed.to_path_buf()))?;
-    let lock = installations.lock().await?;
+    let _lock = installations.lock().await?;
 
     uv_snapshot!(context.filters(), context.clean().arg("--force").env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed 1 file (0B)
     error: Timeout ([TIME]) when waiting for lock on `managed` at `managed/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
+    cached.assert(predicates::path::missing());
     stale.assert(predicates::path::exists());
-    drop(lock);
-
-    uv_snapshot!(context.filters(), context.clean(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Cleared temporary Python installation files at: managed/.temp
-    No cache found at: [CACHE_DIR]/
-    Removed 1 directory (0B)
-    ");
-    stale.assert(predicates::path::missing());
     Ok(())
 }
 
@@ -614,20 +627,26 @@ fn clean_package_empty_shard_without_search_permission() -> Result<()> {
 }
 
 #[tokio::test]
-async fn cache_timeout() {
-    let context = uv_test::test_context!("3.12");
+async fn cache_timeout_cleans_python_staging() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let stale = context.temp_dir.child("managed/.temp/.tmp-stale");
+    stale.create_dir_all()?;
 
     // Simulate another uv process running and locking the cache, e.g., with a source build.
     let _cache = Cache::from_path(context.cache_dir.path())
         .with_exclusive_lock()
-        .await;
+        .await?;
 
     uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
+    Cleared temporary Python installation files at: managed/.temp
+    Removed 1 directory (0B)
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
+    stale.assert(predicates::path::missing());
+    Ok(())
 }
 
 /// `cache clean` should handle file paths normally restricted by Win32 path normalization.
