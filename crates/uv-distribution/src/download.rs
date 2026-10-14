@@ -29,7 +29,7 @@ pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> bo
     let Ok(metadata) = VariantsJsonContent::from_slice(&contents) else {
         return false;
     };
-    metadata.is_compatible(label, &HashSet::new())
+    metadata.contains_only_variant(label) && metadata.is_compatible(label, &HashSet::new())
 }
 
 /// A locally available wheel.

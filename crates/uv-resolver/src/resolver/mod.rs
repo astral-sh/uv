@@ -23,8 +23,9 @@ use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, InstalledDistKind, Name, RemoteSource, Requirement,
+    RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent,
+    VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -41,7 +42,7 @@ use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
-use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector, VersionChoiceKind};
+use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
 use crate::error::{NoSolutionError, ResolveError, derivation_tree_packages};
 use crate::fork_indexes::ForkIndexes;
@@ -1351,37 +1352,61 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
 
+        let preview_variants = uv_preview::is_enabled(PreviewFeature::WheelVariants);
+        let mut installed_fallback = None;
+        let mut installed_has_variant = false;
+        let candidate = if self.options.reselect_installed_variants
+            && env.marker_environment().is_some()
+            && let CandidateDist::Compatible(CompatibleDist::InstalledDist(installed)) =
+                candidate.dist()
+        {
+            installed_has_variant = match &installed.kind {
+                InstalledDistKind::Registry(_) | InstalledDistKind::Url(_) => installed
+                    .install_path()
+                    .join("variant.json")
+                    .try_exists()
+                    .unwrap_or(true),
+                InstalledDistKind::EggInfoFile(_)
+                | InstalledDistKind::EggInfoDirectory(_)
+                | InstalledDistKind::LegacyEditable(_) => false,
+            };
+            if (preview_variants || installed_has_variant)
+                && let Some(alternative) = self.selector.select_no_preference(
+                    name,
+                    &Range::singleton(candidate.version().clone()),
+                    version_maps,
+                    env,
+                )
+            {
+                installed_fallback = Some(candidate);
+                alternative
+            } else {
+                candidate
+            }
+        } else {
+            candidate
+        };
+
         // Variant properties are scoped to the source that provided the wheel. Only specific
         // resolutions can select variants until lockfiles can record their metadata.
+        let mut variant_metadata_offline = false;
         let variant_prioritized = if env.marker_environment().is_some()
-            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            && preview_variants
             && let Some(prioritized) = candidate.prioritized()
         {
-            // With unsafe-best-match, an earlier index may have been skipped because its only
-            // wheel was an unverified variant. Check it before accepting a later index's wheel.
-            let mut candidates = Vec::new();
-            let consider_earlier_indexes = match candidate.choice_kind() {
-                VersionChoiceKind::Compatible => {
-                    self.selector.index_strategy() == &IndexStrategy::UnsafeBestMatch
-                }
-                VersionChoiceKind::Preference | VersionChoiceKind::Installed => false,
+            // With unsafe-best-match, variants on any index may become compatible after their
+            // properties are checked. Consider the candidates in index order.
+            let candidates = if self.selector.index_strategy() == &IndexStrategy::UnsafeBestMatch {
+                version_maps
+                    .iter()
+                    .filter_map(|version_map| version_map.get(candidate.version()))
+                    .collect::<Vec<_>>()
+            } else {
+                vec![prioritized]
             };
-            if consider_earlier_indexes {
-                for version_map in version_maps {
-                    let Some(earlier) = version_map.get(candidate.version()) else {
-                        continue;
-                    };
-                    if std::ptr::eq(earlier, prioritized) {
-                        break;
-                    }
-                    if earlier.get().is_none() {
-                        candidates.push(earlier);
-                    }
-                }
-            }
-            candidates.push(prioritized);
 
             let mut variant_prioritized = None;
+            let mut unavailable_metadata = None;
             for candidate_dist in candidates {
                 let mut responses = Vec::new();
                 for variants_json in candidate_dist.variants_json() {
@@ -1402,8 +1427,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .map(|metadata| (index.clone(), metadata))
                     })
                     .collect::<Vec<_>>();
+                variant_metadata_offline |= responses.iter().any(|(_, response)| {
+                    matches!(
+                        response.as_ref().as_ref(),
+                        Err(MetadataUnavailable::Offline | MetadataUnavailable::Network(_))
+                    )
+                });
                 variant_prioritized = candidate_dist.prioritize_variants(&metadata);
                 if variant_prioritized.is_some() {
+                    break;
+                }
+                if candidate_dist.get().is_some() {
+                    if !std::ptr::eq(candidate_dist, prioritized) {
+                        variant_prioritized = Some(candidate_dist.clone());
+                    }
                     break;
                 }
                 if std::ptr::eq(candidate_dist, prioritized)
@@ -1412,11 +1449,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .iter()
                         .find_map(|(_, response)| response.as_ref().as_ref().err())
                 {
-                    return Ok(Some(ResolverVersion::Unavailable(
-                        candidate.version().clone(),
-                        self.record_unavailable_metadata(name, candidate.version(), reason),
-                    )));
+                    unavailable_metadata = Some(reason.clone());
                 }
+            }
+            if variant_prioritized.is_none()
+                && installed_fallback.is_none()
+                && let Some(reason) = unavailable_metadata.as_ref()
+            {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    candidate.version().clone(),
+                    self.record_unavailable_metadata(name, candidate.version(), reason),
+                )));
             }
             variant_prioritized
         } else {
@@ -1424,6 +1467,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
         let candidate = if let Some(prioritized) = &variant_prioritized {
             candidate.with_prioritized_dist(prioritized)
+        } else {
+            candidate
+        };
+        let candidate = if let Some(installed) = installed_fallback {
+            let compatible = candidate.compatible().is_some_and(|dist| {
+                Self::check_requires_python(dist, python_requirement).is_none()
+            });
+            let selected_variant =
+                if let CandidateDist::Compatible(CompatibleDist::CompatibleWheel {
+                    wheel, ..
+                }) = candidate.dist()
+                {
+                    wheel.filename.variant().is_some()
+                } else {
+                    false
+                };
+            if compatible
+                && (selected_variant || (installed_has_variant && !variant_metadata_offline))
+            {
+                candidate
+            } else {
+                installed
+            }
         } else {
             candidate
         };

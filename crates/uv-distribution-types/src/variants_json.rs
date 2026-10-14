@@ -37,6 +37,11 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
+    /// Whether the metadata describes only the given variant.
+    pub fn contains_only_variant(&self, label: &VariantLabel) -> bool {
+        self.variants.len() == 1 && self.variants.contains_key(label)
+    }
+
     /// Whether the properties of a variant are supported by the target system.
     pub fn is_compatible(
         &self,

@@ -12,6 +12,8 @@ pub struct Options {
     pub resolution_mode: ResolutionMode,
     pub prerelease: Prerelease,
     pub dependency_mode: DependencyMode,
+    /// Reconsider the wheel variant of already-installed distributions when syncing.
+    pub reselect_installed_variants: bool,
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: ExcludeNewer,
     pub index_strategy: IndexStrategy,
@@ -28,6 +30,7 @@ pub struct OptionsBuilder {
     resolution_mode: ResolutionMode,
     prerelease: Prerelease,
     dependency_mode: DependencyMode,
+    reselect_installed_variants: bool,
     fork_strategy: ForkStrategy,
     exclude_newer: ExcludeNewer,
     index_strategy: IndexStrategy,
@@ -62,6 +65,13 @@ impl OptionsBuilder {
     #[must_use]
     pub fn dependency_mode(mut self, dependency_mode: DependencyMode) -> Self {
         self.dependency_mode = dependency_mode;
+        self
+    }
+
+    /// Reconsider the wheel variant of already-installed distributions when syncing.
+    #[must_use]
+    pub fn reselect_installed_variants(mut self, reselect_installed_variants: bool) -> Self {
+        self.reselect_installed_variants = reselect_installed_variants;
         self
     }
 
@@ -130,6 +140,7 @@ impl OptionsBuilder {
             resolution_mode: self.resolution_mode,
             prerelease: self.prerelease,
             dependency_mode: self.dependency_mode,
+            reselect_installed_variants: self.reselect_installed_variants,
             fork_strategy: self.fork_strategy,
             exclude_newer: self.exclude_newer,
             index_strategy: self.index_strategy,

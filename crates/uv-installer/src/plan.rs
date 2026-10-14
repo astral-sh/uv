@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,8 +15,9 @@ use uv_distribution::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
-    RequirementSource, Resolution, ResolvedDist, SourceDist,
+    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, InstalledDistKind, Name,
+    PackageConfigSettings, RequirementSource, Resolution, ResolvedDist, SourceDist,
+    VariantsJsonContent,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -391,8 +393,13 @@ impl<'a> Planner<'a> {
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
-                                debug!("Requirement already installed: {installed}");
-                                continue;
+                                if installed_variant_matches(installed, dist) {
+                                    debug!("Requirement already installed: {installed}");
+                                    continue;
+                                }
+                                debug!(
+                                    "Installed wheel variant differs from the resolved distribution: {installed}"
+                                );
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
@@ -808,6 +815,35 @@ impl<'a> Planner<'a> {
             reinstalls,
             extraneous,
         })
+    }
+}
+
+/// Check whether an installed wheel is the variant selected by the resolver.
+fn installed_variant_matches(installed: &InstalledDist, dist: &ResolvedDist) -> bool {
+    if let ResolvedDist::Installed { .. } = dist {
+        return true;
+    }
+
+    let variant = dist.wheel_filename().and_then(WheelFilename::variant);
+    match &installed.kind {
+        InstalledDistKind::Registry(_) | InstalledDistKind::Url(_) => {}
+        InstalledDistKind::EggInfoFile(_)
+        | InstalledDistKind::EggInfoDirectory(_)
+        | InstalledDistKind::LegacyEditable(_) => return variant.is_none(),
+    }
+
+    match fs_err::read(installed.install_path().join("variant.json")) {
+        Ok(contents) => variant.is_some_and(|label| {
+            VariantsJsonContent::from_slice(&contents).is_ok_and(|metadata| {
+                metadata.contains_only_variant(label)
+                    && metadata.is_compatible(label, &HashSet::new())
+            })
+        }),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => variant.is_none(),
+        Err(err) => {
+            debug!("Failed to read installed wheel variant metadata: {err}");
+            false
+        }
     }
 }
 
