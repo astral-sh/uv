@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, btree_map::Entry},
+    mem,
     str::FromStr,
 };
 use uv_cache_key::CacheKeyHasher;
@@ -126,7 +127,7 @@ impl FromIterator<ConfigSettingEntry> for ConfigSettings {
                 }
                 Entry::Occupied(mut occupied) => match occupied.get_mut() {
                     ConfigSettingValue::String(existing) => {
-                        let existing = existing.clone();
+                        let existing = mem::take(existing);
                         occupied.insert(ConfigSettingValue::List(vec![existing, entry.value]));
                     }
                     ConfigSettingValue::List(existing) => {
@@ -161,7 +162,7 @@ impl ConfigSettings {
                 }
                 Entry::Occupied(mut occupied) => match occupied.get_mut() {
                     ConfigSettingValue::String(existing) => {
-                        let existing = existing.clone();
+                        let existing = mem::take(existing);
                         match value {
                             ConfigSettingValue::String(value) => {
                                 occupied.insert(ConfigSettingValue::List(vec![existing, value]));
@@ -278,7 +279,7 @@ impl PackageConfigSettings {
                     vacant.insert(settings);
                 }
                 Entry::Occupied(mut occupied) => {
-                    let merged = occupied.get().clone().merge(settings);
+                    let merged = mem::take(occupied.get_mut()).merge(settings);
                     occupied.insert(merged);
                 }
             }
