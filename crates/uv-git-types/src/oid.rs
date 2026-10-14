@@ -22,7 +22,7 @@ impl GitObjectFormat {
         }
     }
 
-    pub(crate) const fn hex_length(self) -> usize {
+    const fn hex_length(self) -> usize {
         match self {
             Self::Sha1 => SHA1_HEX_LENGTH,
             Self::Sha256 => SHA256_HEX_LENGTH,

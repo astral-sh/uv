@@ -6793,7 +6793,7 @@ impl Package {
                         // Reconstruct the `GitUrl` from the `GitSource`.
                         let git_url = GitUrl::from_commit(
                             url,
-                            GitReference::try_from(git.kind.clone())?,
+                            GitReference::from(git.kind.clone()),
                             git.precise,
                             git.lfs,
                         )?;
@@ -7000,7 +7000,7 @@ impl Package {
 
                 let git_url = GitUrl::from_commit(
                     url,
-                    GitReference::try_from(git.kind.clone())?,
+                    GitReference::from(git.kind.clone()),
                     git.precise,
                     git.lfs,
                 )?;
@@ -7327,7 +7327,7 @@ impl Package {
             Source::Git(url, git) => Ok(Some(ResolvedRepositoryReference {
                 reference: RepositoryReference {
                     url: RepositoryUrl::new(url.to_url().map_err(LockErrorKind::InvalidUrl)?),
-                    reference: GitReference::try_from(git.kind.clone())?,
+                    reference: GitReference::from(git.kind.clone()),
                 },
                 sha: git.precise,
             })),
@@ -8179,9 +8179,6 @@ impl TryFrom<SourceWire> for Source {
                             given: git,
                         })
                     }
-                    GitSourceError::InvalidRevisionLength(revision) => LockErrorKind::GitUrlParse(
-                        GitUrlParseError::InvalidRevisionLength(revision),
-                    ),
                     GitSourceError::RevisionMismatch { revision, precise } => {
                         let mut repository_url = url.clone();
                         repository_url.set_query(None);
@@ -8200,7 +8197,7 @@ impl TryFrom<SourceWire> for Source {
                 repository_url.set_fragment(None);
                 GitUrl::from_commit(
                     repository_url,
-                    git_source.kind.clone().try_into()?,
+                    git_source.kind.clone().into(),
                     git_source.precise,
                     git_source.lfs,
                 )?;
@@ -8320,7 +8317,6 @@ struct GitSource {
 enum GitSourceError {
     InvalidSha,
     MissingSha,
-    InvalidRevisionLength(String),
     RevisionMismatch { revision: String, precise: GitOid },
 }
 
@@ -8354,9 +8350,7 @@ impl GitSource {
         // A full commit requested as `rev` is already precise and must not resolve to another
         // commit through the lockfile fragment.
         if let GitSourceKind::Rev(revision) = &kind
-            && let Some(commit) = GitReference::from_rev(revision.clone())
-                .map_err(|_| GitSourceError::InvalidRevisionLength(revision.clone()))?
-                .as_commit()
+            && let Some(commit) = GitReference::from_rev(revision.clone()).as_commit()
             && commit != precise
         {
             return Err(GitSourceError::RevisionMismatch {
@@ -8730,16 +8724,14 @@ impl From<GitReference> for GitSourceKind {
     }
 }
 
-impl TryFrom<GitSourceKind> for GitReference {
-    type Error = GitUrlParseError;
-
-    fn try_from(value: GitSourceKind) -> Result<Self, Self::Error> {
-        Ok(match value {
+impl From<GitSourceKind> for GitReference {
+    fn from(value: GitSourceKind) -> Self {
+        match value {
             GitSourceKind::Branch(branch) => Self::Branch(branch),
             GitSourceKind::Tag(tag) => Self::Tag(tag),
-            GitSourceKind::Rev(rev) => Self::from_rev(rev)?,
+            GitSourceKind::Rev(rev) => Self::from_rev(rev),
             GitSourceKind::DefaultBranch => Self::DefaultBranch,
-        })
+        }
     }
 }
 

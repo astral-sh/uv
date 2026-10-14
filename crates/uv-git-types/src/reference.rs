@@ -4,7 +4,7 @@ use std::str;
 
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 
-use crate::{GitObjectFormat, GitOid, GitUrlParseError};
+use crate::GitOid;
 
 /// Percent-encode Git revisions for use after the `@` in VCS URLs.
 ///
@@ -39,19 +39,16 @@ pub enum GitReference {
 impl GitReference {
     /// Creates a [`GitReference`] from an arbitrary revision string, which could represent a
     /// branch, tag, commit, or named ref.
-    pub fn from_rev(rev: String) -> Result<Self, GitUrlParseError> {
-        Ok(if rev.starts_with("refs/") {
+    pub fn from_rev(rev: String) -> Self {
+        if rev.starts_with("refs/") {
             Self::NamedRef(rev)
         } else if let Ok(commit) = rev.parse() {
             Self::Commit(commit)
         } else if looks_like_commit_hash(&rev) {
-            if rev.len() > GitObjectFormat::Sha1.hex_length() {
-                return Err(GitUrlParseError::InvalidRevisionLength(rev));
-            }
             Self::BranchOrTagOrCommit(rev)
         } else {
             Self::BranchOrTag(rev)
-        })
+        }
     }
 
     /// Converts the [`GitReference`] to a `str`.
