@@ -1931,11 +1931,9 @@ fn allow_incompatibilities() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict")
-        .env(EnvVars::RUST_LOG, "uv_installer::site_packages=trace"), @"
+        .arg("--strict"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    TRACE Scanning installed packages
     Checked 1 package in [TIME]
     warning: The package `flask` requires `jinja2>=3.1.2`, but `2.11.3` is installed
     "

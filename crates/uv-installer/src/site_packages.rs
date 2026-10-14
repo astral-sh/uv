@@ -6,7 +6,6 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use tracing::trace;
 
 use uv_configuration::{
     DependencyMode, DependencyModifierScope, DependencyModifiers, ExcludeDependency, Excludes,
@@ -74,7 +73,6 @@ impl SitePackages {
         interpreter: &Interpreter,
         package_names: Option<&FxHashSet<&PackageName>>,
     ) -> Result<Self> {
-        trace!("Scanning installed packages");
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
         let mut by_url: FxHashMap<DisplaySafeUrl, Vec<usize>> = FxHashMap::default();
