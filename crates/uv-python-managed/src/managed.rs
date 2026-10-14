@@ -138,14 +138,10 @@ impl ManagedPythonInstallations {
         let installations = self.clone();
         // Keep the lock in the blocking task so cancellation cannot release it during cleanup.
         Ok(spawn_blocking(move || {
-            if let Err(err) = installations.clear_scratch(&lock, |directory, name| {
-                if let Err(err) = cap_fs::remove_dir_all(directory.file(), Path::new(name)) {
-                    warn!(
-                        "Failed to remove temporary Python installation at `{}`: {err}",
-                        directory.path().join(name).user_display()
-                    );
+            if let Err(err) = installations.clear_scratch(&lock, |result| {
+                if let Err(err) = result {
+                    warn!("{err}");
                 }
-                Ok(())
             }) {
                 warn!(
                     "Failed to clean temporary Python installations at `{}`: {err}",
@@ -158,10 +154,11 @@ impl ManagedPythonInstallations {
     }
 
     /// Remove abandoned temporary installation directories while holding the installation lock.
+    /// Report the result for each directory without stopping after a removal failure.
     pub fn clear_scratch(
         &self,
         lock: &LockedFile,
-        mut remove: impl FnMut(&fs::File, &OsStr) -> io::Result<()>,
+        mut report: impl FnMut(io::Result<()>),
     ) -> io::Result<()> {
         let root = fs::File::from_parts(
             cap_fs::open_ambient_dir(&self.root, ambient_authority())?,
@@ -197,8 +194,18 @@ impl ManagedPythonInstallations {
         for entry in cap_fs::read_base_dir(scratch.file())? {
             let entry = entry?;
             let name = entry.file_name();
-            if entry.file_type()?.is_dir() && uv_fs::is_temporary(&name) {
-                remove(&scratch, &name)?;
+            if uv_fs::is_temporary(&name) && entry.file_type()?.is_dir() {
+                report(
+                    cap_fs::remove_dir_all(scratch.file(), Path::new(&name)).map_err(|err| {
+                        io::Error::new(
+                            err.kind(),
+                            format!(
+                                "failed to remove `{}`: {err}",
+                                scratch.path().join(name).display()
+                            ),
+                        )
+                    }),
+                );
             }
         }
         Ok(())

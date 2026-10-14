@@ -12,8 +12,6 @@ use std::process::Command;
 
 use uv_cache::Cache;
 #[cfg(unix)]
-use uv_cache::RemovalAccounting;
-#[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_python_managed::ManagedPythonInstallations;
 use uv_static::EnvVars;
@@ -78,8 +76,8 @@ fn clean_python_staging() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
+    Removed 1 file ([SIZE])
     Cleared temporary Python installation files at: managed/.temp
-    Removed 2 files ([SIZE])
     ");
     stale.assert(predicates::path::missing());
     installed.assert(predicates::path::exists());
@@ -104,8 +102,8 @@ fn clean_python_staging_after_partial_failure() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
+    No cache entries found
     Cleared temporary Python installation files at: managed/.temp
-    Removed 1 file (0B)
     error: Failed to clear temporary Python installation files at: managed/.temp
       cause: failed to remove `[TEMP_DIR]/managed/.temp/[TMP]`: Permission denied (os error 13)
     ");
@@ -121,30 +119,33 @@ async fn clean_python_staging_after_directory_redirect() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
     let managed = context.temp_dir.child("managed");
     let scratch = managed.child(".temp");
-    scratch.child(".tmp-stale").create_dir_all()?;
-    scratch.child(".tmp-stale/marker").touch()?;
+    scratch.child(".tmp-first").create_dir_all()?;
+    scratch.child(".tmp-second").create_dir_all()?;
     let redirected = context.temp_dir.child("redirected");
-    let unrelated = redirected.child(".tmp-stale");
-    unrelated.create_dir_all()?;
-    unrelated.child("marker").touch()?;
+    redirected.child(".tmp-first").create_dir_all()?;
+    redirected.child(".tmp-second").create_dir_all()?;
     let original = managed.child(".temp-original");
     let installations = ManagedPythonInstallations::from_settings(Some(managed.to_path_buf()))?;
     let lock = installations.lock().await?;
-    let cache =
-        Cache::from_path(context.cache_dir.path()).with_removal_accounting(RemovalAccounting::Fine);
-    let mut summary = cache.removal();
+    let mut redirect_result = None;
 
-    installations.clear_scratch(&lock, |directory, name| {
-        fs_err::rename(scratch.path(), original.path())?;
-        uv_fs::replace_symlink(redirected.path(), scratch.path())?;
-        summary.remove_dir_at(directory, name)
+    installations.clear_scratch(&lock, |result| {
+        if redirect_result.is_none() {
+            redirect_result = Some(result.and_then(|()| {
+                fs_err::rename(scratch.path(), original.path())?;
+                uv_fs::replace_symlink(redirected.path(), scratch.path())
+            }));
+        }
     })?;
+    redirect_result.transpose()?;
 
-    original
-        .child(".tmp-stale")
-        .assert(predicates::path::missing());
-    unrelated.child("marker").assert(predicates::path::exists());
-    assert_eq!(summary.num_files, 1);
+    assert!(fs_err::read_dir(original.path())?.next().is_none());
+    redirected
+        .child(".tmp-first")
+        .assert(predicates::path::exists());
+    redirected
+        .child(".tmp-second")
+        .assert(predicates::path::exists());
     Ok(())
 }
 
@@ -161,7 +162,6 @@ fn clean_python_staging_without_cache() -> Result<()> {
     ----- stderr -----
     No cache found at: [CACHE_DIR]/
     Cleared temporary Python installation files at: managed/.temp
-    Removed 1 directory (0B)
     ");
     stale.assert(predicates::path::missing());
     Ok(())
@@ -706,7 +706,6 @@ async fn cache_timeout_cleans_python_staging() -> Result<()> {
     ----- stderr -----
     Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)
     Cleared temporary Python installation files at: managed/.temp
-    Removed 1 directory (0B)
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
     stale.assert(predicates::path::missing());

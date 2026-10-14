@@ -2,16 +2,12 @@
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/e1ebce1035f9b53bb46a55bd4b0ecf51e24c6458/src/cargo/ops/cargo_clean.rs#L324>
 
-use std::ffi::OsStr;
 use std::fs::Metadata;
 use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
-use cap_primitives::fs as cap_fs;
-#[cfg(unix)]
-use cap_primitives::fs::{MetadataExt as _, OpenOptionsExt as _};
 use tracing::debug;
 use uv_fs::PhysicalSpaceError;
 
@@ -65,13 +61,8 @@ impl Remover {
 /// Estimate the storage reclaimed by removing a non-directory entry.
 #[cfg(unix)]
 fn file_size(metadata: &Metadata) -> u64 {
-    allocated_file_size(metadata.nlink(), metadata.blocks())
-}
-
-#[cfg(unix)]
-fn allocated_file_size(links: u64, blocks: u64) -> u64 {
-    if links == 1 {
-        blocks.saturating_mul(512)
+    if metadata.nlink() == 1 {
+        metadata.blocks().saturating_mul(512)
     } else {
         0
     }
@@ -114,14 +105,8 @@ impl Removal {
     fn add_file(&mut self, path: &Path, metadata: &Metadata) {
         self.coarse_bytes += file_size(metadata);
 
-        if self.fine_bytes.is_some() {
-            self.add_fine_bytes(path, uv_fs::physical_space(path, metadata));
-        }
-    }
-
-    fn add_fine_bytes(&mut self, path: &Path, result: Result<u64, PhysicalSpaceError>) {
         if let Some(fine_bytes) = self.fine_bytes {
-            match result {
+            match uv_fs::physical_space(path, metadata) {
                 Ok(bytes) => {
                     self.fine_bytes = Some(fine_bytes.saturating_add(bytes));
                 }
@@ -142,95 +127,6 @@ impl Removal {
                 }
             }
         }
-    }
-
-    /// Remove a directory relative to an open parent without following symlinks.
-    ///
-    /// Successful removals remain accounted for if a later operation fails.
-    pub fn remove_dir_at(&mut self, parent: &fs_err::File, name: &OsStr) -> io::Result<()> {
-        self.remove_dir_at_inner(parent, name).map_err(|err| {
-            io::Error::new(
-                err.kind(),
-                format!(
-                    "failed to remove `{}`: {err}",
-                    parent.path().join(name).display()
-                ),
-            )
-        })
-    }
-
-    fn remove_dir_at_inner(&mut self, parent: &fs_err::File, name: &OsStr) -> io::Result<()> {
-        {
-            let directory = cap_fs::open_dir_nofollow(parent.file(), Path::new(name))?;
-            let directory = fs_err::File::from_parts(directory, parent.path().join(name));
-            for entry in cap_fs::read_base_dir(directory.file())? {
-                let entry = entry?;
-                let name = entry.file_name();
-                let metadata = entry.metadata()?;
-                if metadata.is_dir() {
-                    self.remove_dir_at_inner(&directory, &name)?;
-                } else {
-                    self.remove_file_at(&directory, &name, &metadata)?;
-                }
-            }
-        }
-        // On Windows, the directory handle must be closed before removing it.
-        cap_fs::remove_dir(parent.file(), Path::new(name))?;
-        self.num_dirs += 1;
-        Ok(())
-    }
-
-    fn remove_file_at(
-        &mut self,
-        parent: &fs_err::File,
-        name: &OsStr,
-        metadata: &cap_fs::Metadata,
-    ) -> io::Result<()> {
-        #[cfg(unix)]
-        let coarse_bytes = allocated_file_size(metadata.nlink(), metadata.blocks());
-        #[cfg(not(unix))]
-        let coarse_bytes = metadata.len();
-
-        let path = parent.path().join(name);
-        let fine_bytes = self.fine_bytes.map(|_| {
-            if !metadata.is_file() {
-                return Ok(coarse_bytes);
-            }
-            let mut options = cap_fs::OpenOptions::new();
-            options.read(true);
-            #[cfg(unix)]
-            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-            cap_fs::open(parent.file(), Path::new(name), &options)
-                .map_err(PhysicalSpaceError::from)
-                .and_then(|file| {
-                    uv_fs::physical_space_from_file(&fs_err::File::from_parts(file, &path))
-                })
-        });
-
-        let result = cap_fs::remove_file(parent.file(), Path::new(name));
-        #[cfg(windows)]
-        let result = result.or_else(|err| {
-            if metadata.is_symlink() {
-                cap_fs::remove_dir(parent.file(), Path::new(name)).or(Err(err))
-            } else if err.kind() == io::ErrorKind::PermissionDenied
-                && metadata.permissions().readonly()
-            {
-                let mut permissions = metadata.permissions();
-                permissions.set_readonly(false);
-                cap_fs::set_symlink_permissions(parent.file(), Path::new(name), permissions)?;
-                cap_fs::remove_file(parent.file(), Path::new(name))
-            } else {
-                Err(err)
-            }
-        });
-        result?;
-
-        self.num_files += 1;
-        self.coarse_bytes += coarse_bytes;
-        if let Some(fine_bytes) = fine_bytes {
-            self.add_fine_bytes(&path, fine_bytes);
-        }
-        Ok(())
     }
 
     /// Recursively remove a file or directory and all its contents.

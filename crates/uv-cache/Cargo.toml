@@ -27,7 +27,6 @@ uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 
-cap-primitives = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 fs-err = { workspace = true, features = ["tokio"] }
 rmp-serde = { workspace = true }
@@ -38,6 +37,3 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
-
-[target.'cfg(unix)'.dependencies]
-libc = { workspace = true }

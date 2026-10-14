@@ -143,7 +143,7 @@ uv provides a few different mechanisms for removing entries from the cache:
   The directory and its lock file remain so that other uv processes can safely share the cache. It
   also removes temporary files left by interrupted Python installations. These files are stored
   outside the cache, in the Python installation directory, and are also cleaned up during the next
-  Python installation.
+  Python installation. The reported cache file count and size exclude these temporary files.
 - `uv cache clean ruff` removes all cache entries for the `ruff` package, useful for invalidating
   the cache for a single or finite set of packages.
 - `uv cache prune` removes all _unused_ cache entries and all centralized project environments. For

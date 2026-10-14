@@ -31,9 +31,7 @@ use crate::named_temp_file::tempfile_in_with_permissions;
 pub use crate::named_temp_file::{NamedTempFile, PersistError, tempfile_in};
 pub use crate::path::*;
 pub use crate::read::ValidatedReader;
-pub use crate::space::{
-    PhysicalSpaceError, physical_space, physical_space_from_file, supports_fine_grained_accounting,
-};
+pub use crate::space::{PhysicalSpaceError, physical_space, supports_fine_grained_accounting};
 
 pub mod cachedir;
 #[cfg(target_os = "macos")]
