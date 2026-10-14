@@ -9,52 +9,48 @@ Released on 2026-10-14.
 
 ### Enhancements
 
-- Clarify missing hashes in resolver errors ([#22241](https://github.com/astral-sh/uv/pull/22241))
-- Disable unsupported filesystem ioctls on SPARC ([#22463](https://github.com/astral-sh/uv/pull/22463))
-- Ignore `Requires-Python` upper bounds in `uv pip check` ([#22500](https://github.com/astral-sh/uv/pull/22500))
+- Align `uv pip check` and `uv pip install --strict` with resolution by ignoring `Requires-Python` upper bounds ([#22500](https://github.com/astral-sh/uv/pull/22500))
+- Support Linux SPARC by falling back when filesystem cloning and detailed cache accounting are unavailable ([#22463](https://github.com/astral-sh/uv/pull/22463))
+- Report missing trusted hashes directly instead of incorrectly claiming requirements are unpinned ([#22241](https://github.com/astral-sh/uv/pull/22241))
 
 ### Preview features
 
-- Parse wheel filenames with variant labels ([#22039](https://github.com/astral-sh/uv/pull/22039))
-- Respect upgrades for installed-package preferences in tool upgrades ([#22498](https://github.com/astral-sh/uv/pull/22498))
+- Allow `uv tool upgrade` to upgrade installed tools when `tool-install-locks` is enabled ([#22498](https://github.com/astral-sh/uv/pull/22498))
+- Add preliminary support for parsing PEP 825 variant labels in wheel filenames with `wheel-variants` ([#22039](https://github.com/astral-sh/uv/pull/22039))
 
 ### Performance
 
-- Avoid linking the Zstandard ZIP encoder ([#22432](https://github.com/astral-sh/uv/pull/22432))
-- Deserialize dependency overrides and Simple API fields directly ([#22429](https://github.com/astral-sh/uv/pull/22429))
-- Keep large Debug formatters out of line ([#22430](https://github.com/astral-sh/uv/pull/22430))
-- Use astral-mail-headers for package metadata ([#22239](https://github.com/astral-sh/uv/pull/22239))
+- Reduce uv's binary size and speed up Simple API parsing through direct deserialization ([#22429](https://github.com/astral-sh/uv/pull/22429))
+- Reduce uv's binary size by keeping large debug formatters out of line ([#22430](https://github.com/astral-sh/uv/pull/22430))
+- Reduce uv's binary size by omitting unused Zstandard encoding support while retaining Zstandard wheel support ([#22432](https://github.com/astral-sh/uv/pull/22432))
+- Reduce package metadata parsing overhead with `astral-mail-headers` ([#22239](https://github.com/astral-sh/uv/pull/22239))
 
 ### Bug fixes
 
-- Allow hard-links when extracting sdists ([#22516](https://github.com/astral-sh/uv/pull/22516))
-- Avoid recursively deleting parent directories during uninstall ([#22495](https://github.com/astral-sh/uv/pull/22495))
-- Bump tar-codec to 0.0.15 ([#22522](https://github.com/astral-sh/uv/pull/22522))
-- Keep the cache lock in place during cleanup ([#22387](https://github.com/astral-sh/uv/pull/22387))
-- Keep the tools lock after uninstalling the last tool ([#22391](https://github.com/astral-sh/uv/pull/22391))
-- Persist settings after no-op tool upgrades ([#22499](https://github.com/astral-sh/uv/pull/22499))
-- Preserve special files when writing command output ([#22496](https://github.com/astral-sh/uv/pull/22496))
-- Publish managed Python sysconfig updates atomically ([#22403](https://github.com/astral-sh/uv/pull/22403))
-- Revert interpreter cache warming ([#22520](https://github.com/astral-sh/uv/pull/22520))
-- Skip resolution for installed Git dependencies pinned to full commits ([#22464](https://github.com/astral-sh/uv/pull/22464))
-- Use the same environment lock for aliased project paths ([#22390](https://github.com/astral-sh/uv/pull/22390))
-- Write Python version files atomically ([#22402](https://github.com/astral-sh/uv/pull/22402))
-- Write lockfiles atomically for concurrent frozen readers ([#22399](https://github.com/astral-sh/uv/pull/22399))
+- Prevent tool and managed Python uninstalls from deleting unrelated files beside their storage directories ([#22495](https://github.com/astral-sh/uv/pull/22495))
+- Restore support for older source distributions containing hard links ([#22516](https://github.com/astral-sh/uv/pull/22516))
+- Accept source distributions created by Python's `tarfile` when a user or group name fills its tar header ([#22522](https://github.com/astral-sh/uv/pull/22522))
+- Preserve device files and FIFOs used as `uv pip compile` or `uv export` output destinations ([#22496](https://github.com/astral-sh/uv/pull/22496))
+- Fix `sys._base_executable` detection for environments created from symlinked interpreters ([#22520](https://github.com/astral-sh/uv/pull/22520))
+- Ensure frozen readers never observe partially written project or script lockfiles during concurrent updates ([#22399](https://github.com/astral-sh/uv/pull/22399))
+- Serialize concurrent project commands that reach the same environment through real and symlinked paths ([#22390](https://github.com/astral-sh/uv/pull/22390))
+- Prevent installs, syncs, and environment creation from failing when they race with `uv cache clean` ([#22387](https://github.com/astral-sh/uv/pull/22387))
+- Prevent concurrent tool installations from corrupting an environment when the last tool is uninstalled ([#22391](https://github.com/astral-sh/uv/pull/22391))
+- Prevent concurrent Python processes from observing partially updated sysconfig files during managed Python repair ([#22403](https://github.com/astral-sh/uv/pull/22403))
+- Prevent concurrent readers from observing partially written Python version files ([#22402](https://github.com/astral-sh/uv/pull/22402))
+- Persist changed upgrade settings even when `uv tool upgrade` leaves the tool version unchanged ([#22499](https://github.com/astral-sh/uv/pull/22499))
+- Reuse environments with installed Git dependencies pinned to full commit hashes without resolving again ([#22464](https://github.com/astral-sh/uv/pull/22464))
 
 ### Documentation
 
-- Document native Python preference on Windows ARM64 ([#22424](https://github.com/astral-sh/uv/pull/22424))
-- Fix broken .netrc documentation link ([#22514](https://github.com/astral-sh/uv/pull/22514))
+- Explain how to select an emulated Python interpreter on Windows ARM64 when native wheels are unavailable ([#22424](https://github.com/astral-sh/uv/pull/22424))
+- Fix the `.netrc` format documentation link ([#22514](https://github.com/astral-sh/uv/pull/22514))
+- Add the missing source metadata cache fix to the 0.13.0 release notes ([#22444](https://github.com/astral-sh/uv/pull/22444))
 
 ### Other changes
 
-- Document source metadata cache fix in 0.13.0 ([#22444](https://github.com/astral-sh/uv/pull/22444))
-- Fix Cargo.lock ordering for sdist builds ([#22504](https://github.com/astral-sh/uv/pull/22504))
-- Promote Python 3.15 Docker images to stable tags ([#22503](https://github.com/astral-sh/uv/pull/22503))
-- Start Docker before the Windows NanoServer integration test ([#22449](https://github.com/astral-sh/uv/pull/22449))
-- Update build-hash diagnostic snapshots ([#22489](https://github.com/astral-sh/uv/pull/22489))
-- Update codex-action to preserve TMPDIR ([#22392](https://github.com/astral-sh/uv/pull/22392))
-- Use astral-ini for INI parsing ([#22368](https://github.com/astral-sh/uv/pull/22368))
+- Publish Python 3.15-based uv Docker images under stable tags ([#22503](https://github.com/astral-sh/uv/pull/22503))
+- Parse wheel entry points, `setup.cfg` package names, and `EXTERNALLY-MANAGED` files with Python-compatible INI semantics ([#22368](https://github.com/astral-sh/uv/pull/22368))
 
 ## 0.13.0
 
