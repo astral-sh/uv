@@ -32,8 +32,6 @@ use uv_workspace::WorkspaceCache;
 pub(super) struct CollectedEnvironment {
     /// Installed distributions keyed by their selected or unmanaged package IDs.
     pub(super) packages: BTreeMap<String, InstalledDist>,
-    /// IDs of unmanaged distributions with discoverable modules.
-    pub(super) unmanaged_distributions: Vec<String>,
     /// Maps importable module names to the IDs of their owning distributions.
     pub(super) module_owners: BTreeMap<ModuleName, Vec<String>>,
 }
@@ -153,7 +151,6 @@ fn inspect_environment(
 ) -> Result<CollectedEnvironment> {
     let site_packages = SitePackages::from_environment(venv)?;
     let mut packages = BTreeMap::new();
-    let mut unmanaged_distributions = Vec::new();
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
     for dist in site_packages {
         let selected_package_id = package_ids.get(dist.name());
@@ -189,9 +186,6 @@ fn inspect_environment(
         if modules.is_empty() {
             continue;
         }
-        if selected_package_id.is_none() {
-            unmanaged_distributions.push(package_id.clone());
-        }
         for module in modules {
             owners.entry(module).or_default().insert(package_id.clone());
         }
@@ -199,7 +193,6 @@ fn inspect_environment(
 
     Ok(CollectedEnvironment {
         packages,
-        unmanaged_distributions,
         module_owners: owners
             .into_iter()
             .map(|(module, owners)| (module, owners.into_iter().collect()))

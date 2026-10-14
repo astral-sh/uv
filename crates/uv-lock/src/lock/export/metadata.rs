@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Display;
 use std::path::Path;
 
@@ -93,9 +93,6 @@ pub struct Metadata {
     /// The dependency graph.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     resolution: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
-    /// IDs of unmanaged distributions with discoverable modules in `environment.packages`.
-    #[serde(skip_serializing_if = "BTreeSet::is_empty", default)]
-    unmanaged_distributions: BTreeSet<MetadataNodeIdFlat>,
 }
 
 /// The schema version for the metadata report.
@@ -1476,7 +1473,6 @@ impl Metadata {
             requires_python: lock.requires_python.clone(),
             members,
             resolution: resolve,
-            unmanaged_distributions: BTreeSet::new(),
         }
     }
 
@@ -1500,16 +1496,6 @@ impl Metadata {
     /// ID uses the distribution's metadata path as its source.
     pub fn unmanaged_package_node_id(dist: &InstalledDist) -> String {
         MetadataNodeId::from_unmanaged_distribution(dist).to_flat()
-    }
-
-    /// Attach references to unmanaged distributions in `environment.packages`.
-    #[must_use]
-    pub fn with_unmanaged_distributions(
-        mut self,
-        distributions: impl IntoIterator<Item = String>,
-    ) -> Self {
-        self.unmanaged_distributions = distributions.into_iter().collect();
-        self
     }
 
     #[must_use]
@@ -1537,8 +1523,9 @@ impl Metadata {
                 let owners = owners
                     .into_iter()
                     .filter(|package_id| {
-                        self.resolution.contains_key(package_id)
-                            || self.unmanaged_distributions.contains(package_id)
+                        self.environment.as_ref().is_some_and(|environment| {
+                            environment.packages.contains_key(package_id)
+                        })
                     })
                     .map(|package_id| MetadataModuleOwner { package_id })
                     .collect::<Vec<_>>();

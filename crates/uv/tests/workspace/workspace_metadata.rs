@@ -739,7 +739,6 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
-            "unmanaged_distributions": metadata["unmanaged_distributions"],
             "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
             "resolution": metadata["resolution"],
@@ -766,10 +765,7 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
               "kind": "script",
               "path": "[TEMP_DIR]/script.py"
             }
-          },
-          "unmanaged_distributions": [
-            "metadata-extra==0.1.0@unmanaged+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
-          ]
+          }
         }
         "#);
     });
@@ -788,7 +784,6 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
 
     insta::assert_json_snapshot!(serde_json::json!({
-        "unmanaged_distributions": metadata.get("unmanaged_distributions"),
         "extraneous_installed": context
             .pip_show()
             .arg("metadata-extra")
@@ -801,8 +796,7 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
     {
       "extraneous_installed": false,
       "installed_packages": {},
-      "module_owners": null,
-      "unmanaged_distributions": null
+      "module_owners": null
     }
     "#);
 
@@ -1978,7 +1972,6 @@ package = false
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
-            "unmanaged_distributions": metadata["unmanaged_distributions"],
             "module_owners": metadata["module_owners"],
             "resolution": metadata["resolution"],
         }), @r#"
@@ -2005,10 +1998,7 @@ package = false
               "kind": "workspace",
               "path": "[TEMP_DIR]/"
             }
-          },
-          "unmanaged_distributions": [
-            "module-owner-root==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info"
-          ]
+          }
         }
         "#);
     });
@@ -2062,7 +2052,6 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
-            "unmanaged_distributions": metadata.get("unmanaged_distributions"),
             "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
         }), @r#"
@@ -2081,8 +2070,7 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
                 "package_id": "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl"
               }
             ]
-          },
-          "unmanaged_distributions": null
+          }
         }
         "#);
     });
@@ -2101,7 +2089,6 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
-            "unmanaged_distributions": metadata["unmanaged_distributions"],
             "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
             "resolution": metadata["resolution"],
@@ -2137,10 +2124,7 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
               "kind": "workspace",
               "path": "[TEMP_DIR]/"
             }
-          },
-          "unmanaged_distributions": [
-            "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
-          ]
+          }
         }
         "#);
     });
@@ -2200,7 +2184,6 @@ fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
         insta::assert_json_snapshot!(serde_json::json!({
             "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
-            "unmanaged_distributions": metadata["unmanaged_distributions"],
         }), @r#"
         {
           "installed_packages": {
@@ -2226,11 +2209,7 @@ fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
                 "package_id": "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info"
               }
             ]
-          },
-          "unmanaged_distributions": [
-            "module-owner==0.1.0@unmanaged+[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
-            "module-owner==0.2.0@unmanaged+[SITE_PACKAGES]/module_owner-0.2.0.dist-info"
-          ]
+          }
         }
         "#);
     });
@@ -2277,7 +2256,6 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
-            "unmanaged_distributions": metadata.get("unmanaged_distributions"),
             "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
             "resolution": metadata["resolution"],
@@ -2313,8 +2291,7 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
               "kind": "workspace",
               "path": "[TEMP_DIR]/"
             }
-          },
-          "unmanaged_distributions": null
+          }
         }
         "#);
     });
