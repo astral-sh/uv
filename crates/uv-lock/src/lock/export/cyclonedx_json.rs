@@ -116,8 +116,7 @@ impl Property {
     fn new(name: &'static str, value: &str) -> Self {
         Self {
             name,
-            // CycloneDX property values use XML normalized strings, including in JSON exports.
-            value: value.replace("\r\n", " ").replace(['\r', '\n', '\t'], " "),
+            value: value.to_string(),
         }
     }
 }
