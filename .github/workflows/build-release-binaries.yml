@@ -41,7 +41,7 @@ on:
         value: ${{ jobs.collect-symbols.outputs.artifact }}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.build-group || 'all' }}
   cancel-in-progress: true
 
 env:
