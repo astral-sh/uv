@@ -303,9 +303,6 @@ def package(target: str, wheels: Path, binaries: Path, output: Path) -> None:
         # The wheel and standalone archives must contain the same stripped bytes.
         rewritten = temporary / wheel.name
         repack_wheel(wheel, rewritten, replacements)
-        for binary in replacements.values():
-            shutil.copyfile(binary, binaries / binary.name)
-        shutil.copyfile(rewritten, wheel)
         (symbols / "symbols.json").write_text(
             json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
         )
@@ -320,6 +317,10 @@ def package(target: str, wheels: Path, binaries: Path, output: Path) -> None:
         else:
             with tarfile.open(destination, "w:gz", compresslevel=6) as archive:
                 archive.add(symbols, arcname=symbols.name)
+        # Keep the original unstripped wheel until the symbol archive is complete.
+        for binary in replacements.values():
+            shutil.copyfile(binary, binaries / binary.name)
+        shutil.copyfile(rewritten, wheel)
     destination.with_name(destination.name + ".sha256").write_text(
         f"{digest(destination)}  {destination.name}\n", encoding="utf-8"
     )
@@ -414,7 +415,9 @@ def verify(target: str, archive: Path, binaries: Path) -> None:
                     or path.stat().st_size != expected["bytes"]
                 ):
                     raise ValueError(f"Symbol file hash/size mismatch: {relative}")
-            companion = root / record["companion"]
+            companion = (root / record["companion"]).resolve()
+            if not companion.is_relative_to(root) or not record["files"]:
+                raise ValueError("Invalid symbol companion manifest")
             identity = (
                 pdb_identity(companion)
                 if system == "windows"

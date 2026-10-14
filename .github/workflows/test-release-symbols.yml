@@ -1,8 +1,5 @@
 name: Test release symbol packaging
 on:
-  push:
-    branches: [ee/release-full-debug-symbols]
-    paths: [".github/workflows/test-release-symbols.yml"]
   workflow_call:
   workflow_dispatch:
 permissions:
