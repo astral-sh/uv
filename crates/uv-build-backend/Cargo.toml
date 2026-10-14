@@ -72,4 +72,4 @@ anstream = { workspace = true }
 hex = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }

@@ -32,7 +32,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 md-5 = { workspace = true }
 rayon = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 sha2 = { workspace = true }

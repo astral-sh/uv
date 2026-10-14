@@ -52,7 +52,7 @@ indoc = { workspace = true }
 insta = { workspace = true, features = ["filters"] }
 itertools = { workspace = true }
 predicates = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

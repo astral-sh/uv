@@ -22,7 +22,7 @@ uv-platform-tags = { workspace = true }
 
 fs-err = { workspace = true }
 goblin = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 target-lexicon = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
