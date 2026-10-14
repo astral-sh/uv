@@ -749,20 +749,14 @@ fn fetch(
         }
 
         // A failed fetch can leave a cache database initialized with a different object format
-        // than its remote. Compare formats before replacing it, without adding a remote request to
-        // successful fetches.
+        // than its remote. Exact commits identify their format; other references require probing
+        // the remote.
         let format = repo.object_format().and_then(|local_format| {
-            let requested_format = reference.as_commit().map(|commit| commit.object_format());
-            if requested_format == Some(local_format) {
-                return None;
-            }
-            remote_object_format(repo, remote_url, &refspecs, disable_ssl, offline).filter(
-                |remote_format| {
-                    *remote_format != local_format
-                        && requested_format
-                            .is_none_or(|requested_format| requested_format == *remote_format)
-                },
-            )
+            reference
+                .as_commit()
+                .map(|commit| commit.object_format())
+                .or_else(|| remote_object_format(repo, remote_url, &refspecs, disable_ssl, offline))
+                .filter(|format| *format != local_format)
         });
         let Some(format) = format else {
             return Err(error);
@@ -1032,6 +1026,30 @@ mod tests {
             .is_err()
         );
         assert_eq!(database.rev_parse("HEAD")?, original);
+        Ok(())
+    }
+
+    #[test]
+    fn fetch_exact_commit_without_remote_head() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let database_path = temporary.path().join("db");
+        fs_err::create_dir(&database_path)?;
+        let mut database = GitRepository::init(&database_path, Some(GitObjectFormat::Sha1))?;
+        let remote =
+            repository_with_commit(&temporary.path().join("remote"), GitObjectFormat::Sha256)?;
+        let commit = remote.rev_parse("HEAD")?;
+        GIT.as_ref()
+            .cloned()?
+            .args(&["symbolic-ref", "HEAD", "refs/heads/missing"])
+            .cwd(&remote.path)
+            .exec_with_output()?;
+        let url = Url::from_directory_path(&remote.path)
+            .map_err(|()| anyhow!("failed to convert remote path to URL"))?
+            .into();
+
+        let reference = GitReference::Commit(commit);
+        fetch(&mut database, &url, &reference, false, true)?;
+        assert_eq!(database.resolve(&reference)?, commit);
         Ok(())
     }
 
