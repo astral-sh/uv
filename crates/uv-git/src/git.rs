@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 
 use uv_fs::Simplified;
-use uv_git_types::{GitObjectFormat, GitOid, GitReference};
+use uv_git_types::{GitObjectFormat, GitOid, GitReference, GitUrlParseError};
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -771,14 +771,28 @@ fn fetch(
                 .parent()
                 .context("Git database has no parent directory")?,
         )?;
-        let replacement = temporary.path().join("replacement");
-        fs_err::create_dir(&replacement)?;
-        fetch_refspecs(&mut GitRepository::init(&replacement, Some(format))?)?;
+        let replacement_path = temporary.path().join("replacement");
+        fs_err::create_dir(&replacement_path)?;
+        let mut replacement = GitRepository::init(&replacement_path, Some(format))?;
+        fetch_refspecs(&mut replacement)?;
+
+        // A successful fetch does not guarantee that the requested revision identifies a commit.
+        let precise = replacement.resolve(reference)?;
+        if let Some(commit) = reference.as_commit()
+            && commit != precise
+        {
+            return Err(GitUrlParseError::MismatchedRevision {
+                revision: commit.to_string(),
+                precise,
+                url: Box::new(remote_url.clone()),
+            }
+            .into());
+        }
 
         // Move the original database aside until the fetched replacement is in place.
         let original = temporary.path().join("original");
         fs_err::rename(&repo.path, &original)?;
-        if let Err(error) = fs_err::rename(&replacement, &repo.path) {
+        if let Err(error) = fs_err::rename(&replacement_path, &repo.path) {
             if let Err(restore_error) = fs_err::rename(&original, &repo.path) {
                 let _ = temporary.keep();
                 return Err(error).with_context(|| {
@@ -1003,8 +1017,9 @@ mod tests {
         Ok(repository)
     }
 
+    /// Fetching all refs can succeed even if the requested abbreviated commit does not exist.
     #[test]
-    fn failed_fetch_preserves_git_database() -> Result<()> {
+    fn unresolved_reference_preserves_git_database() -> Result<()> {
         let temporary = tempfile::tempdir()?;
         let mut database =
             repository_with_commit(&temporary.path().join("db"), GitObjectFormat::Sha1)?;
@@ -1019,7 +1034,7 @@ mod tests {
             fetch(
                 &mut database,
                 &url,
-                &GitReference::Branch("missing".to_owned()),
+                &GitReference::BranchOrTagOrCommit("deadbeefdeadbeef".to_owned()),
                 false,
                 true
             )
