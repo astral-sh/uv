@@ -83,8 +83,8 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
 
         database.record_metadata(&dist);
 
-        // Fetch the metadata for the distribution.
-        let metadata = {
+        // Collect the available extras from the distribution metadata.
+        let mut extras = {
             let id = dist.distribution_id();
             if let Some(archive) = index
                 .distributions()
@@ -98,8 +98,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                     }
                 })
             {
-                // If the metadata is already in the index, return it.
-                archive.metadata.clone()
+                archive.metadata.provides_extra.to_vec()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = database
@@ -107,23 +106,19 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                     .await
                     .map_err(|err| Error::from_dist(dist, err))?;
 
-                let metadata = archive.metadata.clone();
+                let extras = archive.metadata.provides_extra.to_vec();
 
                 // Insert the metadata into the index.
                 index
                     .distributions()
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                metadata
+                extras
             }
         };
 
         // Sort extras for consistency.
-        let extras = {
-            let mut extras = metadata.provides_extra.to_vec();
-            extras.sort_unstable();
-            extras
-        };
+        extras.sort_unstable();
 
         Ok(Requirement {
             extras: extras.into_boxed_slice(),
