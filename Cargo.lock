@@ -7097,7 +7097,6 @@ name = "uv-logging"
 version = "0.0.93"
 dependencies = [
  "anstream",
- "jiff",
  "owo-colors",
  "tracing",
  "tracing-subscriber",
