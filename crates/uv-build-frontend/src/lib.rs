@@ -951,7 +951,7 @@ impl SourceBuild {
                     "Call to `{}.prepare_metadata_for_build_{}` failed",
                     self.pep517_backend.backend, self.build_kind
                 ),
-                &output,
+                output,
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
@@ -1071,7 +1071,7 @@ impl SourceBuild {
                     "Call to `{}.build_{}` failed",
                     self.pep517_backend.backend, self.build_kind
                 ),
-                &output,
+                output,
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
@@ -1086,7 +1086,7 @@ impl SourceBuild {
                     "Call to `{}.build_{}` failed",
                     self.pep517_backend.backend, self.build_kind
                 ),
-                &output,
+                output,
                 self.level,
                 self.package_name.as_ref(),
                 self.package_version.as_ref(),
@@ -1180,7 +1180,7 @@ async fn get_pep517_build_requirements(
                 "Call to `{}.get_requires_for_build_{}` failed",
                 pep517_backend.backend, build_kind
             ),
-            &output,
+            output,
             level,
             package_name,
             package_version,
@@ -1201,7 +1201,7 @@ async fn get_pep517_build_requirements(
                     "Call to `{}.get_requires_for_build_{}` failed: {}",
                     pep517_backend.backend, build_kind, err
                 ),
-                &output,
+                output,
                 level,
                 package_name,
                 package_version,
