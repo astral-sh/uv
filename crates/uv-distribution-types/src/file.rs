@@ -12,8 +12,6 @@ use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
-use crate::VariantsJsonFilename;
-
 /// Error converting [`uv_pypi_types::PypiFile`] to [`File`].
 #[derive(Debug, thiserror::Error)]
 pub enum FileConversionError {
@@ -43,15 +41,9 @@ pub struct File {
 impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
     pub fn try_from_pypi(
-        mut file: uv_pypi_types::PypiFile,
+        file: uv_pypi_types::PypiFile,
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
-        // These attributes apply to distributions, not index-level variant metadata.
-        if VariantsJsonFilename::from_str(&file.filename).is_ok() {
-            file.requires_python = None;
-            file.core_metadata = None;
-            file.yanked = None;
-        }
         Ok(Self {
             dist_info_metadata: Self::dist_info_metadata(file.core_metadata),
             filename: file.filename,

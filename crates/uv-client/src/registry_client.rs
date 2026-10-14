@@ -2291,7 +2291,7 @@ mod tests {
         let response = r#"{
             "files": [
                 {"filename": "example-1.0-py3-none-any.whl", "hashes": {}, "url": "example-1.0-py3-none-any.whl"},
-                {"filename": "example-1.0-variants.json", "hashes": {}, "url": "metadata/1.0", "requires-python": "not a version", "core-metadata": true, "yanked": "ignored"},
+                {"filename": "example-1.0-variants.json", "hashes": {}, "url": "metadata/1.0"},
                 {"filename": "other-2.0-variants.json", "hashes": {}, "url": "other-2.0-variants.json"}
             ]
         }"#;
@@ -2324,15 +2324,6 @@ mod tests {
         ]
         "#);
         let sidecar = &entries[1].1;
-        assert_debug_snapshot!(
-            (&sidecar.requires_python, &sidecar.dist_info_metadata, &sidecar.yanked),
-            @r#"
-        (
-            None,
-            None,
-            None,
-        )
-        "#);
         assert_snapshot!(
             sidecar.url.to_url()?,
             @"https://example.com/simple/example/metadata/1.0"
@@ -2344,7 +2335,7 @@ mod tests {
     fn variant_json_html_index() -> Result<(), Error> {
         let html = r#"
             <a href="example-1.0-py3-none-any.whl">example-1.0-py3-none-any.whl</a>
-            <a href="example-1.0-variants.json" data-requires-python="invalid" data-core-metadata="true" data-yanked>example-1.0-variants.json</a>
+            <a href="example-1.0-variants.json">example-1.0-variants.json</a>
         "#;
         let package_name = PackageName::from_str("example")?;
         let base = DisplaySafeUrl::parse("https://example.com/simple/example/")?;
@@ -2367,15 +2358,6 @@ mod tests {
         ]
         "#);
         let sidecar = &entries[1].1;
-        assert_debug_snapshot!(
-            (&sidecar.requires_python, &sidecar.dist_info_metadata, &sidecar.yanked),
-            @r#"
-        (
-            None,
-            None,
-            None,
-        )
-        "#);
         assert_snapshot!(
             sidecar.url.to_url()?,
             @"https://example.com/simple/example/example-1.0-variants.json"
