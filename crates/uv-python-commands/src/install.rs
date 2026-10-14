@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use anyhow::{Context, Error, Result};
 use futures::{StreamExt, join};
@@ -435,7 +434,7 @@ async fn perform_install(
             if let PythonRequest::Version(VersionRequest::MajorMinor(major, minor, ..)) =
                 request.python_request()
             {
-                uv_pep440::Version::from_str(&format!("{major}.{minor}")).ok()
+                Some((*major, *minor))
             } else {
                 None
             }
@@ -677,7 +676,8 @@ async fn perform_install(
         }
 
         let upgradeable = (default || is_default_install)
-            || requested_minor_versions.contains(&installation.key().version().python_version());
+            || requested_minor_versions
+                .contains(&(installation.key().major(), installation.key().minor()));
 
         if let Some(bin_dir) = bin_dir.as_ref() {
             create_bin_links(

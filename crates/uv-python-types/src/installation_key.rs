@@ -75,16 +75,7 @@ impl PythonInstallationKey {
     }
 
     pub fn version(&self) -> PythonVersion {
-        PythonVersion::from_str(&format!(
-            "{}.{}.{}{}",
-            self.major,
-            self.minor,
-            self.patch,
-            self.prerelease
-                .map(|pre| pre.to_string())
-                .unwrap_or_default()
-        ))
-        .expect("Python installation keys must have valid Python versions")
+        PythonVersion::from_components(self.major, self.minor, self.patch, self.prerelease)
     }
 
     /// The version in `x.y.z` format.
@@ -426,6 +417,25 @@ mod tests {
         assert!(PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64").is_err());
         assert!(PythonInstallationKey::from_str("cpython-3.12.0").is_err());
         assert!(PythonInstallationKey::from_str("cpython").is_err());
+    }
+
+    #[test]
+    fn installation_key_version() -> Result<(), PythonInstallationKeyError> {
+        for version in [
+            "0.0.0",
+            "3.12.0",
+            "3.14.0a1",
+            "3.14.0b2",
+            "3.14.0rc3",
+            "255.255.255",
+        ] {
+            let key: PythonInstallationKey =
+                format!("cpython-{version}-linux-x86_64-gnu").parse()?;
+            let actual = key.version();
+            assert_eq!(actual.to_string(), version);
+            assert_eq!(actual.python_full_version().to_string(), version);
+        }
+        Ok(())
     }
 
     #[test]
