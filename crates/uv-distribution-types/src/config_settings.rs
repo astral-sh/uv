@@ -88,6 +88,10 @@ impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
                 Ok(ConfigSettingValue::String(value.to_string()))
             }
 
+            fn visit_string<E: serde::de::Error>(self, value: String) -> Result<Self::Value, E> {
+                Ok(ConfigSettingValue::String(value))
+            }
+
             fn visit_seq<A: serde::de::SeqAccess<'de>>(
                 self,
                 mut seq: A,
