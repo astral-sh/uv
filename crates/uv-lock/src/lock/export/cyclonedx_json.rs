@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -109,14 +110,14 @@ struct Hash {
 #[derive(Clone, Serialize)]
 struct Property {
     name: &'static str,
-    value: String,
+    value: Cow<'static, str>,
 }
 
 impl Property {
-    fn new(name: &'static str, value: &str) -> Self {
+    fn new(name: &'static str, value: impl Into<Cow<'static, str>>) -> Self {
         Self {
             name,
-            value: value.to_string(),
+            value: value.into(),
         }
     }
 }
@@ -267,7 +268,7 @@ impl<'a> ComponentBuilder<'a> {
             PackageType::Workspace(path) => {
                 properties.push(Property::new(
                     "uv:workspace:path",
-                    &PortablePath::from(path).to_string(),
+                    PortablePath::from(path).to_string(),
                 ));
             }
             PackageType::Root => {
@@ -279,7 +280,7 @@ impl<'a> ComponentBuilder<'a> {
         if let Some(marker_contents) = marker.and_then(|marker| marker.contents()) {
             properties.push(Property::new(
                 "uv:package:marker",
-                &marker_contents.to_string(),
+                marker_contents.to_string(),
             ));
         }
 
