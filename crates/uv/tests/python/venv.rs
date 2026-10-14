@@ -2165,11 +2165,11 @@ fn activate_non_relocatable_venv_ksh() {
 
     uv_snapshot!(context.filters(), context.external_command("sh")
         .arg("-c")
-        .arg(indoc! {r#"
+        .arg(indoc! {r"
             unset BASH_VERSION ZSH_VERSION
             readonly SCRIPT_PATH=caller
             . .venv/bin/activate && python -c 'import sys; print(sys.prefix)'
-        "#})
+        "})
         .env(EnvVars::KSH_VERSION, "test"), @"
     exit_code: 0 (success)
     ----- stdout -----
