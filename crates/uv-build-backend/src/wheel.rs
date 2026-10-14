@@ -132,10 +132,7 @@ fn write_wheel(
     mut wheel_writer: impl DirectoryWriter,
     show_warnings: bool,
 ) -> Result<(), Error> {
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
+    let settings = pyproject_toml.settings();
 
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
 
@@ -253,10 +250,7 @@ pub fn build_editable(
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     pyproject_toml.warn_build_system(uv_version, BuildKind::Editable);
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
+    let settings = pyproject_toml.settings();
     let exclude_matcher = build_wheel_exclude_matcher(&settings)?;
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;

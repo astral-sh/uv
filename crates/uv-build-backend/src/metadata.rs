@@ -448,8 +448,16 @@ impl PyProjectToml {
             .map(String::as_str)
     }
 
-    pub(crate) fn settings(&self) -> Option<&BuildBackendSettings> {
-        self.tool.as_ref()?.uv.as_ref()?.build_backend.as_ref()
+    /// Borrow the configured settings, or construct defaults when the table is absent.
+    pub(crate) fn settings(&self) -> Cow<'_, BuildBackendSettings> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.build_backend.as_ref())
+            .map_or_else(
+                || Cow::Owned(BuildBackendSettings::default()),
+                Cow::Borrowed,
+            )
     }
 
     /// Warn if the build-system table is inconsistent with the running backend.
