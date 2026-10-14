@@ -800,6 +800,18 @@ fn write_requirements(
     if requirements.len() <= 1 {
         writer.array(requirements, write_requirement)?;
         writer.raw("\n");
+    } else if version >= 2 {
+        // Blank lines let Git merge edits to adjacent declarations independently.
+        writer.raw("[\n");
+        for (index, requirement) in requirements.iter().enumerate() {
+            if index > 0 {
+                writer.raw("\n");
+            }
+            writer.raw("    ");
+            write_requirement_inline(writer, requirement, version)?;
+            writer.raw(",\n");
+        }
+        writer.raw("]\n");
     } else {
         writer.multiline_array(requirements, write_requirement)?;
     }

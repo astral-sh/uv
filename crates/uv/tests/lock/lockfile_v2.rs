@@ -1,4 +1,6 @@
 #[cfg(all(feature = "test-git", feature = "test-universal"))]
+use std::collections::BTreeMap;
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 use std::process::Command;
 
 use anyhow::Result;
@@ -12,7 +14,121 @@ use insta::assert_snapshot;
 use url::Url;
 
 use uv_lock::Lock;
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+use uv_test::packse::generate_wheel;
 use uv_test::{diff_snapshot, uv_snapshot};
+
+/// Script declarations remain without package metadata. Independent upgrades must merge
+/// and retain unrelated locked versions, even when newer releases are available.
+#[test]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+fn lockfile_v2_script_merge_without_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    for name in ["hold-demo", "leaf-demo", "side-demo"] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &"1.0.0".parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+    let script = indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["leaf-demo>=1,<3", "side-demo>=1,<3", "hold-demo>=1,<3"]
+        # ///
+    "#};
+    let script_file = context.temp_dir.child("script.py");
+    script_file.write_str(script)?;
+    let lock_script = || {
+        let mut command = context.lock();
+        command.args([
+            "--script",
+            "script.py",
+            "--offline",
+            "--no-index",
+            "--find-links",
+            "wheels",
+            "--preview-features",
+            "lockfile-v2,lock-without-metadata",
+        ]);
+        command
+    };
+    lock_script().assert().success();
+    let base = context.read("script.py.lock");
+    context.temp_dir.child("base.lock").write_str(&base)?;
+
+    // Version 2 is also available for the unrelated package.
+    for name in ["hold-demo", "leaf-demo", "side-demo"] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &"2.0.0".parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+    script_file.write_str(&script.replace("leaf-demo>=1", "leaf-demo>=2"))?;
+    lock_script()
+        .args(["--upgrade-package", "leaf-demo"])
+        .assert()
+        .success();
+    context
+        .temp_dir
+        .child("left.lock")
+        .write_str(&context.read("script.py.lock"))?;
+
+    context.temp_dir.child("script.py.lock").write_str(&base)?;
+    script_file.write_str(&script.replace("side-demo>=1", "side-demo>=2"))?;
+    lock_script()
+        .args(["--upgrade-package", "side-demo"])
+        .assert()
+        .success();
+    context
+        .temp_dir
+        .child("right.lock")
+        .write_str(&context.read("script.py.lock"))?;
+
+    let merge = Command::new("git")
+        .current_dir(context.temp_dir.path())
+        .args(["merge-file", "-p", "left.lock", "base.lock", "right.lock"])
+        .output()?
+        .assert()
+        .success();
+    let merged = String::from_utf8(merge.get_output().stdout.clone())?;
+    assert_eq!(Lock::from_canonical_toml(&merged)?.to_toml()?, merged);
+    context
+        .temp_dir
+        .child("script.py.lock")
+        .write_str(&merged)?;
+    script_file.write_str(
+        &script
+            .replace("leaf-demo>=1", "leaf-demo>=2")
+            .replace("side-demo>=1", "side-demo>=2"),
+    )?;
+    lock_script().arg("--check").assert().success();
+    assert_eq!(context.read("script.py.lock"), merged);
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--script", "script.py", "--frozen", "--offline", "--preview-features", "lockfile-v2,lock-without-metadata"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    side-demo v2.0.0
+    leaf-demo v2.0.0
+    hold-demo v1.0.0
+
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    ");
+    Ok(())
+}
 
 /// V2 conflict locks retain extra and group selection across frozen reads and revalidation.
 #[test]
@@ -867,7 +983,7 @@ fn lockfile_v2_dependencies() -> Result<()> {
      [package.metadata]
      requires-dist = [{ name = "plain", marker = "extra == 'feature'", virtual = "plain" }]
      provides-extras = ["feature"]
-    @@ -52,25 +51,25 @@
+    @@ -52,35 +51,40 @@
      [[package]]
      name = "project"
      version = "0.1.0"
@@ -900,8 +1016,15 @@ fn lockfile_v2_dependencies() -> Result<()> {
      [package.metadata]
      requires-dist = [
          { name = "base", extras = ["feature"], virtual = "base" },
-    @@ -80,7 +79,7 @@
+    +
+         { name = "conditional", marker = "sys_platform == 'win32'", virtual = "conditional" },
+    +
+         { name = "forked", marker = "sys_platform != 'win32'", virtual = "forked-v2" },
+    +
+         { name = "forked", marker = "sys_platform == 'win32'", virtual = "forked-v1" },
+    +
          { name = "plain", virtual = "plain" },
+    +
          { name = "plain", marker = "extra == 'feature'", virtual = "plain" },
      ]
      provides-extras = ["feature"]
@@ -1276,11 +1399,17 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
     [package.metadata]
     requires-dist = [
         { name = "bounded", specifier = ">=1" },
+
         { name = "extra", extras = ["feature"] },
+
         { name = "group", groups = ["dev"] },
+
         { name = "index", index = "https://example.com/simple" },
+
         { name = "marker", marker = "sys_platform == 'linux'" },
+
         "plain",
+
         { name = "source", virtual = "child" },
     ]
 
@@ -1323,12 +1452,22 @@ fn lockfile_v2_requirement_shorthand() -> Result<()> {
 
      [[package]]
      name = "project"
-    @@ -23,9 +20,9 @@
+    @@ -19,13 +16,19 @@
+     [package.metadata]
+     requires-dist = [
+         { name = "bounded", specifier = ">=1" },
+    +
+         { name = "extra", extras = ["feature"] },
+    +
          { name = "group", groups = ["dev"] },
+    +
          { name = "index", index = "https://example.com/simple" },
+    +
          { name = "marker", marker = "sys_platform == 'linux'" },
     -    { name = "plain" },
+    +
     +    "plain",
+    +
          { name = "source", virtual = "child" },
      ]
 
@@ -1384,7 +1523,7 @@ fn lockfile_v2_git_sources() -> Result<()> {
     assert_snapshot!(diff_snapshot(&original, &upgraded, 3), @r#"
     --- old
     +++ new
-    @@ -1,33 +1,33 @@
+    @@ -1,33 +1,35 @@
     -version = 1
     +version = 2
      requires-python = ">=3.12"
@@ -1427,7 +1566,9 @@ fn lockfile_v2_git_sources() -> Result<()> {
     -    { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo?subdirectory=python&lfs=true&branch=feature%2Fwork" },
     -    { name = "pinned", git = "https://example.com/repo?rev=0123456789012345678901234567890123456789#0123456789012345678901234567890123456789" },
     +    { name = "archive", git = "https://example.com/repo", rev = "main", path = "dist/archive-1.0.0.tar.gz", lfs = true },
+    +
     +    { name = "child", extras = ["feature"], marker = "sys_platform == 'linux'", git = "https://example.com/repo", branch = "feature/work", subdirectory = "python", lfs = true },
+    +
     +    { name = "pinned", git = "https://example.com/repo", rev = "0123456789012345678901234567890123456789", commit = "0123456789012345678901234567890123456789" },
      ]
     "#);
