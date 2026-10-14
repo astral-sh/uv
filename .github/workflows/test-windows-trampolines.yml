@@ -124,7 +124,7 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-test:
-    timeout-minutes: 10
+    timeout-minutes: ${{ matrix.target-arch == 'aarch64' && 15 || 10 }}
     runs-on: ${{ matrix.runner }}
     name: "test on ${{ matrix.target-arch }}"
     strategy:
