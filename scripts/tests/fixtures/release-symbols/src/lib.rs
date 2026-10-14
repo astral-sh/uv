@@ -1,3 +1,4 @@
+// SAFETY: This ABI and signature match native_answer in native.c.
 unsafe extern "C" {
     fn native_answer(input: u64) -> u64;
 }
