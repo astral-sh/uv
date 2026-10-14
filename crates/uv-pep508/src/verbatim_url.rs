@@ -167,8 +167,8 @@ impl VerbatimUrl {
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Convert to a URL.
-        let url = DisplaySafeUrl::from_file_path(path.clone())
-            .map_err(|()| VerbatimUrlError::UrlConversion(path.clone()))?;
+        let url = DisplaySafeUrl::from_file_path(&path)
+            .map_err(|()| VerbatimUrlError::UrlConversion(path))?;
 
         Ok(Self {
             url,
@@ -209,7 +209,7 @@ impl VerbatimUrl {
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Convert to a URL.
-        let url = DisplaySafeUrl::from_file_path(path.clone())
+        let url = DisplaySafeUrl::from_file_path(&path)
             .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         Ok(Self {
