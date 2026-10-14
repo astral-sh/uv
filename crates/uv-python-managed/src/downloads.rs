@@ -1364,8 +1364,8 @@ mod tests {
     }
 
     #[cfg(unix)]
-    #[test]
-    fn relative_installation_minor_link_resolves() -> anyhow::Result<()> {
+    #[tokio::test]
+    async fn relative_installation_minor_link_resolves() -> anyhow::Result<()> {
         let root = tempfile::tempdir_in(std::env::current_dir()?)?;
         let download = cpython_download_for_url("https://example.com/python.tar.gz");
         let installed = root.path().join(download.key().to_string());
@@ -1374,7 +1374,7 @@ mod tests {
         let relative = uv_fs::relative_to(&installed, std::env::current_dir()?)?;
         let installation = ManagedPythonInstallation::new(relative, &download)?;
 
-        installation.ensure_minor_version_link()?;
+        installation.ensure_minor_version_link().await?;
 
         let minor = root
             .path()
