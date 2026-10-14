@@ -29,11 +29,17 @@ defaults with the repository's instructions and concrete constraints:
    that keep the normal path checked. Checks depending on state only available later, or on mutable
    external state, may belong at use instead.
 
-   Use explicit modes instead of ambiguous booleans, types that express cardinality and ownership,
-   and resolved configuration passed through appropriate boundaries. Keep domain values structured
-   in internal APIs and error types; defer formatting to `Display` or another presentation boundary
-   where practical. Look for premature conversion to `String` that discards useful structure or
-   makes callers responsible for diagnostic formatting.
+   Review `bool` fields and parameters that select domain modes or policies. Prefer an enum with
+   meaningful variants when it makes the choice explicit at construction and call sites, even for
+   two alternatives. Reuse an existing enum when it expresses the same concept. Keep booleans for
+   clear predicates, and identify the ambiguity or invariant an enum would clarify before reporting
+   a finding.
+
+   Use types that express cardinality and ownership, and pass resolved configuration through
+   appropriate boundaries. Keep domain values structured in internal APIs and error types; defer
+   formatting to `Display` or another presentation boundary where practical. Look for premature
+   conversion to `String` that discards useful structure or makes callers responsible for diagnostic
+   formatting.
 
 4. **Prefer readable Rust.** Favor direct matching, exhaustive handling, early returns, and
    established library operations. Look for unnecessary wrappers, buffers, hidden clones, and
