@@ -39,6 +39,7 @@ itertools = { workspace = true }
 owo-colors = { workspace = true }
 pathdiff = { workspace = true }
 regex = { workspace = true }
+regex-automata = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

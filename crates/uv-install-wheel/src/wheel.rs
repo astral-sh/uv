@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::io;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::str;
 use std::sync::LazyLock;
 
 use astral_mail_headers::Message;
@@ -11,7 +11,8 @@ use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use itertools::Itertools;
-use regex::bytes::Regex;
+use regex_automata::dfa::{Automaton, dense};
+use regex_automata::{Input, util::syntax};
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
@@ -29,10 +30,37 @@ use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
 
 /// A Python source encoding declaration, as defined by <https://peps.python.org/pep-0263/#defining-the-encoding>.
-static SCRIPT_ENCODING: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?-u)^[ \t\x0c]*#[^\r\n]*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+static SCRIPT_ENCODING: LazyLock<dense::DFA<Vec<u32>>> = LazyLock::new(|| {
+    dense::Builder::new()
+        .syntax(syntax::Config::new().utf8(false))
+        .build(r"(?-u)^[ \t\x0c]*#[^\r\n]*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
         .expect("valid script encoding regex")
 });
+
+/// Find a Python source encoding declaration, restoring the reader's position afterward.
+fn find_script_encoding(script: &mut (impl BufRead + Seek)) -> io::Result<Option<Range<u64>>> {
+    let dfa = &*SCRIPT_ENCODING;
+    let mut state = dfa
+        .start_state_forward(&Input::new(b""))
+        .expect("valid script encoding start state");
+    let script_start = script.stream_position()?;
+    let mut position = script_start;
+    let mut encoding_start = None;
+    for byte in (&mut *script).bytes() {
+        let byte = byte?;
+        state = dfa.next_state(state, byte);
+        // The encoding name is the final part of the pattern. The first matching prefix ends
+        // at its first byte, and each subsequent matching prefix extends it by one byte.
+        if dfa.is_match_state(dfa.next_eoi_state(state)) {
+            encoding_start.get_or_insert(position);
+        } else if encoding_start.is_some() || dfa.is_dead_state(state) {
+            break;
+        }
+        position += 1;
+    }
+    script.seek(SeekFrom::Start(script_start))?;
+    Ok(encoding_start.map(|start| start..position))
+}
 
 /// Wrapper script template function
 ///
@@ -601,27 +629,33 @@ fn install_script(
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
         let mut shebang = format_shebang(&executable, &layout.os_name, relocatable);
-        let mut script_body_prefix = Vec::new();
-        if let Some(newline) = shebang.find('\n') {
+        let encoding = if let Some(newline) = shebang.find('\n') {
             // A multi-line launcher displaces the script's second line. Copy any source
             // encoding declaration into the launcher so Python still recognizes it.
-            script.read_until(b'\n', &mut script_body_prefix)?;
-            if let Some(encoding) = SCRIPT_ENCODING
-                .captures(&script_body_prefix)
-                .and_then(|captures| captures.get(1))
-            {
-                let encoding = str::from_utf8(encoding.as_bytes()).expect("encoding name is ASCII");
-                shebang.insert_str(newline + 1, &format!("# coding: {encoding}\n"));
-            }
-        }
+            find_script_encoding(&mut script)?.map(|encoding| (newline + 1, encoding))
+        } else {
+            None
+        };
 
         // Use appropriate line ending for the platform.
         shebang.push_str(if layout.os_name == "nt" { "\r\n" } else { "\n" });
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
-        let script_body = script_body_prefix.as_slice().chain(script);
-        let size_and_encoded_hash =
-            copy_and_hash(&mut shebang.as_bytes().chain(script_body), &mut target)?;
+        let size_and_encoded_hash = if let Some((newline, encoding)) = encoding {
+            let mut encoding_source = File::open(&path)?;
+            encoding_source.seek(SeekFrom::Start(encoding.start))?;
+            let (first_line, launcher) = shebang.split_at(newline);
+            let mut contents = first_line
+                .as_bytes()
+                .chain(b"# coding: ".as_slice())
+                .chain(encoding_source.take(encoding.end - encoding.start))
+                .chain(b"\n".as_slice())
+                .chain(launcher.as_bytes())
+                .chain(script);
+            copy_and_hash(&mut contents, &mut target)?
+        } else {
+            copy_and_hash(&mut shebang.as_bytes().chain(script), &mut target)?
+        };
 
         persist_with_retry_sync(target, &script_absolute)?;
         fs::remove_file(&path)?;
@@ -1231,7 +1265,7 @@ impl RenameOrCopy {
 #[cfg(test)]
 mod test {
     use std::assert_matches;
-    use std::io::{Cursor, ErrorKind};
+    use std::io::{BufReader, Cursor, ErrorKind, Seek};
     use std::path::Path;
 
     use anyhow::Result;
@@ -1239,8 +1273,9 @@ mod test {
     use indoc::{formatdoc, indoc};
 
     use super::{
-        Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
+        Error, RecordEntry, Script, WheelFile, find_script_encoding, format_shebang,
+        get_script_executable, parse_email_message_file, parse_scripts, read_record,
+        write_installer_metadata,
     };
 
     #[test]
@@ -1433,6 +1468,18 @@ mod test {
             format_shebang(executable, os_name, false),
             "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
         );
+    }
+
+    #[test]
+    fn test_script_encoding_across_buffers() -> Result<()> {
+        let mut source = vec![b' '; 16_384];
+        source.extend_from_slice(b"# \xff coding: ");
+        let start = source.len() as u64;
+        source.extend_from_slice(b"latin-1\r# coding: ascii\n");
+        let mut script = BufReader::with_capacity(2, Cursor::new(source));
+        assert_eq!(find_script_encoding(&mut script)?, Some(start..start + 7));
+        assert_eq!(script.stream_position()?, 0);
+        Ok(())
     }
 
     #[test]
