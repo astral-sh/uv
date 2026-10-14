@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::io;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
+use std::str;
 use std::sync::LazyLock;
 
 use astral_mail_headers::Message;
@@ -27,7 +28,7 @@ use crate::record::RecordEntry;
 use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
 
-/// A Python source encoding declaration, as defined by PEP 263.
+/// A Python source encoding declaration, as defined by <https://peps.python.org/pep-0263/#defining-the-encoding>.
 static SCRIPT_ENCODING: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?-u)^[ \t\x0c]*#[^\r\n]*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
         .expect("valid script encoding regex")
@@ -558,9 +559,10 @@ fn install_script(
         Err(err) => return Err(Error::Io(err)),
     }
     let size_and_encoded_hash = if start == placeholder_python {
+        // `#!pythonw` denotes a GUI script.
+        let is_gui = script.fill_buf()?.first() == Some(&b'w');
+
         // Read the rest of the first line, one byte at a time, until we hit a newline.
-        let mut is_gui = false;
-        let mut first = true;
         let mut byte = [0u8; 1];
         loop {
             match script.read_exact(&mut byte) {
@@ -574,12 +576,6 @@ fn install_script(
                         }
                         break;
                     }
-
-                    // Check if this is a GUI script (starts with 'w').
-                    if first {
-                        is_gui = byte[0] == b'w';
-                        first = false;
-                    }
                 }
                 Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
                 Err(err) => return Err(Error::Io(err)),
@@ -588,40 +584,28 @@ fn install_script(
 
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
-        let mut start = format_shebang(&executable, &layout.os_name, relocatable).into_bytes();
-        let mut second_line = Vec::new();
-        if let Some(newline) = start.iter().position(|byte| *byte == b'\n') {
-            script.read_until(b'\n', &mut second_line)?;
+        let mut shebang = format_shebang(&executable, &layout.os_name, relocatable);
+        let mut script_body_prefix = Vec::new();
+        if let Some(newline) = shebang.find('\n') {
+            // A multi-line launcher displaces the script's second line. Copy any source
+            // encoding declaration into the launcher so Python still recognizes it.
+            script.read_until(b'\n', &mut script_body_prefix)?;
             if let Some(encoding) = SCRIPT_ENCODING
-                .captures(&second_line)
+                .captures(&script_body_prefix)
                 .and_then(|captures| captures.get(1))
             {
-                // Python recognizes source encodings only on the first two lines. Copy the
-                // encoding into the shell launcher as a comment safe for both interpreters.
-                let insert_at = newline + 1;
-                start.splice(
-                    insert_at..insert_at,
-                    b"# coding: "
-                        .iter()
-                        .chain(encoding.as_bytes())
-                        .chain(b"\n")
-                        .copied(),
-                );
+                let encoding = str::from_utf8(encoding.as_bytes()).expect("encoding name is ASCII");
+                shebang.insert_str(newline + 1, &format!("# coding: {encoding}\n"));
             }
         }
 
         // Use appropriate line ending for the platform.
-        if layout.os_name == "nt" {
-            start.extend_from_slice(b"\r\n");
-        } else {
-            start.push(b'\n');
-        }
+        shebang.push_str(if layout.os_name == "nt" { "\r\n" } else { "\n" });
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
-        let size_and_encoded_hash = copy_and_hash(
-            &mut start.chain(second_line.as_slice()).chain(script),
-            &mut target,
-        )?;
+        let script_body = script_body_prefix.as_slice().chain(script);
+        let size_and_encoded_hash =
+            copy_and_hash(&mut shebang.as_bytes().chain(script_body), &mut target)?;
 
         persist_with_retry_sync(target, &script_absolute)?;
         fs::remove_file(&path)?;
