@@ -772,10 +772,31 @@ fn fetch(
             "Reinitializing Git database with {} object format",
             format.as_str()
         );
-        fs_err::remove_dir_all(&repo.path)?;
-        fs_err::create_dir_all(&repo.path)?;
-        *repo = GitRepository::init(&repo.path, Some(format))?;
-        fetch_refspecs(repo)
+        let temporary = tempfile::tempdir_in(
+            repo.path
+                .parent()
+                .context("Git database has no parent directory")?,
+        )?;
+        let replacement = temporary.path().join("replacement");
+        fs_err::create_dir(&replacement)?;
+        fetch_refspecs(&mut GitRepository::init(&replacement, Some(format))?)?;
+
+        // Move the original database aside until the fetched replacement is in place.
+        let original = temporary.path().join("original");
+        fs_err::rename(&repo.path, &original)?;
+        if let Err(error) = fs_err::rename(&replacement, &repo.path) {
+            if let Err(restore_error) = fs_err::rename(&original, &repo.path) {
+                let _ = temporary.keep();
+                return Err(error).with_context(|| {
+                    format!(
+                        "failed to restore Git database from {}: {restore_error}",
+                        original.user_display()
+                    )
+                });
+            }
+            return Err(error.into());
+        }
+        Ok(())
     });
     match reference {
         // With the default branch, adding context is confusing
@@ -965,6 +986,54 @@ mod tests {
     use indoc::indoc;
 
     use super::*;
+
+    fn repository_with_commit(path: &Path, format: GitObjectFormat) -> Result<GitRepository> {
+        fs_err::create_dir(path)?;
+        let repository = GitRepository::init(path, Some(format))?;
+        GIT.as_ref()
+            .cloned()?
+            .args(&[
+                "-c",
+                "user.name=ferris",
+                "-c",
+                "user.email=ferris@example.com",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "Initial commit",
+            ])
+            .cwd(path)
+            .exec_with_output()?;
+        Ok(repository)
+    }
+
+    #[test]
+    fn failed_fetch_preserves_git_database() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let mut database =
+            repository_with_commit(&temporary.path().join("db"), GitObjectFormat::Sha1)?;
+        let original = database.rev_parse("HEAD")?;
+        let remote =
+            repository_with_commit(&temporary.path().join("remote"), GitObjectFormat::Sha256)?;
+        let url = Url::from_directory_path(&remote.path)
+            .map_err(|()| anyhow!("failed to convert remote path to URL"))?
+            .into();
+
+        assert!(
+            fetch(
+                &mut database,
+                &url,
+                &GitReference::Branch("missing".to_owned()),
+                false,
+                true
+            )
+            .is_err()
+        );
+        assert_eq!(database.rev_parse("HEAD")?, original);
+        Ok(())
+    }
 
     #[test]
     fn submodule_update_config_strips_credentials_from_origin_override() {
