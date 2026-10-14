@@ -84,8 +84,6 @@ pub enum GitUrlParseError {
         "Ambiguous Git URL `{0}`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`"
     )]
     AmbiguousRevision(SafeUrl),
-    #[error("Invalid Git revision `{0}`: expected at most 40 or exactly 64 hexadecimal characters")]
-    InvalidRevisionLength(String),
     #[error(
         "Exact Git revision `{revision}` does not match precise commit `{precise}` for `{url}`"
     )]
@@ -299,7 +297,7 @@ impl TryFrom<SafeUrl> for GitUrl {
             .map(|(prefix, suffix)| (prefix.to_string(), suffix.to_string()))
         {
             let suffix = percent_decode_str(&suffix).decode_utf8_lossy().into_owned();
-            reference = GitReference::from_rev(suffix)?;
+            reference = GitReference::from_rev(suffix);
             url.set_path(&prefix);
         }
 
@@ -411,7 +409,7 @@ mod tests {
 
         let error = GitUrl::from_commit(
             url.clone(),
-            GitReference::from_rev(requested_revision.to_string())?,
+            GitReference::from_rev(requested_revision.to_string()),
             precise,
             GitLfs::Disabled,
         )
@@ -423,7 +421,7 @@ mod tests {
 
         let git = GitUrl::from_reference(
             url.clone(),
-            GitReference::from_rev(requested_revision.to_string())?,
+            GitReference::from_rev(requested_revision.to_string()),
             GitLfs::Disabled,
         )?;
         assert!(git.with_precise(precise).is_err());
@@ -433,7 +431,7 @@ mod tests {
         assert!(
             GitUrl::from_commit(
                 url.clone(),
-                GitReference::from_rev(uppercase_revision)?,
+                GitReference::from_rev(uppercase_revision),
                 expected,
                 GitLfs::Disabled,
             )
@@ -443,7 +441,7 @@ mod tests {
         assert!(
             GitUrl::from_commit(
                 url.clone(),
-                GitReference::from_rev("0dacfd6".to_string())?,
+                GitReference::from_rev("0dacfd6".to_string()),
                 precise,
                 GitLfs::Disabled,
             )
@@ -475,7 +473,7 @@ mod tests {
             Some(precise)
         );
         let commit = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389".parse::<GitOid>()?;
-        let git = git.with_reference(GitReference::from_rev(commit.to_string())?);
+        let git = git.with_reference(GitReference::from_rev(commit.to_string()));
         assert_eq!(git.precise(), Some(commit));
         assert_eq!(
             git.with_reference(GitReference::Branch("main".to_string()))
@@ -490,7 +488,7 @@ mod tests {
     fn display_percent_encodes_reference() -> Result<(), Box<dyn std::error::Error>> {
         let git = GitUrl::from_reference(
             SafeUrl::parse("https://example.com/pkg.git")?,
-            GitReference::from_rev("refs/pull/493/head@1#2%".to_string())?,
+            GitReference::from_rev("refs/pull/493/head@1#2%".to_string()),
             GitLfs::Disabled,
         )?;
         let url = SafeUrl::from(git);

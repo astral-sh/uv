@@ -11,13 +11,12 @@ use std::str::Utf8Error;
 use astral_mail_headers::{DecodeError, Message};
 use thiserror::Error;
 
-use uv_git_types::GitUrlParseError;
 use uv_macros::DebugNoInline;
 use uv_normalize::InvalidNameError;
 use uv_pep440::{VersionParseError, VersionSpecifiersParseError};
-use uv_pep508::{Pep508Error, Pep508ErrorSource};
+use uv_pep508::Pep508Error;
 
-use crate::{ParsedUrlError, VerbatimParsedUrl};
+use crate::VerbatimParsedUrl;
 
 pub use build_requires::BuildRequires;
 pub use metadata_resolver::ResolutionMetadata;
@@ -48,10 +47,7 @@ pub enum MetadataError {
     #[error(transparent)]
     Pep440Error(#[from] VersionSpecifiersParseError),
     #[error(transparent)]
-    Pep508Error(Box<Pep508Error<VerbatimParsedUrl>>),
-    /// A build backend cannot resolve an invalid Git revision by regenerating metadata.
-    #[error(transparent)]
-    InvalidGitRevision(Box<Pep508Error<VerbatimParsedUrl>>),
+    Pep508Error(#[from] Box<Pep508Error<VerbatimParsedUrl>>),
     #[error(transparent)]
     InvalidName(#[from] InvalidNameError),
     #[error("Invalid `Metadata-Version` field: {0}")]
@@ -74,20 +70,7 @@ pub enum MetadataError {
 
 impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
     fn from(error: Pep508Error<VerbatimParsedUrl>) -> Self {
-        Self::from(Box::new(error))
-    }
-}
-
-impl From<Box<Pep508Error<VerbatimParsedUrl>>> for MetadataError {
-    fn from(error: Box<Pep508Error<VerbatimParsedUrl>>) -> Self {
-        if let Pep508ErrorSource::UrlError(source) = &error.message
-            && let ParsedUrlError::GitUrlParse(GitUrlParseError::InvalidRevisionLength(_)) =
-                source.as_ref()
-        {
-            Self::InvalidGitRevision(error)
-        } else {
-            Self::Pep508Error(error)
-        }
+        Self::Pep508Error(Box::new(error))
     }
 }
 

@@ -34,7 +34,6 @@ use uv_environment_operations::{
 use uv_errors::HintOrdering;
 use uv_fs::Simplified;
 use uv_git::store_credentials;
-use uv_git_types::GitReference;
 use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
@@ -407,21 +406,17 @@ pub async fn add(
 
     // Resolve any unnamed requirements.
     let requirements = {
-        let git_reference = match (&rev, &tag, &branch) {
-            (Some(rev), _, _) => {
-                Some(GitReference::from_rev(rev.clone()).map_err(anyhow::Error::from)?)
-            }
-            (None, Some(tag), _) => Some(GitReference::Tag(tag.clone())),
-            (None, None, Some(branch)) => Some(GitReference::Branch(branch.clone())),
-            (None, None, None) => None,
-        };
-
         // Partition the requirements into named and unnamed requirements.
         let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
             .into_iter()
             .map(|spec| {
-                spec.requirement
-                    .augment_requirement(git_reference.clone(), lfs.into(), marker)
+                spec.requirement.augment_requirement(
+                    rev.as_deref(),
+                    tag.as_deref(),
+                    branch.as_deref(),
+                    lfs.into(),
+                    marker,
+                )
             })
             .partition_map(|requirement| match requirement {
                 UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),

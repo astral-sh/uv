@@ -689,7 +689,7 @@ fn git_source(
 ) -> Result<RequirementSource, LoweringError> {
     let reference = match (rev, tag, branch) {
         (None, None, None) => GitReference::DefaultBranch,
-        (Some(rev), None, None) => GitReference::from_rev(rev)?,
+        (Some(rev), None, None) => GitReference::from_rev(rev),
         (None, Some(tag), None) => GitReference::Tag(tag),
         (None, None, Some(branch)) => GitReference::Branch(branch),
         _ => return Err(LoweringError::MoreThanOneGitRef),

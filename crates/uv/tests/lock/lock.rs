@@ -928,11 +928,13 @@ fn lock_rejects_mismatched_exact_git_revision() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a Git repository whose object format differs from Git's default.
+/// Resolve an abbreviated SHA-256 commit when Git's default object format is SHA-1.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-fn lock_git_sha256() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"#[0-9a-f]{64}", "#[SHA256]"));
+fn lock_git_sha256_abbreviated_commit() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"#[0-9a-f]{64}", "#[SHA256]"))
+        .with_filter((r"\b[0-9a-f]{41}\b", "[SHA256_PREFIX]"));
     let repository = context.temp_dir.child("repository");
     repository.child("pyproject.toml").write_str(indoc! {r#"
         [project]
@@ -966,6 +968,13 @@ fn lock_git_sha256() -> Result<()> {
         .assert()
         .success();
 
+    let commit = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "--short=41", "HEAD"])
+        .assert()
+        .success();
+    let revision = std::str::from_utf8(&commit.get_output().stdout)?.trim();
     let repository_url = Url::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
@@ -979,7 +988,7 @@ fn lock_git_sha256() -> Result<()> {
         dependencies = ["dependency"]
 
         [tool.uv.sources]
-        dependency = {{ git = "{repository_url}" }}
+        dependency = {{ git = "{repository_url}", rev = "{revision}" }}
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline").env(EnvVars::GIT_DEFAULT_HASH, "sha1"), @"
@@ -999,7 +1008,7 @@ fn lock_git_sha256() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.1.0"
-        source = { git = "file://[TEMP_DIR]/repository/#[SHA256]" }
+        source = { git = "file://[TEMP_DIR]/repository/?rev=[SHA256_PREFIX]#[SHA256]" }
 
         [[package]]
         name = "project"
@@ -1010,35 +1019,10 @@ fn lock_git_sha256() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "dependency", git = "file://[TEMP_DIR]/repository/" }]
+        requires-dist = [{ name = "dependency", git = "file://[TEMP_DIR]/repository/?rev=[SHA256_PREFIX]" }]
         "#);
     });
 
-    Ok(())
-}
-
-/// Reject a Git revision longer than a SHA-1 ID but shorter than a SHA-256 ID.
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
-#[test]
-fn lock_rejects_invalid_git_revision_length() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["dependency @ git+https://example.com/repository.git@01234567890123456789012345678901234567890"]
-    "#})?;
-
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: Failed to build `project @ file://[TEMP_DIR]/`
-      cause: Failed to extract static metadata from `pyproject.toml`
-      cause: Invalid Git revision `01234567890123456789012345678901234567890`: expected at most 40 or exactly 64 hexadecimal characters
-             dependency @ git+https://example.com/repository.git@01234567890123456789012345678901234567890
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ");
     Ok(())
 }
 
