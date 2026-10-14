@@ -229,7 +229,7 @@ fn add_version(
     in_memory: &InMemoryIndex,
     package: &ResolutionPackage,
     selected: SelectedDistribution,
-    is_workspace_member: bool,
+    is_project_or_workspace_member: bool,
 ) -> NodeIndex {
     let ResolutionPackage {
         name,
@@ -295,7 +295,7 @@ fn add_version(
         kind: kind.clone(),
         hashes,
         metadata,
-        is_workspace_member,
+        is_project_or_workspace_member,
         marker: UniversalMarker::TRUE,
     }))
 }

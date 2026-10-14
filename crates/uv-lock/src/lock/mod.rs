@@ -2534,9 +2534,13 @@ impl Lock {
             // Git declarations can introduce direct sources needed by offline freshness checks.
             if metadata_free
                 && matches!(package.id.source, Source::Git(..))
-                && let Some(metadata) = dist.metadata_for_lock()
+                && let Some(metadata) = dist.metadata()
             {
-                package.metadata = PackageMetadata::from_distribution(metadata.as_ref(), root)?;
+                package.metadata = PackageMetadata::from_distribution(
+                    metadata,
+                    root,
+                    dist.is_project_or_workspace_member,
+                )?;
             }
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
@@ -6655,10 +6659,12 @@ impl Package {
         let metadata = if id.source.is_immutable() {
             PackageMetadata::default()
         } else {
-            let metadata = annotated_dist
-                .metadata_for_lock()
-                .expect("metadata is present");
-            PackageMetadata::from_distribution(metadata.as_ref(), root)?
+            let metadata = annotated_dist.metadata().expect("metadata is present");
+            PackageMetadata::from_distribution(
+                metadata,
+                root,
+                annotated_dist.is_project_or_workspace_member,
+            )?
         };
         Ok(Self {
             id,
@@ -7447,13 +7453,27 @@ struct PackageMetadata {
 }
 
 impl PackageMetadata {
-    fn from_distribution(metadata: &DistributionMetadata, root: &Path) -> Result<Self, LockError> {
+    fn from_distribution(
+        metadata: &DistributionMetadata,
+        root: &Path,
+        preserve_path_preference: bool,
+    ) -> Result<Self, LockError> {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
+        // We normally write dependency paths relative to the lockfile. For the current project and
+        // workspace members, preserve the user's choice of relative or absolute paths instead.
+        // Metadata from `tool.uv.dependency-metadata` already preserves that choice.
+        // Apply the path policy to the cloned requirements so shared metadata remains unchanged.
+        let relative_requirement = |requirement: &Requirement| {
+            let mut requirement = requirement.clone();
+            if preserve_path_preference {
+                requirement.set_force_relative(false);
+            }
+            requirement.relative_to(root)
+        };
         let requires_dist = metadata
             .requires_dist
             .iter()
-            .cloned()
-            .map(|requirement| requirement.relative_to(root))
+            .map(&relative_requirement)
             .collect::<Result<Vec<_>, _>>()
             .map(|requirements| {
                 normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
@@ -7465,8 +7485,7 @@ impl PackageMetadata {
             .map(|(group, requirements)| {
                 let requirements = requirements
                     .iter()
-                    .cloned()
-                    .map(|requirement| requirement.relative_to(root))
+                    .map(&relative_requirement)
                     .collect::<Result<Vec<_>, _>>()
                     .map(|requirements| {
                         normalize_collection::<_, NormalizedRequirements>(requirements, normalize)

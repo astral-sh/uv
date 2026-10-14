@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Display;
 use std::sync::Arc;
 
@@ -46,8 +45,8 @@ impl PackageNodeKind {
 }
 
 /// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a
-/// specific distribution (e.g., a specific wheel), while the [`Metadata23`] refers to the metadata
-/// for the package-version pair.
+/// specific distribution (e.g., a specific wheel), while the [`Metadata`] describes
+/// the package-version pair.
 #[derive(Debug, Clone)]
 pub struct AnnotatedDist {
     pub dist: ResolvedDist,
@@ -56,7 +55,8 @@ pub struct AnnotatedDist {
     pub kind: PackageNodeKind,
     pub hashes: HashDigests,
     pub metadata: Option<Arc<MetadataResponse>>,
-    pub is_workspace_member: bool,
+    /// Whether this distribution is the current project or a workspace member.
+    pub is_project_or_workspace_member: bool,
     /// The "full" marker for this distribution. It precisely describes all
     /// marker environments for which this distribution _can_ be installed.
     /// That is, when doing a traversal over all of the distributions in a
@@ -75,21 +75,6 @@ impl AnnotatedDist {
                 None
             }
         })
-    }
-
-    /// Returns the resolved metadata with local path preferences preserved for lock serialization.
-    pub fn metadata_for_lock(&self) -> Option<Cow<'_, Metadata>> {
-        let metadata = self.metadata()?;
-
-        // We normally write dependency paths relative to the lockfile. For the current project and
-        // workspace members, preserve the user's choice of relative or absolute paths instead.
-        // Metadata from `tool.uv.dependency-metadata` already preserves that choice.
-        // Only change this copy, not shared metadata.
-        if self.is_workspace_member {
-            Some(Cow::Owned(metadata.clone().with_force_relative(false)))
-        } else {
-            Some(Cow::Borrowed(metadata))
-        }
     }
 
     /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
