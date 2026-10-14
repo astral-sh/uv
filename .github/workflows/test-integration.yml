@@ -1192,8 +1192,7 @@ jobs:
 
           # Test both `build_wheel` and `build_sdist` through uv
           ./uv venv -c -v
-          # Exercise Unicode filtering in the standalone backend, whose regex features differ from workspace tests.
-          RUST_LOG='[span{field=(?i)é\pL\w+}]=debug' ./uv build -v --force-pep517 test/packages/built-by-uv --find-links crates/uv-build/dist --offline
+          ./uv build -v --force-pep517 test/packages/built-by-uv --find-links crates/uv-build/dist --offline
           ./uv pip install -v test/packages/built-by-uv/dist/*.tar.gz --find-links crates/uv-build/dist --offline --no-deps
           ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
 
