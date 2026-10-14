@@ -50,7 +50,7 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 assert_fs = { workspace = true }
 insta = { workspace = true }
-regex = { workspace = true }
+regex = { workspace = true, features = ["perf", "unicode"] }
 tempfile = { workspace = true }
 
 [features]

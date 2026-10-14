@@ -232,7 +232,19 @@ rand = { version = "0.10.2", default-features = false, features = ["thread_rng"]
 rayon = { version = "1.10.0", default-features = false }
 ref-cast = { version = "1.0.24", default-features = false }
 reflink-copy = { version = "0.1.19", default-features = false }
-regex = { version = "1.13.0", default-features = false, features = ["perf", "std", "unicode"] }
+# Keep the regex features used by uv-build in the base set. Other consumers opt into the full
+# `perf` and `unicode` feature sets.
+regex = { version = "1.13.0", default-features = false, features = [
+  "perf-backtrack",
+  "perf-cache",
+  "perf-dfa",
+  "perf-inline",
+  "perf-literal",
+  "std",
+  "unicode-case",
+  "unicode-gencat",
+  "unicode-perl",
+] }
 regex-automata = { version = "0.4.8", default-features = false, features = [
   "dfa-build",
   "dfa-search",
