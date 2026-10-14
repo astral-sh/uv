@@ -5970,6 +5970,7 @@ dependencies = [
  "futures-lite",
  "globset",
  "hex",
+ "ignore",
  "indexmap",
  "indoc",
  "insta",

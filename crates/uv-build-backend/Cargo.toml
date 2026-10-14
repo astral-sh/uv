@@ -38,6 +38,7 @@ flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true }
 futures-lite = { workspace = true }
 globset = { workspace = true }
+ignore = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 rustc-hash = { workspace = true }
