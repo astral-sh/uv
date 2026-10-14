@@ -3,8 +3,9 @@ use std::fmt::Display;
 use std::str;
 
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
+use uv_redacted::DisplaySafeUrl;
 
-use crate::GitOid;
+use crate::{GitOid, GitUrlParseError};
 
 /// Percent-encode Git revisions for use after the `@` in VCS URLs.
 ///
@@ -93,6 +94,25 @@ impl GitReference {
             | Self::NamedRef(_)
             | Self::DefaultBranch => None,
         }
+    }
+
+    /// Check that an exact commit reference identifies the resolved commit. Other reference kinds
+    /// do not carry a commit identity to compare.
+    pub fn validate_resolved_commit(
+        &self,
+        precise: &GitOid,
+        url: &DisplaySafeUrl,
+    ) -> Result<(), GitUrlParseError> {
+        if let Self::Commit(commit) = self
+            && commit != precise
+        {
+            return Err(GitUrlParseError::MismatchedRevision {
+                revision: commit.to_string(),
+                precise: *precise,
+                url: Box::new(url.clone()),
+            });
+        }
+        Ok(())
     }
 
     /// Percent-encode a revision string for use in a URL.

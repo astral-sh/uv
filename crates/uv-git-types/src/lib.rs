@@ -164,17 +164,10 @@ impl GitUrl {
 
     /// Set the precise [`GitOid`] to use for this Git URL.
     pub fn with_precise(mut self, precise: GitOid) -> Result<Self, GitUrlParseError> {
-        match self.reference.as_commit() {
-            Some(commit) => {
-                if commit != precise {
-                    return Err(GitUrlParseError::MismatchedRevision {
-                        revision: commit.to_string(),
-                        precise,
-                        url: Box::new(self.url.clone()),
-                    });
-                }
-            }
-            None => self.resolved = Some(Arc::new(precise)),
+        self.reference
+            .validate_resolved_commit(&precise, &self.url)?;
+        if self.reference.as_commit().is_none() {
+            self.resolved = Some(Arc::new(precise));
         }
 
         Ok(self)
