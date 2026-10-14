@@ -1207,7 +1207,7 @@ pub(crate) fn find_python_installation(
         }
 
         // If it's an error, we're done.
-        let Ok(Ok(ref installation)) = result else {
+        let Ok(Ok(installation)) = result else {
             return result;
         };
 
@@ -1231,7 +1231,7 @@ pub(crate) fn find_python_installation(
         {
             debug!("Skipping pre-release installation {}", installation.key());
             if first_prerelease.is_none() {
-                first_prerelease = Some(installation.clone());
+                first_prerelease = Some(installation);
             }
             continue;
         }
@@ -1245,7 +1245,7 @@ pub(crate) fn find_python_installation(
         {
             debug!("Skipping debug installation {}", installation.key());
             if first_debug.is_none() {
-                first_debug = Some(installation.clone());
+                first_debug = Some(installation);
             }
             continue;
         }
@@ -1271,13 +1271,13 @@ pub(crate) fn find_python_installation(
                 installation.key()
             );
             if first_managed.is_none() {
-                first_managed = Some(installation.clone());
+                first_managed = Some(installation);
             }
             continue;
         }
 
         // If we didn't skip it, this is the installation to use
-        return result;
+        return Ok(Ok(installation));
     }
 
     // If we only found managed installations, and the preference allows them, we should return
