@@ -48,12 +48,15 @@ runs:
           fi
         done
 
-        mv "$exported" "symbols/$archive"
+        # Container exports can be owned by root; stage archives in a runner-owned directory.
+        cp -R "$exported" "$extracted/$archive"
+        chmod -R u+w "$extracted/$archive"
+        archive_path="$PWD/debug-symbols/$archive"
         if [[ "$TARGET" == *-windows-msvc ]]; then
-          (cd symbols && python -m zipfile -c "../debug-symbols/$archive.zip" "$archive")
+          (cd "$extracted" && python -m zipfile -c "$archive_path.zip" "$archive")
           (cd debug-symbols && sha256sum "$archive.zip" > "$archive.zip.sha256")
         else
-          tar -czf "debug-symbols/$archive.tar.gz" -C symbols "$archive"
+          tar -czf "$archive_path.tar.gz" -C "$extracted" "$archive"
           if [[ "$TARGET" == *-apple-darwin ]]; then
             (cd debug-symbols && shasum -a 256 "$archive.tar.gz" > "$archive.tar.gz.sha256")
           else
