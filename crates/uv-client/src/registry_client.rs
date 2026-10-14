@@ -400,10 +400,10 @@ impl RegistryClient {
                         }
                         IndexFormat::Flat => {
                             let entries = self.flat_single_index(package_name, index.url).await?;
-                            if entries.iter().any(|entry| match entry.filename() {
-                                IndexEntryFilename::DistFilename(_) => true,
-                                IndexEntryFilename::VariantJson(_) => false,
-                            }) {
+                            if entries
+                                .iter()
+                                .any(|entry| entry.filename().is_distribution())
+                            {
                                 results.push((index.url, MetadataFormat::Flat(entries)));
                                 break;
                             }

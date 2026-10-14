@@ -29,6 +29,14 @@ impl IndexEntryFilename {
         }
     }
 
+    /// Whether the entry refers to an installable file.
+    pub fn is_distribution(&self) -> bool {
+        match self {
+            Self::DistFilename(_) => true,
+            Self::VariantJson(_) => false,
+        }
+    }
+
     /// Parse a filename without knowing its package name.
     pub fn try_from_normalized_filename(filename: &str) -> Option<Self> {
         // Check the extension first to avoid allocating the error.
