@@ -522,6 +522,14 @@ pub(crate) fn create(
             _ => Cow::Borrowed(bin_name),
         };
 
+        let template = if *name == "activate" {
+            Cow::Owned(template.replace(
+                "{{ RELOCATABLE }}",
+                if relocatable { "true" } else { "false" },
+            ))
+        } else {
+            Cow::Borrowed(*template)
+        };
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
             .replace("{{ BIN_NAME }}", &bin_name)
