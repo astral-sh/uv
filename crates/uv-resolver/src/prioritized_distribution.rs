@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -7,7 +8,7 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
     File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, VariantsJsonFilename,
+    RegistrySourceDist, RequiresPython, VariantsJsonContent, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -359,6 +360,8 @@ pub enum PythonRequirementKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
+    /// The wheel matches the platform tags, but its variant properties have not been checked.
+    UnverifiedVariant(HashComparison, Option<TagPriority>, Option<BuildTag>),
     Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
 }
 
@@ -416,6 +419,63 @@ impl PrioritizedDist {
         &self.0.variants_json
     }
 
+    /// Whether this index has a wheel whose variant properties need to be checked.
+    pub(crate) fn has_unverified_variants(&self, index: &IndexUrl) -> bool {
+        self.0.wheels.iter().any(|(wheel, compatibility)| {
+            &wheel.index == index
+                && matches!(compatibility, WheelCompatibility::UnverifiedVariant(..))
+        })
+    }
+
+    /// Select among wheels whose properties are known to be supported.
+    pub(crate) fn prioritize_variants(
+        &self,
+        metadata: &[(IndexUrl, &VariantsJsonContent)],
+    ) -> Option<Self> {
+        let mut prioritized = self.clone();
+        let mut found_variant = false;
+        for (wheel, compatibility) in &mut prioritized.0.wheels {
+            if let WheelCompatibility::UnverifiedVariant(hash, priority, build_tag) = compatibility
+                && let Some(label) = wheel.filename.variant()
+                && metadata.iter().any(|(index, metadata)| {
+                    index == &wheel.index && metadata.has_no_properties(label)
+                })
+            {
+                *compatibility =
+                    WheelCompatibility::Compatible(*hash, *priority, build_tag.clone());
+                found_variant = true;
+            }
+        }
+        if !found_variant {
+            return None;
+        }
+
+        prioritized.0.best_wheel_index = prioritized
+            .0
+            .wheels
+            .iter()
+            .enumerate()
+            .filter_map(|(index, (wheel, compatibility))| {
+                let WheelCompatibility::Compatible(hash, priority, build_tag) = compatibility
+                else {
+                    return None;
+                };
+                Some((
+                    index,
+                    (
+                        hash,
+                        wheel.filename.variant().is_some(),
+                        Reverse(wheel.filename.variant()),
+                        priority,
+                        build_tag,
+                    ),
+                ))
+            })
+            .max_by(|(_, left), (_, right)| left.cmp(right))
+            .map(|(index, _)| index);
+        Some(prioritized)
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub(crate) fn insert_built(
         &mut self,
@@ -442,8 +502,8 @@ impl PrioritizedDist {
         if !compatibility.is_excluded() {
             self.0.hashes.extend(hashes);
         }
-        // Track the highest-priority wheel. Variant wheels cannot provide metadata, so prefer
-        // ordinary wheels even when they cannot be installed (e.g., with `--no-binary`).
+        // Before checking variant properties, prefer ordinary wheels as metadata sources even
+        // when they cannot be installed (e.g., with `--no-binary`).
         if let Some((existing_wheel, existing_compatibility)) = self.best_wheel() {
             let is_more_compatible =
                 match (dist.filename.variant(), existing_wheel.filename.variant()) {
@@ -524,7 +584,8 @@ impl PrioritizedDist {
             // using the wheel is faster.
             //
             // (If the incompatible wheel should actually be ignored entirely, fall through to
-            // using the source distribution. Variant wheels are not supported yet.)
+            // using the source distribution. Variant wheels need their properties checked before
+            // they can provide metadata.)
             (
                 Some((wheel, compatibility @ WheelCompatibility::Incompatible(_))),
                 Some((sdist, SourceDistCompatibility::Compatible(_))),
@@ -565,6 +626,9 @@ impl PrioritizedDist {
             .and_then(|(_, compatibility)| match compatibility {
                 WheelCompatibility::Compatible(_, _, _) => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
+                WheelCompatibility::UnverifiedVariant(..) => {
+                    Some(&IncompatibleWheel::Tag(IncompatibleTag::Variant))
+                }
             })
     }
 
@@ -754,17 +818,27 @@ impl WheelCompatibility {
     /// Compatible wheel ordering is determined by tag priority.
     fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible(_, _, _), Self::Incompatible(_)) => true,
+            (Self::Compatible(_, _, _), Self::Incompatible(_) | Self::UnverifiedVariant(..)) => {
+                true
+            }
             (
                 Self::Compatible(hash, tag_priority, build_tag),
                 Self::Compatible(other_hash, other_tag_priority, other_build_tag),
             ) => {
                 (hash, tag_priority, build_tag) > (other_hash, other_tag_priority, other_build_tag)
             }
-            (Self::Incompatible(_), Self::Compatible(_, _, _)) => false,
+            (Self::Incompatible(_) | Self::UnverifiedVariant(..), Self::Compatible(_, _, _)) => {
+                false
+            }
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }
+            (Self::UnverifiedVariant(..), Self::Incompatible(other)) => {
+                IncompatibleWheel::Tag(IncompatibleTag::Variant).is_more_compatible(other)
+            }
+            (Self::Incompatible(incompatibility), Self::UnverifiedVariant(..)) => incompatibility
+                .is_more_compatible(&IncompatibleWheel::Tag(IncompatibleTag::Variant)),
+            (Self::UnverifiedVariant(..), Self::UnverifiedVariant(..)) => false,
         }
     }
 }

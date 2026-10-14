@@ -37,6 +37,11 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
+    /// Whether the metadata describes a variant with no required properties.
+    pub fn has_no_properties(&self, label: &VariantLabel) -> bool {
+        self.variants.get(label).is_some_and(BTreeMap::is_empty)
+    }
+
     /// Parse and validate the contents of a variant metadata file.
     pub fn from_slice(contents: &[u8]) -> Result<Self, VariantsJsonParseError> {
         match serde_json::from_slice(contents) {

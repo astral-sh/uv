@@ -408,7 +408,7 @@ mod tests {
         ### `wheel-variants` {#wheel-variants}
 
         Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
-        Variant wheels are not yet selectable.
+        Variant wheels without properties can be selected for platform-specific resolutions.
 
         ### `workspace-dir` {#workspace-dir}
 

@@ -1,14 +1,406 @@
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
+use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
+use uv_test::packse::generate_wheel_with_files;
 use uv_test::uv_snapshot;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+
+/// An empty-property variant takes precedence over an ordinary wheel when opted in.
+#[test]
+fn select_empty_property_variant() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let variant_metadata = json!({
+        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "default-priorities": { "namespace": ["cuda"] },
+        "variants": { "empty": { "cuda": {} } },
+    })
+    .to_string();
+    let (_, ordinary_wheel) = generate_wheel_with_files(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[("ok/variant.txt", "ordinary")],
+    );
+    links
+        .child("ok-1.0.0-py3-none-any.whl")
+        .write_binary(&ordinary_wheel)?;
+    let (_, variant_wheel) = generate_wheel_with_files(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[
+            ("ok/variant.txt", "empty"),
+            ("ok-1.0.0.dist-info/variant.json", &variant_metadata),
+        ],
+    );
+    links
+        .child("ok-1.0.0-py3-none-any-empty.whl")
+        .write_binary(&variant_wheel)?;
+    links
+        .child("ok-1.0.0-9-py3-none-any-gpu.whl")
+        .write_str("unsupported wheel")?;
+    links
+        .child("ok-1.0.0-10-py3-none-any-missing.whl")
+        .write_str("unlisted wheel")?;
+    links
+        .child("ok-1.0.0-99-py3-none-any-null.whl")
+        .write_str("lower-priority variant")?;
+    links.child("ok-1.0.0-variants.json").write_str(
+        &json!({
+            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+            "default-priorities": { "namespace": ["cuda"] },
+            "variants": { "empty": { "cuda": {} }, "gpu": { "cuda": { "version": ["12"] } }, "null": {} },
+        })
+        .to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"ordinary");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--reinstall")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0
+    ");
+    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"empty");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn select_null_variant() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    let metadata = json!({
+        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "default-priorities": { "namespace": ["cuda"] },
+        "variants": { "null": {} },
+    })
+    .to_string();
+    let (_, wheel) = generate_wheel_with_files(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[("ok-1.0.0.dist-info/variant.json", &metadata)],
+    );
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "meta": { "api-version": "1.0" },
+                    "name": "ok",
+                    "files": [
+                        {
+                            "filename": "ok-1.0.0-py3-none-any-null.whl",
+                            "url": format!("{}/files/ok-1.0.0-py3-none-any-null.whl", server.uri()),
+                            "hashes": {},
+                            "core-metadata": true,
+                        },
+                        {
+                            "filename": "ok-1.0.0-variants.json",
+                            "url": format!("{}/files/ok-1.0.0-variants.json", server.uri()),
+                            "hashes": {},
+                        },
+                    ],
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(metadata))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any-null.whl.metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any-null.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
+/// A variant from the first index takes precedence when the same version is on another index.
+#[tokio::test]
+async fn select_variant_with_unsafe_best_match() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    let metadata = json!({
+        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "default-priorities": { "namespace": ["cuda"] },
+        "variants": { "null": {} },
+    })
+    .to_string();
+    let (_, variant_wheel) = generate_wheel_with_files(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[
+            ("ok/variant.txt", "variant"),
+            ("ok-1.0.0.dist-info/variant.json", &metadata),
+        ],
+    );
+    let (_, ordinary_wheel) = generate_wheel_with_files(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[("ok/variant.txt", "ordinary")],
+    );
+    Mock::given(method("GET"))
+        .and(path("/first/ok/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{}/files/ok-1.0.0-py3-none-any-null.whl">wheel</a>
+                <a href="{}/files/ok-1.0.0-variants.json">metadata</a>"#,
+                server.uri(),
+                server.uri(),
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/second/ok/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{}/files/ok-1.0.0-py3-none-any.whl">wheel</a>"#,
+                server.uri(),
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-variants.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(metadata))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any-null.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(variant_wheel))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(ordinary_wheel))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--extra-index-url")
+        .arg(format!("{}/first/", server.uri()))
+        .arg("--index-url")
+        .arg(format!("{}/second/", server.uri()))
+        .arg("--index-strategy")
+        .arg("unsafe-best-match")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"variant");
+    Ok(())
+}
+
+/// A wheel requiring unsupported properties cannot prevent backtracking to an older version.
+#[test]
+fn unsupported_variant_backtracks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    links
+        .child("ok-2.0.0-py3-none-any-gpu.whl")
+        .write_str("unsupported wheel")?;
+    links.child("ok-2.0.0-variants.json").write_str(
+        &json!({
+            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+            "default-priorities": { "namespace": ["cuda"] },
+            "variants": { "gpu": { "cuda": { "version": ["12"] } } },
+        })
+        .to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
+/// Invalid metadata for a variant-only version also permits backtracking.
+#[test]
+fn invalid_variant_only_metadata_backtracks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    links
+        .child("ok-2.0.0-py3-none-any-null.whl")
+        .write_str("unverified wheel")?;
+    links.child("ok-2.0.0-variants.json").write_str("{}")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
+/// A sidecar from another source cannot make a variant wheel eligible.
+#[test]
+fn variant_metadata_is_scoped_to_its_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    let metadata = context.temp_dir.child("metadata");
+    wheels.create_dir_all()?;
+    metadata.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        wheels.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    wheels
+        .child("ok-2.0.0-py3-none-any-null.whl")
+        .write_str("unverified wheel")?;
+    metadata.child("ok-2.0.0-variants.json").write_str(
+        &json!({
+            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+            "default-priorities": { "namespace": ["cuda"] },
+            "variants": { "null": {} },
+        })
+        .to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(wheels.path())
+        .arg("--find-links")
+        .arg(metadata.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    Ok(())
+}
 
 /// Only the selected version's variant metadata is fetched, and configured caching works offline.
 #[tokio::test]

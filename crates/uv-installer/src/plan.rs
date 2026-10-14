@@ -341,9 +341,10 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
-            // TODO(konsti): Support installing wheel variants.
             if let Some(filename) = dist.wheel_filename()
                 && filename.variant().is_some()
+                && (!uv_preview::is_enabled(uv_preview::PreviewFeature::WheelVariants)
+                    || !matches!(dist, ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Built(BuiltDist::Registry(_)))))
             {
                 return Err(uv_distribution::Error::UnsupportedWheelVariant(Box::new(
                     filename.clone(),

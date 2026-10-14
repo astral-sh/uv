@@ -113,6 +113,11 @@ impl WheelFilename {
         if self.variant().is_some() {
             return TagCompatibility::Incompatible(IncompatibleTag::Variant);
         }
+        self.tag_compatibility(compatible_tags)
+    }
+
+    /// Return the platform tag compatibility without checking the variant label.
+    pub fn tag_compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
         self.tags.compatibility(compatible_tags)
     }
 

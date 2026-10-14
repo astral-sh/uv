@@ -16,6 +16,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
@@ -232,8 +233,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
-        // TODO(konsti): Check variant compatibility for flat-index wheels.
-        if filename.variant().is_some() {
+        if filename.variant().is_some() && !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
                 IncompatibleTag::Variant,
             ));
@@ -245,7 +245,7 @@ impl FlatDistributions {
 
         // Determine a compatibility for the wheel based on tags.
         let priority = match tags {
-            Some(tags) => match filename.compatibility(tags) {
+            Some(tags) => match filename.tag_compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
@@ -271,7 +271,11 @@ impl FlatDistributions {
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        if filename.variant().is_some() {
+            WheelCompatibility::UnverifiedVariant(hash, priority, build_tag)
+        } else {
+            WheelCompatibility::Compatible(hash, priority, build_tag)
+        }
     }
 }
 

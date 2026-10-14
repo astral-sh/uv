@@ -16,6 +16,7 @@ use uv_fs::{directories, files};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
+use uv_preview::PreviewFeature;
 use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
@@ -70,6 +71,7 @@ impl IndexEntry<'_> {
         no_binary: bool,
     ) -> bool {
         self.matches_index_and_build_policy(index, no_build, no_binary)
+            && self.dist.filename.variant().is_none()
             && self.dist.filename.name == *name
             && self.dist.filename.version == *version
     }
@@ -247,7 +249,10 @@ impl<'a> RegistryWheelIndex<'a> {
                             if let Some(wheel) =
                                 CachedWheel::from_http_pointer(wheel_dir.join(file), cache)
                             {
-                                if wheel.filename.compatibility(tags).is_compatible() {
+                                if wheel.filename.tag_compatibility(tags).is_compatible()
+                                    && (wheel.filename.variant().is_none()
+                                        || uv_preview::is_enabled(PreviewFeature::WheelVariants))
+                                {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_package(
                                         &wheel.filename.name,
@@ -273,7 +278,10 @@ impl<'a> RegistryWheelIndex<'a> {
                             if let Some(wheel) =
                                 CachedWheel::from_local_pointer(wheel_dir.join(file), cache)
                             {
-                                if wheel.filename.compatibility(tags).is_compatible() {
+                                if wheel.filename.tag_compatibility(tags).is_compatible()
+                                    && (wheel.filename.variant().is_none()
+                                        || uv_preview::is_enabled(PreviewFeature::WheelVariants))
+                                {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_package(
                                         &wheel.filename.name,

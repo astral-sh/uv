@@ -967,6 +967,14 @@ impl<'a> Candidate<'a> {
         }
     }
 
+    /// Reevaluate this version with variant compatibility taken into account.
+    pub(crate) fn with_prioritized_dist(self, prioritized: &'a PrioritizedDist) -> Self {
+        Self {
+            dist: CandidateDist::from(prioritized),
+            ..self
+        }
+    }
+
     /// Return the name of the package.
     pub(crate) fn name(&self) -> &PackageName {
         self.name
