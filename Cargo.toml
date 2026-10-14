@@ -211,10 +211,6 @@ jiff = { version = "0.2.0", default-features = false, features = [
   "serde",
   "std",
   "tz-fat",
-  "tz-system",
-  "tzdb-bundle-platform",
-  "tzdb-concatenated",
-  "tzdb-zoneinfo",
 ] }
 junction = { version = "2.0.0", default-features = false, features = ["unstable_admin"] }
 libc = { version = "0.2.0", default-features = false, features = ["std"] }
