@@ -135,6 +135,118 @@ fn lockfile_v2_merge_independent_upgrades() -> Result<()> {
     Ok(())
 }
 
+/// Script declarations remain without package metadata. Independent upgrades must merge
+/// and retain unrelated locked versions, even when newer releases are available.
+#[test]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+fn lockfile_v2_script_merge_without_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    for name in ["hold-demo", "leaf-demo", "side-demo"] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &"1.0.0".parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+    let script = indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["leaf-demo>=1,<3", "side-demo>=1,<3", "hold-demo>=1,<3"]
+        # ///
+    "#};
+    let script_file = context.temp_dir.child("script.py");
+    script_file.write_str(script)?;
+    let lock_script = || {
+        let mut command = context.lock();
+        command.args([
+            "--script",
+            "script.py",
+            "--offline",
+            "--no-index",
+            "--find-links",
+            "wheels",
+            "--preview-features",
+            "lockfile-v2,lock-without-metadata",
+        ]);
+        command
+    };
+    lock_script().assert().success();
+    let base = context.read("script.py.lock");
+    context.temp_dir.child("base.lock").write_str(&base)?;
+
+    // Version 2 is also available for the unrelated package.
+    for name in ["hold-demo", "leaf-demo", "side-demo"] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &"2.0.0".parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+    script_file.write_str(&script.replace("leaf-demo>=1", "leaf-demo>=2"))?;
+    lock_script()
+        .args(["--upgrade-package", "leaf-demo"])
+        .assert()
+        .success();
+    context
+        .temp_dir
+        .child("left.lock")
+        .write_str(&context.read("script.py.lock"))?;
+
+    context.temp_dir.child("script.py.lock").write_str(&base)?;
+    script_file.write_str(&script.replace("side-demo>=1", "side-demo>=2"))?;
+    lock_script()
+        .args(["--upgrade-package", "side-demo"])
+        .assert()
+        .success();
+    context
+        .temp_dir
+        .child("right.lock")
+        .write_str(&context.read("script.py.lock"))?;
+
+    let merge = Command::new("git")
+        .current_dir(context.temp_dir.path())
+        .args(["merge-file", "-p", "left.lock", "base.lock", "right.lock"])
+        .output()?
+        .assert()
+        .success();
+    let merged = String::from_utf8(merge.get_output().stdout.clone())?;
+    assert_eq!(Lock::from_canonical_toml(&merged)?.to_toml()?, merged);
+    context
+        .temp_dir
+        .child("script.py.lock")
+        .write_str(&merged)?;
+    script_file.write_str(
+        &script
+            .replace("leaf-demo>=1", "leaf-demo>=2")
+            .replace("side-demo>=1", "side-demo>=2"),
+    )?;
+    lock_script().arg("--check").assert().success();
+    assert_eq!(context.read("script.py.lock"), merged);
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--script", "script.py", "--frozen", "--offline", "--preview-features", "lockfile-v2,lock-without-metadata"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    side-demo v2.0.0
+    leaf-demo v2.0.0
+    hold-demo v1.0.0
+
+    ----- stderr -----
+    warning: The `lockfile-v2` feature is highly experimental. The lockfile format may change incompatibly in patch releases.
+    ");
+    Ok(())
+}
+
 /// V2 conflict locks retain extra and group selection across frozen reads and revalidation.
 #[test]
 #[cfg(feature = "test-universal")]
