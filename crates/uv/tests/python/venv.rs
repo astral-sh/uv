@@ -2171,6 +2171,33 @@ fn create_venv_apostrophe() {
     assert_eq!(stdout.trim(), venv_dir.to_string_lossy());
 }
 
+/// Emulate a ksh without ksh93's `${.sh.file}` parameter using a POSIX shell.
+#[test]
+#[cfg(unix)]
+fn activate_non_relocatable_venv_ksh() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context
+        .venv()
+        .arg("--no-relocatable")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.external_command("sh")
+        .arg("-c")
+        .arg(indoc! {r"
+            unset BASH_VERSION ZSH_VERSION
+            readonly SCRIPT_PATH=caller
+            . .venv/bin/activate && python -c 'import sys; print(sys.prefix)'
+        "})
+        .env(EnvVars::KSH_VERSION, "test"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/
+    ");
+}
+
 #[test]
 fn venv_python_preference() {
     let context =
