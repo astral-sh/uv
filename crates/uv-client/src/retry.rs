@@ -13,7 +13,7 @@ use rustls::{AlertDescription, Error as RustlsError};
 use tracing::{debug, trace};
 use url::Url;
 
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::{RequestBuilder, WrappedReqwestError};
 
@@ -34,11 +34,11 @@ impl RetryableStrategy for UvRetryableStrategy {
                 Ok(response) => {
                     debug!(
                         "Transient request failure for: {}",
-                        DisplaySafeUrl::ref_cast(response.url())
+                        SafeUrl::ref_cast(response.url())
                     );
                 }
                 Err(err) => {
-                    let url = request_error_url(err).map(DisplaySafeUrl::ref_cast);
+                    let url = request_error_url(err).map(SafeUrl::ref_cast);
                     let redact = |message: &str| {
                         url.map_or_else(|| message.to_owned(), |url| url.redact_in(message))
                     };
@@ -62,12 +62,12 @@ pub struct RetryState {
     retry_policy: ExponentialBackoff,
     start_time: SystemTime,
     total_retries: u32,
-    url: DisplaySafeUrl,
+    url: SafeUrl,
 }
 
 impl RetryState {
     /// Initialize the [`RetryState`] and record the start time for the retry policy.
-    pub fn start(retry_policy: ExponentialBackoff, url: impl Into<DisplaySafeUrl>) -> Self {
+    pub fn start(retry_policy: ExponentialBackoff, url: impl Into<SafeUrl>) -> Self {
         Self {
             retry_policy,
             start_time: SystemTime::now(),
@@ -197,12 +197,12 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
     {
         trace!(
             "Considering retry of response HTTP {status} for `{url}`",
-            url = DisplaySafeUrl::from_url(url.clone())
+            url = SafeUrl::from_url(url.clone())
         );
     } else if let Some(url) = request_error_url(err) {
         trace!(
             "Considering retry of error: {}",
-            DisplaySafeUrl::ref_cast(url).redact_in(&format!("{err:?}"))
+            SafeUrl::ref_cast(url).redact_in(&format!("{err:?}"))
         );
     } else {
         trace!("Considering retry of error: {err:?}");

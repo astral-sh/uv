@@ -11,7 +11,7 @@ use tracing::{debug, instrument};
 
 use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitUrl};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::credentials::GIT_STORE;
 use crate::git::{GitDatabase, GitRemote};
@@ -188,8 +188,8 @@ impl Fetch {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &SafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize);
+    fn on_checkout_complete(&self, url: &SafeUrl, rev: &str, index: usize);
 }

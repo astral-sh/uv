@@ -42,7 +42,7 @@ use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_archive_metadata;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_static::TarBackend;
 use uv_warnings::warn_user;
 
@@ -66,11 +66,7 @@ pub enum PublishError {
     #[error("Failed to publish: {}", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to `{}`", _0.user_display(), _1)]
-    PublishSend(
-        PathBuf,
-        Box<DisplaySafeUrl>,
-        #[source] Box<PublishSendError>,
-    ),
+    PublishSend(PathBuf, Box<SafeUrl>, #[source] Box<PublishSendError>),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] Box<TrustedPublishingError>),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -157,7 +153,7 @@ pub enum PublishSendError {
     #[error("Request was redirected, but location header is not a UTF-8 string")]
     RedirectLocationInvalidStr(#[source] ToStrError),
     #[error("Request was redirected, but location header is not a URL")]
-    RedirectInvalidLocation(#[source] DisplaySafeUrlError),
+    RedirectInvalidLocation(#[source] SafeUrlError),
 }
 
 pub trait Reporter: Send + Sync + 'static {
@@ -319,7 +315,7 @@ struct CheckUrlClient<'a> {
 /// perform cleanup.
 #[must_use = "publishing sessions must be finalized after use"]
 pub struct PublishSession<'a> {
-    publish_url: DisplaySafeUrl,
+    publish_url: SafeUrl,
     credentials: PublishingCredentials,
     credentials_prompt: Option<CredentialsPrompt>,
     upload_client: &'a BaseClient,
@@ -539,7 +535,7 @@ pub async fn check_trusted_publishing(
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
     trusted_publishing: TrustedPublishing,
-    registry: &DisplaySafeUrl,
+    registry: &SafeUrl,
     client: &BaseClient,
 ) -> Result<TrustedPublishResult, PublishError> {
     match trusted_publishing {
@@ -611,7 +607,7 @@ impl<'a> PublishSession<'a> {
     /// The retry policy applies to streaming uploads, whose client must have automatic retries
     /// and redirects disabled. The OIDC client uses its own retry and timeout settings.
     pub fn new(
-        publish_url: DisplaySafeUrl,
+        publish_url: SafeUrl,
         credentials: PublishingCredentials,
         upload_client: &'a BaseClient,
         oidc_client: &'a BaseClient,
@@ -771,7 +767,7 @@ impl<'a> PublishSession<'a> {
                                     PublishSendError::RedirectLocationInvalidStr(err).into(),
                                 )
                             })?;
-                        current_registry = DisplaySafeUrl::parse(location).map_err(|err| {
+                        current_registry = SafeUrl::parse(location).map_err(|err| {
                             PublishError::PublishSend(
                                 prepared.file.clone(),
                                 current_registry.clone().into(),
@@ -1325,7 +1321,7 @@ impl PublishSession<'_> {
         prepared: &PreparedDistribution,
         form_metadata: &FormMetadata,
         attestations: Option<&str>,
-        registry: &DisplaySafeUrl,
+        registry: &SafeUrl,
         reporter: Arc<impl Reporter>,
     ) -> Result<(RequestBuilder<'_>, usize), PublishPrepareError> {
         let credentials = self.credentials.as_credentials();
@@ -1397,7 +1393,7 @@ impl PublishSession<'_> {
 
     /// Log response information and map response to an error variant if not successful.
     async fn handle_response(
-        registry: &DisplaySafeUrl,
+        registry: &SafeUrl,
         response: Response,
     ) -> Result<(), PublishSendError> {
         let status_code = response.status();
@@ -1486,7 +1482,7 @@ mod tests {
     use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
     use uv_pypi_types::{HashDigest, Metadata23};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
     use uv_static::TarBackend;
 
     use crate::{
@@ -1587,7 +1583,7 @@ mod tests {
         }
     }
 
-    fn test_session(registry: DisplaySafeUrl, client: &BaseClient) -> PublishSession<'_> {
+    fn test_session(registry: SafeUrl, client: &BaseClient) -> PublishSession<'_> {
         PublishSession::new(
             registry,
             PublishingCredentials::Supplied(Credentials::basic(
@@ -1614,8 +1610,8 @@ mod tests {
             .build()
             .expect("failed to build base client");
 
-        let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri()))
-            .expect("Valid registry URL");
+        let registry =
+            SafeUrl::parse(&format!("{}/final", mock_server.uri())).expect("Valid registry URL");
         let mut session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let result = session.upload(prepared, Arc::new(DummyReporter)).await;
@@ -1968,8 +1964,7 @@ mod tests {
             .retries(0)
             .build()
             .expect("Failed to build client");
-        let registry =
-            DisplaySafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
+        let registry = SafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
         let session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let (form_metadata, attestations, _) = prepared
@@ -2097,8 +2092,7 @@ mod tests {
             .retries(0)
             .build()
             .expect("Failed to build client");
-        let registry =
-            DisplaySafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
+        let registry = SafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
         let session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let (form_metadata, attestations, _) = prepared
@@ -2276,7 +2270,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let registry = DisplaySafeUrl::parse(&server.uri()).expect("Valid registry URL");
+        let registry = SafeUrl::parse(&server.uri()).expect("Valid registry URL");
         let prompt = CredentialsPrompt::new(|| {
             Ok(Some(Credentials::basic(
                 Some("writer".to_string()),
@@ -2322,7 +2316,7 @@ mod tests {
 
         // The next file's index check can reload read credentials into the shared cache.
         client_builder.store_credentials(
-            &DisplaySafeUrl::parse(&server.uri()).expect("Valid registry URL"),
+            &SafeUrl::parse(&server.uri()).expect("Valid registry URL"),
             Credentials::basic(
                 Some("reader".to_string()),
                 Some("read-password".to_string()),
@@ -2367,7 +2361,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let registry = DisplaySafeUrl::parse(&server.uri()).expect("Valid registry URL");
+        let registry = SafeUrl::parse(&server.uri()).expect("Valid registry URL");
         let prompt = CredentialsPrompt::new(|| {
             Err(CredentialsPromptError::ReadUsername(io::Error::other(
                 "Unexpected prompt",

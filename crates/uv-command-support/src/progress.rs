@@ -7,7 +7,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use uv_console::human_readable_bytes;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use crate::Printer;
@@ -357,7 +357,7 @@ impl ProgressReporter {
         self.on_request_start(Direction::Hash, name, size)
     }
 
-    pub fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
+    pub fn on_checkout_start(&self, url: &SafeUrl, rev: &str) -> usize {
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -387,7 +387,7 @@ impl ProgressReporter {
         id
     }
 
-    pub fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize) {
+    pub fn on_checkout_complete(&self, url: &SafeUrl, rev: &str, id: usize) {
         let ProgressMode::Multi {
             state,
             multi_progress,

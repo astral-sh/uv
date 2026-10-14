@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 use url::Url;
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
 
@@ -17,10 +17,10 @@ use crate::cache_key::{CacheKey, CacheKeyHasher};
 /// string value of the `Url` it contains. This is intentional, because all fetching should still
 /// happen within the context of the original URL.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct CanonicalUrl(DisplaySafeUrl);
+pub struct CanonicalUrl(SafeUrl);
 
 impl CanonicalUrl {
-    pub fn new(mut url: DisplaySafeUrl) -> Self {
+    pub fn new(mut url: SafeUrl) -> Self {
         // If the URL cannot be a base, then it's not a valid URL anyway.
         if url.cannot_be_a_base() {
             return Self(url);
@@ -95,8 +95,8 @@ impl CanonicalUrl {
         Self(url)
     }
 
-    pub fn parse(url: &str) -> Result<Self, DisplaySafeUrlError> {
-        Ok(Self::new(DisplaySafeUrl::parse(url)?))
+    pub fn parse(url: &str) -> Result<Self, SafeUrlError> {
+        Ok(Self::new(SafeUrl::parse(url)?))
     }
 }
 
@@ -116,7 +116,7 @@ impl Hash for CanonicalUrl {
     }
 }
 
-impl From<CanonicalUrl> for DisplaySafeUrl {
+impl From<CanonicalUrl> for SafeUrl {
     fn from(value: CanonicalUrl) -> Self {
         value.0
     }
@@ -145,12 +145,12 @@ impl std::fmt::Display for CanonicalUrl {
 /// When Git LFS is `false` or `None`, the cache key remains unchanged.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct RepositoryUrl {
-    repo_url: DisplaySafeUrl,
+    repo_url: SafeUrl,
     with_lfs: Option<bool>,
 }
 
 impl RepositoryUrl {
-    pub fn new(url: DisplaySafeUrl) -> Self {
+    pub fn new(url: SafeUrl) -> Self {
         let mut url = CanonicalUrl::new(url).0;
 
         // If a Git URL ends in a reference (like a branch, tag, or commit), remove it.
@@ -174,8 +174,8 @@ impl RepositoryUrl {
         }
     }
 
-    pub fn parse(url: &str) -> Result<Self, DisplaySafeUrlError> {
-        Ok(Self::new(DisplaySafeUrl::parse(url)?))
+    pub fn parse(url: &str) -> Result<Self, SafeUrlError> {
+        Ok(Self::new(SafeUrl::parse(url)?))
     }
 
     #[must_use]
@@ -226,7 +226,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn user_credential_does_not_affect_cache_key() -> Result<(), DisplaySafeUrlError> {
+    fn user_credential_does_not_affect_cache_key() -> Result<(), SafeUrlError> {
         let mut hasher = CacheKeyHasher::new();
         CanonicalUrl::parse("https://example.com/pypa/sample-namespace-packages.git@2.0.0")?
             .cache_key(&mut hasher);
@@ -276,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn canonical_url() -> Result<(), DisplaySafeUrlError> {
+    fn canonical_url() -> Result<(), SafeUrlError> {
         // Two URLs should be considered equal regardless of the `.git` suffix.
         assert_eq!(
             CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn repository_url() -> Result<(), DisplaySafeUrlError> {
+    fn repository_url() -> Result<(), SafeUrlError> {
         // Two URLs should be considered equal regardless of the `.git` suffix.
         assert_eq!(
             RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git")?,
@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn repository_url_with_lfs() -> Result<(), DisplaySafeUrlError> {
+    fn repository_url_with_lfs() -> Result<(), SafeUrlError> {
         let mut hasher = CacheKeyHasher::new();
         RepositoryUrl::parse("https://example.com/pypa/sample-namespace-packages.git@2.0.0")?
             .cache_key(&mut hasher);

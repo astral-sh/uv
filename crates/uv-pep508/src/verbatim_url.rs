@@ -13,7 +13,7 @@ use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::Pep508Url;
 
@@ -23,7 +23,7 @@ use crate::Pep508Url;
 #[derive(Clone, Eq)]
 pub struct VerbatimUrl {
     /// The parsed URL.
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     /// The URL as it was provided by the user.
     ///
     /// Even if originally set, this will be [`None`] after
@@ -39,7 +39,7 @@ pub struct VerbatimUrl {
 impl Debug for VerbatimUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let given = self.given.as_deref().map(|given| {
-            DisplaySafeUrl::parse(given).map_or_else(
+            SafeUrl::parse(given).map_or_else(
                 |_| Cow::Borrowed(given),
                 |url| {
                     let redacted = url.to_string();
@@ -81,7 +81,7 @@ impl PartialEq for VerbatimUrl {
 
 impl VerbatimUrl {
     /// Create a [`VerbatimUrl`] from a [`Url`].
-    pub fn from_url(url: DisplaySafeUrl) -> Self {
+    pub fn from_url(url: SafeUrl) -> Self {
         Self {
             url,
             given: None,
@@ -93,7 +93,7 @@ impl VerbatimUrl {
     /// Parse a URL from a string.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
         let given = given.as_ref();
-        let url = DisplaySafeUrl::parse(given)?;
+        let url = SafeUrl::parse(given)?;
 
         Ok(Self {
             url,
@@ -166,8 +166,8 @@ impl VerbatimUrl {
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Convert to a URL.
-        let url = DisplaySafeUrl::from_file_path(&path)
-            .map_err(|()| VerbatimUrlError::UrlConversion(path))?;
+        let url =
+            SafeUrl::from_file_path(&path).map_err(|()| VerbatimUrlError::UrlConversion(path))?;
 
         Ok(Self {
             url,
@@ -208,7 +208,7 @@ impl VerbatimUrl {
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Convert to a URL.
-        let url = DisplaySafeUrl::from_file_path(&path)
+        let url = SafeUrl::from_file_path(&path)
             .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         Ok(Self {
@@ -233,7 +233,7 @@ impl VerbatimUrl {
         };
 
         // Convert to a URL.
-        let url = DisplaySafeUrl::from_file_path(path)
+        let url = SafeUrl::from_file_path(path)
             .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         Ok(Self {
@@ -314,18 +314,18 @@ impl VerbatimUrl {
         Self { expanded, ..self }
     }
 
-    /// Return the underlying [`DisplaySafeUrl`].
-    pub fn raw(&self) -> &DisplaySafeUrl {
+    /// Return the underlying [`SafeUrl`].
+    pub fn raw(&self) -> &SafeUrl {
         &self.url
     }
 
-    /// Convert a [`VerbatimUrl`] into a [`DisplaySafeUrl`].
-    pub fn to_url(&self) -> DisplaySafeUrl {
+    /// Convert a [`VerbatimUrl`] into a [`SafeUrl`].
+    pub fn to_url(&self) -> SafeUrl {
         self.url.clone()
     }
 
-    /// Convert the [`VerbatimUrl`] into a [`DisplaySafeUrl`].
-    pub fn into_url(self) -> DisplaySafeUrl {
+    /// Convert the [`VerbatimUrl`] into a [`SafeUrl`].
+    pub fn into_url(self) -> SafeUrl {
         self.url
     }
 
@@ -365,7 +365,7 @@ impl std::fmt::Display for VerbatimUrl {
 }
 
 impl Deref for VerbatimUrl {
-    type Target = DisplaySafeUrl;
+    type Target = SafeUrl;
 
     fn deref(&self) -> &Self::Target {
         &self.url
@@ -374,12 +374,12 @@ impl Deref for VerbatimUrl {
 
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
-        Self::from_url(DisplaySafeUrl::from_url(url))
+        Self::from_url(SafeUrl::from_url(url))
     }
 }
 
-impl From<DisplaySafeUrl> for VerbatimUrl {
-    fn from(url: DisplaySafeUrl) -> Self {
+impl From<SafeUrl> for VerbatimUrl {
+    fn from(url: SafeUrl) -> Self {
         Self::from_url(url)
     }
 }
@@ -406,7 +406,7 @@ impl<'de> serde::Deserialize<'de> for VerbatimUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        let url = DisplaySafeUrl::deserialize(deserializer)?;
+        let url = SafeUrl::deserialize(deserializer)?;
         Ok(Self::from_url(url))
     }
 }
@@ -504,7 +504,7 @@ impl Pep508Url for VerbatimUrl {
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]
-    Url(#[from] DisplaySafeUrlError),
+    Url(#[from] SafeUrlError),
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
@@ -516,7 +516,7 @@ pub enum VerbatimUrlError {
 
     /// Received a URL that could not be converted to a path.
     #[error("URL could not be converted to a path: {0}")]
-    PathConversion(Box<DisplaySafeUrl>),
+    PathConversion(Box<SafeUrl>),
 
     /// Received a path that could not be normalized.
     #[error("path could not be normalized: {0}")]

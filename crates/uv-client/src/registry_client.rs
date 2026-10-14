@@ -35,7 +35,7 @@ use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{Digest, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{PypiSimpleDetail, PypiSimpleIndex, ResolutionMetadata};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
@@ -281,12 +281,12 @@ impl RegistryClient {
     }
 
     /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self, url: &DisplaySafeUrl) -> &RedirectClientWithMiddleware {
+    pub fn uncached_client(&self, url: &SafeUrl) -> &RedirectClientWithMiddleware {
         self.client.uncached().for_host(url)
     }
 
     /// Return the [`GitHttpSettings`] for fetching from the given URL.
-    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+    pub fn git_http_settings(&self, url: &SafeUrl) -> GitHttpSettings {
         self.client.uncached().git_http_settings(url)
     }
 
@@ -625,7 +625,7 @@ impl RegistryClient {
     async fn fetch_remote_simple_detail(
         &self,
         package_name: &PackageName,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
@@ -642,7 +642,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = DisplaySafeUrl::from_url(response.url().clone());
+                let url = SafeUrl::from_url(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -758,7 +758,7 @@ impl RegistryClient {
     async fn fetch_local_simple_detail(
         &self,
         package_name: &PackageName,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         let path = url
             .to_file_path()
@@ -808,7 +808,7 @@ impl RegistryClient {
     /// Fetch the list of projects from a remote Simple API index.
     async fn fetch_remote_simple_index(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: &IndexUrl,
     ) -> Result<OwnedArchive<SimpleIndexMetadata>, Error> {
         let cache_entry = self.cache.entry(
@@ -834,7 +834,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = DisplaySafeUrl::from_url(response.url().clone());
+                let url = SafeUrl::from_url(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -906,7 +906,7 @@ impl RegistryClient {
     /// Fetch the list of projects from a local Simple API index.
     async fn fetch_local_simple_index(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
     ) -> Result<OwnedArchive<SimpleIndexMetadata>, Error> {
         let path = url
             .to_file_path()
@@ -946,7 +946,7 @@ impl RegistryClient {
                     /// A local file path.
                     Path(PathBuf),
                     /// A remote URL.
-                    Url(DisplaySafeUrl),
+                    Url(SafeUrl),
                 }
 
                 let wheel = wheels.best_wheel();
@@ -1068,7 +1068,7 @@ impl RegistryClient {
     async fn wheel_metadata_registry(
         &self,
         wheel: &RegistryBuiltWheel,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         let RegistryBuiltWheel {
@@ -1169,7 +1169,7 @@ impl RegistryClient {
     async fn wheel_metadata_no_pep658<'data>(
         &self,
         filename: &'data WheelFilename,
-        url: &'data DisplaySafeUrl,
+        url: &'data SafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: WheelCache<'data>,
         capabilities: &'data IndexCapabilities,
@@ -1630,7 +1630,7 @@ impl SimpleIndexMetadata {
     }
 
     /// Create a [`SimpleIndexMetadata`] from HTML content.
-    fn from_html(text: &str, url: &DisplaySafeUrl) -> Result<Self, Error> {
+    fn from_html(text: &str, url: &SafeUrl) -> Result<Self, Error> {
         let html = crate::html::SimpleIndexHtml::parse(text).map_err(|err| {
             Error::from(ErrorKind::BadHtml {
                 source: err,
@@ -1740,11 +1740,7 @@ impl SimpleDetailMetadata {
     }
 
     /// Read the [`SimpleDetailMetadata`] from an HTML index.
-    fn from_html(
-        text: &str,
-        package_name: &PackageName,
-        url: &DisplaySafeUrl,
-    ) -> Result<Self, Error> {
+    fn from_html(text: &str, package_name: &PackageName, url: &SafeUrl) -> Result<Self, Error> {
         let SimpleDetailHTML {
             project_status,
             base,
@@ -1849,7 +1845,7 @@ mod tests {
     use url::Url;
     use uv_normalize::PackageName;
     use uv_pypi_types::{HashDigest, HashDigests, PypiSimpleDetail};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
     use uv_torch::{TorchBackend, TorchStrategy};
 
     use crate::{
@@ -2001,7 +1997,7 @@ mod tests {
         let password = "password";
 
         let auth_server = start_test_server(username, password).await;
-        let auth_base_url = DisplaySafeUrl::parse(&auth_server.uri())?;
+        let auth_base_url = SafeUrl::parse(&auth_server.uri())?;
 
         let redirect_server = MockServer::start().await;
 
@@ -2013,7 +2009,7 @@ mod tests {
             .mount(&redirect_server)
             .await;
 
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
+        let redirect_server_url = SafeUrl::parse(&redirect_server.uri())?;
 
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
@@ -2074,7 +2070,7 @@ mod tests {
             .mount(&redirect_server)
             .await;
 
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
+        let redirect_server_url = SafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
 
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
@@ -2132,7 +2128,7 @@ mod tests {
             .expect("failed to build registry client");
         let client = registry_client.cached_client().uncached();
 
-        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
+        let redirect_server_url = SafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
         let mut url = redirect_server_url.clone();
         let _ = url.set_username(username);
         let _ = url.set_password(Some(password));
@@ -2187,7 +2183,7 @@ mod tests {
     }
     "#;
         let data: PypiSimpleDetail = serde_json::from_str(response).unwrap();
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pyflyby/").unwrap();
+        let base = SafeUrl::parse("https://pypi.org/simple/pyflyby/").unwrap();
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
@@ -2224,7 +2220,7 @@ mod tests {
         "#;
         let package_name = PackageName::from_str("example-1")?;
         let data: PypiSimpleDetail = serde_json::from_str(response)?;
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example-1/")?;
+        let base = SafeUrl::parse("https://pypi.org/simple/example-1/")?;
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &package_name,
@@ -2297,7 +2293,7 @@ mod tests {
         }"#;
         let data: PypiSimpleDetail = serde_json::from_str(response)?;
         let package_name = PackageName::from_str("example")?;
-        let base = DisplaySafeUrl::parse("https://example.com/simple/example/")?;
+        let base = SafeUrl::parse("https://example.com/simple/example/")?;
         let metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &package_name,
@@ -2338,7 +2334,7 @@ mod tests {
             <a href="example-1.0-variants.json">example-1.0-variants.json</a>
         "#;
         let package_name = PackageName::from_str("example")?;
-        let base = DisplaySafeUrl::parse("https://example.com/simple/example/")?;
+        let base = SafeUrl::parse("https://example.com/simple/example/")?;
         let metadata = SimpleDetailMetadata::from_html(html, &package_name, &base)?;
         let entries: Vec<_> = metadata
             .versions
@@ -2403,7 +2399,7 @@ mod tests {
         "#;
 
         let data: PypiSimpleDetail = serde_json::from_str(json).unwrap();
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
+        let base = SafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &PackageName::from_str("pepy").unwrap(),
@@ -2480,7 +2476,7 @@ mod tests {
         <!--SERIAL 15765070-->
         "#;
 
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
+        let base = SafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
         let simple_metadata =
             SimpleDetailMetadata::from_html(html, &PackageName::from_str("pepy").unwrap(), &base)
                 .unwrap();
@@ -2558,7 +2554,7 @@ mod tests {
     "#;
 
         // Note the lack of a trailing `/` here is important for coverage of url-join behavior
-        let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
+        let base = SafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleDetailHTML {
             project_status: _,
@@ -2572,10 +2568,7 @@ mod tests {
             .into_iter()
             .map(|file| FileLocation::new(file.url, &base).to_url())
             .collect::<Result<Vec<_>, _>>()?;
-        let urls = urls
-            .iter()
-            .map(DisplaySafeUrl::to_string)
-            .collect::<Vec<_>>();
+        let urls = urls.iter().map(SafeUrl::to_string).collect::<Vec<_>>();
         assert_debug_snapshot!(urls, @r#"
         [
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz",

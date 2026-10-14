@@ -23,7 +23,7 @@ use uv_publish::{
     PublishingCredentials, TrustedPublishResult, TrustedPublishingError, UploadOutcome,
     check_trusted_publishing,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::EnvironmentOptions;
 use uv_static::TarBackend;
 use uv_warnings::{warn_user, warn_user_once};
@@ -33,7 +33,7 @@ use crate::reporters::PublishReporter;
 /// Publish distributions to a package index.
 pub async fn publish(
     paths: Vec<String>,
-    publish_url: DisplaySafeUrl,
+    publish_url: SafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
     environment: &EnvironmentOptions,
@@ -303,7 +303,7 @@ async fn publish_file(
 
 /// The publish URL and credentials, with any ignored trusted publishing error.
 struct GatheredCredentials {
-    publish_url: DisplaySafeUrl,
+    publish_url: SafeUrl,
     credentials: PublishingCredentials,
     trusted_publishing_error: Option<TrustedPublishingError>,
 }
@@ -337,7 +337,7 @@ impl GatheredCredentials {
     /// If no credentials are found, the auth middleware checks the credential cache and providers
     /// before invoking the interactive prompt.
     async fn gather(
-        mut publish_url: DisplaySafeUrl,
+        mut publish_url: SafeUrl,
         mut username: Option<String>,
         mut password: Option<String>,
         trusted_publishing: TrustedPublishing,
@@ -403,7 +403,7 @@ impl GatheredCredentials {
                 if let Some(username) = &username {
                     debug!("Fetching password from keyring");
                     if let Some(keyring_password) = provider
-                        .fetch(DisplaySafeUrl::ref_cast(&publish_url), Some(username))
+                        .fetch(SafeUrl::ref_cast(&publish_url), Some(username))
                         .await
                         .as_ref()
                         .and_then(|credentials| credentials.password())
@@ -456,13 +456,13 @@ mod tests {
 
     use insta::assert_snapshot;
 
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
 
     async fn get_credentials(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         username: Option<String>,
         password: Option<String>,
-    ) -> Result<(DisplaySafeUrl, Credentials)> {
+    ) -> Result<(SafeUrl, Credentials)> {
         let client = BaseClientBuilder::default().build()?;
         let GatheredCredentials {
             publish_url,
@@ -483,10 +483,10 @@ mod tests {
 
     #[tokio::test]
     async fn username_password_sources() {
-        let example_url = DisplaySafeUrl::from_str("https://example.com").unwrap();
-        let example_url_username = DisplaySafeUrl::from_str("https://ferris@example.com").unwrap();
+        let example_url = SafeUrl::from_str("https://example.com").unwrap();
+        let example_url_username = SafeUrl::from_str("https://ferris@example.com").unwrap();
         let example_url_username_password =
-            DisplaySafeUrl::from_str("https://ferris:f3rr1s@example.com").unwrap();
+            SafeUrl::from_str("https://ferris:f3rr1s@example.com").unwrap();
 
         let (publish_url, credentials) = get_credentials(example_url.clone(), None, None)
             .await

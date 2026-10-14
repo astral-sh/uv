@@ -6,7 +6,7 @@ use url::Url;
 
 use uv_client::BaseClientBuilder;
 use uv_configuration::RequirementsInput;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 #[test]
@@ -47,20 +47,18 @@ fn parse_requirements_input() -> Result<()> {
     ] {
         assert_eq!(
             remote.parse::<RequirementsInput>()?,
-            RequirementsInput::Remote(DisplaySafeUrl::parse(remote)?)
+            RequirementsInput::Remote(SafeUrl::parse(remote)?)
         );
     }
 
     let remote = "https://example.com/nested/requirements.txt".parse::<RequirementsInput>()?;
     assert_eq!(
         remote.resolve("child.txt", Path::new("unused"))?,
-        RequirementsInput::Remote(DisplaySafeUrl::parse(
-            "https://example.com/nested/child.txt"
-        )?)
+        RequirementsInput::Remote(SafeUrl::parse("https://example.com/nested/child.txt")?)
     );
     assert_eq!(
         remote.resolve("/child.txt", Path::new("unused"))?,
-        RequirementsInput::Remote(DisplaySafeUrl::parse("https://example.com/child.txt")?)
+        RequirementsInput::Remote(SafeUrl::parse("https://example.com/child.txt")?)
     );
     assert_eq!(
         RequirementsInput::Local("requirements.txt".into())

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_torch::TorchBackend;
 
 use crate::pubgrub::{
@@ -21,7 +21,7 @@ impl SystemDependency {
     /// Extract a [`SystemDependency`] from an index URL.
     ///
     /// For example, given `https://download.pytorch.org/whl/cu124`, returns CUDA 12.4.
-    pub(super) fn from_index(index: &DisplaySafeUrl) -> Option<Self> {
+    pub(super) fn from_index(index: &SafeUrl) -> Option<Self> {
         let backend = TorchBackend::from_index(index)?;
         if let Some(cuda_version) = backend.cuda_version() {
             Some(Self {
@@ -60,19 +60,19 @@ mod tests {
 
     use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
 
     use crate::resolver::system::SystemDependency;
 
     #[test]
     fn pypi() {
-        let url = DisplaySafeUrl::parse("https://pypi.org/simple").unwrap();
+        let url = SafeUrl::parse("https://pypi.org/simple").unwrap();
         assert_eq!(SystemDependency::from_index(&url), None);
     }
 
     #[test]
     fn pytorch_cuda_12_4() {
-        let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/cu124").unwrap();
+        let url = SafeUrl::parse("https://download.pytorch.org/whl/cu124").unwrap();
         assert_eq!(
             SystemDependency::from_index(&url),
             Some(SystemDependency {
@@ -84,13 +84,13 @@ mod tests {
 
     #[test]
     fn pytorch_cpu() {
-        let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/cpu").unwrap();
+        let url = SafeUrl::parse("https://download.pytorch.org/whl/cpu").unwrap();
         assert_eq!(SystemDependency::from_index(&url), None);
     }
 
     #[test]
     fn pytorch_xpu() {
-        let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/xpu").unwrap();
+        let url = SafeUrl::parse("https://download.pytorch.org/whl/xpu").unwrap();
         assert_eq!(SystemDependency::from_index(&url), None);
     }
 }

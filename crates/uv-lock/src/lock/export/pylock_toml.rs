@@ -38,7 +38,7 @@ use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 use uv_warnings::warn_user_once;
 
@@ -136,7 +136,7 @@ pub enum PylockTomlErrorKind {
     #[error(transparent)]
     FileHash(#[from] FileHashError),
     #[error("URL must end in a valid wheel filename: {0}")]
-    UrlMissingFilename(DisplaySafeUrl),
+    UrlMissingFilename(SafeUrl),
     #[error("Invalid artifact URL: {0}")]
     InvalidArtifactUrl(UrlString),
     #[error("Path must end in a valid wheel filename: {0}")]
@@ -300,14 +300,14 @@ where
 fn hash_source(
     name: &PackageName,
     field: &'static str,
-    url: Option<&DisplaySafeUrl>,
+    url: Option<&SafeUrl>,
     path: Option<&PortablePathBuf>,
     install_path: &Path,
-) -> Result<DisplaySafeUrl, PylockTomlErrorKind> {
+) -> Result<SafeUrl, PylockTomlErrorKind> {
     if let Some(url) = url {
         Ok(url.clone())
     } else if let Some(path) = path {
-        DisplaySafeUrl::from_file_path(absolute(install_path.join(path))?)
+        SafeUrl::from_file_path(absolute(install_path.join(path))?)
             .map_err(|()| PylockTomlErrorKind::PathToUrl)
     } else {
         Err(PylockTomlErrorKind::MissingHashes(name.clone(), field))
@@ -321,7 +321,7 @@ pub struct PylockTomlPackage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Version>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<DisplaySafeUrl>,
+    pub index: Option<SafeUrl>,
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
@@ -364,7 +364,7 @@ struct PylockTomlDirectory {
 struct PylockTomlVcs {
     r#type: VcsKind,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<DisplaySafeUrl>,
+    url: Option<SafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -378,7 +378,7 @@ struct PylockTomlVcs {
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlArchive {
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<DisplaySafeUrl>,
+    url: Option<SafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -402,7 +402,7 @@ struct PylockTomlSdist {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<SmallString>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<DisplaySafeUrl>,
+    url: Option<SafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
@@ -424,7 +424,7 @@ struct PylockTomlWheel {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<WheelFilename>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<DisplaySafeUrl>,
+    url: Option<SafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
@@ -1638,7 +1638,7 @@ impl PylockTomlWheel {
         install_path: &Path,
         name: &PackageName,
         version: Option<&Version>,
-        index: Option<&DisplaySafeUrl>,
+        index: Option<&SafeUrl>,
     ) -> Result<RegistryBuiltWheel, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
         validate_wheel_filename(&filename, name, version)?;
@@ -1646,8 +1646,7 @@ impl PylockTomlWheel {
         let file_url = if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
             validate_path_size(&path, self.size)?;
-            let url = DisplaySafeUrl::from_file_path(path)
-                .map_err(|()| PylockTomlErrorKind::PathToUrl)?;
+            let url = SafeUrl::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
         } else if let Some(url) = self.url.as_ref() {
             UrlString::from(url)
@@ -1730,7 +1729,7 @@ impl PylockTomlVcs {
             let mut url = if let Some(url) = self.url.as_ref() {
                 url.clone()
             } else if let Some(path) = self.path.as_ref() {
-                DisplaySafeUrl::from_url(
+                SafeUrl::from_url(
                     Url::from_directory_path(install_path.join(path))
                         .map_err(|()| PylockTomlErrorKind::PathToUrl)?,
                 )
@@ -1752,7 +1751,7 @@ impl PylockTomlVcs {
         };
 
         // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-        let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+        let url = SafeUrl::from(ParsedGitDirectoryUrl {
             url: git_url.clone(),
             subdirectory: subdirectory.clone(),
         });
@@ -1794,7 +1793,7 @@ impl PylockTomlSdist {
         install_path: &Path,
         name: &PackageName,
         version: Option<&Version>,
-        index: Option<&DisplaySafeUrl>,
+        index: Option<&SafeUrl>,
     ) -> Result<RegistrySourceDist, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
         let ext = SourceDistExtension::from_path(filename.as_ref())?;
@@ -1809,8 +1808,7 @@ impl PylockTomlSdist {
         let file_url = if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
             validate_path_size(&path, self.size)?;
-            let url = DisplaySafeUrl::from_file_path(path)
-                .map_err(|()| PylockTomlErrorKind::PathToUrl)?;
+            let url = SafeUrl::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
         } else if let Some(url) = self.url.as_ref() {
             UrlString::from(url)

@@ -16,7 +16,7 @@ use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, MetadataError};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::{
     BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
@@ -131,7 +131,7 @@ pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
     pub direct_url: Box<DirectUrl>,
-    pub url: DisplaySafeUrl,
+    pub url: SafeUrl,
     pub editable: bool,
     pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
@@ -158,7 +158,7 @@ pub struct InstalledLegacyEditable {
     pub version: Version,
     pub egg_link: Box<Path>,
     pub target: Box<Path>,
-    pub target_url: DisplaySafeUrl,
+    pub target_url: SafeUrl,
     pub egg_info: Box<Path>,
 }
 
@@ -185,7 +185,7 @@ impl InstalledDist {
             let build_info = Self::read_build_info(path)?;
 
             return if let Some(direct_url) = Self::read_direct_url(path)? {
-                match DisplaySafeUrl::try_from(&direct_url) {
+                match SafeUrl::try_from(&direct_url) {
                     Ok(url) => Ok(Some(Self::from(InstalledDistKind::Url(
                         InstalledDirectUrlDist {
                             name,
@@ -323,7 +323,7 @@ impl InstalledDist {
 
             // Normalisation comes from `pkg_resources.to_filename`.
             let egg_info = target.join(file_stem.replace('-', "_") + ".egg-info");
-            let url = DisplaySafeUrl::from_file_path(&target)
+            let url = SafeUrl::from_file_path(&target)
                 .map_err(|()| InstalledDistError::InvalidEggLinkTarget(path.to_path_buf()))?;
 
             // Mildly unfortunate that we must read metadata to get the version.

@@ -61,7 +61,7 @@ use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl,
     ParsedUrl, VerbatimParsedUrl,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -164,7 +164,7 @@ pub enum InstalledVersion<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location, along with the version
     /// specifier to which it resolved.
-    Url(&'a DisplaySafeUrl, &'a Version),
+    Url(&'a SafeUrl, &'a Version),
 }
 
 impl<'a> InstalledVersion<'a> {
@@ -279,7 +279,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Box<DisplaySafeUrl>,
+    pub location: Box<SafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
     /// The expected size of the archive, if provided by a lockfile.
@@ -336,7 +336,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Box<DisplaySafeUrl>,
+    pub location: Box<SafeUrl>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<Box<Path>>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -416,7 +416,7 @@ impl Dist {
     pub fn from_http_url(
         name: PackageName,
         url: VerbatimUrl,
-        location: DisplaySafeUrl,
+        location: SafeUrl,
         subdirectory: Option<Box<Path>>,
         ext: DistExtension,
     ) -> Result<Self, Error> {
@@ -1212,9 +1212,9 @@ impl RemoteSource for File {
 impl RemoteSource for Url {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
-        let mut path_segments = self.path_segments().ok_or_else(|| {
-            Error::MissingPathSegments(DisplaySafeUrl::ref_cast(self).to_string())
-        })?;
+        let mut path_segments = self
+            .path_segments()
+            .ok_or_else(|| Error::MissingPathSegments(SafeUrl::ref_cast(self).to_string()))?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
         let last = path_segments
@@ -1447,7 +1447,7 @@ impl RemoteSource for Dist {
     }
 }
 
-impl Identifier for DisplaySafeUrl {
+impl Identifier for SafeUrl {
     fn distribution_id(&self) -> DistributionId {
         DistributionId::Url(uv_cache_key::CanonicalUrl::new(self.clone()))
     }
@@ -1776,7 +1776,7 @@ impl Identifier for BuildableSource<'_> {
 #[cfg(test)]
 mod test {
     use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
 
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
@@ -1805,7 +1805,7 @@ mod test {
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
             "https://example.com/foo%2D0.1.0.tar.gz?query=1/2#fragment/3",
         ] {
-            let url = DisplaySafeUrl::parse(url).unwrap();
+            let url = SafeUrl::parse(url).unwrap();
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");

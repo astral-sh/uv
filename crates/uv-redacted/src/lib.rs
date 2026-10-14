@@ -16,7 +16,7 @@ const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
 ];
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum DisplaySafeUrlError {
+pub enum SafeUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]
     Url(#[from] url::ParseError),
@@ -29,18 +29,18 @@ pub enum DisplaySafeUrlError {
 
 /// A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.
 ///
-/// `DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask
+/// `SafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask
 /// secrets by default when the URL is displayed or logged. This helps prevent accidental
 /// exposure of sensitive information in logs and debug output.
 ///
 /// # Examples
 ///
 /// ```
-/// use uv_redacted::DisplaySafeUrl;
+/// use uv_redacted::SafeUrl;
 /// use std::str::FromStr;
 ///
-/// // Create a `DisplaySafeUrl` from a `&str`
-/// let mut url = DisplaySafeUrl::parse("https://user:password@example.com").unwrap();
+/// // Create a `SafeUrl` from a `&str`
+/// let mut url = SafeUrl::parse("https://user:password@example.com").unwrap();
 ///
 /// // Display will mask secrets
 /// assert_eq!(url.to_string(), "https://user:****@example.com/");
@@ -64,7 +64,7 @@ pub enum DisplaySafeUrlError {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[repr(transparent)]
-pub struct DisplaySafeUrl(Url);
+pub struct SafeUrl(Url);
 
 /// Check if a path or fragment contains a credential-like pattern (`:` followed by `@`).
 ///
@@ -89,9 +89,9 @@ fn has_credential_like_pattern(s: &str) -> bool {
     false
 }
 
-impl DisplaySafeUrl {
+impl SafeUrl {
     #[inline]
-    pub fn parse(input: &str) -> Result<Self, DisplaySafeUrlError> {
+    pub fn parse(input: &str) -> Result<Self, SafeUrlError> {
         let url = Url::parse(input)?;
 
         Self::reject_ambiguous_credentials(input, &url)?;
@@ -111,7 +111,7 @@ impl DisplaySafeUrl {
     ///
     /// To detect it, we use a heuristic: if the password component is missing but the path or
     /// fragment contain a `:` followed by a `@`, then we assume the URL is ambiguous.
-    fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), DisplaySafeUrlError> {
+    fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), SafeUrlError> {
         // `git://`, `http://`, and `https://` URLs may carry credentials, while `file://` URLs
         // on Windows may contain both sigils, but it's always safe, e.g.
         // `file://C:/Users/ferris/project@home/workspace`. The same holds for VCS URLs that use a
@@ -147,10 +147,10 @@ impl DisplaySafeUrl {
         // the error message. We somewhat aggressively replace everything between the scheme's
         // ':' and the lastmost `@` with `***`.
         let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
-        Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path))
+        Err(SafeUrlError::AmbiguousAuthority(redacted_path))
     }
 
-    /// Create a new [`DisplaySafeUrl`] from a [`Url`].
+    /// Create a new [`SafeUrl`] from a [`Url`].
     ///
     /// Unlike [`Self::parse`], this doesn't perform any ambiguity checks.
     /// That means that it's primarily useful for contexts where a human can't easily accidentally
@@ -159,7 +159,7 @@ impl DisplaySafeUrl {
         Self(url)
     }
 
-    /// Cast a `&Url` to a `&DisplaySafeUrl` using ref-cast.
+    /// Cast a `&Url` to a `&SafeUrl` using ref-cast.
     #[inline]
     pub fn ref_cast(url: &Url) -> &Self {
         RefCast::ref_cast(url)
@@ -167,7 +167,7 @@ impl DisplaySafeUrl {
 
     /// Parse a string as an URL, with this URL as the base URL.
     #[inline]
-    pub fn join(&self, input: &str) -> Result<Self, DisplaySafeUrlError> {
+    pub fn join(&self, input: &str) -> Result<Self, SafeUrlError> {
         Ok(Self(self.0.join(input)?))
     }
 
@@ -240,7 +240,7 @@ impl DisplaySafeUrl {
     }
 }
 
-impl Deref for DisplaySafeUrl {
+impl Deref for SafeUrl {
     type Target = Url;
 
     fn deref(&self) -> &Self::Target {
@@ -248,24 +248,24 @@ impl Deref for DisplaySafeUrl {
     }
 }
 
-impl DerefMut for DisplaySafeUrl {
+impl DerefMut for SafeUrl {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl Display for DisplaySafeUrl {
+impl Display for SafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         display_with_redacted_credentials(&self.0, f)
     }
 }
 
-impl Debug for DisplaySafeUrl {
+impl Debug for SafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let url = &self.0;
         let (username, password) = redacted_credentials(url);
 
-        f.debug_struct("DisplaySafeUrl")
+        f.debug_struct("SafeUrl")
             .field("scheme", &url.scheme())
             .field("cannot_be_a_base", &url.cannot_be_a_base())
             .field("username", &username)
@@ -283,20 +283,20 @@ impl Debug for DisplaySafeUrl {
     }
 }
 
-impl From<DisplaySafeUrl> for Url {
-    fn from(url: DisplaySafeUrl) -> Self {
+impl From<SafeUrl> for Url {
+    fn from(url: SafeUrl) -> Self {
         url.0
     }
 }
 
-impl From<Url> for DisplaySafeUrl {
+impl From<Url> for SafeUrl {
     fn from(url: Url) -> Self {
         Self(url)
     }
 }
 
-impl FromStr for DisplaySafeUrl {
-    type Err = DisplaySafeUrlError;
+impl FromStr for SafeUrl {
+    type Err = SafeUrlError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         Self::parse(input)
@@ -391,8 +391,7 @@ mod tests {
     #[test]
     fn from_url_no_credentials() {
         let url_str = "https://pypi-proxy.fly.dev/basic-auth/simple";
-        let log_safe_url =
-            DisplaySafeUrl::parse("https://pypi-proxy.fly.dev/basic-auth/simple").unwrap();
+        let log_safe_url = SafeUrl::parse("https://pypi-proxy.fly.dev/basic-auth/simple").unwrap();
         assert_eq!(log_safe_url.username(), "");
         assert!(log_safe_url.password().is_none());
         assert_eq!(log_safe_url.to_string(), url_str);
@@ -401,8 +400,7 @@ mod tests {
     #[test]
     fn from_url_username_and_password() {
         let log_safe_url =
-            DisplaySafeUrl::parse("https://user:pass@pypi-proxy.fly.dev/basic-auth/simple")
-                .unwrap();
+            SafeUrl::parse("https://user:pass@pypi-proxy.fly.dev/basic-auth/simple").unwrap();
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
@@ -414,7 +412,7 @@ mod tests {
     #[test]
     fn from_url_just_password() {
         let log_safe_url =
-            DisplaySafeUrl::parse("https://:pass@pypi-proxy.fly.dev/basic-auth/simple").unwrap();
+            SafeUrl::parse("https://:pass@pypi-proxy.fly.dev/basic-auth/simple").unwrap();
         assert_eq!(log_safe_url.username(), "");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
@@ -426,7 +424,7 @@ mod tests {
     #[test]
     fn from_url_just_username() {
         let log_safe_url =
-            DisplaySafeUrl::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple").unwrap();
+            SafeUrl::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple").unwrap();
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_none());
         assert_eq!(
@@ -438,13 +436,13 @@ mod tests {
     #[test]
     fn from_url_git_username() {
         let ssh_str = "ssh://git@github.com/org/repo";
-        let ssh_url = DisplaySafeUrl::parse(ssh_str).unwrap();
+        let ssh_url = SafeUrl::parse(ssh_str).unwrap();
         assert_eq!(ssh_url.username(), "git");
         assert!(ssh_url.password().is_none());
         assert_eq!(ssh_url.to_string(), ssh_str);
         // Test again for the `git+ssh` scheme
         let git_ssh_str = "git+ssh://git@github.com/org/repo";
-        let git_ssh_url = DisplaySafeUrl::parse(git_ssh_str).unwrap();
+        let git_ssh_url = SafeUrl::parse(git_ssh_str).unwrap();
         assert_eq!(git_ssh_url.username(), "git");
         assert!(git_ssh_url.password().is_none());
         assert_eq!(git_ssh_url.to_string(), git_ssh_str);
@@ -453,7 +451,7 @@ mod tests {
     #[test]
     fn parse_url_string() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let log_safe_url = DisplaySafeUrl::parse(url_str).unwrap();
+        let log_safe_url = SafeUrl::parse(url_str).unwrap();
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
@@ -465,7 +463,7 @@ mod tests {
     #[test]
     fn remove_credentials() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let mut log_safe_url = DisplaySafeUrl::parse(url_str).unwrap();
+        let mut log_safe_url = SafeUrl::parse(url_str).unwrap();
         log_safe_url.remove_credentials();
         assert_eq!(log_safe_url.username(), "");
         assert!(log_safe_url.password().is_none());
@@ -478,14 +476,14 @@ mod tests {
     #[test]
     fn preserve_ssh_git_username_on_remove_credentials() {
         let ssh_str = "ssh://git@pypi-proxy.fly.dev/basic-auth/simple";
-        let mut ssh_url = DisplaySafeUrl::parse(ssh_str).unwrap();
+        let mut ssh_url = SafeUrl::parse(ssh_str).unwrap();
         ssh_url.remove_credentials();
         assert_eq!(ssh_url.username(), "git");
         assert!(ssh_url.password().is_none());
         assert_eq!(ssh_url.to_string(), ssh_str);
         // Test again for `git+ssh` scheme
         let git_ssh_str = "git+ssh://git@pypi-proxy.fly.dev/basic-auth/simple";
-        let mut git_shh_url = DisplaySafeUrl::parse(git_ssh_str).unwrap();
+        let mut git_shh_url = SafeUrl::parse(git_ssh_str).unwrap();
         git_shh_url.remove_credentials();
         assert_eq!(git_shh_url.username(), "git");
         assert!(git_shh_url.password().is_none());
@@ -495,7 +493,7 @@ mod tests {
     #[test]
     fn displayable_with_credentials() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let log_safe_url = DisplaySafeUrl::parse(url_str).unwrap();
+        let log_safe_url = SafeUrl::parse(url_str).unwrap();
         assert_eq!(
             log_safe_url.displayable_with_credentials().to_string(),
             url_str
@@ -504,7 +502,7 @@ mod tests {
 
     #[test]
     fn redact_url_in_message() {
-        let url = DisplaySafeUrl::parse("https://user:pass@example.com/org/repo.git").unwrap();
+        let url = SafeUrl::parse("https://user:pass@example.com/org/repo.git").unwrap();
         let message = format!(
             "process didn't exit successfully: `git fetch '{}'`\n--- stderr\nfatal: Authentication failed for '{}'",
             url.as_str(),
@@ -519,7 +517,7 @@ mod tests {
 
     #[test]
     fn redact_presigned_url_in_message() {
-        let url = DisplaySafeUrl::parse(
+        let url = SafeUrl::parse(
             "https://bucket.s3.amazonaws.com/dist.whl?X-Amz%2DSignature=signature&X-Amz-Credential=credential&X-Amz-Security-Token=token&safe=value",
         )
         .unwrap();
@@ -533,7 +531,7 @@ mod tests {
 
     #[test]
     fn redact_aws_presigned_query_values() {
-        let log_safe_url = DisplaySafeUrl::parse(
+        let log_safe_url = SafeUrl::parse(
             "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=credential&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=signature&X-Amz-Security-Token=token",
         )
         .unwrap();
@@ -545,8 +543,8 @@ mod tests {
     }
 
     #[test]
-    fn redact_azure_shared_access_signature() -> Result<(), DisplaySafeUrlError> {
-        let url = DisplaySafeUrl::parse(
+    fn redact_azure_shared_access_signature() -> Result<(), SafeUrlError> {
+        let url = SafeUrl::parse(
             "https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=signature&sp=r",
         )?;
         assert_eq!(
@@ -567,7 +565,7 @@ mod tests {
 
     #[test]
     fn redact_aws_presigned_query_values_case_insensitive() {
-        let log_safe_url = DisplaySafeUrl::parse(
+        let log_safe_url = SafeUrl::parse(
             "https://bucket.s3.amazonaws.com/dist.whl?x-amz-credential=credential&x-amz-signature=signature&x-amz-security-token=token",
         )
         .unwrap();
@@ -580,7 +578,7 @@ mod tests {
 
     #[test]
     fn redact_aws_presigned_query_values_with_percent_encoded_keys() {
-        let log_safe_url = DisplaySafeUrl::parse(
+        let log_safe_url = SafeUrl::parse(
             "https://bucket.s3.amazonaws.com/dist.whl?X-Amz%2DSignature=signature&safe=value",
         )
         .unwrap();
@@ -593,7 +591,7 @@ mod tests {
 
     #[test]
     fn redact_aws_presigned_query_values_in_debug() {
-        let log_safe_url = DisplaySafeUrl::parse(
+        let log_safe_url = SafeUrl::parse(
             "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Credential=credential&X-Amz-Signature=signature",
         )
         .unwrap();
@@ -610,7 +608,7 @@ mod tests {
             "https://account.blob.core.windows.net/container/dist.whl?sv=2024-11-04&sr=b&sig=signature&sp=r",
             "https://account.blob.core.windows.net/container/dist.whl?SIG=signature&safe=value",
         ]
-        .map(|url| DisplaySafeUrl::parse(url).unwrap().to_string());
+        .map(|url| SafeUrl::parse(url).unwrap().to_string());
 
         assert_debug_snapshot!(urls, @r#"
         [
@@ -623,7 +621,7 @@ mod tests {
     #[test]
     fn does_not_redact_unknown_query_values() {
         let log_safe_url =
-            DisplaySafeUrl::parse("https://bucket.s3.amazonaws.com/dist.whl?token=secret").unwrap();
+            SafeUrl::parse("https://bucket.s3.amazonaws.com/dist.whl?token=secret").unwrap();
 
         assert_eq!(
             log_safe_url.to_string(),
@@ -633,7 +631,7 @@ mod tests {
 
     #[test]
     fn does_not_add_authority_to_urls_without_authority() {
-        let log_safe_url = DisplaySafeUrl::parse("c:/home/ferris/projects/foo").unwrap();
+        let log_safe_url = SafeUrl::parse("c:/home/ferris/projects/foo").unwrap();
 
         assert_eq!(log_safe_url.to_string(), "c:/home/ferris/projects/foo");
     }
@@ -641,7 +639,7 @@ mod tests {
     #[test]
     fn redacts_query_values_in_urls_without_authority() {
         let log_safe_url =
-            DisplaySafeUrl::parse("c:/home/ferris/projects/foo?X-Amz-Signature=signature").unwrap();
+            SafeUrl::parse("c:/home/ferris/projects/foo?X-Amz-Signature=signature").unwrap();
 
         assert_eq!(
             log_safe_url.to_string(),
@@ -652,7 +650,7 @@ mod tests {
     #[test]
     fn redacts_query_values_in_cannot_be_a_base_urls() {
         let log_safe_url =
-            DisplaySafeUrl::parse("mailto:ferris@example.com?X-Amz-Signature=signature").unwrap();
+            SafeUrl::parse("mailto:ferris@example.com?X-Amz-Signature=signature").unwrap();
 
         assert!(log_safe_url.cannot_be_a_base());
         assert_eq!(
@@ -664,7 +662,7 @@ mod tests {
     #[test]
     fn url_join() {
         let url_str = "https://token@example.com/abc/";
-        let log_safe_url = DisplaySafeUrl::parse(url_str).unwrap();
+        let log_safe_url = SafeUrl::parse(url_str).unwrap();
         let foo_url = log_safe_url.join("foo").unwrap();
         assert_eq!(foo_url.to_string(), "https://****@example.com/abc/foo");
     }
@@ -672,8 +670,8 @@ mod tests {
     #[test]
     fn log_safe_url_ref() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
-        let url = DisplaySafeUrl::parse(url_str).unwrap();
-        let log_safe_url = DisplaySafeUrl::ref_cast(&url);
+        let url = SafeUrl::parse(url_str).unwrap();
+        let log_safe_url = SafeUrl::ref_cast(&url);
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
@@ -690,12 +688,12 @@ mod tests {
             "https://user#name:password@domain/a/b/c",
             "https://user.com/name:password@domain/a/b/c",
         ] {
-            let err = DisplaySafeUrl::parse(url).unwrap_err();
+            let err = SafeUrl::parse(url).unwrap_err();
             match err {
-                DisplaySafeUrlError::AmbiguousAuthority(redacted) => {
+                SafeUrlError::AmbiguousAuthority(redacted) => {
                     assert!(redacted.starts_with("https:***@domain/a/b/c"));
                 }
-                DisplaySafeUrlError::Url(_) => panic!("expected AmbiguousAuthority error"),
+                SafeUrlError::Url(_) => panic!("expected AmbiguousAuthority error"),
             }
         }
     }
@@ -717,7 +715,7 @@ mod tests {
             "git+file:///C:/Users/ferris/repo.git@10c049896212932ad5f7b19456d90bc604eeca53",
             "hg+file:///C:/Users/ferris/repo@default",
         ] {
-            DisplaySafeUrl::parse(url).unwrap();
+            SafeUrl::parse(url).unwrap();
         }
     }
 

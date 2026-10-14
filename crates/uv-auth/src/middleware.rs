@@ -9,7 +9,7 @@ use tracing::{debug, trace, warn};
 
 use uv_netrc::Netrc;
 use uv_preview::{Preview, PreviewFeature};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use crate::providers::{
@@ -381,7 +381,7 @@ impl Middleware for AuthMiddleware {
             // making a failing request
             let credentials = self
                 .cache()
-                .get_url(DisplaySafeUrl::ref_cast(request.url()), &Username::none());
+                .get_url(SafeUrl::ref_cast(request.url()), &Username::none());
             if let Some(credentials) = credentials.as_ref() {
                 request = credentials.authenticate(request).await?;
 
@@ -452,7 +452,7 @@ impl Middleware for AuthMiddleware {
             trace!("Checking for credentials for `{url}`");
             (request, None)
         };
-        let retry_request_url = DisplaySafeUrl::ref_cast(retry_request.url());
+        let retry_request_url = SafeUrl::ref_cast(retry_request.url());
 
         let username = credentials
             .as_ref()
@@ -554,7 +554,7 @@ impl AuthMiddleware {
             // Nothing to insert into the cache if we don't have credentials
             return next.run(request, extensions).await;
         };
-        let url = DisplaySafeUrl::from_url(request.url().clone());
+        let url = SafeUrl::from_url(request.url().clone());
         if matches!(auth_policy, AuthPolicy::Always) && !credentials.is_authenticated() {
             return Err(Error::Middleware(format_err!(
                 "Incomplete credentials for `{url}`"
@@ -582,7 +582,7 @@ impl AuthMiddleware {
         mut request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&Index>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
@@ -622,7 +622,7 @@ impl AuthMiddleware {
         }
 
         let credentials = if let Some(credentials) = self.cache().get_url(
-            DisplaySafeUrl::ref_cast(request.url()),
+            SafeUrl::ref_cast(request.url()),
             credentials.as_username().as_ref(),
         ) {
             request = credentials.authenticate(request).await?;
@@ -631,7 +631,7 @@ impl AuthMiddleware {
         } else if let Some(credentials) = self
             .fetch_credentials(
                 Some(&credentials),
-                DisplaySafeUrl::ref_cast(request.url()),
+                SafeUrl::ref_cast(request.url()),
                 index,
                 auth_policy,
             )
@@ -665,7 +665,7 @@ impl AuthMiddleware {
     async fn fetch_credentials(
         &self,
         credentials: Option<&Authentication>,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&Index>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Option<Arc<Authentication>>> {
@@ -854,7 +854,7 @@ impl AuthMiddleware {
                             username, index.url
                         );
                         keyring
-                            .fetch(DisplaySafeUrl::ref_cast(&index.url), Some(username))
+                            .fetch(SafeUrl::ref_cast(&index.url), Some(username))
                             .await
                     } else {
                         debug!(
@@ -869,9 +869,7 @@ impl AuthMiddleware {
                             "Checking keyring for credentials for index URL `{}` without username due to `authenticate = always`",
                             index.url
                         );
-                        keyring
-                            .fetch(DisplaySafeUrl::ref_cast(&index.url), None)
-                            .await
+                        keyring.fetch(SafeUrl::ref_cast(&index.url), None).await
                     } else {
                         None
                     }
@@ -899,8 +897,8 @@ impl AuthMiddleware {
     }
 }
 
-fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> DisplaySafeUrl {
-    let mut url = DisplaySafeUrl::from_url(request.url().clone());
+fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> SafeUrl {
+    let mut url = SafeUrl::from_url(request.url().clone());
     if let Some(Authentication::Credentials(creds)) = credentials {
         if let Some(username) = creds.username() {
             let _ = url.set_username(username);
@@ -996,7 +994,7 @@ mod tests {
         let cache = CredentialsCache::new();
         // A username discovered at another path in the same realm still needs a password.
         cache.store_credentials(
-            &DisplaySafeUrl::parse(&format!("{}/read/simple/", server.uri()))?,
+            &SafeUrl::parse(&format!("{}/read/simple/", server.uri()))?,
             Credentials::basic(Some("reader".to_string()), None),
         );
         Mock::given(method("GET"))
@@ -1239,7 +1237,7 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let cache = CredentialsCache::new();
         cache.insert(
-            DisplaySafeUrl::ref_cast(&base_url),
+            SafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 Some(password.to_string()),
@@ -1293,7 +1291,7 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let cache = CredentialsCache::new();
         cache.insert(
-            DisplaySafeUrl::ref_cast(&base_url),
+            SafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 None,
@@ -1687,7 +1685,7 @@ mod tests {
         // Seed _just_ the username. We should pull the username from the cache if not present on the
         // URL.
         cache.insert(
-            DisplaySafeUrl::ref_cast(&base_url),
+            SafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 None,
@@ -1747,14 +1745,14 @@ mod tests {
         let cache = CredentialsCache::new();
         // Seed the cache with our credentials
         cache.insert(
-            DisplaySafeUrl::ref_cast(&base_url_1),
+            SafeUrl::ref_cast(&base_url_1),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             ))),
         );
         cache.insert(
-            DisplaySafeUrl::ref_cast(&base_url_2),
+            SafeUrl::ref_cast(&base_url_2),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
@@ -1942,14 +1940,14 @@ mod tests {
 
         // Seed the cache with our credentials
         cache.insert(
-            DisplaySafeUrl::ref_cast(&base_url_1),
+            SafeUrl::ref_cast(&base_url_1),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             ))),
         );
         cache.insert(
-            DisplaySafeUrl::ref_cast(&base_url_2),
+            SafeUrl::ref_cast(&base_url_2),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
@@ -2293,13 +2291,13 @@ mod tests {
         let base_url_2 = base_url.join("prefix_2")?;
         let indexes = Indexes::from_indexes(vec![
             Index {
-                url: DisplaySafeUrl::from_url(base_url_1.clone()),
-                root_url: DisplaySafeUrl::from_url(base_url_1.clone()),
+                url: SafeUrl::from_url(base_url_1.clone()),
+                root_url: SafeUrl::from_url(base_url_1.clone()),
                 auth_policy: AuthPolicy::Auto,
             },
             Index {
-                url: DisplaySafeUrl::from_url(base_url_2.clone()),
-                root_url: DisplaySafeUrl::from_url(base_url_2.clone()),
+                url: SafeUrl::from_url(base_url_2.clone()),
+                root_url: SafeUrl::from_url(base_url_2.clone()),
                 auth_policy: AuthPolicy::Auto,
             },
         ]);
@@ -2401,8 +2399,8 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let index_url = base_url.join("prefix_1")?;
         let indexes = Indexes::from_indexes(vec![Index {
-            url: DisplaySafeUrl::from_url(index_url.clone()),
-            root_url: DisplaySafeUrl::from_url(index_url.clone()),
+            url: SafeUrl::from_url(index_url.clone()),
+            root_url: SafeUrl::from_url(index_url.clone()),
             auth_policy: AuthPolicy::Auto,
         }]);
 
@@ -2456,7 +2454,7 @@ mod tests {
     }
 
     fn indexes_for(url: &Url, policy: AuthPolicy) -> Indexes {
-        let mut url = DisplaySafeUrl::from_url(url.clone());
+        let mut url = SafeUrl::from_url(url.clone());
         url.set_password(None).ok();
         url.set_username("").ok();
         Indexes::from_indexes(vec![Index {
@@ -2653,7 +2651,7 @@ mod tests {
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, None),
-            DisplaySafeUrl::parse("https://pypi-proxy.fly.dev/basic-auth/simple").unwrap()
+            SafeUrl::parse("https://pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
 
         let creds = Authentication::from(Credentials::Basic {
@@ -2663,7 +2661,7 @@ mod tests {
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, Some(&creds)),
-            DisplaySafeUrl::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple").unwrap()
+            SafeUrl::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
 
         let creds = Authentication::from(Credentials::Basic {
@@ -2673,8 +2671,7 @@ mod tests {
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, Some(&creds)),
-            DisplaySafeUrl::parse("https://user:password@pypi-proxy.fly.dev/basic-auth/simple")
-                .unwrap()
+            SafeUrl::parse("https://user:password@pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
     }
 

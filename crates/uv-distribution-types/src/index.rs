@@ -8,7 +8,7 @@ use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
 use uv_pypi_types::HashAlgorithm;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 
 use crate::exclude_newer::ExcludeNewerOverride;
@@ -196,7 +196,7 @@ pub struct Index {
     /// url = "https://pypi.org/simple"
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
-    pub publish_url: Option<DisplaySafeUrl>,
+    pub publish_url: Option<SafeUrl>,
     /// When uv should use authentication for requests to the index.
     ///
     /// ```toml
@@ -274,7 +274,7 @@ pub struct Index {
 #[derive(Debug, Error)]
 #[error("Failed to parse credentials in index URL: {url}")]
 pub struct IndexCredentialsError {
-    url: DisplaySafeUrl,
+    url: SafeUrl,
     #[source]
     source: CredentialsFromUrlError,
 }
@@ -494,7 +494,7 @@ impl Index {
     }
 
     /// Return the raw [`Url`] of the index.
-    pub fn raw_url(&self) -> &DisplaySafeUrl {
+    pub fn raw_url(&self) -> &SafeUrl {
         self.url.url()
     }
 
@@ -502,7 +502,7 @@ impl Index {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root_url(&self) -> Option<DisplaySafeUrl> {
+    pub fn root_url(&self) -> Option<SafeUrl> {
         self.url.root()
     }
 
@@ -746,7 +746,7 @@ struct IndexWire {
     default: bool,
     #[serde(default)]
     format: IndexFormat,
-    publish_url: Option<DisplaySafeUrl>,
+    publish_url: Option<SafeUrl>,
     #[serde(default)]
     authenticate: AuthPolicy,
     #[serde(default)]

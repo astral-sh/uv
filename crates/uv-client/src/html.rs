@@ -9,7 +9,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, ProjectStatus, PypiFile, Status, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_small_str::SmallString;
 
 type RequiresPythonResult = Result<Arc<VersionSpecifiers>, VersionSpecifiersParseError>;
@@ -57,7 +57,7 @@ pub(crate) struct SimpleDetailHTML {
 impl SimpleDetailHTML {
     /// Parse the list of [`PypiFile`]s from the simple HTML page returned by the given URL.
     #[instrument(skip_all, fields(url = % url))]
-    pub(crate) fn parse(text: &str, url: &DisplaySafeUrl) -> Result<Self, Error> {
+    pub(crate) fn parse(text: &str, url: &SafeUrl) -> Result<Self, Error> {
         let dom = Document::parse(text)?;
 
         // Project status information appears in the `<meta>` tags in the `<head>`.
@@ -156,12 +156,11 @@ impl SimpleDetailHTML {
     }
 
     /// Parse the `href` from a `<base>` tag.
-    fn parse_base(base: &Element<'_, '_>) -> Result<Option<DisplaySafeUrl>, Error> {
+    fn parse_base(base: &Element<'_, '_>) -> Result<Option<SafeUrl>, Error> {
         let Some(href) = attribute(base, "href") else {
             return Ok(None);
         };
-        let url =
-            DisplaySafeUrl::parse(href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
+        let url = SafeUrl::parse(href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
         Ok(Some(url))
     }
 
@@ -346,7 +345,7 @@ pub enum Error {
     FromUtf8(#[from] std::string::FromUtf8Error),
 
     #[error("Failed to parse URL: {0}")]
-    UrlParse(String, #[source] DisplaySafeUrlError),
+    UrlParse(String, #[source] SafeUrlError),
 
     #[error(transparent)]
     HtmlParse(#[from] astral_html::Error),
@@ -386,7 +385,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -395,7 +394,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -447,7 +446,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -456,7 +455,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -506,8 +505,8 @@ mod tests {
 </body>
 </html>
 "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/")
-            .expect("valid base URL");
+        let base =
+            SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").expect("valid base URL");
         let error = SimpleDetailHTML::parse(text, &base).expect_err("invalid digest length");
         insta::assert_snapshot!(error, @"Invalid hash digest length (expected 64 hexadecimal characters, found 5)");
     }
@@ -527,7 +526,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -536,7 +535,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -588,7 +587,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -597,7 +596,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -649,7 +648,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -658,7 +657,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -710,7 +709,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -719,7 +718,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -769,7 +768,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -778,7 +777,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -828,7 +827,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     ";
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -837,7 +836,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -870,7 +869,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -879,7 +878,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -912,7 +911,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -921,7 +920,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -971,7 +970,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -980,7 +979,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -1030,7 +1029,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
@@ -1040,7 +1039,7 @@ mod tests {
                     reason: None,
                 },
                 base: BaseUrl(
-                    DisplaySafeUrl {
+                    SafeUrl {
                         scheme: "https",
                         cannot_be_a_base: false,
                         username: "",
@@ -1091,7 +1090,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
@@ -1101,7 +1100,7 @@ mod tests {
                     reason: None,
                 },
                 base: BaseUrl(
-                    DisplaySafeUrl {
+                    SafeUrl {
                         scheme: "https",
                         cannot_be_a_base: false,
                         username: "",
@@ -1152,7 +1151,7 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap_err();
         insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`");
     }
@@ -1169,10 +1168,9 @@ mod tests {
         </body>
         </html>
     "#;
-        let base = DisplaySafeUrl::parse(
-            "https://storage.googleapis.com/jax-releases/jax_cuda_releases.html",
-        )
-        .unwrap();
+        let base =
+            SafeUrl::parse("https://storage.googleapis.com/jax-releases/jax_cuda_releases.html")
+                .unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -1181,7 +1179,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -1257,7 +1255,7 @@ mod tests {
         </body>
         </html>
     "#;
-        let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
+        let base = SafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
@@ -1267,7 +1265,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -1365,7 +1363,7 @@ mod tests {
 </body>
 </html>
     "#;
-        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let base = SafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
@@ -1374,7 +1372,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -1441,7 +1439,7 @@ mod tests {
 </body>
 </html>
     "#;
-        let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
+        let base = SafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
@@ -1451,7 +1449,7 @@ mod tests {
                 reason: None,
             },
             base: BaseUrl(
-                DisplaySafeUrl {
+                SafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -1595,7 +1593,7 @@ mod tests {
 
         let result = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap(),
+            &SafeUrl::parse("https://pypi.org/simple/pepy/").unwrap(),
         )
         .unwrap();
         insta::assert_debug_snapshot!(result.project_status, @"
@@ -1629,7 +1627,7 @@ mod tests {
 
         let result = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+            &SafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
         )
         .unwrap();
         insta::assert_debug_snapshot!(result.project_status, @r#"
@@ -1663,7 +1661,7 @@ mod tests {
 
         let result = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+            &SafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
         )
         .unwrap();
         insta::assert_debug_snapshot!(
@@ -1795,7 +1793,7 @@ mod tests {
 
         let result = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+            &SafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
         )
         .unwrap();
         insta::assert_debug_snapshot!(
@@ -1835,7 +1833,7 @@ mod tests {
 
         let result = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://pypi.org/simple/spookyproject/").unwrap(),
+            &SafeUrl::parse("https://pypi.org/simple/spookyproject/").unwrap(),
         );
         insta::assert_debug_snapshot!(result.unwrap().project_status, @r#"
         ProjectStatus {
@@ -1869,7 +1867,7 @@ mod tests {
 
         let result = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://pypi.org/simple/unknownproject/").unwrap(),
+            &SafeUrl::parse("https://pypi.org/simple/unknownproject/").unwrap(),
         );
         insta::assert_debug_snapshot!(result.unwrap().project_status, @"
         ProjectStatus {
@@ -2063,7 +2061,7 @@ mod tests {
         "#;
         let result = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://example.com/simple/example/").unwrap(),
+            &SafeUrl::parse("https://example.com/simple/example/").unwrap(),
         )
         .unwrap();
         let file = &result.files[0];
@@ -2092,7 +2090,7 @@ mod tests {
         "#;
         let result = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://example.com/simple/example/").unwrap(),
+            &SafeUrl::parse("https://example.com/simple/example/").unwrap(),
         )
         .unwrap();
         insta::assert_debug_snapshot!(
@@ -2134,7 +2132,7 @@ mod tests {
         "#;
         let detail = SimpleDetailHTML::parse(
             text,
-            &DisplaySafeUrl::parse("https://example.com/simple/example/").unwrap(),
+            &SafeUrl::parse("https://example.com/simple/example/").unwrap(),
         )
         .unwrap();
         let index = SimpleIndexHtml::parse(text).unwrap();

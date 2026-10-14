@@ -31,7 +31,7 @@ use uv_python_discovery::ConfigDiscovery;
 use uv_python_discovery::ProjectPythonRequest;
 use uv_python_interpreter::Interpreter;
 use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_resolve_operations::loggers::DefaultResolveLogger;
 use uv_resolver::MetadataResponse;
 use uv_settings::{PythonInstallMirrors, ResolverSettings};
@@ -396,7 +396,7 @@ pub async fn upgrade(
     };
 
     let state = UniversalState::default();
-    let distribution_id = DisplaySafeUrl::from_file_path(project.project_root())
+    let distribution_id = SafeUrl::from_file_path(project.project_root())
         .map_err(|()| anyhow!("Project root is not a valid file URL"))?
         .distribution_id();
     state.index().distributions().done(

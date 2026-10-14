@@ -21,7 +21,7 @@ use uv_git::GitError;
 use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pypi_types::HashDigest;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 /// RFC 9457 Problem Details for HTTP APIs
 ///
@@ -234,18 +234,18 @@ impl Error {
     }
 
     /// Create a new error from a JSON parsing error.
-    pub(crate) fn from_json_err(err: serde_json::Error, url: DisplaySafeUrl) -> Self {
+    pub(crate) fn from_json_err(err: serde_json::Error, url: SafeUrl) -> Self {
         ErrorKind::BadJson { source: err, url }.into()
     }
 
     /// Create a new error from an HTML parsing error.
-    pub(crate) fn from_html_err(err: html::Error, url: DisplaySafeUrl) -> Self {
+    pub(crate) fn from_html_err(err: html::Error, url: SafeUrl) -> Self {
         ErrorKind::BadHtml { source: err, url }.into()
     }
 
     /// Create an [`Error`] from a [`reqwest_middleware::Error`].
     pub(crate) fn from_reqwest_middleware(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         err: reqwest_middleware::Error,
         start: Instant,
         certificate_source: CertificateSource,
@@ -298,7 +298,7 @@ impl Error {
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
     pub(crate) fn is_http_range_requests_unsupported(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         index: Option<&IndexUrl>,
     ) -> bool {
         match &*self.kind {
@@ -450,13 +450,13 @@ pub enum ErrorKind {
     Git(#[from] uv_git::GitResolverError),
 
     #[error("The wheel `{0}` is missing Git LFS artifacts.")]
-    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    MissingWheelGitLfsArtifacts(SafeUrl, #[source] GitError),
 
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(DisplaySafeUrl),
+    NonFileUrl(SafeUrl),
 
     #[error("Expected an index URL, but received non-base URL: {0}")]
-    CannotBeABase(DisplaySafeUrl),
+    CannotBeABase(SafeUrl),
 
     #[error("Failed to read metadata: {0}")]
     Metadata(String, #[source] uv_metadata::Error),
@@ -484,7 +484,7 @@ pub enum ErrorKind {
         "Hash mismatch for package metadata at `{url}`\n\nExpected:\n  {expected}\n\nComputed:\n  {actual}"
     )]
     MetadataHashMismatch {
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         expected: HashDigest,
         actual: HashDigest,
     },
@@ -499,25 +499,22 @@ pub enum ErrorKind {
 
     /// An error that happened while making a request or in a reqwest middleware.
     #[error("Failed to fetch: {0}")]
-    WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
+    WrappedReqwestError(SafeUrl, #[source] WrappedReqwestError),
 
     #[error("Received some unexpected JSON from `{}`", url)]
     BadJson {
         source: serde_json::Error,
-        url: DisplaySafeUrl,
+        url: SafeUrl,
     },
 
     #[error("Received some unexpected HTML from `{}`", url)]
-    BadHtml {
-        source: html::Error,
-        url: DisplaySafeUrl,
-    },
+    BadHtml { source: html::Error, url: SafeUrl },
 
     #[error("Failed to read zip with range requests: {0}")]
-    AsyncHttpRangeReader(DisplaySafeUrl, #[source] AsyncHttpRangeReaderError),
+    AsyncHttpRangeReader(SafeUrl, #[source] AsyncHttpRangeReaderError),
 
     #[error("Wheel metadata range requests are required, but not supported for: {0}")]
-    MetadataRangeRequestsRequired(DisplaySafeUrl, #[source] Box<Error>),
+    MetadataRangeRequestsRequired(SafeUrl, #[source] Box<Error>),
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),
@@ -547,13 +544,13 @@ pub enum ErrorKind {
     Encode(#[source] rmp_serde::encode::Error),
 
     #[error("Missing `Content-Type` header for `{0}`")]
-    MissingContentType(DisplaySafeUrl),
+    MissingContentType(SafeUrl),
 
     #[error("Invalid `Content-Type` header for `{0}`")]
-    InvalidContentTypeHeader(DisplaySafeUrl, #[source] http::header::ToStrError),
+    InvalidContentTypeHeader(SafeUrl, #[source] http::header::ToStrError),
 
     #[error("Unsupported `Content-Type` \"{1}\" for `{0}`. Expected JSON or HTML.")]
-    UnsupportedMediaType(DisplaySafeUrl, String),
+    UnsupportedMediaType(SafeUrl, String),
 
     #[error("Reading from cache archive failed: {0}")]
     ArchiveRead(String),
@@ -570,7 +567,7 @@ pub enum ErrorKind {
 impl ErrorKind {
     /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         error: reqwest::Error,
         certificate_source: CertificateSource,
     ) -> Self {
@@ -582,7 +579,7 @@ impl ErrorKind {
 
     /// Create an [`ErrorKind`] from a [`reqwest::Error`] with problem details.
     pub(crate) fn from_reqwest_with_problem_details(
-        url: DisplaySafeUrl,
+        url: SafeUrl,
         error: reqwest::Error,
         problem_details: Option<ProblemDetails>,
     ) -> Self {

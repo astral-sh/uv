@@ -9,7 +9,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_types::{File, FileLocation, IndexEntryFilename, IndexUrl, UrlString};
 use uv_pypi_types::HashDigests;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
@@ -19,7 +19,7 @@ use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive, RetrySta
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(DisplaySafeUrl),
+    NonFileUrl(SafeUrl),
 
     #[error("Failed to read `--find-links` directory: {0}")]
     FindLinksDirectory(PathBuf, #[source] FindLinksDirectoryError),
@@ -28,7 +28,7 @@ pub enum FlatIndexError {
     FindLinksFile(PathBuf, #[source] Error),
 
     #[error("Failed to read `--find-links` URL: {0}")]
-    FindLinksUrl(DisplaySafeUrl, #[source] Error),
+    FindLinksUrl(SafeUrl, #[source] Error),
 }
 
 impl FlatIndexError {
@@ -198,7 +198,7 @@ impl<'a> FlatIndexClient<'a> {
     /// Read a flat remote index from a `--find-links` URL.
     async fn read_from_url(
         &self,
-        url: &DisplaySafeUrl,
+        url: &SafeUrl,
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, Error> {
         let cache_entry = self.cache.entry(
@@ -230,7 +230,7 @@ impl<'a> FlatIndexClient<'a> {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = DisplaySafeUrl::from_url(response.url().clone());
+                let url = SafeUrl::from_url(response.url().clone());
 
                 let text = response.text().await.map_err(|err| {
                     ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
@@ -281,7 +281,7 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Parse distributions from a flat HTML index.
-    fn parse_html(text: &str, url: &DisplaySafeUrl) -> Result<Vec<File>, crate::html::Error> {
+    fn parse_html(text: &str, url: &SafeUrl) -> Result<Vec<File>, crate::html::Error> {
         let SimpleDetailHTML {
             project_status: _,
             base,
@@ -361,7 +361,7 @@ impl<'a> FlatIndexClient<'a> {
             };
 
             // SAFETY: The index path is itself constructed from a URL.
-            let url = DisplaySafeUrl::from_file_path(entry.path()).unwrap();
+            let url = SafeUrl::from_file_path(entry.path()).unwrap();
 
             let file = File {
                 dist_info_metadata: None,
@@ -408,7 +408,7 @@ mod tests {
     /// Round-trip a synthetic flat-index cache entry and preserve sidecar hashes.
     #[test]
     fn cached_files_round_trip() -> Result<(), Box<dyn std::error::Error>> {
-        let url = DisplaySafeUrl::parse("https://example.com/flat/")?;
+        let url = SafeUrl::parse("https://example.com/flat/")?;
         let files = FlatIndexClient::parse_html(
             r#"<a href="example-1.0.0-py3-none-any.whl" data-core-metadata="sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef">example-1.0.0-py3-none-any.whl</a>"#,
             &url,

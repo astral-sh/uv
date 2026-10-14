@@ -18,7 +18,7 @@ use thiserror::Error;
 use url::Url;
 
 use uv_netrc::Netrc;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -205,11 +205,7 @@ impl Credentials {
     /// Return [`Credentials`] for a [`Url`] from a [`Netrc`] file, if any.
     ///
     /// If a username is provided, it must match the login in the netrc file or [`None`] is returned.
-    pub(crate) fn from_netrc(
-        netrc: &Netrc,
-        url: &DisplaySafeUrl,
-        username: Option<&str>,
-    ) -> Option<Self> {
+    pub(crate) fn from_netrc(netrc: &Netrc, url: &SafeUrl, username: Option<&str>) -> Option<Self> {
         let host = url.host_str()?;
         let entry = netrc
             .hosts
@@ -368,7 +364,7 @@ impl Credentials {
     ///
     /// Any existing credentials will be overridden.
     #[must_use]
-    pub fn apply(&self, mut url: DisplaySafeUrl) -> DisplaySafeUrl {
+    pub fn apply(&self, mut url: SafeUrl) -> SafeUrl {
         if let Some(username) = self.username() {
             let _ = url.set_username(username);
         }

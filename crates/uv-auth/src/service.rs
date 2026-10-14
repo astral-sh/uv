@@ -2,29 +2,29 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 #[derive(Error, Debug)]
 pub enum ServiceParseError {
     #[error(transparent)]
-    InvalidUrl(#[from] DisplaySafeUrlError),
+    InvalidUrl(#[from] SafeUrlError),
     #[error("Unsupported scheme: {0}")]
     UnsupportedScheme(String),
     #[error("HTTPS is required for non-local hosts")]
     HttpsRequired,
 }
 
-/// A service URL that wraps [`DisplaySafeUrl`] for CLI usage.
+/// A service URL that wraps [`SafeUrl`] for CLI usage.
 ///
 /// This type provides automatic URL parsing and validation when used as a CLI argument,
 /// eliminating the need for manual parsing in command functions.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct Service(DisplaySafeUrl);
+pub struct Service(SafeUrl);
 
 impl Service {
-    /// Get the underlying [`DisplaySafeUrl`].
-    pub fn url(&self) -> &DisplaySafeUrl {
+    /// Get the underlying [`SafeUrl`].
+    pub fn url(&self) -> &SafeUrl {
         &self.0
     }
 
@@ -44,12 +44,12 @@ impl FromStr for Service {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // First try parsing as-is
-        let url = match DisplaySafeUrl::parse(s) {
+        let url = match SafeUrl::parse(s) {
             Ok(url) => url,
-            Err(DisplaySafeUrlError::Url(url::ParseError::RelativeUrlWithoutBase)) => {
+            Err(SafeUrlError::Url(url::ParseError::RelativeUrlWithoutBase)) => {
                 // If it's a relative URL, try prepending https://
                 let with_https = format!("https://{s}");
-                DisplaySafeUrl::parse(&with_https)?
+                SafeUrl::parse(&with_https)?
             }
             Err(err) => return Err(err.into()),
         };
@@ -80,10 +80,10 @@ impl From<Service> for String {
     }
 }
 
-impl TryFrom<DisplaySafeUrl> for Service {
+impl TryFrom<SafeUrl> for Service {
     type Error = ServiceParseError;
 
-    fn try_from(value: DisplaySafeUrl) -> Result<Self, Self::Error> {
+    fn try_from(value: SafeUrl) -> Result<Self, Self::Error> {
         Self::check_scheme(&value)?;
         Ok(Self(value))
     }
