@@ -1,3 +1,6 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
@@ -1083,7 +1086,10 @@ fn python_find_script_no_environment() {
 
 #[test]
 fn python_find_script_python_not_found() {
-    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_env(EnvVars::UV_PYTHON_PREFERENCE, "only-managed")
+        .with_env(EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED, "");
+    context.temp_dir.child(".python-version").touch().unwrap();
 
     let script = context.temp_dir.child("foo.py");
 
@@ -1098,10 +1104,38 @@ fn python_find_script_python_not_found() {
     uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    No interpreter found in [PYTHON SOURCES]
+    error: No interpreter found in virtual environments or managed installations
 
     hint: A managed Python download is available, but Python downloads are set to 'never'
     ");
+}
+
+#[cfg(unix)]
+#[test]
+fn python_find_script_interpreter_error_chain() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context.temp_dir.child("foo.py").write_str(indoc! {r"
+        # /// script
+        # dependencies = []
+        # ///
+    "})?;
+    let python = context.temp_dir.child("broken-python");
+    python.write_str("#!/bin/sh\nprintf 'interpreter probe failed\\n' >&2\nexit 42\n")?;
+    fs_err::set_permissions(&python, std::fs::Permissions::from_mode(0o755))?;
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str(python.path().to_str().expect("UTF-8 fixture path"))?;
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py").arg("-q"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from provided path at `broken-python`
+      cause: Querying Python at `[TEMP_DIR]/broken-python` failed with exit status exit status: 42
+
+             [stderr]
+             interpreter probe failed
+    ");
+    Ok(())
 }
 
 #[test]
@@ -1141,7 +1175,7 @@ fn python_find_script_no_such_version() {
     uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    No interpreter found for Python >=3.16 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.16 in [PYTHON SOURCES]
     ");
 }
 
