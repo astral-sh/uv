@@ -32,6 +32,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 owo-colors = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
