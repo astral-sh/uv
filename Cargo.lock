@@ -6189,8 +6189,10 @@ dependencies = [
 name = "uv-cache"
 version = "0.0.92"
 dependencies = [
+ "cap-primitives",
  "clap",
  "fs-err",
+ "libc",
  "rmp-serde",
  "rustc-hash",
  "same-file",
@@ -7655,6 +7657,7 @@ dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
+ "cap-primitives",
  "dunce",
  "fs-err",
  "futures",

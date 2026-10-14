@@ -8,6 +8,7 @@ use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use cap_primitives::{ambient_authority, fs as cap_fs};
 use fs_err as fs;
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -137,11 +138,11 @@ impl ManagedPythonInstallations {
         let installations = self.clone();
         // Keep the lock in the blocking task so cancellation cannot release it during cleanup.
         Ok(spawn_blocking(move || {
-            if let Err(err) = installations.clear_scratch(&lock, |path| {
-                if let Err(err) = fs::remove_dir_all(path) {
+            if let Err(err) = installations.clear_scratch(&lock, |directory, name| {
+                if let Err(err) = cap_fs::remove_dir_all(directory.file(), Path::new(name)) {
                     warn!(
                         "Failed to remove temporary Python installation at `{}`: {err}",
-                        path.user_display()
+                        directory.path().join(name).user_display()
                     );
                 }
                 Ok(())
@@ -159,21 +160,46 @@ impl ManagedPythonInstallations {
     /// Remove abandoned temporary installation directories while holding the installation lock.
     pub fn clear_scratch(
         &self,
-        _lock: &LockedFile,
-        mut remove: impl FnMut(&Path) -> io::Result<()>,
+        lock: &LockedFile,
+        mut remove: impl FnMut(&fs::File, &OsStr) -> io::Result<()>,
     ) -> io::Result<()> {
-        let scratch = self.scratch();
-        match fs::symlink_metadata(&scratch) {
+        let root = fs::File::from_parts(
+            cap_fs::open_ambient_dir(&self.root, ambient_authority())?,
+            &self.root,
+        );
+        let lock_file = fs::File::from_parts(
+            cap_fs::open(
+                root.file(),
+                Path::new(".lock"),
+                cap_fs::OpenOptions::new().read(true),
+            )?,
+            self.root.join(".lock"),
+        );
+        if !lock.is_same_file(lock_file)? {
+            return Err(io::Error::other(
+                "Python installation directory changed while locked",
+            ));
+        }
+        let name = Path::new(".temp");
+        match cap_fs::stat(root.file(), name, cap_fs::FollowSymlinks::No) {
             Ok(metadata) if metadata.is_dir() => {}
             Ok(_) => return Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
             Err(err) => return Err(err),
         }
 
+        let scratch = fs::File::from_parts(
+            cap_fs::open_dir_nofollow(root.file(), name)?,
+            self.scratch(),
+        );
         // Another process may have initialized the scratch directory before waiting for the lock.
         // Leave the directory itself in place, and only remove directories created by `tempfile`.
-        for path in uv_fs::directories(&scratch)?.filter(|path| uv_fs::is_temporary(path)) {
-            remove(&path)?;
+        for entry in cap_fs::read_base_dir(scratch.file())? {
+            let entry = entry?;
+            let name = entry.file_name();
+            if entry.file_type()?.is_dir() && uv_fs::is_temporary(&name) {
+                remove(&scratch, &name)?;
+            }
         }
         Ok(())
     }

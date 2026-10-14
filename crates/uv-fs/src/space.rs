@@ -4,6 +4,8 @@ use std::path::Path;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use std::ffi::CString;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+use std::os::fd::AsRawFd;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -59,26 +61,13 @@ pub fn physical_space(
     path: &Path,
     metadata: &std::fs::Metadata,
 ) -> Result<u64, PhysicalSpaceError> {
-    if !metadata.is_file() {
-        #[cfg(unix)]
-        {
-            return Ok(metadata.blocks().saturating_mul(512));
-        }
-
-        #[cfg(not(unix))]
-        {
-            return Ok(0);
-        }
-    }
-
-    #[cfg(unix)]
-    if metadata.nlink() > 1 {
-        return Ok(0);
+    if let Some(bytes) = metadata_physical_space(metadata) {
+        return Ok(bytes);
     }
 
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
-        apple_physical_space(path)
+        apple_physical_space(AppleSource::Path(path))
     }
 
     #[cfg(all(
@@ -86,7 +75,7 @@ pub fn physical_space(
         not(any(target_arch = "sparc", target_arch = "sparc64"))
     ))]
     {
-        linux_physical_space(path)
+        linux_physical_space(&fs_err::File::open(path)?)
     }
 
     #[cfg(not(any(
@@ -103,11 +92,66 @@ pub fn physical_space(
     }
 }
 
+/// Return the physical file data that would be reclaimed by deleting an open file.
+pub fn physical_space_from_file(file: &fs_err::File) -> Result<u64, PhysicalSpaceError> {
+    if let Some(bytes) = metadata_physical_space(&file.metadata()?) {
+        return Ok(bytes);
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        apple_physical_space(AppleSource::File(file))
+    }
+
+    #[cfg(all(
+        target_os = "linux",
+        not(any(target_arch = "sparc", target_arch = "sparc64"))
+    ))]
+    {
+        linux_physical_space(file)
+    }
+
+    #[cfg(not(any(
+        all(
+            target_os = "linux",
+            not(any(target_arch = "sparc", target_arch = "sparc64"))
+        ),
+        target_os = "macos",
+        target_os = "ios"
+    )))]
+    {
+        Err(PhysicalSpaceError::UnsupportedFilesystem)
+    }
+}
+
+fn metadata_physical_space(metadata: &std::fs::Metadata) -> Option<u64> {
+    if !metadata.is_file() {
+        #[cfg(unix)]
+        {
+            return Some(metadata.blocks().saturating_mul(512));
+        }
+        #[cfg(not(unix))]
+        {
+            return Some(0);
+        }
+    }
+    #[cfg(unix)]
+    if metadata.nlink() > 1 {
+        return Some(0);
+    }
+    None
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[derive(Clone, Copy)]
+enum AppleSource<'a> {
+    Path(&'a Path),
+    File(&'a fs_err::File),
+}
+
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[expect(unsafe_code)]
-fn apple_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
-    let path = CString::new(path.as_os_str().as_bytes())
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+fn apple_physical_space(source: AppleSource<'_>) -> Result<u64, PhysicalSpaceError> {
     let mut attributes = libc::attrlist {
         bitmapcount: libc::ATTR_BIT_MAP_COUNT,
         reserved: 0,
@@ -119,17 +163,30 @@ fn apple_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
     };
     let mut response = [0_u8; 32];
 
-    // SAFETY: `path` is null-terminated and valid for the duration of the call. `attributes` is a
-    // valid attribute request, and `response` has enough space for the length, returned attribute
-    // set, and requested private-size value.
+    // SAFETY: The path or file descriptor remains valid for the call. `attributes` is a valid
+    // attribute request, and `response` has enough space for the length, returned attribute set,
+    // and requested private-size value.
     let result = unsafe {
-        libc::getattrlist(
-            path.as_ptr(),
-            (&raw mut attributes).cast(),
-            response.as_mut_ptr().cast(),
-            response.len(),
-            libc::FSOPT_ATTR_CMN_EXTENDED,
-        )
+        match source {
+            AppleSource::Path(path) => {
+                let path = CString::new(path.as_os_str().as_bytes())
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+                libc::getattrlist(
+                    path.as_ptr(),
+                    (&raw mut attributes).cast(),
+                    response.as_mut_ptr().cast(),
+                    response.len(),
+                    libc::FSOPT_ATTR_CMN_EXTENDED,
+                )
+            }
+            AppleSource::File(file) => libc::fgetattrlist(
+                file.as_raw_fd(),
+                (&raw mut attributes).cast(),
+                response.as_mut_ptr().cast(),
+                response.len(),
+                libc::FSOPT_ATTR_CMN_EXTENDED,
+            ),
+        }
     };
     if result != 0 {
         let error = io::Error::last_os_error();
@@ -154,7 +211,7 @@ fn apple_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
     not(any(target_arch = "sparc", target_arch = "sparc64"))
 ))]
 #[expect(unsafe_code)]
-fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
+fn linux_physical_space(file: &fs_err::File) -> Result<u64, PhysicalSpaceError> {
     const MAX_EXTENTS: usize = 32;
 
     #[derive(Default)]
@@ -186,7 +243,6 @@ fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
         extents: [FiemapExtent; MAX_EXTENTS],
     }
 
-    let file = fs_err::File::open(path)?;
     let mut physical = 0_u64;
     let mut start = 0_u64;
 
@@ -205,7 +261,7 @@ fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
         // expected fiemap header followed by enough initialized storage for all requested extents.
         unsafe {
             rustix::ioctl::ioctl(
-                &file,
+                file,
                 rustix::ioctl::Updater::<{ FS_IOC_FIEMAP as rustix::ioctl::Opcode }, _>::new(
                     &mut request,
                 ),

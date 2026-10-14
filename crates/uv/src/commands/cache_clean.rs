@@ -169,9 +169,8 @@ async fn clean_python_downloads(cache: Cache, printer: Printer) -> Result<Remova
     let lock = installations.lock().await?;
     let summary = tokio::task::spawn_blocking(move || {
         let mut summary = cache.removal();
-        installations.clear_scratch(&lock, |path| {
-            summary += cache.remove_path(path)?;
-            Ok(())
+        installations.clear_scratch(&lock, |directory, name| {
+            summary.remove_dir_at(directory, name)
         })?;
         Ok::<_, std::io::Error>(summary)
     })

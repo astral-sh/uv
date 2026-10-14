@@ -12,6 +12,8 @@ use std::process::Command;
 
 use uv_cache::Cache;
 #[cfg(unix)]
+use uv_cache::RemovalAccounting;
+#[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
 use uv_python_managed::ManagedPythonInstallations;
 use uv_static::EnvVars;
@@ -81,6 +83,40 @@ fn clean_python_staging() -> Result<()> {
     ");
     stale.assert(predicates::path::missing());
     installed.assert(predicates::path::exists());
+    Ok(())
+}
+
+/// Replacing the scratch path during cleanup must not redirect deletion to another directory.
+#[cfg(unix)]
+#[tokio::test]
+async fn clean_python_staging_after_directory_redirect() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let managed = context.temp_dir.child("managed");
+    let scratch = managed.child(".temp");
+    scratch.child(".tmp-stale").create_dir_all()?;
+    scratch.child(".tmp-stale/marker").touch()?;
+    let redirected = context.temp_dir.child("redirected");
+    let unrelated = redirected.child(".tmp-stale");
+    unrelated.create_dir_all()?;
+    unrelated.child("marker").touch()?;
+    let original = managed.child(".temp-original");
+    let installations = ManagedPythonInstallations::from_settings(Some(managed.to_path_buf()))?;
+    let lock = installations.lock().await?;
+    let cache =
+        Cache::from_path(context.cache_dir.path()).with_removal_accounting(RemovalAccounting::Fine);
+    let mut summary = cache.removal();
+
+    installations.clear_scratch(&lock, |directory, name| {
+        fs_err::rename(scratch.path(), original.path())?;
+        uv_fs::replace_symlink(redirected.path(), scratch.path())?;
+        summary.remove_dir_at(directory, name)
+    })?;
+
+    original
+        .child(".tmp-stale")
+        .assert(predicates::path::missing());
+    unrelated.child("marker").assert(predicates::path::exists());
+    assert_eq!(summary.num_files, 1);
     Ok(())
 }
 

@@ -35,6 +35,7 @@ uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
+cap-primitives = { workspace = true }
 dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
