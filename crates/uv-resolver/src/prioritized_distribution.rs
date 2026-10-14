@@ -1,4 +1,5 @@
 use std::cmp::Reverse;
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -361,7 +362,7 @@ pub enum PythonRequirementKind {
 pub(crate) enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
     /// The wheel matches the platform tags, but its variant properties have not been checked.
-    UnverifiedVariant(HashComparison, Option<TagPriority>, Option<BuildTag>),
+    Variant(HashComparison, Option<TagPriority>, Option<BuildTag>),
     Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
 }
 
@@ -420,10 +421,9 @@ impl PrioritizedDist {
     }
 
     /// Whether this index has a wheel whose variant properties need to be checked.
-    pub(crate) fn has_unverified_variants(&self, index: &IndexUrl) -> bool {
+    pub(crate) fn has_variants(&self, index: &IndexUrl) -> bool {
         self.0.wheels.iter().any(|(wheel, compatibility)| {
-            &wheel.index == index
-                && matches!(compatibility, WheelCompatibility::UnverifiedVariant(..))
+            &wheel.index == index && matches!(compatibility, WheelCompatibility::Variant(..))
         })
     }
 
@@ -435,10 +435,10 @@ impl PrioritizedDist {
         let mut prioritized = self.clone();
         let mut found_variant = false;
         for (wheel, compatibility) in &mut prioritized.0.wheels {
-            if let WheelCompatibility::UnverifiedVariant(hash, priority, build_tag) = compatibility
+            if let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility
                 && let Some(label) = wheel.filename.variant()
                 && metadata.iter().any(|(index, metadata)| {
-                    index == &wheel.index && metadata.has_no_properties(label)
+                    index == &wheel.index && metadata.is_compatible(label, &HashSet::new())
                 })
             {
                 *compatibility =
@@ -626,7 +626,7 @@ impl PrioritizedDist {
             .and_then(|(_, compatibility)| match compatibility {
                 WheelCompatibility::Compatible(_, _, _) => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
-                WheelCompatibility::UnverifiedVariant(..) => {
+                WheelCompatibility::Variant(..) => {
                     Some(&IncompatibleWheel::Tag(IncompatibleTag::Variant))
                 }
             })
@@ -818,27 +818,23 @@ impl WheelCompatibility {
     /// Compatible wheel ordering is determined by tag priority.
     fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible(_, _, _), Self::Incompatible(_) | Self::UnverifiedVariant(..)) => {
-                true
-            }
+            (Self::Compatible(_, _, _), Self::Incompatible(_) | Self::Variant(..)) => true,
             (
                 Self::Compatible(hash, tag_priority, build_tag),
                 Self::Compatible(other_hash, other_tag_priority, other_build_tag),
             ) => {
                 (hash, tag_priority, build_tag) > (other_hash, other_tag_priority, other_build_tag)
             }
-            (Self::Incompatible(_) | Self::UnverifiedVariant(..), Self::Compatible(_, _, _)) => {
-                false
-            }
+            (Self::Incompatible(_) | Self::Variant(..), Self::Compatible(_, _, _)) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }
-            (Self::UnverifiedVariant(..), Self::Incompatible(other)) => {
+            (Self::Variant(..), Self::Incompatible(other)) => {
                 IncompatibleWheel::Tag(IncompatibleTag::Variant).is_more_compatible(other)
             }
-            (Self::Incompatible(incompatibility), Self::UnverifiedVariant(..)) => incompatibility
+            (Self::Incompatible(incompatibility), Self::Variant(..)) => incompatibility
                 .is_more_compatible(&IncompatibleWheel::Tag(IncompatibleTag::Variant)),
-            (Self::UnverifiedVariant(..), Self::UnverifiedVariant(..)) => false,
+            (Self::Variant(..), Self::Variant(..)) => false,
         }
     }
 }

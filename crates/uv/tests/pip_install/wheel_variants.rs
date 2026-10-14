@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use uv_cache::CacheBucket;
 use uv_static::EnvVars;
 use uv_test::archive::generate_source_archive;
 use uv_test::packse::generate_wheel_with_files;
@@ -103,6 +104,160 @@ fn select_empty_property_variant() -> Result<()> {
     ");
     assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"empty");
 
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - ok==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"empty");
+
+    Ok(())
+}
+
+/// A cached wheel with unsupported properties cannot be reused as a compatible variant.
+#[test]
+fn cached_variant_requires_compatible_properties() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let metadata = json!({
+        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "default-priorities": { "namespace": ["cuda"] },
+        "variants": { "empty": {} },
+    })
+    .to_string();
+    let (_, wheel) = generate_wheel_with_files(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[("ok-1.0.0.dist-info/variant.json", &metadata)],
+    );
+    links
+        .child("ok-1.0.0-py3-none-any-empty.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(&metadata)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - ok==1.0.0
+    ");
+
+    let variant_metadata = context
+        .cache_files(CacheBucket::Archive)?
+        .into_iter()
+        .find(|path| path.ends_with("ok-1.0.0.dist-info/variant.json"))
+        .context("cached variant metadata not found")?;
+    fs_err::write(
+        variant_metadata,
+        json!({
+            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+            "default-priorities": { "namespace": ["cuda"] },
+            "variants": { "empty": { "cuda": { "version": ["12"] } } },
+        })
+        .to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    assert_snapshot!(context.read(context.site_packages().join("ok-1.0.0.dist-info/variant.json")), @r#"{"$schema":"https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json","default-priorities":{"namespace":["cuda"]},"variants":{"empty":{}}}"#);
+    Ok(())
+}
+
+/// A wheel's properties must be supported even when its index metadata says otherwise.
+#[test]
+fn variant_with_unsupported_wheel_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    let metadata = json!({
+        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+        "default-priorities": { "namespace": ["cuda"] },
+        "variants": { "gpu": { "cuda": { "version": ["12"] } } },
+    })
+    .to_string();
+    let (_, wheel) = generate_wheel_with_files(
+        &"ok".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[("ok-1.0.0.dist-info/variant.json", &metadata)],
+    );
+    links
+        .child("ok-1.0.0-py3-none-any-gpu.whl")
+        .write_binary(&wheel)?;
+    links.child("ok-1.0.0-variants.json").write_str(
+        &json!({
+            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
+            "default-priorities": { "namespace": ["cuda"] },
+            "variants": { "gpu": {} },
+        })
+        .to_string(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==1.0.0`
+      cause: Wheel variant has unsupported or invalid properties: `ok-1.0.0-py3-none-any-gpu.whl`
+    ");
     Ok(())
 }
 

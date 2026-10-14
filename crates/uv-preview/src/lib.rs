@@ -461,7 +461,6 @@ pub enum PreviewFeature {
     /// hashes](./projects/build.md#project-build-dependency-hashes) for configuration and exceptions.
     BuildDependencyHashes,
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
-    /// Variant wheels without properties can be selected for platform-specific resolutions.
     WheelVariants,
 }
 

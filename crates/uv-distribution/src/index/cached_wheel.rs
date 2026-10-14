@@ -7,6 +7,7 @@ use uv_distribution_types::{BuildInfo, CachedDirectUrlDist, CachedRegistryDist, 
 use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::archive::Archive;
+use crate::download::variant_compatible;
 use crate::{HttpArchivePointer, PathArchivePointer};
 
 #[derive(Debug, Clone)]
@@ -53,6 +54,11 @@ impl CachedWheel {
     /// Return the filename of the wheel.
     pub fn filename(&self) -> &WheelFilename {
         &self.filename
+    }
+
+    /// Whether the wheel's variant properties are supported by the target system.
+    pub(super) fn variant_compatible(&self) -> bool {
+        variant_compatible(&self.filename, self.entry.path())
     }
 
     /// Create a [`CachedWheel`] from a [`ResolvedWheel`].

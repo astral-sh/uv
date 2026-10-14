@@ -16,7 +16,6 @@ use uv_fs::{directories, files};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
-use uv_preview::PreviewFeature;
 use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
@@ -250,8 +249,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                 CachedWheel::from_http_pointer(wheel_dir.join(file), cache)
                             {
                                 if wheel.filename.tag_compatibility(tags).is_compatible()
-                                    && (wheel.filename.variant().is_none()
-                                        || uv_preview::is_enabled(PreviewFeature::WheelVariants))
+                                    && wheel.variant_compatible()
                                 {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_package(
@@ -279,8 +277,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                 CachedWheel::from_local_pointer(wheel_dir.join(file), cache)
                             {
                                 if wheel.filename.tag_compatibility(tags).is_compatible()
-                                    && (wheel.filename.variant().is_none()
-                                        || uv_preview::is_enabled(PreviewFeature::WheelVariants))
+                                    && wheel.variant_compatible()
                                 {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_package(

@@ -37,9 +37,26 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
-    /// Whether the metadata describes a variant with no required properties.
-    pub fn has_no_properties(&self, label: &VariantLabel) -> bool {
-        self.variants.get(label).is_some_and(BTreeMap::is_empty)
+    /// Whether the properties of a variant are supported by the target system.
+    pub fn is_compatible(
+        &self,
+        label: &VariantLabel,
+        supported: &HashSet<(&str, &str, &str)>,
+    ) -> bool {
+        // TODO(konsti): Implement the complete variant compatibility and prioritization algorithm.
+        self.variants.get(label).is_some_and(|properties| {
+            properties.iter().all(|(namespace, features)| {
+                features.iter().all(|(feature, values)| {
+                    values.iter().any(|value| {
+                        supported.contains(&(
+                            namespace.0.as_str(),
+                            feature.0.as_str(),
+                            value.0.as_str(),
+                        ))
+                    })
+                })
+            })
+        })
     }
 
     /// Parse and validate the contents of a variant metadata file.

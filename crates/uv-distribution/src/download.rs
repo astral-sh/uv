@@ -1,12 +1,36 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{BuildInfo, CachedDist, Dist, Hashed};
+use uv_distribution_types::{BuildInfo, CachedDist, Dist, Hashed, VariantsJsonContent};
 use uv_metadata::read_flat_wheel_metadata;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
 use crate::Error;
+
+/// Whether an extracted wheel's variant properties are supported by the target system.
+pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> bool {
+    let Some(label) = filename.variant() else {
+        return true;
+    };
+    if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+        return false;
+    }
+
+    let Ok(dist_info) = uv_metadata::find_flat_dist_info(filename, archive) else {
+        return false;
+    };
+    let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
+    let Ok(contents) = fs_err::read(path) else {
+        return false;
+    };
+    let Ok(metadata) = VariantsJsonContent::from_slice(&contents) else {
+        return false;
+    };
+    metadata.is_compatible(label, &HashSet::new())
+}
 
 /// A locally available wheel.
 #[derive(Debug, Clone)]

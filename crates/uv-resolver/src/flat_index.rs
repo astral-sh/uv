@@ -272,7 +272,7 @@ impl FlatDistributions {
         let build_tag = filename.build_tag().cloned();
 
         if filename.variant().is_some() {
-            WheelCompatibility::UnverifiedVariant(hash, priority, build_tag)
+            WheelCompatibility::Variant(hash, priority, build_tag)
         } else {
             WheelCompatibility::Compatible(hash, priority, build_tag)
         }

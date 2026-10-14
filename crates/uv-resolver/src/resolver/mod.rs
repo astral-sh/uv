@@ -1385,7 +1385,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             for candidate_dist in candidates {
                 let mut responses = Vec::new();
                 for variants_json in candidate_dist.variants_json() {
-                    if candidate_dist.has_unverified_variants(&variants_json.index) {
+                    if candidate_dist.has_variants(&variants_json.index) {
                         responses.push((
                             variants_json.index.clone(),
                             requests.request_variants_json(variants_json)?.wait(),
