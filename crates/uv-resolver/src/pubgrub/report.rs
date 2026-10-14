@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error;
 use std::fmt::Write;
+use std::iter;
 use std::ops::Bound;
 
 use indexmap::IndexSet;
@@ -30,8 +32,7 @@ use crate::prioritized_distribution::{IncompatibleDist, IncompatibleSource, Inco
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
-    MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
-    UnavailableVersion,
+    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 use uv_configuration::EffectiveExcludeNewerSource;
@@ -1216,13 +1217,16 @@ impl PubGrubReportFormatter<'_> {
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
             }
-            Some(UnavailablePackage::InvalidMetadata(reason)) => {
+            Some(
+                reason @ (UnavailablePackage::InvalidMetadata(_)
+                | UnavailablePackage::InconsistentMetadata(_)),
+            ) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
                     package: name.clone(),
                     reason: reason.clone(),
                 });
             }
-            Some(UnavailablePackage::InvalidStructure(reason)) => {
+            Some(reason @ UnavailablePackage::InvalidStructure(_)) => {
                 hints.insert(PubGrubHint::InvalidPackageStructure {
                     package: name.clone(),
                     reason: reason.clone(),
@@ -1519,13 +1523,13 @@ pub enum PubGrubHint {
     InvalidPackageMetadata {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: UnavailableErrorChain,
+        reason: UnavailablePackage,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: UnavailableErrorChain,
+        reason: UnavailablePackage,
     },
     /// The package metadata could not be fetched due to a network error.
     InvalidPackageNetwork {
@@ -1940,20 +1944,20 @@ impl std::fmt::Display for PubGrubHint {
                 )
             }
             Self::InvalidPackageMetadata { package, reason } => {
-                write!(
-                    f,
-                    "Metadata for `{}` could not be parsed.\n{}",
-                    package.cyan(),
-                    textwrap::indent(reason.to_string().as_str(), "  ")
-                )
+                writeln!(f, "Metadata for `{}` could not be parsed.", package.cyan())?;
+                for source in iter::successors(reason.source(), |&error| error.source()) {
+                    let message = format!("Caused by: {}", source.to_string().trim());
+                    writeln!(f, "{}", textwrap::indent(&message, "  "))?;
+                }
+                Ok(())
             }
             Self::InvalidPackageStructure { package, reason } => {
-                write!(
-                    f,
-                    "The structure of `{}` was invalid\n{}",
-                    package.cyan(),
-                    textwrap::indent(reason.to_string().as_str(), "  ")
-                )
+                writeln!(f, "The structure of `{}` was invalid", package.cyan())?;
+                for source in iter::successors(reason.source(), |&error| error.source()) {
+                    let message = format!("Caused by: {}", source.to_string().trim());
+                    writeln!(f, "{}", textwrap::indent(&message, "  "))?;
+                }
+                Ok(())
             }
             Self::InvalidPackageNetwork { package, status } => {
                 write!(
