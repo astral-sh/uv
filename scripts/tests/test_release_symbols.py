@@ -188,6 +188,11 @@ class ReleaseSymbols(unittest.TestCase):
                 if system == "linux"
                 else "packed",
             }
+            if system == "linux":
+                environment["RUSTFLAGS"] = (
+                    environment.get("RUSTFLAGS", "")
+                    + " -C link-arg=-Wl,--build-id=sha1"
+                ).strip()
             command = [
                 "maturin",
                 "build",
