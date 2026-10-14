@@ -85,7 +85,7 @@ pub fn parse_boolish_environment_variable(
     //
     // Any other value will be considered as `true`.
     fn str_to_bool(val: impl AsRef<str>) -> Option<bool> {
-        let pat: &str = &val.as_ref().to_lowercase();
+        let pat: &str = &val.as_ref().to_ascii_lowercase();
         if TRUE_LITERALS.contains(&pat) {
             Some(true)
         } else if FALSE_LITERALS.contains(&pat) {
