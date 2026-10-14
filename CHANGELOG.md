@@ -13,6 +13,10 @@ Released on 2026-10-14.
 - Support Linux SPARC by falling back when filesystem cloning and detailed cache accounting are unavailable ([#22463](https://github.com/astral-sh/uv/pull/22463))
 - Report missing trusted hashes in resolution errors ([#22241](https://github.com/astral-sh/uv/pull/22241))
 
+### Python
+
+- Add CPython 3.16.0a1 ([#22527](https://github.com/astral-sh/uv/pull/22527))
+
 ### Preview features
 
 - Allow `uv tool upgrade` to upgrade installed tools when `tool-install-locks` is enabled ([#22498](https://github.com/astral-sh/uv/pull/22498))
