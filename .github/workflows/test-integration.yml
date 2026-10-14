@@ -13,7 +13,7 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
-  # Apply the cutoff only to PyPI installs; other tests use lockfiles or custom indexes.
+  # Apply a dependency cutoff to tests that don't use a lockfile
   CI_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
