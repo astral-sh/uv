@@ -28,7 +28,8 @@ profile generation/use to avoid mixing Apple Clang and Rust LLVM profiling runti
 The executable is stripped after extracting its companion, with platform identity checks. Original
 build directories are removed before debugging. LLDB loads the retained companion explicitly and
 disables external symbol lookup. A second session runs an isolated binary without the companion;
-fixture source locations and source breakpoints must then be unavailable.
+fixture source locations and source breakpoints must then be unavailable. Windows CDB replays add an
+independent native-debugger check with the same retained PE/PDB files and a missing-PDB control.
 
 The fixture covers:
 
@@ -45,11 +46,13 @@ The fixture covers:
 | Tail call               | A forwarding caller that can lose its physical frame; record real, inline and artificial frames             |
 
 The checkpoint itself is exported so no-debug and missing-symbol controls can stop at the same
-locations. LLDB reads variables through its debug-information API and Rust formatters; the harness
-does not evaluate target expressions to manufacture values. Both raw and synthetic children are
-retained. Memory-resident live values form a positive control; other probes deliberately allow
-optimization. An optimized-away value is an observation, not a harness failure. A failed unoptimized
-positive control is an infrastructure/tool-compatibility failure requiring investigation.
+locations. LLDB reads variables through its debug-information API and Rust formatters. CDB reads
+named variables and fields using its local-variable display and typed expressions; neither backend
+executes target functions or computes the expected values as a substitute for inspection. Both raw
+and synthetic children are retained. Memory-resident live values form a positive control; other
+probes deliberately allow optimization. An optimized-away value is an observation, not a harness
+failure. A failed unoptimized positive control is an infrastructure/tool-compatibility failure
+requiring investigation.
 
 No fixed list of variables is required to disappear. The compiler can preserve constants or
 reconstruct values even when it removes their physical storage. Likewise, a variable that is
@@ -73,3 +76,10 @@ companion symbols, binaries, LLDB commands/logs, detailed checkpoint observation
 controls. Failed variants retain their evidence and do not prevent independent variants from being
 attempted. These fixtures do not measure variable availability in the complete uv binary, core-dump
 support, or performance costs.
+
+`replay_capabilities.py` can repeat observations on hash-verified retained binaries without building
+them again. It records the compiled source commit separately from the observer commit. Replays can
+add normal debugger CLI output alongside structured values and use lexical lookup for shadowed
+names. The original observations remain retained. `backend=cdb` in the workflow uses the Windows SDK
+debugger engine; `platform=Unix` selects the three Unix targets for LLDB replays. Both require a
+source run ID and exact compiled-source commit.

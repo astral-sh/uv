@@ -78,6 +78,9 @@ def debugger_probe(debugger, binary, symbols, destination, sysroot):
 
 
 def variable(observation, name):
+    for frame in observation["matching_frames"]:
+        if name in frame.get("lexical_lookup", {}):
+            return frame["lexical_lookup"][name]
     return next(
         (
             value
@@ -87,6 +90,18 @@ def variable(observation, name):
         ),
         None,
     )
+
+
+def inline_frames(observation):
+    return [
+        frame["function"]
+        for frame in observation["frames"]
+        if frame["inline"]
+        and any(
+            name in (frame["function"] or "")
+            for name in ("inline_leaf", "inline_middle")
+        )
+    ]
 
 
 def summarize(probe):
@@ -138,12 +153,7 @@ def summarize(probe):
         "after_last_use": variable(observations["after_last_use"], "temporary"),
         "shadow_inner": variable(observations["shadow_inner"], "shadowed"),
         "shadow_outer": variable(observations["shadow_outer"], "shadowed"),
-        "inline_frames": [
-            frame["function"]
-            for frame in observations["inline_chain"]["frames"]
-            if frame["inline"]
-            and "capability_fixture::inline_" in (frame["function"] or "")
-        ],
+        "inline_frames": inline_frames(observations["inline_chain"]),
         "native_variables": values(observations["native_values"]),
         "tail_frames": [
             {

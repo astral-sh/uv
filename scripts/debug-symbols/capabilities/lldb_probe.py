@@ -37,7 +37,9 @@ def value_record(value, depth=0):
     formatted = value
     value = value.GetNonSyntheticValue()
     error = lldb.SBError()
-    unsigned = value.GetValueAsUnsigned(error)
+    unsigned = None
+    if value.GetNumChildren() == 0 and value.GetValue() is not None:
+        unsigned = value.GetValueAsUnsigned(error)
     record = {
         "name": value.GetName(),
         "type": value.GetTypeName(),
@@ -65,16 +67,21 @@ def value_record(value, depth=0):
 
 def frame_record(frame):
     line = frame.GetLineEntry()
+    variables = list(frame.GetVariables(True, True, False, True))
     return {
+        "index": frame.GetFrameID(),
         "function": frame.GetFunctionName(),
         "inline": frame.IsInlined(),
         "artificial": frame.IsArtificial(),
         "file": str(line.GetFileSpec()) if line.IsValid() else None,
         "line": line.GetLine() if line.IsValid() else None,
         "pc": frame.GetPC(),
-        "variables": [
-            value_record(value) for value in frame.GetVariables(True, True, False, True)
-        ],
+        "variables": [value_record(value) for value in variables],
+        "lexical_lookup": {
+            name: value_record(frame.FindVariable(name))
+            for name in dict.fromkeys(value.GetName() for value in variables)
+            if name
+        },
     }
 
 
@@ -159,6 +166,10 @@ def observe(debugger, configuration):
                 for frame in item["frames"]
                 if function in (frame["function"] or "")
             ]
+            item["cli"] = []
+            for frame in item["matching_frames"]:
+                item["cli"].append(command(debugger, f"frame select {frame['index']}"))
+                item["cli"].append(command(debugger, "frame variable -T -L"))
             observations.append(item)
             process.Continue()
         if process.GetState() != lldb.eStateExited or process.GetExitStatus() != 0:

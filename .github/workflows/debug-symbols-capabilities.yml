@@ -7,14 +7,29 @@ on:
       platform:
         description: Native platforms on which to test debugger capabilities
         type: choice
-        options: [all, Linux, Linux-ARM64, macOS, Windows]
+        options: [all, Unix, Linux, Linux-ARM64, macOS, Windows]
         default: all
+      backend:
+        description: Debugger backend
+        type: choice
+        options: [lldb, cdb]
+        default: lldb
+      source-run:
+        description: Replay retained fixtures from this run instead of rebuilding
+        type: string
+        default: ""
+      source-commit:
+        description: Exact expected compiled-fixture commit for replay
+        type: string
+        default: ""
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   capabilities:
+    if: inputs.backend != 'cdb'
     name: capabilities / ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -32,11 +47,11 @@ jobs:
             runner: namespace-profile-windows-2022-x86-64-16x32
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        if: inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows')
         with:
           persist-credentials: false
       - name: Discover Windows debugger Python requirement
-        if: runner.os == 'Windows' && (github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform)
+        if: runner.os == 'Windows' && (inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows'))
         id: debugger-python
         shell: pwsh
         run: |
@@ -51,36 +66,101 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           $llvm >> $env:GITHUB_PATH
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        if: inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows')
         with:
           python-version: ${{ steps.debugger-python.outputs.version || '3.12' }}
           cache: ""
       - name: Install Rust tooling and sampler dependency
-        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        if: inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows')
         run: |
           rustup toolchain install --profile minimal
           rustup component add llvm-tools-preview clippy rustfmt
           python -m pip install --disable-pip-version-check psutil==7.0.0
       - name: Install Linux debugger
-        if: runner.os == 'Linux' && (github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform)
+        if: runner.os == 'Linux' && (inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows'))
         run: sudo apt-get update && sudo apt-get install -y lldb
       - name: Enable debugging on the disposable macOS runner
-        if: runner.os == 'macOS' && (github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform)
+        if: runner.os == 'macOS' && (inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows'))
         run: sudo DevToolsSecurity -enable
       - name: Check fixture and debugger scripting
-        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        if: inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows')
         run: |
           cargo fmt --manifest-path scripts/debug-symbols/capabilities/Cargo.toml --check
           cargo clippy --manifest-path scripts/debug-symbols/capabilities/Cargo.toml --all-targets --locked -- -D warnings
           lldb --batch --no-lldbinit -o "script import sys; print(sys.version)"
       - name: Exercise debug levels and optimization edge cases
-        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        if: inputs.source-run == '' && (inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows'))
         run: python scripts/debug-symbols/run_capabilities.py
+      - name: Download retained fixtures for replay
+        if: inputs.source-run != '' && (inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows'))
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: debug-capabilities-${{ runner.os }}-${{ runner.arch }}-1
+          path: target/retained-capabilities
+          run-id: ${{ inputs.source-run }}
+          github-token: ${{ github.token }}
+      - name: Replay retained fixtures in LLDB
+        if: inputs.source-run != '' && (inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows'))
+        env:
+          CAPABILITY_SOURCE_COMMIT: ${{ inputs.source-commit }}
+        run: python scripts/debug-symbols/replay_capabilities.py --input target/retained-capabilities --backend lldb
       - name: Retain all capability evidence
-        if: always() && (github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform)
+        if: always() && (inputs.platform == 'all' || inputs.platform == matrix.platform || (inputs.platform == 'Unix' && runner.os != 'Windows'))
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: debug-capabilities-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}
-          path: target/debug-symbols-capabilities
+          path: ${{ inputs.source-run != '' && 'target/debug-symbols-capabilities-replay' || 'target/debug-symbols-capabilities' }}
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows-cdb:
+    if: inputs.backend == 'cdb'
+    name: capabilities / Windows CDB
+    runs-on: namespace-profile-windows-2022-x86-64-16x32
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: ""
+      - name: Enable installed Windows SDK debugging tools
+        shell: pwsh
+        run: |
+          $cdb = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe"
+          if (-not (Test-Path $cdb)) {
+            $installer = Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
+              Where-Object { $_.DisplayName -match 'Windows Software Development Kit' -and $_.BundleCachePath -and (Test-Path $_.BundleCachePath) } |
+              Sort-Object DisplayVersion -Descending | Select-Object -First 1
+            if (-not $installer) { throw 'No installed Windows SDK setup bundle found' }
+            $signature = Get-AuthenticodeSignature $installer.BundleCachePath
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') {
+              throw 'Windows SDK installer signature is invalid'
+            }
+            $process = Start-Process -FilePath $installer.BundleCachePath -ArgumentList '/features', 'OptionId.WindowsDesktopDebuggers', '/quiet', '/norestart' -Wait -PassThru
+            if ($process.ExitCode -notin 0, 3010) { throw "Windows SDK setup failed: $($process.ExitCode)" }
+          }
+          if (-not (Test-Path $cdb)) { throw 'CDB was not installed' }
+          "CDB=$cdb" >> $env:GITHUB_ENV
+          python -m pip install --disable-pip-version-check psutil==7.0.0
+      - name: Download retained Windows fixtures
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: debug-capabilities-Windows-X64-1
+          path: target/retained-capabilities
+          run-id: ${{ inputs.source-run }}
+          github-token: ${{ github.token }}
+      - name: Observe retained fixtures with CDB
+        env:
+          CAPABILITY_SOURCE_COMMIT: ${{ inputs.source-commit }}
+        run: python scripts/debug-symbols/replay_capabilities.py --input target/retained-capabilities --backend cdb
+      - name: Retain CDB evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: debug-capabilities-cdb-Windows-X64-${{ github.run_attempt }}
+          path: target/debug-symbols-capabilities-replay
           if-no-files-found: warn
           retention-days: 14
