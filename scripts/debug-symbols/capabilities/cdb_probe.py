@@ -53,15 +53,20 @@ def observe(binary, destination):
     initial_file.write_text(
         "\n".join(
             [
-                ".version",
-                ".symopt+0x410",
+                "version",
+                # Permit export-only symbols in the no-PDB controls, while
+                # retaining the default rejection of mismatched symbol files.
+                ".symopt-0x440",
+                ".symopt+0x10",
                 ".lines -e",
                 f".sympath {binary.parent}",
                 ".echo CAP_TYPES",
                 "dt capability_fixture!capability_fixture::Record",
                 "dt capability_fixture!capability_fixture::Choice",
                 "dt capability_fixture!native_record",
-                f'bp capability_fixture!capability_checkpoint "$$><{checkpoint_file}"',
+                # Breakpoint strings interpret backslash escapes. A relative
+                # script name avoids interpreting Windows path separators.
+                f'bp capability_fixture!capability_checkpoint "$$<{checkpoint_file.name}"',
                 "g",
             ]
         )
