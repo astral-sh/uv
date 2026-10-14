@@ -3,12 +3,14 @@ use std::fmt::Display;
 use std::io;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use astral_mail_headers::Message;
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use itertools::Itertools;
+use regex::bytes::Regex;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
@@ -24,6 +26,12 @@ use uv_warnings::warn_user_once;
 use crate::record::RecordEntry;
 use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
+
+/// A Python source encoding declaration, as defined by PEP 263.
+static SCRIPT_ENCODING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?-u)^[ \t\x0c]*#[^\r\n]*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+        .expect("valid script encoding regex")
+});
 
 /// Wrapper script template function
 ///
@@ -580,9 +588,27 @@ fn install_script(
 
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
-        let mut start = format_shebang(&executable, &layout.os_name, relocatable)
-            .as_bytes()
-            .to_vec();
+        let mut start = format_shebang(&executable, &layout.os_name, relocatable).into_bytes();
+        let mut second_line = Vec::new();
+        if let Some(newline) = start.iter().position(|byte| *byte == b'\n') {
+            script.read_until(b'\n', &mut second_line)?;
+            if let Some(encoding) = SCRIPT_ENCODING
+                .captures(&second_line)
+                .and_then(|captures| captures.get(1))
+            {
+                // Python recognizes source encodings only on the first two lines. Copy the
+                // encoding into the shell launcher as a comment safe for both interpreters.
+                let insert_at = newline + 1;
+                start.splice(
+                    insert_at..insert_at,
+                    b"# coding: "
+                        .iter()
+                        .chain(encoding.as_bytes())
+                        .chain(b"\n")
+                        .copied(),
+                );
+            }
+        }
 
         // Use appropriate line ending for the platform.
         if layout.os_name == "nt" {
@@ -592,7 +618,10 @@ fn install_script(
         }
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
-        let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
+        let size_and_encoded_hash = copy_and_hash(
+            &mut start.chain(second_line.as_slice()).chain(script),
+            &mut target,
+        )?;
 
         persist_with_retry_sync(target, &script_absolute)?;
         fs::remove_file(&path)?;

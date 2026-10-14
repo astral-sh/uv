@@ -153,6 +153,39 @@ fn install_crlf_wheel_script_preserves_encoding_cookie() -> Result<()> {
     Ok(())
 }
 
+/// A Python script's encoding declaration must remain on the second line even when its
+/// interpreter path requires a multi-line shell launcher.
+#[test]
+#[cfg(unix)]
+fn install_wheel_script_with_shell_launcher_preserves_encoding_cookie() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let wheel = context
+        .temp_dir
+        .join("encoded_script-1.0.0-py3-none-any.whl");
+    write_crlf_script_wheel(&wheel)?;
+
+    let venv = context.temp_dir.join("venv with spaces");
+    context.venv().arg(&venv).assert().success();
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python").arg(&venv).arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: venv with spaces
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + encoded-script==1.0.0 (from file://[TEMP_DIR]/encoded_script-1.0.0-py3-none-any.whl)
+    ");
+
+    uv_snapshot!(context.external_command(venv_bin_path(&venv).join("encoded-script")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    café
+    ");
+
+    Ok(())
+}
+
 /// Hash the entire HTTP response even when extraction stops before trailing bytes.
 #[test]
 fn install_http_wheel_hashes_trailing_bytes() -> Result<()> {
