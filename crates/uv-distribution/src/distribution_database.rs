@@ -222,6 +222,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // TODO(konsti): Support variant wheels from non-registry sources.
         if let Dist::Built(built) = dist
             && built.wheel_filename().variant().is_some()
             && (!uv_preview::is_enabled(PreviewFeature::WheelVariants)
@@ -273,6 +274,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // TODO(konsti): Support variant wheels from non-registry sources.
         if let Dist::Built(built) = dist
             && built.wheel_filename().variant().is_some()
             && (!uv_preview::is_enabled(PreviewFeature::WheelVariants)

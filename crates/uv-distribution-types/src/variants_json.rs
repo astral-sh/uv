@@ -43,7 +43,7 @@ impl VariantsJsonContent {
         label: &VariantLabel,
         supported: &HashSet<(&str, &str, &str)>,
     ) -> bool {
-        // TODO(konsti): Implement the complete variant compatibility and prioritization algorithm.
+        // TODO(konsti): This is only the bare minimum of the complete compatibility and priority story.
         self.variants.get(label).is_some_and(|properties| {
             properties.iter().all(|(namespace, features)| {
                 features.iter().all(|(feature, values)| {
