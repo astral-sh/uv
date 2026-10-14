@@ -41,10 +41,7 @@ pub(super) async fn resolve_names(
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
         .into_iter()
-        .map(|spec| {
-            spec.requirement
-                .augment_requirement(None, None, None, lfs.into(), None)
-        })
+        .map(|spec| spec.requirement.augment_requirement(None, lfs.into(), None))
         .partition_map(|requirement| match requirement {
             UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
             UnresolvedRequirement::Unnamed(requirement) => itertools::Either::Right(requirement),

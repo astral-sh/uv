@@ -266,7 +266,7 @@ async fn infer_requires_python_from_requirement(
 ) -> Option<RequiresPython> {
     let requirement = requirement
         .clone()
-        .augment_requirement(None, None, None, lfs.into(), None);
+        .augment_requirement(None, lfs.into(), None);
     let source = requirement.source();
 
     match StaticMetadataDatabase::new(client_builder, git_resolver, cache)

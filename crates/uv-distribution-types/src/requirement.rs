@@ -1134,7 +1134,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     match &*key {
                         "tag" => reference = GitReference::Tag(val.into_owned()),
                         "branch" => reference = GitReference::Branch(val.into_owned()),
-                        "rev" => reference = GitReference::from_rev(val.into_owned()),
+                        "rev" => reference = GitReference::from_rev(val.into_owned())?,
                         "subdirectory" => {
                             subdirectory = Some(PortablePathBuf::from(val.as_ref()));
                         }

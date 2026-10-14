@@ -89,7 +89,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     // Reconstruct the `GitUrl` from the `GitSource`.
                     let git_url = uv_git_types::GitUrl::from_commit(
                         url,
-                        GitReference::from(git.kind.clone()),
+                        GitReference::try_from(git.kind.clone()).map_err(|_| std::fmt::Error)?,
                         git.precise,
                         git.lfs,
                     )

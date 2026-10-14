@@ -928,6 +928,120 @@ fn lock_rejects_mismatched_exact_git_revision() -> Result<()> {
     Ok(())
 }
 
+/// Resolve a Git repository whose object format differs from Git's default.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_git_sha256() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"#[0-9a-f]{64}", "#[SHA256]"));
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+    "#})?;
+
+    Command::new("git")
+        .args(["init", "--object-format=sha256"])
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "pyproject.toml"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = {{ git = "{repository_url}" }}
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").env(EnvVars::GIT_DEFAULT_HASH, "sha1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "dependency"
+        version = "0.1.0"
+        source = { git = "file://[TEMP_DIR]/repository/#[SHA256]" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "dependency" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "dependency", git = "file://[TEMP_DIR]/repository/" }]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Reject a Git revision longer than a SHA-1 ID but shorter than a SHA-256 ID.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_rejects_invalid_git_revision_length() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency @ git+https://example.com/repository.git@01234567890123456789012345678901234567890"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to extract static metadata from `pyproject.toml`
+      cause: Invalid Git revision `01234567890123456789012345678901234567890`: expected at most 40 or exactly 64 hexadecimal characters
+             dependency @ git+https://example.com/repository.git@01234567890123456789012345678901234567890
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ");
+    Ok(())
+}
+
 /// Lock a Git requirement using `tool.uv.sources`.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]

@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument, warn};
 
 use uv_fs::Simplified;
-use uv_git_types::{GitOid, GitReference};
+use uv_git_types::{GitObjectFormat, GitOid, GitReference};
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -122,7 +122,7 @@ impl GitRepository {
     }
 
     /// Initializes a Git repository at `path`.
-    fn init(path: &Path) -> Result<Self> {
+    fn init(path: &Path, format: Option<GitObjectFormat>) -> Result<Self> {
         // TODO(ibraheem): see if this still necessary now that we no longer use libgit2
         // Skip anything related to templates, they just call all sorts of issues as
         // we really don't want to use them yet they insist on being used. See #6240
@@ -130,15 +130,32 @@ impl GitRepository {
         // opts.external_template(false);
 
         // Initialize the repository.
-        GIT.as_ref()
-            .cloned()?
-            .arg("init")
-            .cwd(path)
-            .exec_with_output()?;
+        let mut cmd = GIT.as_ref().cloned()?;
+        if let Some(format) = format {
+            cmd.env(EnvVars::GIT_DEFAULT_HASH, format.as_str());
+        }
+        cmd.arg("init").cwd(path).exec_with_output()?;
 
         Ok(Self {
             path: path.to_path_buf(),
         })
+    }
+
+    /// Return the repository's object format, if Git can determine it.
+    fn object_format(&self) -> Option<GitObjectFormat> {
+        let output = GIT
+            .as_ref()
+            .ok()?
+            .clone()
+            .args(&["rev-parse", "--show-object-format"])
+            .cwd(&self.path)
+            .exec_with_output()
+            .ok()?;
+        match str::from_utf8(&output.stdout).ok()?.trim() {
+            "sha1" => Some(GitObjectFormat::Sha1),
+            "sha256" => Some(GitObjectFormat::Sha256),
+            _ => None,
+        }
     }
 
     /// Resolve a [`GitReference`] using the objects already in this repository.
@@ -274,7 +291,10 @@ impl GitRemote {
         }
 
         fs_err::create_dir_all(into)?;
-        let mut repo = GitRepository::init(into)?;
+        let mut repo = GitRepository::init(
+            into,
+            reference.as_commit().map(|commit| commit.object_format()),
+        )?;
         fetch(&mut repo, &self.url, reference, disable_ssl, offline)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = repo.resolve(reference)?;
@@ -676,7 +696,7 @@ fn fetch(
     }
 
     debug!("Performing a Git fetch for: {remote_url}");
-    let result = match refspec_strategy {
+    let fetch_refspecs = |repo: &mut GitRepository| match refspec_strategy {
         RefspecStrategy::All => fetch_with_cli(
             repo,
             remote_url,
@@ -723,6 +743,40 @@ fn fetch(
             }
         }
     };
+    let result = fetch_refspecs(repo).or_else(|error| {
+        if !error.is::<ProcessError>() {
+            return Err(error);
+        }
+
+        // A failed fetch can leave a cache database initialized with a different object format
+        // than its remote. Compare formats before replacing it, without adding a remote request to
+        // successful fetches.
+        let format = repo.object_format().and_then(|local_format| {
+            let requested_format = reference.as_commit().map(|commit| commit.object_format());
+            if requested_format == Some(local_format) {
+                return None;
+            }
+            remote_object_format(repo, remote_url, &refspecs, disable_ssl, offline).filter(
+                |remote_format| {
+                    *remote_format != local_format
+                        && requested_format
+                            .is_none_or(|requested_format| requested_format == *remote_format)
+                },
+            )
+        });
+        let Some(format) = format else {
+            return Err(error);
+        };
+
+        debug!(
+            "Reinitializing Git database with {} object format",
+            format.as_str()
+        );
+        fs_err::remove_dir_all(&repo.path)?;
+        fs_err::create_dir_all(&repo.path)?;
+        *repo = GitRepository::init(&repo.path, Some(format))?;
+        fetch_refspecs(repo)
+    });
     match reference {
         // With the default branch, adding context is confusing
         GitReference::DefaultBranch => result,
@@ -750,23 +804,10 @@ fn fetch_with_cli(
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
-    let mut cmd = GIT.as_ref().cloned()?;
-    // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
-    // animation and the process will "hang". Interactive prompts via the GUI like `SSH_ASKPASS`
-    // are still usable.
-    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
-
+    let mut cmd = remote_command(disable_ssl, offline)?;
     cmd.arg("fetch");
     if tags {
         cmd.arg("--tags");
-    }
-    if disable_ssl {
-        debug!("Disabling SSL verification for Git fetch via `GIT_SSL_NO_VERIFY`");
-        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
-    }
-    if offline {
-        debug!("Disabling remote protocols for Git fetch via `GIT_ALLOW_PROTOCOL=file`");
-        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
@@ -786,6 +827,57 @@ fn fetch_with_cli(
     })?;
 
     Ok(())
+}
+
+/// Determine a remote repository's object format from an advertised object ID.
+fn remote_object_format(
+    repo: &GitRepository,
+    url: &DisplaySafeUrl,
+    refspecs: &[String],
+    disable_ssl: bool,
+    offline: bool,
+) -> Option<GitObjectFormat> {
+    let mut cmd = remote_command(disable_ssl, offline).ok()?;
+    cmd.arg("ls-remote")
+        .arg(url.as_str())
+        .arg("HEAD")
+        .cwd(&repo.path);
+    // Include requested named refs in case the remote does not have a default branch. Exclude
+    // wildcard refspecs so a failed fetch cannot cause a large ref listing.
+    for refspec in refspecs {
+        if let Some((source, _)) = refspec
+            .strip_prefix('+')
+            .and_then(|refspec| refspec.split_once(':'))
+            && source.starts_with("refs/")
+            && !source.contains('*')
+        {
+            cmd.arg(source);
+        }
+    }
+    let output = cmd.exec_with_output().ok()?;
+    str::from_utf8(&output.stdout)
+        .ok()?
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .find_map(|(oid, _)| oid.parse::<GitOid>().ok())
+        .map(|oid| oid.object_format())
+}
+
+/// Prepare a Git command that can access a remote repository.
+fn remote_command(disable_ssl: bool, offline: bool) -> Result<ProcessBuilder> {
+    let mut cmd = GIT.as_ref().cloned()?;
+    // Disable terminal prompts, which are erased by the progress bar. GUI prompts like SSH_ASKPASS
+    // remain usable.
+    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
+    if disable_ssl {
+        debug!("Disabling SSL verification for Git via `GIT_SSL_NO_VERIFY`");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
+    if offline {
+        debug!("Disabling remote protocols for Git via `GIT_ALLOW_PROTOCOL=file`");
+        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
+    }
+    Ok(cmd)
 }
 
 /// A global cache of the `git lfs` command.

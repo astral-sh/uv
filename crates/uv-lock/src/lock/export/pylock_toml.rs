@@ -1629,7 +1629,7 @@ impl PylockTomlPackage {
             return Ok(None);
         };
         let reference = match vcs.requested_revision.as_ref() {
-            Some(rev) => GitReference::from_rev(rev.clone()),
+            Some(rev) => GitReference::from_rev(rev.clone())?,
             None => GitReference::DefaultBranch,
         };
         let git = GitUrl::from_commit(url.clone(), reference, vcs.commit_id, GitLfs::Disabled)?;
@@ -1773,6 +1773,7 @@ impl PylockTomlVcs {
                 .requested_revision
                 .clone()
                 .map(GitReference::from_rev)
+                .transpose()?
                 .unwrap_or(GitReference::Commit(self.commit_id));
             let precise = self.commit_id;
 
