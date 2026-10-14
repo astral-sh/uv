@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, hash_map::Entry};
-use std::sync::Arc;
 
 use petgraph::{
     Directed, Direction,
@@ -13,7 +12,7 @@ use uv_distribution_types::{
     DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
     ResolutionDiagnostic, parse_url_hashes,
 };
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
 use uv_types::HashStrategy;
@@ -50,7 +49,6 @@ pub(crate) fn from_state(
     let mut inverse: FxHashMap<ResolutionNode, NodeIndex<u32>> =
         FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
     let mut diagnostics = Vec::new();
-    let mut extras = FxHashMap::default();
 
     // Add the root node.
     let root_index = graph.add_node(ResolutionGraphNode::Root);
@@ -70,7 +68,6 @@ pub(crate) fn from_state(
             let node = add_version(
                 &mut graph,
                 &mut diagnostics,
-                &mut extras,
                 preferences,
                 hasher,
                 index,
@@ -223,7 +220,6 @@ fn add_edge(
 fn add_version(
     graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
-    extras: &mut FxHashMap<*const MetadataResponse, FxHashSet<ExtraName>>,
     preferences: &Preferences,
     hasher: &HashStrategy,
     in_memory: &InMemoryIndex,
@@ -268,7 +264,7 @@ fn add_version(
         let metadata = &archive.metadata;
         // Validate the extra.
         if let Some(extra) = kind.extra() {
-            if !provides_extra(response, extra, extras) {
+            if !metadata.provides_extra.contains(extra) {
                 diagnostics.push(ResolutionDiagnostic::MissingExtra {
                     dist: dist.clone(),
                     extra: extra.clone(),
@@ -298,26 +294,6 @@ fn add_version(
         is_project_or_workspace_member,
         marker: UniversalMarker::TRUE,
     }))
-}
-
-/// Returns whether the resolved distribution provides the requested extra.
-fn provides_extra(
-    response: &Arc<MetadataResponse>,
-    extra: &ExtraName,
-    extras: &mut FxHashMap<*const MetadataResponse, FxHashSet<ExtraName>>,
-) -> bool {
-    let MetadataResponse::Found(archive) = response.as_ref() else {
-        return false;
-    };
-
-    if archive.metadata.provides_extra.len() <= 8 {
-        return archive.metadata.provides_extra.contains(extra);
-    }
-
-    extras
-        .entry(Arc::as_ptr(response))
-        .or_insert_with(|| archive.metadata.provides_extra.iter().cloned().collect())
-        .contains(extra)
 }
 
 /// Identify the hashes for a concrete distribution, preserving any hashes that were provided
@@ -502,94 +478,4 @@ fn has_lower_bound(
         }
     }
     false
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeMap;
-    use std::str::FromStr;
-    use std::sync::Arc;
-
-    use rustc_hash::FxHashMap;
-
-    use uv_distribution::{ArchiveMetadata, Metadata};
-    use uv_normalize::{ExtraName, PackageName};
-    use uv_pep440::Version;
-    use uv_pep508::Requirement;
-
-    use crate::MetadataResponse;
-    use crate::resolution::output::provides_extra;
-
-    fn metadata(extra_start: usize, extra_count: usize) -> Arc<MetadataResponse> {
-        let provides_extra = (extra_start..extra_start + extra_count)
-            .map(|extra| ExtraName::from_str(&format!("extra-{extra}")).expect("valid extra"))
-            .collect();
-        let requires_dist = (0..128)
-            .map(|requirement| {
-                Requirement::from_str(&format!(
-                    "dependency-{requirement}>=1; python_version >= '3.8'"
-                ))
-                .expect("valid requirement")
-                .into()
-            })
-            .collect();
-        Arc::new(MetadataResponse::Found(ArchiveMetadata::from(Metadata {
-            name: PackageName::from_str("package").expect("valid name"),
-            version: Version::from_str("1.0.0").expect("valid version"),
-            requires_dist,
-            requires_python: None,
-            provides_extra,
-            dependency_groups: BTreeMap::default(),
-            dynamic: false,
-        })))
-    }
-
-    #[test]
-    fn small_extra_lookup_avoids_cache() {
-        let metadata = metadata(0, 8);
-        let mut extras = FxHashMap::default();
-
-        assert!(provides_extra(
-            &metadata,
-            &ExtraName::from_str("extra-7").expect("valid extra"),
-            &mut extras,
-        ));
-        assert!(!provides_extra(
-            &metadata,
-            &ExtraName::from_str("missing").expect("valid extra"),
-            &mut extras,
-        ));
-        assert!(extras.is_empty());
-    }
-
-    #[test]
-    fn large_extra_lookup_is_scoped_to_distribution() {
-        let first = metadata(0, 128);
-        let second = metadata(64, 128);
-        let mut extras = FxHashMap::default();
-
-        for extra in 0..128 {
-            assert!(provides_extra(
-                &first,
-                &ExtraName::from_str(&format!("extra-{extra}")).expect("valid extra"),
-                &mut extras,
-            ));
-        }
-        assert!(!provides_extra(
-            &first,
-            &ExtraName::from_str("extra-191").expect("valid extra"),
-            &mut extras,
-        ));
-        assert!(!provides_extra(
-            &second,
-            &ExtraName::from_str("extra-0").expect("valid extra"),
-            &mut extras,
-        ));
-        assert!(provides_extra(
-            &second,
-            &ExtraName::from_str("extra-191").expect("valid extra"),
-            &mut extras,
-        ));
-        assert_eq!(extras.len(), 2);
-    }
 }
