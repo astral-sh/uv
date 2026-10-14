@@ -1,14 +1,18 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::io;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use astral_mail_headers::Message;
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use itertools::Itertools;
+use regex_automata::dfa::{Automaton, dense};
+use regex_automata::{Input, util::syntax};
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
@@ -24,6 +28,41 @@ use uv_warnings::warn_user_once;
 use crate::record::RecordEntry;
 use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
+
+const SHELL_SHEBANG: &str = "#!/bin/sh\n";
+
+/// A Python source encoding declaration, as defined by <https://peps.python.org/pep-0263/#defining-the-encoding>.
+static SCRIPT_ENCODING: LazyLock<dense::DFA<Vec<u32>>> = LazyLock::new(|| {
+    dense::Builder::new()
+        .syntax(syntax::Config::new().utf8(false))
+        .build(r"(?-u)^[ \t\x0c]*#[^\r\n]*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+        .expect("valid script encoding regex")
+});
+
+/// Find a Python source encoding declaration, restoring the reader's position afterward.
+fn find_script_encoding(script: &mut (impl BufRead + Seek)) -> io::Result<Option<Range<u64>>> {
+    let dfa = &*SCRIPT_ENCODING;
+    let mut state = dfa
+        .start_state_forward(&Input::new(b""))
+        .expect("valid script encoding start state");
+    let script_start = script.stream_position()?;
+    let mut position = script_start;
+    let mut encoding_start = None;
+    for byte in (&mut *script).bytes() {
+        let byte = byte?;
+        state = dfa.next_state(state, byte);
+        // The encoding name is the final part of the pattern. The first matching prefix ends
+        // at its first byte, and each subsequent matching prefix extends it by one byte.
+        if dfa.is_match_state(dfa.next_eoi_state(state)) {
+            encoding_start.get_or_insert(position);
+        } else if encoding_start.is_some() || dfa.is_dead_state(state) {
+            break;
+        }
+        position += 1;
+    }
+    script.seek(SeekFrom::Start(script_start))?;
+    Ok(encoding_start.map(|start| start..position))
+}
 
 /// Wrapper script template function
 ///
@@ -100,21 +139,40 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
         // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
         // (note: the Windows trampoline binaries natively support relative paths to executable)
         if shebang_length > 127 || executable.contains(' ') || relocatable {
-            let prefix = if relocatable {
-                r#""$(dirname -- "$(realpath -- "$0")")"/"#
-            } else {
-                ""
-            };
-            let executable = format!(
-                "{}'{}'",
-                prefix,
-                escape_posix_for_single_quotes(&executable)
-            );
-            return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
+            let executable = format!("'{}'", escape_posix_for_single_quotes(&executable));
+            return format_shell_shebang(&executable, relocatable);
         }
     }
 
     format!("#!{executable}")
+}
+
+fn format_shell_shebang(executable: &str, relocatable: bool) -> String {
+    let prefix = if relocatable {
+        r#""$(dirname -- "$(realpath -- "$0")")"/"#
+    } else {
+        ""
+    };
+    format!("{SHELL_SHEBANG}'''exec' {prefix}{executable} \"$0\" \"$@\"\n' '''")
+}
+
+/// Quote a shell executable so its path cannot become Python syntax after source decoding.
+fn quote_executable_for_encoded_script(executable: &Path) -> String {
+    let path_bytes = executable.as_os_str().as_encoded_bytes();
+    // Command substitution removes trailing newlines, so leave them outside the substitution.
+    let trailing_newlines = path_bytes
+        .iter()
+        .rev()
+        .take_while(|&&byte| byte == b'\n')
+        .count();
+    // Only octal digits inside the substitution depend on the path. Quote the backslash
+    // separately so a source codec such as `unicode_escape` cannot decode the octal sequence.
+    let octal = path_bytes[..path_bytes.len() - trailing_newlines]
+        .iter()
+        .format_with(" ", |byte, formatter| {
+            formatter(&format_args!(r"'\'0{byte:03o}"))
+        });
+    format!("\"$(printf %b {octal}){}\"", "\n".repeat(trailing_newlines))
 }
 
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.
@@ -550,9 +608,10 @@ fn install_script(
         Err(err) => return Err(Error::Io(err)),
     }
     let size_and_encoded_hash = if start == placeholder_python {
+        // `#!pythonw` denotes a GUI script.
+        let is_gui = script.fill_buf()?.first() == Some(&b'w');
+
         // Read the rest of the first line, one byte at a time, until we hit a newline.
-        let mut is_gui = false;
-        let mut first = true;
         let mut byte = [0u8; 1];
         loop {
             match script.read_exact(&mut byte) {
@@ -566,12 +625,6 @@ fn install_script(
                         }
                         break;
                     }
-
-                    // Check if this is a GUI script (starts with 'w').
-                    if first {
-                        is_gui = byte[0] == b'w';
-                        first = false;
-                    }
                 }
                 Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
                 Err(err) => return Err(Error::Io(err)),
@@ -580,19 +633,36 @@ fn install_script(
 
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
-        let mut start = format_shebang(&executable, &layout.os_name, relocatable)
-            .as_bytes()
-            .to_vec();
-
-        // Use appropriate line ending for the platform.
-        if layout.os_name == "nt" {
-            start.extend_from_slice(b"\r\n");
+        let mut shebang = format_shebang(&executable, &layout.os_name, relocatable);
+        let encoding = if shebang.starts_with(SHELL_SHEBANG) {
+            // A multi-line launcher displaces the script's second line. Copy any source
+            // encoding declaration into the launcher so Python still recognizes it.
+            find_script_encoding(&mut script)?
         } else {
-            start.push(b'\n');
-        }
+            None
+        };
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
-        let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
+        let size_and_encoded_hash = if let Some(encoding) = encoding {
+            let mut encoding_source = File::open(&path)?;
+            encoding_source.seek(SeekFrom::Start(encoding.start))?;
+            let executable = quote_executable_for_encoded_script(&executable);
+            let shebang = format_shell_shebang(&executable, relocatable);
+            let (shebang, launcher) = shebang.split_at(SHELL_SHEBANG.len());
+            let mut contents = shebang
+                .as_bytes()
+                .chain(b"# coding: ".as_slice())
+                .chain(encoding_source.take(encoding.end - encoding.start))
+                .chain(b"\n".as_slice())
+                .chain(launcher.as_bytes())
+                .chain(b"\n".as_slice())
+                .chain(script);
+            copy_and_hash(&mut contents, &mut target)?
+        } else {
+            // Use appropriate line ending for the platform.
+            shebang.push_str(if layout.os_name == "nt" { "\r\n" } else { "\n" });
+            copy_and_hash(&mut shebang.as_bytes().chain(script), &mut target)?
+        };
 
         persist_with_retry_sync(target, &script_absolute)?;
         fs::remove_file(&path)?;
@@ -1202,7 +1272,7 @@ impl RenameOrCopy {
 #[cfg(test)]
 mod test {
     use std::assert_matches;
-    use std::io::{Cursor, ErrorKind};
+    use std::io::{BufReader, Cursor, ErrorKind, Seek};
     use std::path::Path;
 
     use anyhow::Result;
@@ -1210,8 +1280,9 @@ mod test {
     use indoc::{formatdoc, indoc};
 
     use super::{
-        Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
+        Error, RecordEntry, Script, WheelFile, find_script_encoding, format_shebang,
+        get_script_executable, parse_email_message_file, parse_scripts, read_record,
+        write_installer_metadata,
     };
 
     #[test]
@@ -1404,6 +1475,18 @@ mod test {
             format_shebang(executable, os_name, false),
             "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
         );
+    }
+
+    #[test]
+    fn test_script_encoding_across_buffers() -> Result<()> {
+        let mut source = vec![b' '; 16_384];
+        source.extend_from_slice(b"# \xff coding: ");
+        let start = source.len() as u64;
+        source.extend_from_slice(b"latin-1\r# coding: ascii\n");
+        let mut script = BufReader::with_capacity(2, Cursor::new(source));
+        assert_eq!(find_script_encoding(&mut script)?, Some(start..start + 7));
+        assert_eq!(script.stream_position()?, 0);
+        Ok(())
     }
 
     #[test]
