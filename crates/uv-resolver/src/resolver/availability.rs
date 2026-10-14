@@ -228,9 +228,8 @@ impl UnavailablePackage {
             Self::NoIndex => Cow::Borrowed("not found in the provided package locations"),
             Self::Offline => Cow::Borrowed("not found in the cache"),
             Self::NotFound => Cow::Borrowed("not found in the package registry"),
-            Self::InvalidMetadata(_) | Self::InconsistentMetadata(_) => {
-                Cow::Borrowed("invalid metadata")
-            }
+            Self::InvalidMetadata(_) => Cow::Borrowed("invalid metadata"),
+            Self::InconsistentMetadata(_) => Cow::Borrowed("invalid metadata"),
             Self::InvalidStructure(_) => Cow::Borrowed("an invalid package format"),
             Self::Network(status) => Cow::Owned(status.to_string()),
         }
@@ -241,7 +240,8 @@ impl UnavailablePackage {
             Self::NoIndex => format!("was {self}"),
             Self::Offline => format!("was {self}"),
             Self::NotFound => format!("was {self}"),
-            Self::InvalidMetadata(_) | Self::InconsistentMetadata(_) => format!("has {self}"),
+            Self::InvalidMetadata(_) => format!("has {self}"),
+            Self::InconsistentMetadata(_) => format!("has {self}"),
             Self::InvalidStructure(_) => format!("has {self}"),
             Self::Network(_) => format!("could not be fetched from the network (`{self}`)"),
         }
