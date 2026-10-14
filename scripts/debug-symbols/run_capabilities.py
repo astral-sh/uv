@@ -31,8 +31,11 @@ def save(path, data):
 
 
 def digest(path):
+    checksum = hashlib.sha256()
     with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+        while chunk := stream.read(1024 * 1024):
+            checksum.update(chunk)
+    return checksum.hexdigest()
 
 
 def debugger_probe(debugger, binary, symbols, destination, sysroot):
@@ -48,7 +51,6 @@ def debugger_probe(debugger, binary, symbols, destination, sysroot):
         ),
         "output": str(destination / "debugger.json"),
         "formatter_script": str(sysroot / "lib/rustlib/etc/lldb_lookup.py"),
-        "formatter_commands": str(sysroot / "lib/rustlib/etc/lldb_commands"),
     }
     save(destination / "debugger-config.json", configuration)
     arguments = [

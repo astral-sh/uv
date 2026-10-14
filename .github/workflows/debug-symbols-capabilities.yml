@@ -2,11 +2,6 @@ name: Debug symbol capabilities
 run-name: Debugger capabilities (${{ inputs.platform || 'all' }})
 
 on:
-  push:
-    paths:
-      - ".github/workflows/debug-symbols-capabilities.yml"
-      - "scripts/debug-symbols/capabilities/**"
-      - "scripts/debug-symbols/run_capabilities.py"
   workflow_dispatch:
     inputs:
       platform:

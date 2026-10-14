@@ -130,13 +130,11 @@ def observe(debugger, configuration):
             debugger,
             "command script import " + shlex.quote(configuration["formatter_script"]),
         ),
-        command(
-            debugger,
-            "command source " + shlex.quote(configuration["formatter_commands"]),
-        ),
     ]
     if not all(item["success"] for item in formatters):
-        raise RuntimeError("Rust debugger formatters could not be loaded")
+        raise RuntimeError(
+            "Rust debugger formatters could not be loaded: " + json.dumps(formatters)
+        )
     target, loaded = create_target(debugger, configuration)
     breakpoint = target.BreakpointCreateByName("capability_checkpoint")
     if breakpoint.GetNumLocations() != 1:
