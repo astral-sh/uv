@@ -800,9 +800,20 @@ fn write_requirements(
     if requirements.len() <= 1 {
         writer.array(requirements, write_requirement)?;
         writer.raw("\n");
-    } else {
+    } else if version >= 2 {
         // Blank lines let Git merge edits to adjacent declarations independently.
-        writer.multiline_array(requirements, write_requirement, version >= 2)?;
+        writer.raw("[\n");
+        for (index, requirement) in requirements.iter().enumerate() {
+            if index > 0 {
+                writer.raw("\n");
+            }
+            writer.raw("    ");
+            write_requirement_inline(writer, requirement, version)?;
+            writer.raw(",\n");
+        }
+        writer.raw("]\n");
+    } else {
+        writer.multiline_array(requirements, write_requirement)?;
     }
     Ok(())
 }
@@ -914,7 +925,7 @@ fn write_serialized_array<T: Serialize>(
         writer.array(values, write_value)?;
         writer.raw("\n");
     } else {
-        writer.multiline_array(values, write_value, false)?;
+        writer.multiline_array(values, write_value)?;
     }
     Ok(())
 }
@@ -1027,24 +1038,16 @@ impl LockWriter {
         F: FnMut(&mut Self, T) -> Result<(), WriteError>,
     {
         self.key_start(key)?;
-        self.multiline_array(values, write_value, false)
+        self.multiline_array(values, write_value)
     }
 
-    fn multiline_array<I, T, F>(
-        &mut self,
-        values: I,
-        mut write_value: F,
-        blank_lines: bool,
-    ) -> Result<(), WriteError>
+    fn multiline_array<I, T, F>(&mut self, values: I, mut write_value: F) -> Result<(), WriteError>
     where
         I: IntoIterator<Item = T>,
         F: FnMut(&mut Self, T) -> Result<(), WriteError>,
     {
         self.raw("[\n");
-        for (index, value) in values.into_iter().enumerate() {
-            if blank_lines && index > 0 {
-                self.raw("\n");
-            }
+        for value in values {
             self.raw("    ");
             write_value(self, value)?;
             self.raw(",\n");
