@@ -54,11 +54,23 @@ pub fn build_source_dist(
     match tar_backend {
         TarBackend::TarCodec => {
             let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
-            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+            write_source_dist(
+                source_tree,
+                &pyproject_toml,
+                writer,
+                uv_version,
+                show_warnings,
+            )?;
         }
         TarBackend::TokioTar => {
             let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
-            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+            write_source_dist(
+                source_tree,
+                &pyproject_toml,
+                writer,
+                uv_version,
+                show_warnings,
+            )?;
         }
     }
     temp_file
@@ -82,7 +94,13 @@ pub fn list_source_dist(
     };
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
-    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    write_source_dist(
+        source_tree,
+        &pyproject_toml,
+        writer,
+        uv_version,
+        show_warnings,
+    )?;
     Ok((filename, files))
 }
 
@@ -211,11 +229,11 @@ fn source_dist_matcher(
 /// Shared implementation for building and listing a source distribution.
 fn write_source_dist(
     source_tree: &Path,
+    pyproject_toml: &PyProjectToml,
     mut writer: impl DirectoryWriter,
     uv_version: &str,
     show_warnings: bool,
-) -> Result<SourceDistFilename, Error> {
-    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
+) -> Result<(), Error> {
     for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Sdist) {
         warn_user_once!("{warning}");
     }
@@ -223,12 +241,6 @@ fn write_source_dist(
         .settings()
         .cloned()
         .unwrap_or_else(BuildBackendSettings::default);
-
-    let filename = SourceDistFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        extension: SourceDistExtension::TarGz,
-    };
 
     let top_level = format!(
         "{}-{}",
@@ -281,7 +293,7 @@ fn write_source_dist(
     )?;
 
     let (include_matcher, exclude_matcher) =
-        source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
+        source_dist_matcher(source_tree, pyproject_toml, settings, show_warnings)?;
 
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
@@ -357,7 +369,7 @@ fn write_source_dist(
 
     writer.close(&top_level)?;
 
-    Ok(filename)
+    Ok(())
 }
 
 pub(crate) struct SyncReader<R> {
