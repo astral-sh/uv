@@ -144,19 +144,21 @@ jobs:
       - name: Copy Git Repo to Dev Drive
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup toolchain install --profile minimal --target ${{ matrix.target-arch }}-pc-windows-msvc
+      - name: "Install trampoline Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: rustup toolchain install --profile minimal --target ${{ matrix.target-arch }}-pc-windows-msvc --component rust-src
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-      - name: "Install Rust toolchain"
-        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        run: |
-          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
-          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
+          key: ${{ matrix.target-arch }}
+          workspaces: |
+            ${{ env.UV_WORKSPACE }}
+            ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Test committed binaries"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: |
-          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
-          cargo test --locked -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
+        run: cargo test --locked -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
       # Build and copy the new binaries
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
