@@ -1,14 +1,18 @@
 use std::borrow::Cow;
+use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::iter;
 use std::sync::Arc;
 
 use reqwest::StatusCode;
 
+use uv_distribution::Error as DistributionError;
 use uv_distribution_types::{Requirement, RequirementSource};
+use uv_metadata::Error as WheelMetadataError;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
+use uv_pypi_types::MetadataError;
 
 use crate::prioritized_distribution::IncompatibleDist;
 use crate::pubgrub::Range;
@@ -201,13 +205,16 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
 }
 
 /// Display the error chain for unavailable packages.
-#[derive(Debug, Clone)]
-pub struct UnavailableErrorChain(Arc<dyn std::error::Error + Send + Sync + 'static>);
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum UnavailableErrorChain {
+    InvalidMetadata(#[source] Arc<MetadataError>),
+    InconsistentMetadata(#[source] Arc<DistributionError>),
+    InvalidStructure(#[source] Arc<WheelMetadataError>),
+}
 
 impl Display for UnavailableErrorChain {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for source in iter::successors(Some(&self.0 as &dyn std::error::Error), |&err| err.source())
-        {
+        for source in iter::successors(self.source(), |&err| err.source()) {
             writeln!(f, "Caused by: {}", source.to_string().trim())?;
         }
         Ok(())
@@ -275,13 +282,13 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
         match reason {
             MetadataUnavailable::Offline => Self::Offline,
             MetadataUnavailable::InvalidMetadata(err) => {
-                Self::InvalidMetadata(UnavailableErrorChain(err.clone()))
+                Self::InvalidMetadata(UnavailableErrorChain::InvalidMetadata(err.clone()))
             }
             MetadataUnavailable::InconsistentMetadata(err) => {
-                Self::InvalidMetadata(UnavailableErrorChain(err.clone()))
+                Self::InvalidMetadata(UnavailableErrorChain::InconsistentMetadata(err.clone()))
             }
             MetadataUnavailable::InvalidStructure(err) => {
-                Self::InvalidStructure(UnavailableErrorChain(err.clone()))
+                Self::InvalidStructure(UnavailableErrorChain::InvalidStructure(err.clone()))
             }
             MetadataUnavailable::RequiresPython(..) => {
                 unreachable!("`requires-python` is only known upfront for registry distributions")
