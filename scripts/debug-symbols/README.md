@@ -1,7 +1,10 @@
 # Optimized Rust+C debug symbols experiment
 
-The [debugger capability probes](CAPABILITIES.md) exercise variables, types, inline and tail-call
-frames, source stepping and missing-symbol controls under the optimized PGO configuration.
+The [native debugger results](results/2026-10-14-capabilities/README.md) test all three debug levels
+under optimized PGO. Full debug enables Rust type/local inspection, but the probes also demonstrate
+unavailable values, lost tail-call frames and misleading partial-structure displays. Line tables and
+limited provide source locations; both reconstruct the tested inline chain on Unix. See the
+[capability methods](CAPABILITIES.md) and platform-specific debugger limitations.
 
 The [five-round thin-LTO summary](results/2026-10-13-all-debug-repeat/README.md) combines the
 completed reference with four additional rounds. All 20 allocations and 80 builds passed, with zero

@@ -1,0 +1,11 @@
+target/debug-symbols-capabilities-2026-10-14/run-38601818261/Linux-X64/outputs/optimized-full/capability_fixture.debug:	file format elf64-x86-64
+
+0x00003f40: DW_TAG_variable
+              DW_AT_location	(0x0000115b:
+                 [0x000000000000ed4c, 0x000000000000ed51): DW_OP_reg3 RBX, DW_OP_piece 0x8, DW_OP_breg5 RDI+0, DW_OP_constu 0x65, DW_OP_mul, DW_OP_stack_value, DW_OP_piece 0x8
+                 [0x000000000000ed51, 0x000000000000ed6a): DW_OP_reg3 RBX, DW_OP_piece 0x8)
+              DW_AT_name	("partial")
+              DW_AT_alignment	(8)
+              DW_AT_decl_file	("/home/runner/work/uv/uv/scripts/debug-symbols/capabilities/src/main.rs")
+              DW_AT_decl_line	(104)
+              DW_AT_type	(0x000034d2 "capability_fixture::Record")

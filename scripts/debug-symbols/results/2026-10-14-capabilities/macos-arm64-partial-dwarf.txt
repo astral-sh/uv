@@ -1,0 +1,10 @@
+target/debug-symbols-capabilities-2026-10-14/run-38601818261/macOS-ARM64/outputs/optimized-full/capability_fixture.dSYM/Contents/Resources/DWARF/capability_fixture-e2d16b0ff95cba57:	file format Mach-O arm64
+
+0x0000400a: DW_TAG_variable
+              DW_AT_location	(0x00000f37:
+                 [0x000000010000199c, 0x00000001000019b8): DW_OP_reg19 W19, DW_OP_piece 0x8)
+              DW_AT_name	("partial")
+              DW_AT_alignment	(8)
+              DW_AT_decl_file	("/Users/runner/work/uv/uv/scripts/debug-symbols/capabilities/src/main.rs")
+              DW_AT_decl_line	(104)
+              DW_AT_type	(0x00003590 "capability_fixture::Record")

@@ -1,5 +1,10 @@
 # Debugger capability probes
 
+The [October 14 native results](results/2026-10-14-capabilities/README.md) include all four targets,
+live positive/negative controls, debugger transcripts and optimization edge cases. Full debug
+provides state inspection that reduced levels omit, while retaining important limits on variable
+availability and partial-object displays.
+
 This experiment tests actual debugger operations on a small Rust+C program. It complements the
 build-time studies, whose symbol checks establish address-to-source lookup but do not establish
 variable inspection, inline-stack reconstruction or stepping quality.

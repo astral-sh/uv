@@ -1,0 +1,10 @@
+target/debug-symbols-capabilities-2026-10-14/run-38601818261/Linux-ARM64/outputs/optimized-full/capability_fixture.debug:	file format elf64-littleaarch64
+
+0x00003e90: DW_TAG_variable
+              DW_AT_location	(0x00001456:
+                 [0x0000000000007e64, 0x0000000000007e7c): DW_OP_reg19 W19, DW_OP_piece 0x8)
+              DW_AT_name	("partial")
+              DW_AT_alignment	(8)
+              DW_AT_decl_file	("/home/runner/work/uv/uv/scripts/debug-symbols/capabilities/src/main.rs")
+              DW_AT_decl_line	(104)
+              DW_AT_type	(0x000034cf "capability_fixture::Record")

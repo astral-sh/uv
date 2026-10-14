@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "compiled_source_commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+  "native_builds_in_retained_cohort": 20,
+  "native_build_failures_in_retained_cohort": 0,
+  "final_observer_variants_completed": 20,
+  "final_observer_variants_failed": 0,
+  "original_windows_lldb_positive_control_failed": true,
+  "platforms": {
+    "Linux-X64": {
+      "build": {
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38601818261/job/115982706139",
+        "job_id": 115982706139,
+        "run_id": 38601818261,
+        "run_attempt": 1,
+        "commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "conclusion": "success",
+        "runner_name": "depot-8bkwnlltns",
+        "labels": ["depot-ubuntu-24.04-16"],
+        "artifact": {
+          "id": 11913737356,
+          "name": "debug-capabilities-Linux-X64-1",
+          "digest": "sha256:6fc5b13d8aaad370ef49e2341aa09ccd4456f8a28666407e1f24fae4612b2381",
+          "created_at": "2026-10-14T16:54:44Z",
+          "updated_at": "2026-10-14T16:54:44Z",
+          "size_in_bytes": 3963769
+        }
+      },
+      "observer": {
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38604711140/job/115992535117",
+        "job_id": 115992535117,
+        "run_id": 38604711140,
+        "run_attempt": 1,
+        "commit": "c27b2631a8cabf8a208f2712457706ca81148b97",
+        "conclusion": "success",
+        "runner_name": "depot-5199ptpr70",
+        "labels": ["depot-ubuntu-24.04-16"],
+        "artifact": {
+          "id": 11915277098,
+          "name": "debug-capabilities-Linux-X64-1",
+          "digest": "sha256:550da92c2623fb91ca1f6cbde0b122c946f0575b6fd25b02d56621673b52d760",
+          "created_at": "2026-10-14T17:14:24Z",
+          "updated_at": "2026-10-14T17:14:24Z",
+          "size_in_bytes": 3183769
+        }
+      },
+      "verification": {
+        "artifact_digest_verified": true,
+        "original_report_binary_symbol_hashes_verified": true,
+        "source_run": 38601818261,
+        "source_commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "observer_commit": "c27b2631a8cabf8a208f2712457706ca81148b97",
+        "job": "https://github.com/astral-sh/uv/actions/runs/38604711140/job/115992535117",
+        "native_conclusion": "success",
+        "completed": true,
+        "failures": {}
+      },
+      "source_sha256": {
+        "src/main.rs": "3dae761b60652b144683b8d3b7e3e46f760b70074731bfc196ac4cf246d73d01",
+        "native.c": "66facf59de424891d8fef63eedc19254e65b6f2a0d1295d21634edac569bc373",
+        "build.rs": "1045f5778e576d6c6ef71d9be1ee69ed8e387231e47f736917cde8cc22a07a61",
+        "Cargo.toml": "eac5c116891ef4c01bc7f8f14ef9bb9b7738e26784dad098d68b9d44fd6d9bf5",
+        "Cargo.lock": "0ddf3372d92784a2115360228326b4dda7f56fd61c1347109fe97d226bb46352",
+        "lldb_probe.py": "e93da1f9bcc41654bc086a5c6fef2c97b942b8c53fc0b4a6a1f72ed5bca079c8"
+      }
+    },
+    "Linux-ARM64": {
+      "build": {
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38601818261/job/115982705575",
+        "job_id": 115982705575,
+        "run_id": 38601818261,
+        "run_attempt": 1,
+        "commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "conclusion": "success",
+        "runner_name": "depot-hhxplzn4pw",
+        "labels": ["depot-ubuntu-24.04-arm-16"],
+        "artifact": {
+          "id": 11913369888,
+          "name": "debug-capabilities-Linux-ARM64-1",
+          "digest": "sha256:539efcdcdee8f3173cb1aab1d751432d01d02d0c2d126efebc0127d930e0c24f",
+          "created_at": "2026-10-14T16:54:50Z",
+          "updated_at": "2026-10-14T16:54:50Z",
+          "size_in_bytes": 3583184
+        }
+      },
+      "observer": {
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38604711140/job/115992535096",
+        "job_id": 115992535096,
+        "run_id": 38604711140,
+        "run_attempt": 1,
+        "commit": "c27b2631a8cabf8a208f2712457706ca81148b97",
+        "conclusion": "success",
+        "runner_name": "depot-5qm629cczn",
+        "labels": ["depot-ubuntu-24.04-arm-16"],
+        "artifact": {
+          "id": 11915511631,
+          "name": "debug-capabilities-Linux-ARM64-1",
+          "digest": "sha256:29619f90a0209d6e3bddb03265f984194929d91ddedd73e91ded7a20f82cd7d6",
+          "created_at": "2026-10-14T17:14:18Z",
+          "updated_at": "2026-10-14T17:14:18Z",
+          "size_in_bytes": 2822954
+        }
+      },
+      "verification": {
+        "artifact_digest_verified": true,
+        "original_report_binary_symbol_hashes_verified": true,
+        "source_run": 38601818261,
+        "source_commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "observer_commit": "c27b2631a8cabf8a208f2712457706ca81148b97",
+        "job": "https://github.com/astral-sh/uv/actions/runs/38604711140/job/115992535096",
+        "native_conclusion": "success",
+        "completed": true,
+        "failures": {}
+      },
+      "source_sha256": {
+        "src/main.rs": "3dae761b60652b144683b8d3b7e3e46f760b70074731bfc196ac4cf246d73d01",
+        "native.c": "66facf59de424891d8fef63eedc19254e65b6f2a0d1295d21634edac569bc373",
+        "build.rs": "1045f5778e576d6c6ef71d9be1ee69ed8e387231e47f736917cde8cc22a07a61",
+        "Cargo.toml": "eac5c116891ef4c01bc7f8f14ef9bb9b7738e26784dad098d68b9d44fd6d9bf5",
+        "Cargo.lock": "0ddf3372d92784a2115360228326b4dda7f56fd61c1347109fe97d226bb46352",
+        "lldb_probe.py": "e93da1f9bcc41654bc086a5c6fef2c97b942b8c53fc0b4a6a1f72ed5bca079c8"
+      }
+    },
+    "macOS-ARM64": {
+      "build": {
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38601818261/job/115982706232",
+        "job_id": 115982706232,
+        "run_id": 38601818261,
+        "run_attempt": 1,
+        "commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "conclusion": "success",
+        "runner_name": "nsc-runner-9n5416pomhcti",
+        "labels": ["namespace-profile-macos-15"],
+        "artifact": {
+          "id": 11913508011,
+          "name": "debug-capabilities-macOS-ARM64-1",
+          "digest": "sha256:018e22e781ee5632f4903935a2975f8ab3c29d98868066656d2b2883d4eaa31d",
+          "created_at": "2026-10-14T16:54:04Z",
+          "updated_at": "2026-10-14T16:54:04Z",
+          "size_in_bytes": 4003603
+        }
+      },
+      "observer": {
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38604711140/job/115992535031",
+        "job_id": 115992535031,
+        "run_id": 38604711140,
+        "run_attempt": 1,
+        "commit": "c27b2631a8cabf8a208f2712457706ca81148b97",
+        "conclusion": "success",
+        "runner_name": "nsc-runner-04meu4qc38d5m",
+        "labels": ["namespace-profile-macos-15"],
+        "artifact": {
+          "id": 11915167996,
+          "name": "debug-capabilities-macOS-ARM64-1",
+          "digest": "sha256:ba878a4674018866df2ebcaa8dd09638147e89aa812e75821c43ce9f07626555",
+          "created_at": "2026-10-14T17:13:45Z",
+          "updated_at": "2026-10-14T17:13:45Z",
+          "size_in_bytes": 3262708
+        }
+      },
+      "verification": {
+        "artifact_digest_verified": true,
+        "original_report_binary_symbol_hashes_verified": true,
+        "source_run": 38601818261,
+        "source_commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "observer_commit": "c27b2631a8cabf8a208f2712457706ca81148b97",
+        "job": "https://github.com/astral-sh/uv/actions/runs/38604711140/job/115992535031",
+        "native_conclusion": "success",
+        "completed": true,
+        "failures": {}
+      },
+      "source_sha256": {
+        "src/main.rs": "3dae761b60652b144683b8d3b7e3e46f760b70074731bfc196ac4cf246d73d01",
+        "native.c": "66facf59de424891d8fef63eedc19254e65b6f2a0d1295d21634edac569bc373",
+        "build.rs": "1045f5778e576d6c6ef71d9be1ee69ed8e387231e47f736917cde8cc22a07a61",
+        "Cargo.toml": "eac5c116891ef4c01bc7f8f14ef9bb9b7738e26784dad098d68b9d44fd6d9bf5",
+        "Cargo.lock": "0ddf3372d92784a2115360228326b4dda7f56fd61c1347109fe97d226bb46352",
+        "lldb_probe.py": "e93da1f9bcc41654bc086a5c6fef2c97b942b8c53fc0b4a6a1f72ed5bca079c8"
+      }
+    },
+    "Windows-X64": {
+      "build": {
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38601818261/job/115982706170",
+        "job_id": 115982706170,
+        "run_id": 38601818261,
+        "run_attempt": 1,
+        "commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "conclusion": "failure",
+        "runner_name": "nsc-runner-uoc0svjiboh1o",
+        "labels": ["namespace-profile-windows-2022-x86-64-16x32"],
+        "artifact": {
+          "id": 11914240255,
+          "name": "debug-capabilities-Windows-X64-1",
+          "digest": "sha256:50c90f5c7007a7aad5e6cbd54b93df3fa418cb0f7c0b2c5dcc00403dd903d9d8",
+          "created_at": "2026-10-14T16:54:23Z",
+          "updated_at": "2026-10-14T16:54:23Z",
+          "size_in_bytes": 4326349
+        }
+      },
+      "observer": {
+        "job_url": "https://github.com/astral-sh/uv/actions/runs/38605179316/job/115994120165",
+        "job_id": 115994120165,
+        "run_id": 38605179316,
+        "run_attempt": 1,
+        "commit": "bef1715d879ad3ffd0f4ac936c45a6e9e0d80023",
+        "conclusion": "success",
+        "runner_name": "nsc-runner-g2njrpt7ibj74",
+        "labels": ["namespace-profile-windows-2022-x86-64-16x32"],
+        "artifact": {
+          "id": 11914713742,
+          "name": "debug-capabilities-cdb-Windows-X64-1",
+          "digest": "sha256:83654d7a8d98255a8920722a315cd896d0f807887266f5bbb6e4747a0506f119",
+          "created_at": "2026-10-14T17:16:30Z",
+          "updated_at": "2026-10-14T17:16:30Z",
+          "size_in_bytes": 5360500
+        }
+      },
+      "verification": {
+        "artifact_digest_verified": true,
+        "original_report_binary_symbol_hashes_verified": true,
+        "source_run": 38601818261,
+        "source_commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "observer_commit": "bef1715d879ad3ffd0f4ac936c45a6e9e0d80023",
+        "job": "https://github.com/astral-sh/uv/actions/runs/38605179316/job/115994120165",
+        "native_conclusion": "success",
+        "completed": true,
+        "failures": {}
+      },
+      "source_sha256": {
+        "src\\main.rs": "3dae761b60652b144683b8d3b7e3e46f760b70074731bfc196ac4cf246d73d01",
+        "native.c": "66facf59de424891d8fef63eedc19254e65b6f2a0d1295d21634edac569bc373",
+        "build.rs": "1045f5778e576d6c6ef71d9be1ee69ed8e387231e47f736917cde8cc22a07a61",
+        "Cargo.toml": "eac5c116891ef4c01bc7f8f14ef9bb9b7738e26784dad098d68b9d44fd6d9bf5",
+        "Cargo.lock": "0ddf3372d92784a2115360228326b4dda7f56fd61c1347109fe97d226bb46352",
+        "lldb_probe.py": "e93da1f9bcc41654bc086a5c6fef2c97b942b8c53fc0b4a6a1f72ed5bca079c8"
+      }
+    }
+  },
+  "earlier_attempts": {
+    "initial_run": 38601046009,
+    "initial_commit": "1d25c2a7250a6cec7696b7522939dbe1982fec0c",
+    "failures": {
+      "Windows": "Harness used hashlib.file_digest, unavailable on LLDB-required Python 3.10; no native builds attempted.",
+      "Linux/Linux-ARM64/macOS": "Rust 1.99 registers pretty-printers when importing lldb_lookup.py; harness also tried the obsolete lldb_commands file. All fixture builds completed; debugger observations stopped before target launch."
+    },
+    "local_preflight": {
+      "run1": "Checksum expectation corrected from 578 to 478; matched production Apple-Clang CFLAGS to avoid mixed profile runtimes. Evidence retained in target/debug-symbols-capabilities-local-builds.",
+      "run2": "All five builds passed before tail-call probe addition.",
+      "run3": "All five final fixture builds passed with checksum 536; Windows cargo-xwin clippy and native clippy passed."
+    },
+    "retries": [
+      {
+        "run_id": 38601818261,
+        "commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "attempt": 1,
+        "reason": "Fix Python 3.10 hashing and import-only Rust 1.99 LLDB formatter initialization; compiled Rust/C source unchanged."
+      }
+    ],
+    "replays": [
+      {
+        "run_id": 38604711140,
+        "observer_commit": "c27b2631a8cabf8a208f2712457706ca81148b97",
+        "source_run": 38601818261,
+        "source_commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "backend": "lldb",
+        "platform": "Unix",
+        "attempt": 1,
+        "reason": "Observe lexical shadowing and ordinary CLI values; accept unqualified inline names."
+      },
+      {
+        "run_id": 38604717552,
+        "observer_commit": "c27b2631a8cabf8a208f2712457706ca81148b97",
+        "source_run": 38601818261,
+        "source_commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "backend": "cdb",
+        "platform": "Windows",
+        "attempt": 1,
+        "reason": "Cross-check retained PE/PDBs with Windows debugger after LLDB positive-control failure."
+      },
+      {
+        "run_id": 38605179316,
+        "observer_commit": "bef1715d879ad3ffd0f4ac936c45a6e9e0d80023",
+        "source_run": 38601818261,
+        "source_commit": "737bf01b670a84a6ada1afe33b2f0421efe2e7ca",
+        "backend": "cdb",
+        "platform": "Windows",
+        "attempt": 1,
+        "reason": "Correct CDB breakpoint command-file path escaping and allow export-only controls. The prior CDB replay retained all artifacts but recorded no checkpoints."
+      }
+    ],
+    "collector_notes": [
+      "LLDB command output can drain target stdout; collector accepts checksum536 either from SBProcess stdout or as an exact debugger.log line. Native replay separately validates executable output before debugging."
+    ]
+  },
+  "scope": "Small Rust+C fixture with positive/negative controls; live native debugging, not full uv or core dumps.",
+  "collector_notes": [
+    "Both native compiler phases independently parsed and matched report commands for all sixteen optimized builds. Four unique PGO profile digests per platform.",
+    "CLI commands can drain SBProcess stdout; replay output536 verified in debugger.log where stdout field is empty."
+  ]
+}
