@@ -874,6 +874,27 @@ pub fn diagnose_environment<'a>(
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
+    diagnose_site_packages(
+        relevant_packages,
+        &site_packages,
+        markers,
+        tags,
+        dependency_metadata,
+        printer,
+    )
+}
+
+/// Report diagnostics using an existing snapshot of installed distributions.
+///
+/// Callers must refresh the snapshot after changing the environment.
+pub fn diagnose_site_packages<'a>(
+    relevant_packages: impl Iterator<Item = &'a PackageName>,
+    site_packages: &SitePackages,
+    markers: &ResolverMarkerEnvironment,
+    tags: &Tags,
+    dependency_metadata: &DependencyMetadata,
+    printer: Printer,
+) -> Result<(), Error> {
     let relevant_packages = relevant_packages.collect::<HashSet<_>>();
     for diagnostic in site_packages.diagnostics(markers, tags, dependency_metadata)? {
         // Only surface diagnostics that are "relevant" to the current resolution.

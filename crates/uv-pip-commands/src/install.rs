@@ -374,11 +374,11 @@ pub async fn pip_install(
                 DefaultInstallLogger.on_check(requirements.len(), start, printer, dry_run)?;
 
                 if strict && !dry_run.enabled() {
-                    uv_install_operations::diagnose_environment(
+                    uv_install_operations::diagnose_site_packages(
                         recursive_requirements
                             .iter()
                             .map(|requirement| &requirement.name),
-                        &environment,
+                        site_packages,
                         &marker_env,
                         &tags,
                         &dependency_metadata,
