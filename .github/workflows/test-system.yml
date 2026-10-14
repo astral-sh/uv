@@ -10,6 +10,7 @@ permissions:
   contents: read
 
 env:
+  UV_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
   UV_LOCKED: 1
 
 jobs:
