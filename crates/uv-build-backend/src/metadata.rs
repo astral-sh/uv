@@ -452,13 +452,13 @@ impl PyProjectToml {
         self.tool.as_ref()?.uv.as_ref()?.build_backend.as_ref()
     }
 
-    /// See [`BuildSystem::check_build_system`].
-    pub(crate) fn check_build_system(
-        &self,
-        uv_version: &str,
-        build_kind: BuildKind,
-    ) -> Vec<String> {
-        self.build_system.check_build_system(uv_version, build_kind)
+    /// Warn if the build-system table is inconsistent with the running backend.
+    pub(crate) fn warn_build_system(&self, uv_version: &str, build_kind: BuildKind) {
+        if uv_warnings::is_enabled() {
+            for warning in self.build_system.check_build_system(uv_version, build_kind) {
+                warn_user_once!("{warning}");
+            }
+        }
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -1762,6 +1762,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @""
@@ -1782,18 +1783,21 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @""
         );
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Editable)
                 .join("\n"),
             @""
         );
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Sdist)
                 .join("\n"),
             @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
@@ -1814,6 +1818,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @"Expected `build-system.requires` to contain only `uv_build`, found `uv-build>=0.4.15,<0.5.0`, `wheel`"
@@ -1834,6 +1839,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @"Expected `build-system.requires` to be `uv_build`, found `setuptools`"
@@ -1854,6 +1860,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml
+                .build_system
                 .check_build_system("0.4.15+test", BuildKind::Wheel)
                 .join("\n"),
             @r#"`build_system.build-backend` was expected to be `"uv_build"`, not `"setuptools"`"#

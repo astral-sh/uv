@@ -51,9 +51,7 @@ pub fn build_wheel(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
     let filename = WheelFilename::new(
@@ -100,9 +98,7 @@ pub fn list_wheel(
     show_warnings: bool,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
 
     let filename = WheelFilename::new(
         pyproject_toml.name().clone(),
@@ -256,9 +252,7 @@ pub fn build_editable(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Editable) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Editable);
     let settings = pyproject_toml
         .settings()
         .cloned()
@@ -413,9 +407,7 @@ pub fn metadata(
     uv_version: &str,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
-        warn_user_once!("{warning}");
-    }
+    pyproject_toml.warn_build_system(uv_version, BuildKind::Wheel);
 
     let filename = WheelFilename::new(
         pyproject_toml.name().clone(),
