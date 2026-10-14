@@ -1,0 +1,91 @@
+name: Debug symbol capabilities
+run-name: Debugger capabilities (${{ inputs.platform || 'all' }})
+
+on:
+  push:
+    paths:
+      - ".github/workflows/debug-symbols-capabilities.yml"
+      - "scripts/debug-symbols/capabilities/**"
+      - "scripts/debug-symbols/run_capabilities.py"
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Native platforms on which to test debugger capabilities
+        type: choice
+        options: [all, Linux, Linux-ARM64, macOS, Windows]
+        default: all
+
+permissions:
+  contents: read
+
+jobs:
+  capabilities:
+    name: capabilities / ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            runner: depot-ubuntu-24.04-16
+          - platform: Linux-ARM64
+            runner: depot-ubuntu-24.04-arm-16
+          - platform: macOS
+            runner: namespace-profile-macos-15
+          - platform: Windows
+            runner: namespace-profile-windows-2022-x86-64-16x32
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        with:
+          persist-credentials: false
+      - name: Discover Windows debugger Python requirement
+        if: runner.os == 'Windows' && (github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform)
+        id: debugger-python
+        shell: pwsh
+        run: |
+          $llvm = 'C:\Program Files\LLVM\bin'
+          if (-not (Test-Path "$llvm\lldb.exe")) { throw 'Preinstalled LLVM LLDB is missing' }
+          $imports = (& "$llvm\llvm-readobj.exe" --coff-imports "$llvm\liblldb.dll" | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect LLDB Python dependencies' }
+          $version = '3.11'
+          if ($imports -match 'python(3)([0-9]+)\.dll') {
+            $version = "$($Matches[1]).$($Matches[2])"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          $llvm >> $env:GITHUB_PATH
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        with:
+          python-version: ${{ steps.debugger-python.outputs.version || '3.12' }}
+          cache: ""
+      - name: Install Rust tooling and sampler dependency
+        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        run: |
+          rustup toolchain install --profile minimal
+          rustup component add llvm-tools-preview clippy rustfmt
+          python -m pip install --disable-pip-version-check psutil==7.0.0
+      - name: Install Linux debugger
+        if: runner.os == 'Linux' && (github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform)
+        run: sudo apt-get update && sudo apt-get install -y lldb
+      - name: Enable debugging on the disposable macOS runner
+        if: runner.os == 'macOS' && (github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform)
+        run: sudo DevToolsSecurity -enable
+      - name: Check fixture and debugger scripting
+        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        run: |
+          cargo fmt --manifest-path scripts/debug-symbols/capabilities/Cargo.toml --check
+          cargo clippy --manifest-path scripts/debug-symbols/capabilities/Cargo.toml --all-targets --locked -- -D warnings
+          lldb --batch --no-lldbinit -o "script import sys; print(sys.version)"
+      - name: Exercise debug levels and optimization edge cases
+        if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform
+        run: python scripts/debug-symbols/run_capabilities.py
+      - name: Retain all capability evidence
+        if: always() && (github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == matrix.platform)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: debug-capabilities-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}
+          path: target/debug-symbols-capabilities
+          if-no-files-found: warn
+          retention-days: 14

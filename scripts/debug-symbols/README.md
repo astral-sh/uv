@@ -1,5 +1,8 @@
 # Optimized Rust+C debug symbols experiment
 
+The [debugger capability probes](CAPABILITIES.md) exercise variables, types, inline and tail-call
+frames, source stepping and missing-symbol controls under the optimized PGO configuration.
+
 The [five-round thin-LTO summary](results/2026-10-13-all-debug-repeat/README.md) combines the
 completed reference with four additional rounds. All 20 allocations and 80 builds passed, with zero
 failures. Combined build/PGO overhead below is the median paired effect against each allocation's

@@ -1,0 +1,23 @@
+[package]
+name = "capability_fixture"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[build-dependencies]
+cc = "=1.2.57"
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+strip = false
+
+[profile.dev]
+opt-level = 0
+debug = "full"
+codegen-units = 1
+panic = "abort"
