@@ -4711,9 +4711,7 @@ impl Lock {
             // Validating a direct URL package requires retrieving metadata from the remote
             // artifact. In offline mode, preserve the metadata captured in the lockfile rather
             // than requiring that artifact to already be present in the cache.
-            if matches!(&package.id.source, Source::Direct(..))
-                && database.client().unmanaged.connectivity().is_offline()
-            {
+            if matches!(&package.id.source, Source::Direct(..)) && database.client().is_offline() {
                 trace!(
                     "Skipping metadata validation for `{}` because its direct URL cannot be refreshed while offline",
                     package.id
