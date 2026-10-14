@@ -26,7 +26,7 @@ fn main() -> Result<()> {
         .from_env()
         .context("Invalid RUST_LOG directives")?;
     let stderr_layer = tracing_subscriber::fmt::layer()
-        .event_format(UvFormat::default())
+        .event_format(UvFormat)
         .with_writer(std::sync::Mutex::new(anstream::stderr()))
         .with_filter(filter);
     tracing_subscriber::registry().with(stderr_layer).init();
