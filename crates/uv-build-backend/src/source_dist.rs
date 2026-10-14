@@ -234,6 +234,24 @@ fn write_source_dist(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<(), Error> {
+    let top_level = write_source_dist_contents(
+        source_tree,
+        pyproject_toml,
+        &mut writer,
+        uv_version,
+        show_warnings,
+    )?;
+    writer.close(&top_level)
+}
+
+/// Write the source tree through a shared implementation for each archive format.
+fn write_source_dist_contents(
+    source_tree: &Path,
+    pyproject_toml: &PyProjectToml,
+    writer: &mut dyn DirectoryWriter,
+    uv_version: &str,
+    show_warnings: bool,
+) -> Result<String, Error> {
     for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Sdist) {
         warn_user_once!("{warning}");
     }
@@ -298,7 +316,7 @@ fn write_source_dist(
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
     let top_level_directory = PathBuf::from(&top_level).join("");
-    write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
+    write_directory_once(writer, &mut written_directories, &top_level_directory)?;
     for entry in WalkDir::new(source_tree)
         .sort_by_file_name()
         .into_iter()
@@ -358,7 +376,7 @@ fn write_source_dist(
 
         debug!("Adding to sdist: {}", relative.user_display());
         write_file_with_directories(
-            &mut writer,
+            writer,
             &mut written_directories,
             Path::new(&top_level),
             relative,
@@ -367,9 +385,7 @@ fn write_source_dist(
     }
     debug!("Visited {files_visited} files for source dist build");
 
-    writer.close(&top_level)?;
-
-    Ok(())
+    Ok(top_level)
 }
 
 pub(crate) struct SyncReader<R> {
