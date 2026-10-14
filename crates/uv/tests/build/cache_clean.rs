@@ -13,6 +13,7 @@ use std::process::Command;
 use uv_cache::Cache;
 #[cfg(unix)]
 use uv_fs::link::{LinkMode, LinkOptions, link_dir};
+use uv_python_managed::ManagedPythonInstallations;
 use uv_static::EnvVars;
 
 #[cfg(unix)]
@@ -47,6 +48,69 @@ fn clean_all() -> Result<()> {
 
     assert!(context.cache_dir.child(".lock").is_file());
 
+    Ok(())
+}
+
+/// Only a full cache clean removes abandoned Python downloads outside the cache directory.
+#[test]
+fn clean_python_staging() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_managed_python_dirs()
+        .with_filtered_sizes_and_units();
+    context.cache_dir.child("cached").write_str("cache data")?;
+    let managed = context.temp_dir.child("managed");
+    let stale = managed.child(".temp/.tmp-stale");
+    stale.create_dir_all()?;
+    stale.child("download").write_str("download data")?;
+    let installed = managed.child("installed");
+    installed.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("example"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    No cache entries found
+    ");
+    stale.assert(predicates::path::exists());
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Cleared temporary Python installation files at: managed/.temp
+    Clearing cache at: [CACHE_DIR]/
+    Removed 2 files ([SIZE])
+    ");
+    stale.assert(predicates::path::missing());
+    installed.assert(predicates::path::exists());
+    Ok(())
+}
+
+/// Python staging cleanup does not require a cache directory and respects the installation lock.
+#[tokio::test]
+async fn clean_python_staging_without_cache() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    fs_err::remove_dir_all(context.cache_dir.path())?;
+    let managed = context.temp_dir.child("managed");
+    let stale = managed.child(".temp/.tmp-stale");
+    stale.create_dir_all()?;
+    let installations = ManagedPythonInstallations::from_settings(Some(managed.to_path_buf()))?;
+    let lock = installations.lock().await?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("--force").env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Timeout ([TIME]) when waiting for lock on `managed` at `managed/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    ");
+    stale.assert(predicates::path::exists());
+    drop(lock);
+
+    uv_snapshot!(context.filters(), context.clean(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Cleared temporary Python installation files at: managed/.temp
+    No cache found at: [CACHE_DIR]/
+    Removed 1 directory (0B)
+    ");
+    stale.assert(predicates::path::missing());
     Ok(())
 }
 
