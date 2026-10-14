@@ -229,9 +229,7 @@ impl DependencyGroupsHistory {
     /// If a flag was provided multiple times (e.g. `--group A --group B`) this will
     /// elide the arguments and just show the flag once (e.g. just yield "--group").
     ///
-    /// Conceptually this being an empty list should be equivalent to
-    /// [`DependencyGroups::is_empty`][] when there aren't any defaults set.
-    /// When there are defaults the two will disagree, and rightfully so!
+    /// Default groups are omitted because they do not come from CLI flags.
     pub fn as_flags_pretty(&self) -> Vec<Cow<'_, str>> {
         let Self {
             dev_mode,

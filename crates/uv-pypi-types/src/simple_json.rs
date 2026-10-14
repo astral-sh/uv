@@ -1,3 +1,4 @@
+use std::fmt;
 use std::mem::size_of;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -5,7 +6,9 @@ use std::sync::Arc;
 use jiff::Timestamp;
 use rkyv::rancor::{Fallible, Source};
 use rustc_hash::FxHashMap;
-use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use serde::de::{
+    DeserializeSeed, Error, MapAccess, SeqAccess, Visitor, value::MapAccessDeserializer,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_normalize::PackageName;
@@ -271,15 +274,36 @@ pub enum CoreMetadata {
     Hashes(Hashes),
 }
 
+struct CoreMetadataVisitor;
+
+impl<'de> Visitor<'de> for CoreMetadataVisitor {
+    type Value = CoreMetadata;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a boolean or map")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(CoreMetadata::Bool(value))
+    }
+
+    fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+    where
+        M: MapAccess<'de>,
+    {
+        Hashes::deserialize(MapAccessDeserializer::new(map)).map(CoreMetadata::Hashes)
+    }
+}
+
 impl<'de> Deserialize<'de> for CoreMetadata {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .bool(|bool| Ok(Self::Bool(bool)))
-            .map(|map| map.deserialize().map(CoreMetadata::Hashes))
-            .deserialize(deserializer)
+        deserializer.deserialize_any(CoreMetadataVisitor)
     }
 }
 
@@ -302,15 +326,36 @@ pub enum Yanked {
     Reason(SmallString),
 }
 
+struct YankedVisitor;
+
+impl Visitor<'_> for YankedVisitor {
+    type Value = Yanked;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a boolean or string")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(Yanked::Bool(value))
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(Yanked::Reason(SmallString::from(value)))
+    }
+}
+
 impl<'de> Deserialize<'de> for Yanked {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .bool(|bool| Ok(Self::Bool(bool)))
-            .string(|string| Ok(Self::Reason(SmallString::from(string))))
-            .deserialize(deserializer)
+        deserializer.deserialize_any(YankedVisitor)
     }
 }
 
@@ -496,8 +541,11 @@ impl std::fmt::Display for HashAlgorithm {
 }
 
 /// A validated, lowercase hexadecimal digest containing exactly `BYTES` bytes.
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize)]
+#[derive(
+    Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, rkyv::Archive, rkyv::Serialize,
+)]
 #[serde(transparent)]
+#[rkyv(derive(Debug), bytecheck(verify))]
 pub struct Digest<const BYTES: usize>(SmallString);
 
 impl<const BYTES: usize> Digest<BYTES> {
@@ -570,9 +618,46 @@ impl<'de, const BYTES: usize> Deserialize<'de> for Digest<BYTES> {
     }
 }
 
+impl<D, const BYTES: usize> rkyv::Deserialize<Digest<BYTES>, D> for ArchivedDigest<BYTES>
+where
+    D: Fallible + ?Sized,
+    D::Error: Source,
+{
+    fn deserialize(&self, deserializer: &mut D) -> Result<Digest<BYTES>, D::Error> {
+        let digest: SmallString = rkyv::Deserialize::deserialize(&self.0, deserializer)?;
+        Digest::from_hex(digest).map_err(D::Error::new)
+    }
+}
+
+// SAFETY: The derived byte check validates the string before calling `verify`. Checking its
+// length and hexadecimal characters guarantees it can become a validated `Digest<BYTES>`.
+#[expect(unsafe_code)]
+unsafe impl<C, const BYTES: usize> rkyv::bytecheck::Verify<C> for ArchivedDigest<BYTES>
+where
+    C: Fallible + ?Sized,
+    C::Error: Source,
+{
+    fn verify(&self, _context: &mut C) -> Result<(), C::Error> {
+        validate_hex(self.0.as_str(), BYTES).map_err(C::Error::new)
+    }
+}
+
 /// A hash name and hex encoded digest of the file.
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(try_from = "HashDigestWire", into = "HashDigestWire")]
+#[derive(
+    Debug,
+    Clone,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub enum HashDigest {
     Md5(Digest<16>),
     Sha256(Digest<32>),
@@ -610,15 +695,11 @@ impl HashDigest {
 
     /// Return the hex-encoded digest.
     pub fn digest(&self) -> &str {
-        self.digest_string()
-    }
-
-    fn digest_string(&self) -> &SmallString {
         match self {
-            Self::Md5(digest) => &digest.0,
-            Self::Sha256(digest) | Self::Blake2b256(digest) => &digest.0,
-            Self::Sha384(digest) => &digest.0,
-            Self::Sha512(digest) => &digest.0,
+            Self::Md5(digest) => digest.as_str(),
+            Self::Sha256(digest) | Self::Blake2b256(digest) => digest.as_str(),
+            Self::Sha384(digest) => digest.as_str(),
+            Self::Sha512(digest) => digest.as_str(),
         }
     }
 }
@@ -647,97 +728,7 @@ impl FromStr for HashDigest {
     }
 }
 
-/// The hash record used by the shared Serde and rkyv cache formats.
-///
-/// This representation can be removed when all cache buckets containing [`HashDigest`] are bumped.
-#[doc(hidden)]
-#[derive(Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[serde(rename = "HashDigest")]
-#[rkyv(derive(Debug), bytecheck(verify))]
-pub struct HashDigestWire {
-    algorithm: HashAlgorithm,
-    digest: SmallString,
-}
-
-impl From<&HashDigest> for HashDigestWire {
-    fn from(hash: &HashDigest) -> Self {
-        Self {
-            algorithm: hash.algorithm(),
-            digest: hash.digest_string().clone(),
-        }
-    }
-}
-
-impl From<HashDigest> for HashDigestWire {
-    fn from(hash: HashDigest) -> Self {
-        let algorithm = hash.algorithm();
-        let digest = match hash {
-            HashDigest::Md5(digest) => digest.0,
-            HashDigest::Sha256(digest) | HashDigest::Blake2b256(digest) => digest.0,
-            HashDigest::Sha384(digest) => digest.0,
-            HashDigest::Sha512(digest) => digest.0,
-        };
-        Self { algorithm, digest }
-    }
-}
-
-impl TryFrom<HashDigestWire> for HashDigest {
-    type Error = HashError;
-
-    fn try_from(hash: HashDigestWire) -> Result<Self, Self::Error> {
-        Self::new(hash.algorithm, hash.digest)
-    }
-}
-
-impl rkyv::Archive for HashDigest {
-    type Archived = ArchivedHashDigestWire;
-    type Resolver = HashDigestWireResolver;
-
-    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
-        HashDigestWire::from(self).resolve(resolver, out);
-    }
-}
-
-impl<S> rkyv::Serialize<S> for HashDigest
-where
-    S: Fallible + ?Sized,
-    HashDigestWire: rkyv::Serialize<S>,
-{
-    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        rkyv::Serialize::serialize(&HashDigestWire::from(self), serializer)
-    }
-}
-
-impl<D> rkyv::Deserialize<HashDigest, D> for ArchivedHashDigestWire
-where
-    D: Fallible + ?Sized,
-    D::Error: Source,
-{
-    fn deserialize(&self, deserializer: &mut D) -> Result<HashDigest, D::Error> {
-        let hash: HashDigestWire = rkyv::Deserialize::deserialize(self, deserializer)?;
-        HashDigest::try_from(hash).map_err(D::Error::new)
-    }
-}
-
-// SAFETY: The derived byte check validates both fields before calling `verify`. Checking the
-// digest's length and hexadecimal characters guarantees it can become a validated `HashDigest`.
-#[expect(unsafe_code)]
-unsafe impl<C> rkyv::bytecheck::Verify<C> for ArchivedHashDigestWire
-where
-    C: Fallible + ?Sized,
-    C::Error: Source,
-{
-    fn verify(&self, _context: &mut C) -> Result<(), C::Error> {
-        let bytes = match self.algorithm {
-            ArchivedHashAlgorithm::Md5 => 16,
-            ArchivedHashAlgorithm::Sha256 | ArchivedHashAlgorithm::Blake2b256 => 32,
-            ArchivedHashAlgorithm::Sha384 => 48,
-            ArchivedHashAlgorithm::Sha512 => 64,
-        };
-        validate_hex(self.digest.as_str(), bytes).map_err(C::Error::new)
-    }
-}
-
+#[inline]
 fn validate_hex(digest: &str, bytes: usize) -> Result<(), HashError> {
     if digest.len() != bytes * 2 {
         return Err(HashError::InvalidDigestLength {
@@ -745,7 +736,12 @@ fn validate_hex(digest: &str, bytes: usize) -> Result<(), HashError> {
             actual: digest.len(),
         });
     }
-    if !digest.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+    // Reduce over every byte to allow vectorization of this bounded validation.
+    if !digest
+        .as_bytes()
+        .iter()
+        .fold(true, |valid, byte| valid & byte.is_ascii_hexdigit())
+    {
         return Err(HashError::InvalidDigestCharacters(digest.to_string()));
     }
     Ok(())
@@ -910,8 +906,11 @@ pub enum HashError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        CoreMetadata, Digest, HashAlgorithm, HashDigest, HashDigests, HashError, Hashes, PypiFile,
+    use rkyv::rancor::Error as RkyvError;
+
+    use super::{
+        ArchivedHashDigest, CoreMetadata, Digest, HashAlgorithm, HashDigest, HashDigests,
+        HashError, Hashes, PypiFile,
     };
 
     #[test]
@@ -963,7 +962,7 @@ mod tests {
             (HashAlgorithm::Sha256, "sha256", "Sha256", 32),
             (HashAlgorithm::Sha384, "sha384", "Sha384", 48),
             (HashAlgorithm::Sha512, "sha512", "Sha512", 64),
-            (HashAlgorithm::Blake2b256, "blake2b", "Blake2b", 32),
+            (HashAlgorithm::Blake2b256, "blake2b", "Blake2b256", 32),
         ];
 
         for (algorithm, name, variant, bytes) in variants {
@@ -976,17 +975,21 @@ mod tests {
             assert_eq!(parsed.digest(), digest);
             assert_eq!(parsed.to_string(), format!("{name}:{digest}"));
             let serialized = serde_json::to_string(&parsed).expect("serialize hash digest");
-            assert_eq!(
-                serialized,
-                format!(r#"{{"algorithm":"{variant}","digest":"{digest}"}}"#)
-            );
+            assert_eq!(serialized, format!(r#"{{"{variant}":"{digest}"}}"#));
             assert_eq!(
                 serde_json::from_str::<HashDigest>(&serialized).expect("deserialize hash digest"),
                 parsed
             );
 
+            let archived = rkyv::to_bytes::<RkyvError>(&parsed).expect("archive hash digest");
+            assert_eq!(
+                rkyv::from_bytes::<HashDigest, RkyvError>(&archived)
+                    .expect("deserialize archived hash digest"),
+                parsed
+            );
+
             let uppercase = serde_json::from_str::<HashDigest>(&format!(
-                r#"{{"algorithm":"{variant}","digest":"{}"}}"#,
+                r#"{{"{variant}":"{}"}}"#,
                 digest.to_ascii_uppercase()
             ))
             .expect("deserialize uppercase hash digest");
@@ -1023,7 +1026,7 @@ mod tests {
                 ));
             }
             assert!(matches!(
-                HashDigest::new(algorithm, "g".repeat(bytes * 2)),
+                HashDigest::new(algorithm, format!("g{}", "a".repeat(bytes * 2 - 1))),
                 Err(HashError::InvalidDigestCharacters(_))
             ));
         }
@@ -1037,12 +1040,27 @@ mod tests {
             Err(HashError::UnsupportedHashAlgorithm(_))
         ));
 
-        assert!(
-            serde_json::from_str::<HashDigest>(r#"{"algorithm":"Sha256","digest":"short"}"#)
-                .is_err()
-        );
+        assert!(serde_json::from_str::<HashDigest>(r#"{"Sha256":"short"}"#).is_err());
         assert!(serde_json::from_str::<Hashes>(r#"{"sha256":"short"}"#).is_err());
         assert!(serde_json::from_str::<Digest<32>>(&format!(r#""{}""#, "g".repeat(64))).is_err());
+    }
+
+    #[test]
+    fn hash_digest_archive_rejects_invalid_digests() {
+        for digest in ["short".to_string(), "g".repeat(64)] {
+            let hash = HashDigest::Sha256(Digest(digest.into()));
+            let archived = rkyv::to_bytes::<RkyvError>(&hash).expect("archive invalid hash digest");
+            assert!(rkyv::access::<ArchivedHashDigest, RkyvError>(&archived).is_err());
+        }
+    }
+
+    #[test]
+    fn hash_digest_archive_normalizes_uppercase() {
+        let hash = HashDigest::Sha256(Digest("AB".repeat(32).into()));
+        let archived = rkyv::to_bytes::<RkyvError>(&hash).expect("archive uppercase hash digest");
+        let parsed = rkyv::from_bytes::<HashDigest, RkyvError>(&archived)
+            .expect("deserialize archived hash digest");
+        assert_eq!(parsed, HashDigest::Sha256(Digest::from_bytes([0xab; 32])));
     }
 
     #[test]

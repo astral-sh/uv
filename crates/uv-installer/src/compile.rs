@@ -53,7 +53,7 @@ pub enum CompileError {
         #[source]
         err: Box<Self>,
     },
-    #[error("Bytecode timed out ({}s) compiling file: `{}`", elapsed.as_secs_f32(), source_file)]
+    #[error("Bytecode timed out ({}s) compiling file: {}", elapsed.as_secs_f32(), source_file)]
     CompileTimeout {
         elapsed: Duration,
         source_file: String,
@@ -379,7 +379,7 @@ async fn worker(
         match result {
             Ok(()) => {
                 debug!(
-                    "Bytecode compilation `python` at {} stderr:\n{}\n---",
+                    "Bytecode compilation `python` at `{}` stderr:\n{}\n---",
                     interpreter.user_display(),
                     stderr
                 );

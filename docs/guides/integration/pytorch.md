@@ -538,3 +538,5 @@ $ uv pip install torch torchvision \
 ```
 
 The command above resolves PyTorch packages from `https://download.pytorch.org/whl/cu128`.
+
+When both are set, `--torch-backend-index` takes precedence over `UV_TORCH_BACKEND_INDEX`.

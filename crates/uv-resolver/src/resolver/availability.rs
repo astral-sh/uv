@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use reqwest::StatusCode;
 
-use uv_distribution_types::{IncompatibleDist, Requirement, RequirementSource};
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
 
+use crate::prioritized_distribution::IncompatibleDist;
 use crate::pubgrub::Range;
 use crate::resolver::{MetadataUnavailable, VersionFork};
 

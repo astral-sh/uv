@@ -5,28 +5,39 @@ extern crate uv_performance_memory_allocator;
 use std::env;
 use std::fmt::Write;
 use std::hint::black_box;
+use std::io;
 use std::path::Path;
 use std::str::FromStr;
+use std::task::Poll;
 
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
-use criterion::{BatchSize, Criterion, criterion_group, criterion_main, measurement::WallTime};
+use criterion::{
+    BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main,
+    measurement::WallTime,
+};
+use fastrand::Rng;
 use flate2::write::GzEncoder;
+use futures::TryStreamExt;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
+use futures::stream;
 use sha2::{Digest, Sha256};
 use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
-use tokio_util::compat::FuturesAsyncWriteCompatExt;
+use tokio::io::AsyncRead;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_extract::dirhash::UnhashedFile;
+use uv_extract::hash::{HashReader, Hasher};
 use uv_install_wheel::{InstallState, Layout, LinkMode};
-use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
-use uv_pypi_types::Scheme;
-use uv_python::PythonEnvironment;
+use uv_preview::Preview;
+use uv_pypi_types::{HashAlgorithm, Scheme};
+use uv_python_interpreter::PythonEnvironment;
 use uv_resolver::Manifest;
+use uv_static::TarBackend;
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
@@ -48,6 +59,107 @@ fn hash_sha256(c: &mut Criterion<WallTime>) {
     c.bench_function("hash_sha256", |b| {
         b.iter(|| black_box(Sha256::digest(black_box(&bytes))));
     });
+}
+
+fn hash_reader(criterion: &mut Criterion<WallTime>) {
+    if !is_codspeed_simulation() {
+        return;
+    }
+
+    // Rounded PyPI wheel size deciles (10th through 90th), with a second median-sized wheel,
+    // followed by a representative 33 MiB Python standalone archive.
+    let inputs = [7, 12, 20, 32, 55, 55, 98, 220, 589, 3154, 33 * 1024]
+        .map(|kibibytes| vec![0_u8; kibibytes * 1024]);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("Failed to create Tokio runtime");
+    let mut group = criterion.benchmark_group("hash_reader");
+    group.throughput(Throughput::Bytes(
+        inputs.iter().map(|bytes| bytes.len() as u64).sum(),
+    ));
+
+    for (case, algorithms) in [
+        ("none", &[][..]),
+        ("sha256", &[HashAlgorithm::Sha256][..]),
+        ("sha384", &[HashAlgorithm::Sha384][..]),
+        ("sha512", &[HashAlgorithm::Sha512][..]),
+        ("blake2b", &[HashAlgorithm::Blake2b256][..]),
+        (
+            "combined",
+            &[
+                HashAlgorithm::Sha256,
+                HashAlgorithm::Sha384,
+                HashAlgorithm::Sha512,
+                HashAlgorithm::Blake2b256,
+            ][..],
+        ),
+    ] {
+        // Exercise chunks both smaller and larger than the reader's drain buffer.
+        for chunk_size in [4 * 1024, 64 * 1024] {
+            group.bench_with_input(
+                BenchmarkId::new(format!("finish_{case}"), chunk_size),
+                algorithms,
+                |benchmark, algorithms| {
+                    // Use the same sequence of shuffled inputs for each benchmark.
+                    let mut random = Rng::with_seed(0);
+                    benchmark.iter_batched(
+                        || {
+                            let mut inputs = inputs
+                                .iter()
+                                .map(|bytes| {
+                                    let hashers = algorithms
+                                        .iter()
+                                        .copied()
+                                        .map(Hasher::from)
+                                        .collect::<Vec<_>>();
+                                    (bytes, hashers)
+                                })
+                                .collect::<Vec<_>>();
+                            random.shuffle(&mut inputs);
+                            inputs
+                        },
+                        |mut inputs| {
+                            runtime.block_on(async {
+                                for (bytes, hashers) in &mut inputs {
+                                    let stream =
+                                        hash_reader_stream(black_box(bytes.as_slice()), chunk_size);
+                                    let mut reader = HashReader::new(stream, hashers);
+                                    reader
+                                        .finish()
+                                        .await
+                                        .expect("Failed to read benchmark input");
+                                    black_box(reader.bytes_read());
+                                }
+                            });
+                            black_box(inputs);
+                        },
+                        BatchSize::SmallInput,
+                    );
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
+
+/// Simulate chunked delivery through the same stream adapter as HTTP downloads.
+fn hash_reader_stream(bytes: &[u8], chunk_size: usize) -> impl AsyncRead + Unpin + '_ {
+    let mut chunks = bytes.chunks(chunk_size);
+    let mut pending = true;
+    stream::poll_fn(move |context| {
+        // Yield before each chunk to include wakeup overhead without network timing noise.
+        if pending {
+            pending = false;
+            context.waker().wake_by_ref();
+            Poll::Pending
+        } else {
+            pending = true;
+            Poll::Ready(chunks.next().map(Ok::<_, io::Error>))
+        }
+    })
+    .into_async_read()
+    .compat()
 }
 
 fn create_many_files_wheel() -> tempfile::NamedTempFile {
@@ -127,11 +239,6 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
         .build()
         .expect("Failed to create Tokio runtime");
 
-    uv_preview::set(Preview::from_feature_names(&[MaybePreviewFeature::Known(
-        PreviewFeature::TarCodec,
-    )]))
-    .expect("Failed to configure tar backend preview features");
-
     c.bench_function("unpack_sdist_many_files", |b| {
         b.iter_batched(
             || {
@@ -142,14 +249,16 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                     create_sdist_extraction_directory(),
                 )
             },
-            |(archive, extracted_sdist)| {
+            |(mut archive, extracted_sdist)| {
                 let (extracted_sdist, files) = runtime
                     .block_on(uv_extract::stream::archive(
-                        archive,
+                        &mut archive,
                         SourceDistExtension::TarGz,
                         extracted_sdist,
+                        TarBackend::default(),
                     ))
                     .expect("Failed to unpack sdist");
+                drop(archive);
                 let source_tree = uv_extract::strip_component(extracted_sdist.path())
                     .expect("Failed to strip top-level sdist directory");
                 black_box((files, extracted_sdist, source_tree))
@@ -357,6 +466,7 @@ criterion_group! {
     config = criterion_with_preview();
     targets =
         hash_sha256,
+        hash_reader,
         unpack_sdist_many_files,
         unzip_wheel_many_files,
         prepare_wheel_many_files,
@@ -442,7 +552,7 @@ mod resolver {
     use uv_platform_tags::{Arch, Os, Platform, Tags, TagsOptions};
     use uv_preview::Preview;
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
-    use uv_python::Interpreter;
+    use uv_python_interpreter::Interpreter;
     use uv_resolver::{
         ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement,
         Resolver, ResolverEnvironment, ResolverOutput,

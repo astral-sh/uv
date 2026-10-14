@@ -386,7 +386,7 @@ impl<'a> IndexLocations {
         }
     }
 
-    /// Return an iterator over the [`FlatIndexLocation`] entries.
+    /// Return an iterator over the flat [`Index`] entries.
     pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         self.flat_index.iter()
     }

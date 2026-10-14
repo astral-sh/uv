@@ -2,6 +2,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 use serde_json::json;
 use std::process::Command;
 
@@ -9,7 +10,7 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 #[cfg(unix)]
 use uv_test::ReadOnlyDirectoryGuard;
-use uv_test::{TestContext, uv_snapshot};
+use uv_test::{TestContext, assert_link_target, assert_path_missing, uv_snapshot};
 
 fn write_project(
     context: &TestContext,
@@ -74,7 +75,7 @@ fn sync_centralized_env() -> Result<()> {
     Would make no changes
     "#);
     // Only the cached environment remains.
-    assert!(!link.exists());
+    assert_path_missing(&link);
     assert!(target.is_dir());
     Ok(())
 }
@@ -309,7 +310,7 @@ fn sync_centralized_env_respects_explicit_environments() -> Result<()> {
         .success();
     // `UV_PROJECT_ENVIRONMENT` bypasses centralized environments.
     assert!(context.temp_dir.child("override").is_dir());
-    assert!(!context.temp_dir.child(".venv").exists());
+    assert_path_missing(context.temp_dir.child(".venv"));
 
     let active = context.temp_dir.child("active");
     context.venv().arg(active.path()).assert().success();
@@ -324,7 +325,7 @@ fn sync_centralized_env_respects_explicit_environments() -> Result<()> {
         .success();
     // `--active` uses `VIRTUAL_ENV` directly.
     assert!(active.is_dir());
-    assert!(!context.temp_dir.child(".venv").exists());
+    assert_path_missing(context.temp_dir.child(".venv"));
     Ok(())
 }
 
@@ -384,7 +385,7 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
         assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/temp-cp3.12.[X]-[HASH]");
     });
     // The workspace member does not get its own environment.
-    assert!(!member.child(".venv").exists());
+    assert_path_missing(member.child(".venv"));
 
     context
         .sync()
@@ -396,11 +397,8 @@ fn sync_centralized_env_virtual_workspace() -> Result<()> {
         .success();
 
     // Selecting a workspace member still uses the workspace environment.
-    assert_eq!(
-        fs_err::read_link(context.temp_dir.child(".venv").path())?,
-        target
-    );
-    assert!(!member.child(".venv").exists());
+    assert_link_target(context.temp_dir.child(".venv"), &target);
+    assert_path_missing(member.child(".venv"));
     Ok(())
 }
 
@@ -425,7 +423,7 @@ fn sync_centralized_env_dry_run() -> Result<()> {
      + iniconfig==2.0.0
     "#);
     // Dry-run creates neither the persistent environment nor its project link.
-    assert!(!context.temp_dir.child(".venv").exists());
+    assert_path_missing(context.temp_dir.child(".venv"));
     assert!(!context.cache_dir.child("environments-v2").exists());
     Ok(())
 }
@@ -448,12 +446,11 @@ fn cache_prune_removes_and_recreates_centralized_environment() -> Result<()> {
 
     context.prune().assert().success();
     assert!(!target.exists());
-    assert_eq!(target, fs_err::read_link(link.path())?);
+    assert_link_target(&link, &target);
 
     // Without the preview, uv replaces the dangling cache link with a local environment.
     context.sync().assert().success();
-    assert!(link.is_dir());
-    assert!(fs_err::read_link(link.path()).is_err());
+    link.assert(predicate::path::is_dir());
 
     context
         .sync()
@@ -462,7 +459,7 @@ fn cache_prune_removes_and_recreates_centralized_environment() -> Result<()> {
         .assert()
         .success();
     // The recreated environment uses the same cache entry.
-    assert_eq!(target, fs_err::read_link(link.path())?);
+    assert_link_target(&link, &target);
     // The dangling target is recreated.
     assert!(target.is_dir());
     Ok(())
@@ -496,7 +493,7 @@ fn sync_recovers_incomplete_centralized_environment() -> Result<()> {
         .assert()
         .success();
 
-    assert_eq!(target, fs_err::read_link(link.path())?);
+    assert_link_target(&link, &target);
     assert!(target.join("pyvenv.cfg").is_file());
     Ok(())
 }
@@ -521,8 +518,7 @@ fn sync_centralized_env_no_cache_uses_dot_venv() -> Result<()> {
     "#);
 
     let environment = context.temp_dir.child(".venv");
-    assert!(environment.is_dir());
-    assert!(fs_err::read_link(environment.path()).is_err());
+    environment.assert(predicate::path::is_dir());
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
@@ -552,7 +548,7 @@ fn sync_centralized_env_no_cache_uses_dot_venv() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     "#);
-    assert_eq!(fs_err::read_link(environment.path())?, target);
+    assert_link_target(&environment, &target);
     Ok(())
 }
 
@@ -619,7 +615,7 @@ fn sync_recovers_from_centralized_environment_path_file() -> Result<()> {
     // An arbitrary `.venv` file is preserved.
     environment.write_str("user-data")?;
     context.sync().assert().failure();
-    assert_eq!(fs_err::read_to_string(environment.path())?, "user-data");
+    assert_eq!(context.read(".venv"), "user-data");
 
     // A centralized path file can be replaced when returning to a local environment.
     let target = context
@@ -778,7 +774,7 @@ fn sync_centralized_env_link_creation_failure_preserves_cached_target() -> Resul
     Checked in [TIME]
     "#);
 
-    assert_eq!(target, fs_err::read_link(environment.path())?);
+    assert_link_target(&environment, &target);
     assert!(target.join("pyvenv.cfg").is_file());
     Ok(())
 }
@@ -811,8 +807,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
         .success();
 
     // An explicit environment path is local, but replacing it does not remove the cached target.
-    assert!(override_environment.is_dir());
-    assert!(fs_err::read_link(override_environment.path()).is_err());
+    override_environment.assert(predicate::path::is_dir());
 
     let environment = context.temp_dir.child(".venv");
     let intermediate = context.temp_dir.child("intermediate");
@@ -833,8 +828,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
     "#);
 
     // Without the preview, uv replaces the indirect cache link with a local environment.
-    assert!(environment.is_dir());
-    assert!(fs_err::read_link(environment.path()).is_err());
+    environment.assert(predicate::path::is_dir());
 
     // uv rebuilds the linked environment without replacing the link.
     let target = context.temp_dir.child("environment");
@@ -852,7 +846,7 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
     Checked in [TIME]
     "#);
 
-    assert_eq!(fs_err::read_link(environment.path())?, target.path());
+    assert_link_target(&environment, &target);
     // The link still points to the rebuilt Python 3.12 environment.
     let python = if cfg!(windows) {
         target.join("Scripts/python.exe")
@@ -876,6 +870,6 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
     Resolved 1 package in [TIME]
     Checked in [TIME]
     "#);
-    assert_eq!(fs_err::read_link(environment.path())?, cache_target);
+    assert_link_target(&environment, &cache_target);
     Ok(())
 }

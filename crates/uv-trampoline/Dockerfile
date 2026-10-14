@@ -6,7 +6,7 @@
 
 ARG UBUNTU_SNAPSHOT=20260127T200000Z
 
-ARG RUST_NIGHTLY=nightly-2026-03-11
+ARG RUST_NIGHTLY=nightly-2026-05-06
 
 ARG XWIN_SDK_VERSION=10.0.22621
 ARG XWIN_CRT_VERSION=14.44.17.14
@@ -49,7 +49,7 @@ RUN rustup component add rust-src --toolchain ${RUST_NIGHTLY}-x86_64-unknown-lin
 # Install cargo-xwin
 FROM base AS cargo-xwin
 
-COPY --from=ghcr.io/astral-sh/uv:0.12.15@sha256:62f8c047d0a0e9ece6b53fc63df902585a67a47a7f318ddec4a37db586edc8e3 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 /uv /usr/local/bin/uv
 
 COPY toolchain/pyproject.toml toolchain/uv.lock ./
 RUN uv sync --locked --no-dev --python /usr/bin/python3
@@ -72,3 +72,4 @@ FROM base
 COPY --from=xwin-cache ${HOME}/xwin-cache ${HOME}/xwin-cache
 RUN chmod a+rwX ${HOME}/xwin-cache
 COPY --from=cargo-xwin ${HOME}/.venv/bin/cargo-xwin /usr/local/bin/cargo-xwin
+COPY --from=cargo-xwin /usr/local/bin/uv /usr/local/bin/uv

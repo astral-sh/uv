@@ -8,13 +8,12 @@ use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::path::Path;
-use uv_fs::copy_dir_all;
-use uv_python::PYTHON_VERSION_FILENAME;
+use uv_python_discovery::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use uv_test::{TestContext, packse::PackseServer, uv_snapshot};
+use uv_test::{TestContext, copy_dir_ignore, packse::PackseServer, uv_snapshot};
 
 #[test]
 fn run_with_python_version() -> Result<()> {
@@ -772,6 +771,43 @@ fn run_pep723_script_metadata() -> Result<()> {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     ");
 
+    // A full commit pin is already satisfied, so running again should skip resolution.
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"exit_code: 0 (success)");
+
+    Ok(())
+}
+
+/// A script with a Git archive pinned to a full commit skips resolution once installed.
+#[test]
+#[cfg(feature = "test-git")]
+fn run_pep723_script_git_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["iniconfig"]
+        #
+        # [tool.uv.sources]
+        # iniconfig = { git = "https://github.com/astral-sh/archive-in-git-test.git", rev = "bb7ce6abf9f90544767701de5b7b0c7802dc642b", path = "archives/iniconfig-2.0.0-py3-none-any.whl" }
+        # ///
+
+        import iniconfig
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"exit_code: 0 (success)");
+
     Ok(())
 }
 
@@ -1135,7 +1171,7 @@ fn run_pep723_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
 
         [options]
@@ -1239,7 +1275,7 @@ fn run_pep723_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
 
         [options]
@@ -2168,13 +2204,13 @@ fn run_with_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
-    copy_dir_all(
+    copy_dir_ignore(
         context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
@@ -2558,7 +2594,7 @@ fn run_locked() -> Result<()> {
         assert_snapshot!(
             existing, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -3091,7 +3127,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Installed 2 packages in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + typing-extensions==4.10.0
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3284,7 +3320,7 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
-    error: Failed to spawn: `./project/main.py`
+    error: Failed to spawn: ./project/main.py
       cause: [OS ERROR 2]
     ");
 
@@ -4079,7 +4115,7 @@ fn run_invalid_project_table() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 2
                |
              1 | [project.urls]
@@ -4122,7 +4158,7 @@ fn run_script_without_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
-    error: Failed to spawn: `entry`
+    error: Failed to spawn: entry
       cause: No such file or directory (os error 2)
     ");
 
@@ -4743,12 +4779,7 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
 
 #[test]
 fn run_remote_pep723_script() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_python_names()
-        .with_filter((
-            r"(?m)^Downloaded remote script to:.*\.py$",
-            "Downloaded remote script to: [TEMP_PATH].py",
-        ));
+    let context = uv_test::test_context!("3.12").with_filtered_python_names();
     uv_snapshot!(context.filters(), context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -4825,7 +4856,7 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
         .arg("--with-requirements")
         .arg(url)
         .arg(script.as_os_str())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries
@@ -5094,10 +5125,7 @@ fn run_with_malformed_env() -> Result<()> {
 
 #[test]
 fn run_with_not_existing_env_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^error: Failed to read environment file `.env.development`: .*$",
-        "error: Failed to read environment file `.env.development`: [ERR]",
-    ));
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -5108,13 +5136,13 @@ fn run_with_not_existing_env_file() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No environment file found at: `.env.development`
+    error: No environment file found at: .env.development
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("test.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No environment file found at: `.env.development`
+    error: No environment file found at: .env.development
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("--quiet").arg("test.py"), @"
@@ -5579,6 +5607,16 @@ fn run_groups_requires_python_errors() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    ");
+
+    // An isolated environment must satisfy the selected groups too.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("-p").arg("3.12")
+        .arg("python").arg("--version"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
     error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
     ");
 
@@ -6130,7 +6168,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.11"
 
         [options]
@@ -7802,6 +7840,32 @@ fn run_centralized_environment_no_sync_uses_incompatible_python() -> Result<()> 
     ----- stderr -----
     warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
     "#);
+
+    // Without the project link, discovery must reuse the cached environment before
+    // rejecting the selected interpreter against the updated requirement.
+    uv_fs::remove_virtualenv(&context.temp_dir.join(".venv"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&context.read("pyproject.toml").replace(">=3.11", ">=3.13"))?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--no-sync")
+        .arg("--python")
+        .arg("3.12")
+        .arg("python")
+        .arg("-c")
+        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not meet the Python requirement: `>=3.13`)
+    "#);
+
     Ok(())
 }
 

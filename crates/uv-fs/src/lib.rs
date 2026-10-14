@@ -17,6 +17,8 @@ use std::io::Read;
 use encoding_rs_io::DecodeReaderBytes;
 #[cfg(target_os = "linux")]
 use rustix::fs::{AtFlags, CWD as RUSTIX_CWD, StatxFlags, statx};
+#[cfg(feature = "tokio")]
+use tokio::io::AsyncWriteExt;
 use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Foundation::HANDLE;
@@ -24,6 +26,8 @@ use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
 
 pub use crate::locked_file::*;
+#[cfg(feature = "tokio")]
+use crate::named_temp_file::tempfile_in_with_permissions;
 pub use crate::named_temp_file::{NamedTempFile, PersistError, tempfile_in};
 pub use crate::path::*;
 pub use crate::read::ValidatedReader;
@@ -174,7 +178,7 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
     let path = path.as_ref();
     let raw = fs_err::tokio::read(path).await?;
-    transcode_to_string(&raw, &format!("file {}", path.display()))
+    transcode_to_string(&raw, &format!("file `{}`", path.display()))
 }
 
 /// Reads data from stdin and requires that it be valid UTF-8 or UTF-16.
@@ -190,6 +194,10 @@ pub fn read_stdin_to_string_transcode() -> std::io::Result<String> {
 
 #[cfg(feature = "tokio")]
 fn transcode_to_string(raw: &[u8], source: &str) -> std::io::Result<String> {
+    // The decoder needs three bytes to detect a BOM, so handle empty UTF-16 files explicitly.
+    if raw == [0xff, 0xfe] || raw == [0xfe, 0xff] {
+        return Ok(String::new());
+    }
     let mut buf = String::with_capacity(1024);
     DecodeReaderBytes::new(raw)
         .read_to_string(&mut buf)
@@ -274,7 +282,7 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "Cannot create a directory link for {}: is not a directory",
+                "Cannot create a directory link for `{}`: is not a directory",
                 src.display()
             ),
         ));
@@ -358,7 +366,7 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "Cannot create a directory link for {}: is not a directory",
+                "Cannot create a directory link for `{}`: is not a directory",
                 src.display()
             ),
         ));
@@ -490,6 +498,62 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
     persist_with_retry(temp_file, path.as_ref()).await
 }
 
+/// Atomically write a user-managed file, preserving symlinks and the target's permissions.
+///
+/// Replacement requires write access to the target directory, even if the file itself is
+/// writable. A missing symlink target is created when its parent directory exists.
+/// Existing targets must be regular files.
+#[cfg(feature = "tokio")]
+pub async fn write_atomic_preserve(
+    path: impl AsRef<Path>,
+    data: impl AsRef<[u8]>,
+) -> std::io::Result<()> {
+    let mut path = path.as_ref().to_path_buf();
+    let permissions = loop {
+        match fs_err::tokio::symlink_metadata(&path).await {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                path = match fs_err::tokio::canonicalize(&path).await {
+                    Ok(target) => target,
+                    // Canonicalization resolves live links and catches cycles. For a dangling
+                    // chain, follow its next link and let the OS check the remaining path.
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        let target = fs_err::tokio::read_link(&path).await?;
+                        path.parent()
+                            .expect("Write path must have a parent")
+                            .join(target)
+                    }
+                    Err(err) => return Err(err),
+                };
+            }
+            Ok(metadata) if metadata.is_file() => break Some(metadata.permissions()),
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "Cannot atomically replace `{}`: not a regular file",
+                        path.display()
+                    ),
+                ));
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => break None,
+            Err(err) => return Err(err),
+        }
+    };
+    let parent = path.parent().expect("Write path must have a parent");
+    let temp_file = tempfile_in_with_permissions(parent, permissions.clone())?;
+    // Write through the open handle: the umask may prevent reopening the temporary file.
+    let mut file = fs_err::tokio::File::from_std(fs_err::File::from_parts(
+        temp_file.as_file().try_clone()?,
+        temp_file.as_ref(),
+    ));
+    file.write_all(data.as_ref()).await?;
+    file.flush().await?;
+    if let Some(permissions) = permissions {
+        temp_file.as_file().set_permissions(permissions)?;
+    }
+    persist_with_retry(temp_file, path).await
+}
+
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
     let mut temp_file = tempfile_in(
@@ -547,7 +611,7 @@ pub async fn rename_with_retry(
             .when(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
-                    "Retrying rename from {} to {} due to transient error: {}",
+                    "Retrying rename from `{}` to `{}` due to transient error: {}",
                     from.display(),
                     to.display(),
                     err
@@ -588,7 +652,7 @@ pub fn with_retry_sync(
             .when(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
-                    "Retrying {} from {} to {} due to transient error: {}",
+                    "Retrying {} from `{}` to `{}` due to transient error: {}",
                     operation_name,
                     from.display(),
                     to.display(),
@@ -597,13 +661,16 @@ pub fn with_retry_sync(
             })
             .call()
             .map_err(|err| {
-                std::io::Error::other(format!(
-                    "Failed {} {} to {}: {}",
-                    operation_name,
-                    from.display(),
-                    to.display(),
-                    err
-                ))
+                std::io::Error::new(
+                    err.kind(),
+                    format!(
+                        "Failed {} `{}` to `{}`: {}",
+                        operation_name,
+                        from.display(),
+                        to.display(),
+                        err
+                    ),
+                )
             })
     }
     #[cfg(not(windows))]
@@ -691,7 +758,7 @@ async fn persist_with_retry(
             .notify(|err, _dur| {
                 if let PersistRetryError::Persist(error_message) = err {
                     warn!(
-                        "Retrying to persist temporary file to {}: {}",
+                        "Retrying to persist temporary file to `{}`: {}",
                         to.display(),
                         error_message,
                     );
@@ -702,12 +769,12 @@ async fn persist_with_retry(
         match persisted {
             Ok(_) => Ok(()),
             Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
-                "Failed to persist temporary file to {}: {}",
+                "Failed to persist temporary file to `{}`: {}",
                 to.display(),
                 error_message,
             ))),
             Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
-                "Failed to retrieve temporary file while trying to persist to {}",
+                "Failed to retrieve temporary file while trying to persist to `{}`",
                 to.display()
             ))),
         }
@@ -762,7 +829,7 @@ pub fn persist_with_retry_sync(
             .notify(|err, _dur| {
                 if let PersistRetryError::Persist(error_message) = err {
                     warn!(
-                        "Retrying to persist temporary file to {}: {}",
+                        "Retrying to persist temporary file to `{}`: {}",
                         to.display(),
                         error_message,
                     );
@@ -773,12 +840,12 @@ pub fn persist_with_retry_sync(
         match persisted {
             Ok(_) => Ok(()),
             Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
-                "Failed to persist temporary file to {}: {}",
+                "Failed to persist temporary file to `{}`: {}",
                 to.display(),
                 error_message,
             ))),
             Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
-                "Failed to retrieve temporary file while trying to persist to {}",
+                "Failed to retrieve temporary file while trying to persist to `{}`",
                 to.display()
             ))),
         }
@@ -892,6 +959,7 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
 }
 
 /// Whether the error is due to a lock being held.
+#[cfg(feature = "tokio")]
 fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
     match err {
         std::fs::TryLockError::WouldBlock => true,
@@ -1031,8 +1099,92 @@ pub fn clear_virtualenv(location: &Path) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+    #[cfg(all(unix, feature = "tokio"))]
+    use std::os::unix::fs::FileTypeExt;
+    #[cfg(all(unix, feature = "tokio"))]
+    use std::os::unix::net::UnixListener;
 
     use super::*;
+
+    #[cfg(all(unix, feature = "tokio"))]
+    #[tokio::test]
+    async fn write_atomic_preserve_rejects_special_file() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join("socket");
+        let _listener = UnixListener::bind(&path)?;
+
+        let error = write_atomic_preserve(&path, "contents")
+            .await
+            .expect_err("A socket cannot be atomically replaced");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert!(fs_err::metadata(&path)?.file_type().is_socket());
+        Ok(())
+    }
+
+    #[cfg(feature = "tokio")]
+    #[test]
+    fn transcodes_bom_marked_input() -> io::Result<()> {
+        // Include a surrogate pair and an interior BOM that must remain part of the text.
+        let contents = "# café 🐍\u{feff} end\r\npackage==1.0\n";
+        let utf8 = contents.as_bytes().to_vec();
+        let utf8_bom = [b"\xef\xbb\xbf".as_slice(), contents.as_bytes()].concat();
+        let utf16_le = [0xff, 0xfe]
+            .into_iter()
+            .chain(contents.encode_utf16().flat_map(u16::to_le_bytes))
+            .collect::<Vec<_>>();
+        let utf16_be = [0xfe, 0xff]
+            .into_iter()
+            .chain(contents.encode_utf16().flat_map(u16::to_be_bytes))
+            .collect::<Vec<_>>();
+
+        for (source, encoded, expected) in [
+            ("utf8", utf8, contents),
+            ("utf8-bom", utf8_bom, contents),
+            ("utf16-le", utf16_le, contents),
+            ("utf16-be", utf16_be, contents),
+            ("empty", vec![], ""),
+            ("utf8-bom-only", b"\xef\xbb\xbf".to_vec(), ""),
+            ("utf16-le-bom-only", b"\xff\xfe".to_vec(), ""),
+            ("utf16-be-bom-only", b"\xfe\xff".to_vec(), ""),
+        ] {
+            assert_eq!(transcode_to_string(&encoded, source)?, expected, "{source}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn with_retry_sync_preserves_not_found() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let source = tempdir.path().join("missing");
+        let destination = tempdir.path().join("destination");
+        let error = with_retry_sync(&source, &destination, "renaming", || {
+            fs_err::rename(&source, &destination)
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        Ok(())
+    }
+
+    /// Requires `UV_INTERNAL__TEST_ALT_FS` on a different device from the default temp directory.
+    #[test]
+    fn with_retry_sync_preserves_cross_device_error() -> io::Result<()> {
+        let Some(alternate) = std::env::var_os(uv_static::EnvVars::UV_INTERNAL__TEST_ALT_FS) else {
+            return Ok(());
+        };
+        fs_err::create_dir_all(&alternate)?;
+        let tempdir = tempfile::tempdir()?;
+        let alternate = tempfile::tempdir_in(alternate)?;
+        let source = tempdir.path().join("source");
+        let destination = alternate.path().join("destination");
+        fs_err::write(&source, "contents")?;
+
+        let error = with_retry_sync(&source, &destination, "renaming", || {
+            fs_err::rename(&source, &destination)
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::CrossesDevices);
+        Ok(())
+    }
 
     #[test]
     fn remove_symlink_removes_directory_link_without_removing_target() -> io::Result<()> {

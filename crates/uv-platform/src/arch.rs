@@ -1,5 +1,6 @@
-use crate::Error;
+use crate::{Error, Os};
 use std::str::FromStr;
+use target_lexicon::Architecture;
 
 /// Architecture variants, e.g., with support for different instruction sets
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
@@ -17,48 +18,48 @@ pub enum ArchVariant {
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Arch {
-    pub(crate) family: target_lexicon::Architecture,
-    pub(crate) variant: Option<ArchVariant>,
+    family: target_lexicon::Architecture,
+    variant: Option<ArchVariant>,
 }
 
 impl Ord for Arch {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.cmp_for_os(*other, Os::from_env(), Self::from_env())
+    }
+}
+
+impl Arch {
+    /// Compare architectures by their preference for the given OS and native architecture.
+    pub(crate) fn cmp_for_os(self, other: Self, os: Os, native: Self) -> std::cmp::Ordering {
         if self.family == other.family {
             return self.variant.cmp(&other.variant);
         }
 
-        // For the time being, manually make aarch64 windows disfavored
-        // on its own host platform, because most packages don't have wheels for
-        // aarch64 windows, making emulation more useful than native execution!
-        //
-        // The reason we do this in "sorting" and not "supports" is so that we don't
-        // *refuse* to use an aarch64 windows pythons if they happen to be installed
-        // and nothing else is available.
-        //
-        // Similarly if someone manually requests an aarch64 windows install, we
-        // should respect that request (this is the way users should "override"
-        // this behaviour).
-        let preferred = if cfg!(all(windows, target_arch = "aarch64")) {
-            Self {
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            }
-        } else {
-            // Prefer native architectures
-            Self::from_env()
-        };
+        self.preference(os, native)
+            .cmp(&other.preference(os, native))
+            // Fall back to lexicographic order for equally preferred architecture families.
+            .then_with(|| self.family.to_string().cmp(&other.family.to_string()))
+    }
 
-        match (
-            self.family == preferred.family,
-            other.family == preferred.family,
-        ) {
-            (true, true) => unreachable!(),
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            (false, false) => {
-                // Both non-preferred, fallback to lexicographic order
-                self.family.to_string().cmp(&other.family.to_string())
-            }
+    /// Return this architecture's preference rank for the given OS and native architecture.
+    /// Lower ranks are preferred when sorting architecture candidates.
+    fn preference(self, os: Os, native: Self) -> u8 {
+        // Prefer native architectures.
+        if self.family == native.family {
+            return 0;
+        }
+
+        if !os.is_windows() {
+            return 3;
+        }
+
+        // Windows ARM64 can emulate both x86-64 and 32-bit x86, while x86-64 can run
+        // 32-bit x86. Prefer these compatible architectures over other families, with
+        // 64-bit Python ahead of 32-bit Python when both emulated builds are available.
+        match (native.family, self.family) {
+            (Architecture::Aarch64(_), Architecture::X86_64) => 1,
+            (Architecture::Aarch64(_) | Architecture::X86_64, Architecture::X86_32(_)) => 2,
+            _ => 3,
         }
     }
 }
@@ -223,6 +224,44 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 None,
             ),
             uv_platform_tags::Arch::Wasm32 => Self::new(target_lexicon::Architecture::Wasm32, None),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::test_support::{aarch64, run_with_arch, x86_64};
+    use super::{Arch, Os};
+
+    #[test]
+    fn test_arch_sorting_prefers_native() {
+        run_with_arch(aarch64(), || {
+            assert!(aarch64() < x86_64());
+        });
+        run_with_arch(x86_64(), || {
+            assert!(x86_64() < aarch64());
+        });
+    }
+
+    #[test]
+    fn test_arch_sorting_for_os() {
+        let x86 = Arch::from_str("x86").expect("valid architecture");
+        let windows = Os::from_str("windows").expect("valid operating system");
+        let linux = Os::from_str("linux").expect("valid operating system");
+
+        for (os, native, expected) in [
+            (windows, aarch64(), [aarch64(), x86_64(), x86]),
+            (windows, x86_64(), [x86_64(), x86, aarch64()]),
+            (windows, x86, [x86, aarch64(), x86_64()]),
+            (linux, aarch64(), [aarch64(), x86, x86_64()]),
+            (linux, x86_64(), [x86_64(), aarch64(), x86]),
+            (linux, x86, [x86, aarch64(), x86_64()]),
+        ] {
+            let mut architectures = [x86, x86_64(), aarch64()];
+            architectures.sort_by(|left, right| left.cmp_for_os(*right, os, native));
+            assert_eq!(architectures, expected, "{os} on {native}");
         }
     }
 }

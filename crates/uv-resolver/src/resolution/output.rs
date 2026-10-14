@@ -7,7 +7,7 @@ use petgraph::{
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{
     DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
     ResolutionDiagnostic, parse_url_hashes,
@@ -34,7 +34,7 @@ pub(crate) fn from_state(
     workspace_members: &BTreeSet<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
-    overrides: Overrides,
+    modifiers: DependencyModifiers,
     preferences: &Preferences,
     hasher: &HashStrategy,
     index: &InMemoryIndex,
@@ -134,7 +134,7 @@ pub(crate) fn from_state(
     graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
     if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-        report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
+        report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &modifiers);
     }
 
     let output = ResolverOutput {
@@ -144,7 +144,7 @@ pub(crate) fn from_state(
         diagnostics,
         requirements,
         constraints,
-        overrides,
+        modifiers,
         options,
     };
 
@@ -169,7 +169,7 @@ pub(crate) fn from_state(
             tracing::warn!(
                 "found {} conflicting distributions in resolution, \
                  please report this as a bug at \
-                 https://github.com/astral-sh/uv/issues/new",
+                 `https://github.com/astral-sh/uv/issues/new`",
                 conflicting.len()
             );
         }
@@ -321,7 +321,16 @@ fn get_hashes(
         }
     }
 
-    // 2. Reuse a direct URL's declared hash when collecting hashes without validation.
+    // 2. Preserve trusted hashes for this URL or path. Wheel metadata lookup does not always
+    // hash the archive, so installation still needs the original hashes to verify its contents.
+    if let Some(url) = url {
+        let policy = hasher.archive_policy_for_url(&url.verbatim);
+        if !policy.digests().is_empty() {
+            return HashDigests::from(policy.digests());
+        }
+    }
+
+    // 3. Reuse a direct URL's declared hash when collecting hashes without validation.
     if let Some(url) = url
         && let ParsedUrl::Archive(_) = &url.parsed_url
         && hasher.collection() != HashCollection::None
@@ -333,7 +342,7 @@ fn get_hashes(
         return hashes;
     }
 
-    // 3. Look for hashes computed for the specific wheel or source distribution.
+    // 4. Look for hashes computed for the specific wheel or source distribution.
     if let Some(metadata_response) = in_memory.distributions().get(metadata_id) {
         if let MetadataResponse::Found(ref archive) = *metadata_response {
             let mut digests = archive.hashes.clone();
@@ -344,7 +353,7 @@ fn get_hashes(
         }
     }
 
-    // 4. Look for hashes from the registry, which are served at the package level.
+    // 5. Look for hashes from the registry, which are served at the package level.
     if url.is_none() {
         // Query the implicit and explicit indexes (lazily) for the hashes.
         let implicit_response = in_memory.implicit().get(name);
@@ -400,7 +409,7 @@ fn report_missing_lower_bounds(
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
     constraints: &Constraints,
-    overrides: &Overrides,
+    modifiers: &DependencyModifiers,
 ) {
     let mut missing_lower_bounds = Vec::new();
     for node_index in graph.node_indices() {
@@ -408,7 +417,7 @@ fn report_missing_lower_bounds(
             // Ignore the root package.
             continue;
         };
-        if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
+        if !has_lower_bound(node_index, dist.name(), graph, constraints, modifiers) {
             missing_lower_bounds.push(dist.name());
         }
     }
@@ -426,7 +435,7 @@ fn has_lower_bound(
     package_name: &PackageName,
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     constraints: &Constraints,
-    overrides: &Overrides,
+    modifiers: &DependencyModifiers,
 ) -> bool {
     for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
         let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
@@ -450,13 +459,15 @@ fn has_lower_bound(
 
         // Get all individual specifier for the current package and check if any has a lower
         // bound.
-        for requirement in overrides
-            .apply_for(
-                neighbor_dist.name(),
-                &neighbor_dist.version,
+        for requirement in modifiers
+            .apply(
+                DependencyModifierScope::Package(neighbor_dist.name(), &neighbor_dist.version),
                 metadata.requires_dist.iter(),
             )
-            .chain(overrides.apply(metadata.dependency_groups.values().flatten()))
+            .chain(modifiers.apply(
+                DependencyModifierScope::Global,
+                metadata.dependency_groups.values().flatten(),
+            ))
             // Constraints are missing from the graph.
             .chain(constraints.requirements().map(Cow::Borrowed))
         {

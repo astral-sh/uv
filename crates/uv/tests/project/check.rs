@@ -95,8 +95,7 @@ fn check_python_version() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17")
             .arg("--show-command")
-            .env("TY_OUTPUT_FORMAT", "concise")
-            .env_remove(EnvVars::RUST_LOG);
+            .env("TY_OUTPUT_FORMAT", "concise");
         command
     };
 
@@ -178,9 +177,7 @@ fn check_propagates_terminal_settings() -> Result<()> {
             .arg("--no-project")
             .arg("--ty-version")
             .arg("0.0.17")
-            .arg("--show-command")
-            // Logging independently disables progress, so isolate the inherited host setting.
-            .env_remove(EnvVars::RUST_LOG);
+            .arg("--show-command");
         command
     };
 
@@ -284,8 +281,7 @@ fn check_show_command_quotes_script_path() -> Result<()> {
             .arg("script with spaces.py")
             .arg("--ty-version")
             .arg("0.0.17")
-            .arg("--show-command")
-            .env_remove(EnvVars::RUST_LOG),
+            .arg("--show-command"),
         @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -302,8 +298,7 @@ fn check_show_command_quotes_script_path() -> Result<()> {
 /// Check PEP 723 scripts only when explicitly selected, not as part of a workspace member.
 #[test]
 fn check_workspace_excludes_pep723_scripts() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -449,8 +444,7 @@ fn check_project_ignores_invalid_pep723_scripts() -> Result<()> {
 /// Apply a safe fix and verify that the corrected source is written to disk.
 #[test]
 fn check_fix() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -486,8 +480,7 @@ fn check_fix() -> Result<()> {
 /// Apply available fixes while preserving unfixable diagnostics and their failure exit status.
 #[test]
 fn check_fix_unfixable() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -525,8 +518,7 @@ fn check_fix_unfixable() -> Result<()> {
 /// Leave a clean project unchanged and report success when there are no fixes to apply.
 #[test]
 fn check_fix_clean_project() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -562,8 +554,7 @@ fn check_fix_clean_project() -> Result<()> {
 /// Fix only the selected workspace member and leave other members and scripts untouched.
 #[test]
 fn check_fix_workspace_member_selection() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -624,8 +615,7 @@ fn check_fix_workspace_member_selection() -> Result<()> {
 /// Fix all explicitly selected workspace members without modifying standalone scripts.
 #[test]
 fn check_fix_all_packages() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
 
     context
         .temp_dir
@@ -686,8 +676,7 @@ fn check_fix_all_packages() -> Result<()> {
 /// Fix a selected PEP 723 script without checking or changing another Python file.
 #[test]
 fn check_fix_script() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
 
     let selected = context.temp_dir.child("selected.py");
     selected.write_str(indoc! {r#"
@@ -730,8 +719,7 @@ fn check_fix_script() -> Result<()> {
 /// Leave a fixable script unchanged when a different, clean script is selected.
 #[test]
 fn check_fix_script_does_not_fix_unselected_script() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
 
     let selected = context.temp_dir.child("selected.py");
     selected.write_str(indoc! {r#"
@@ -785,8 +773,7 @@ fn check_fix_script_does_not_fix_unselected_script() -> Result<()> {
 /// Respect workspace exclusions unless packages are selected explicitly.
 #[test]
 fn check_workspace_member_selection() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -840,8 +827,7 @@ fn check_workspace_member_selection() -> Result<()> {
 /// Respect ty exclusions when automatically selecting members of a virtual workspace.
 #[test]
 fn check_virtual_workspace_respects_exclusions() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -884,8 +870,7 @@ fn check_virtual_workspace_respects_exclusions() -> Result<()> {
 /// Ignore Python files at a virtual workspace root that do not belong to a member.
 #[test]
 fn check_virtual_workspace_only_checks_declared_members() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -925,8 +910,7 @@ fn check_virtual_workspace_only_checks_declared_members() -> Result<()> {
 /// Include workspace members located outside the workspace root with `--all-packages`.
 #[test]
 fn check_workspace_all_packages_includes_external_members() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
     workspace.create_dir_all()?;
     workspace.child("pyproject.toml").write_str(indoc! {r#"
@@ -971,8 +955,7 @@ fn check_workspace_all_packages_includes_external_members() -> Result<()> {
 /// Apply workspace configuration when checking an externally located member.
 #[test]
 fn check_external_workspace_member_inherits_workspace_configuration() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
     workspace.create_dir_all()?;
     workspace.child("pyproject.toml").write_str(indoc! {r#"
@@ -1024,8 +1007,7 @@ fn check_external_workspace_member_inherits_workspace_configuration() -> Result<
 /// Exclude nested workspace members unless all packages are explicitly selected.
 #[test]
 fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -1073,8 +1055,7 @@ fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
 /// Resolve an excluded nested member as a dependency without checking its files.
 #[test]
 fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -1138,8 +1119,7 @@ fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Resul
 /// Apply workspace configuration when checking an explicitly selected member.
 #[test]
 fn check_workspace_member_inherits_workspace_configuration() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -1200,8 +1180,7 @@ fn check_workspace_missing_package() -> Result<()> {
 /// Exclude nested members when checking only a non-virtual workspace's root package.
 #[test]
 fn check_workspace_root_excludes_nested_members() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -1248,8 +1227,7 @@ fn check_workspace_root_excludes_nested_members() -> Result<()> {
 /// Check only explicitly selected packages and include every member with `--all-packages`.
 #[test]
 fn check_workspace_multiple_packages() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -1338,7 +1316,7 @@ fn check_no_sync_creates_lock_without_sync() -> Result<()> {
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
 
         [options]
@@ -1407,8 +1385,7 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17")
             .arg("--show-command")
-            .env("TY_OUTPUT_FORMAT", "concise")
-            .env_remove(EnvVars::RUST_LOG),
+            .env("TY_OUTPUT_FORMAT", "concise"),
         @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -1436,8 +1413,7 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17")
             .arg("--show-command")
-            .env("TY_OUTPUT_FORMAT", "concise")
-            .env_remove(EnvVars::RUST_LOG),
+            .env("TY_OUTPUT_FORMAT", "concise"),
         @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -1519,7 +1495,7 @@ fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
         +++ new
         @@ -1,26 +1,26 @@
          version = 1
-         revision = 3
+         revision = 5
          requires-python = ">=3.12"
 
          [options]
@@ -1865,8 +1841,9 @@ async fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"));
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"))
+        .with_filtered_http_retries();
 
     context
         .temp_dir
@@ -2274,8 +2251,7 @@ fn check_uses_ty_from_environment() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let context = uv_test::test_context!("3.12");
 
     // If `ty` accidentally uses the workspace environment, it will see this incompatible stub
     // instead of the script dependency and report that `IniConfig` is not callable.
@@ -2452,6 +2428,7 @@ fn check_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer for package `ty`
     Using ty 0.0.16
     ");
 
@@ -2590,12 +2567,8 @@ fn check_script_uses_ty_from_path_with_transitive_dependency() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script_ty_override_precedence() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"))
-        .with_filter((
-            r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
-            "",
-        ));
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
     let tool_dir = context.root.child("tools");
     let bin_dir = context.root.child("tool-bin");
 
@@ -2667,12 +2640,8 @@ fn check_script_ty_override_precedence() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"))
-        .with_filter((
-            r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
-            "",
-        ));
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
 
     let wrapper = context.temp_dir.child("wrapper");
     wrapper.create_dir_all()?;
@@ -2853,10 +2822,7 @@ fn check_ty_version_no_match() {
 
 #[test]
 fn check_ty_version_show_version() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]).with_filter((
-        r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
-        "",
-    ));
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let main_py = context.temp_dir.child("main.py");
     main_py.write_str(indoc! {r"
@@ -3326,6 +3292,37 @@ fn check_no_install_project_env_var_conflicts() -> Result<()> {
     error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--no-project`
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn check_isolated_incompatible_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = []
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check()
+        .arg("--preview-features").arg("check-command")
+        .arg("--isolated")
+        .arg("--python").arg("3.12"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    ");
 
     Ok(())
 }

@@ -34,7 +34,7 @@ PYTHON_MINOR_VERSIONS = ("3.15", "3.14", "3.13", "3.12", "3.11", "3.10")
 
 def main() -> None:
     # Read the download metadata
-    metadata_path = ROOT / "crates" / "uv-python" / "download-metadata.json"
+    metadata_path = ROOT / "crates" / "uv-python-managed" / "download-metadata.json"
     with open(metadata_path) as f:
         metadata = json.load(f)
 

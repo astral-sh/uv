@@ -13,6 +13,9 @@ class Command(typing.NamedTuple):
     command: list[str]
     """The command to benchmark."""
 
+    env: dict[str, str] | None = None
+    """Environment variables for the command."""
+
 
 class Hyperfine(typing.NamedTuple):
     name: str
@@ -67,6 +70,14 @@ class Hyperfine(typing.NamedTuple):
         for command in self.commands:
             args.append("--prepare")
             args.append(command.prepare or "")
+
+        for command in self.commands:
+            args.append("--env")
+            args.append(
+                shlex.join(
+                    f"{key}={value}" for key, value in (command.env or {}).items()
+                )
+            )
 
         # Add all commands.
         for command in self.commands:

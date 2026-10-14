@@ -7,12 +7,15 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{DependencyMode, ExcludeDependency, Excludes, Override, Overrides};
+use uv_configuration::{
+    DependencyMode, DependencyModifierScope, DependencyModifiers, ExcludeDependency, Excludes,
+    Override, Overrides,
+};
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
-    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Requirement, RequiresPython, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -20,7 +23,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
@@ -107,14 +110,14 @@ impl SitePackages {
                         }) =>
                     {
                         warn_user!(
-                            "Ignoring dangling temporary directory: `{}`",
+                            "Ignoring dangling temporary directory: {}",
                             path.simplified_display().cyan()
                         );
                         continue;
                     }
                     Err(err) => {
                         return Err(err).context(format!(
-                            "Failed to read metadata from: `{}`",
+                            "Failed to read metadata from: {}",
                             path.simplified_display()
                         ));
                     }
@@ -208,6 +211,8 @@ impl SitePackages {
         dependency_metadata: &DependencyMetadata,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
+        let python_requirement =
+            RequiresPython::greater_than_equal_version(markers.python_full_version());
 
         for (package, indexes) in &self.by_name {
             let mut distributions = indexes.iter().flat_map(|index| &self.distributions[*index]);
@@ -250,15 +255,15 @@ impl SitePackages {
                     Cow::Borrowed(metadata)
                 };
 
-                // Verify that the package is compatible with the current Python version.
-                if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    if !requires_python.contains(markers.python_full_version()) {
-                        diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
-                            package: package.clone(),
-                            version: self.interpreter.python_version().clone(),
-                            requires_python: requires_python.clone(),
-                        });
-                    }
+                // Ignore Python upper bounds, as we do during resolution.
+                if let Some(requires_python) = metadata.requires_python.as_ref()
+                    && !python_requirement.is_contained_by(requires_python)
+                {
+                    diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
+                        package: package.clone(),
+                        version: self.interpreter.python_version().clone(),
+                        requires_python: requires_python.clone(),
+                    });
                 }
 
                 // Verify that the package is compatible with the current tags.
@@ -438,11 +443,12 @@ impl SitePackages {
         )?;
         let excludes = Excludes::from_entries(exclude_dependencies.iter().cloned());
 
+        let modifiers = DependencyModifiers::new(overrides, excludes);
+
         match self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),
             constraints.iter().map(|constraint| &constraint.requirement),
-            &overrides,
-            &excludes,
+            &modifiers,
             dependency_metadata,
             dependency_mode,
             installation,
@@ -473,8 +479,7 @@ impl SitePackages {
         &self,
         requirements: impl Iterator<Item = &'a Requirement>,
         constraints: impl Iterator<Item = &'b Requirement>,
-        overrides: &Overrides,
-        excludes: &Excludes,
+        modifiers: &DependencyModifiers,
         dependency_metadata: &DependencyMetadata,
         dependency_mode: DependencyMode,
         installation: InstallationStrategy,
@@ -496,10 +501,9 @@ impl SitePackages {
             FxHashSet::with_capacity_and_hasher(requirements.size_hint().0, FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for requirement in requirements
-            .flat_map(|requirement| overrides.apply(once(requirement)))
-            .filter(|requirement| !excludes.contains(&requirement.name))
-        {
+        for requirement in requirements.flat_map(|requirement| {
+            modifiers.apply(DependencyModifierScope::Global, once(requirement))
+        }) {
             if requirement.evaluate_markers(Some(markers), &[]) {
                 let requirement = requirement.into_owned();
                 if seen.insert(requirement.clone()) {
@@ -583,12 +587,10 @@ impl SitePackages {
                         .cloned()
                         .map(Requirement::from)
                         .collect::<Vec<_>>();
-                    for dependency in overrides
-                        .apply_for(name, distribution.version(), &dependencies)
-                        .filter(|dependency| {
-                            !excludes.contains_for(name, distribution.version(), &dependency.name)
-                        })
-                    {
+                    for dependency in modifiers.apply(
+                        DependencyModifierScope::Package(name, distribution.version()),
+                        &dependencies,
+                    ) {
                         if dependency.evaluate_markers(Some(markers), &requirement.extras) {
                             let dependency = dependency.into_owned();
                             if seen.insert(dependency.clone()) {
@@ -829,7 +831,7 @@ mod tests {
     #[cfg(unix)]
     use uv_distribution_types::Name;
     #[cfg(unix)]
-    use uv_python::Interpreter;
+    use uv_python_interpreter::Interpreter;
 
     #[cfg(unix)]
     use super::SitePackages;

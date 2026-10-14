@@ -791,6 +791,52 @@ mod tests {
         }
     }
 
+    /// Test that `>V` excludes only post-releases of the specified version.
+    ///
+    /// See: <https://github.com/pypa/packaging/pull/1141>
+    #[test]
+    fn greater_than_post_release_exclusion() {
+        for (specifier, candidate, expected) in [
+            // Development releases have no post-releases of their own.
+            (">1.0.dev0", "1.0.post0", true),
+            (">1.0.dev1", "1.0a1.post0", true),
+            (">1.0a1.dev1", "1.0a1.post0", true),
+            (">1.0.dev1", "1.0.dev0", false),
+            // A pre-release bound excludes only its own post-releases.
+            (">1.0a1", "1.0.post0", true),
+            (">1.0b1", "1.0.post0", true),
+            (">1.0rc1", "1.0.post0", true),
+            (">1.0a1", "1.0a2.post0", true),
+            (">1.0a1", "1.0a1.post0", false),
+            (">1.0a1", "1.0a1.post0.dev0", false),
+            (">1.0a1", "1.0.0a1.post0", false),
+            // Final and post-release bounds retain their usual exclusions and ordering.
+            (">1.0", "1.0.post0", false),
+            (">1.0", "1.1.post0", true),
+            (">1.0.post0", "1.0.post1", true),
+            // Epochs and local labels participate in the same comparisons.
+            (">1!1.0.dev0", "1!1.0.post0", true),
+            (">1!1.0", "2!1.0.post0", true),
+            (">1!1.0.dev0", "1.0.post0", false),
+            (">1.0.dev0", "1.0.post0+local", true),
+            (">1.0.dev0", "1.0.dev0+local", false),
+            (">1.0a1", "1.0a1.post0+local", false),
+        ] {
+            let specifier = specifier.parse::<VersionSpecifier>().unwrap();
+            let candidate = version(candidate);
+            assert_eq!(
+                specifier.contains(&candidate),
+                expected,
+                "expected `{specifier}` to contain `{candidate}`: {expected}"
+            );
+            assert_eq!(
+                Ranges::<Version>::from(specifier.clone()).contains(&candidate),
+                expected,
+                "expected range for `{specifier}` to contain `{candidate}`: {expected}"
+            );
+        }
+    }
+
     /// Test the compound `<V.postN` cases covered by `packaging`.
     ///
     /// See: <https://github.com/pypa/packaging/pull/1140>

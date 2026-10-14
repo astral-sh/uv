@@ -66,7 +66,7 @@ impl CredentialsCache {
         url: &DisplaySafeUrl,
     ) -> Result<bool, CredentialsFromUrlError> {
         if let Some(credentials) = Credentials::from_url(url)? {
-            trace!("Caching credentials for {url}");
+            trace!("Caching credentials for `{url}`");
             self.insert(url, Arc::new(Authentication::from(credentials)));
             Ok(true)
         } else {
@@ -78,7 +78,7 @@ impl CredentialsCache {
     ///
     /// Returns `true` if the store was updated.
     pub fn store_credentials(&self, url: &DisplaySafeUrl, credentials: Credentials) {
-        trace!("Caching credentials for {url}");
+        trace!("Caching credentials for `{url}`");
         self.insert(url, Arc::new(Authentication::from(credentials)));
     }
 
@@ -131,14 +131,14 @@ impl CredentialsCache {
             if username.is_none() || username.as_deref() == credentials.username() {
                 if username.is_some() && credentials.password().is_none() {
                     // If given a username, don't return password-less credentials
-                    trace!("No password in cache for URL {url}");
+                    trace!("No password in cache for URL `{url}`");
                     return None;
                 }
-                trace!("Found cached credentials for URL {url}");
+                trace!("Found cached credentials for URL `{url}`");
                 return Some(credentials.clone());
             }
         }
-        trace!("No credentials in cache for URL {url}");
+        trace!("No credentials in cache for URL `{url}`");
         None
     }
 

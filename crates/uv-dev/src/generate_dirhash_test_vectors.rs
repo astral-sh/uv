@@ -102,7 +102,7 @@ pub(crate) fn main(args: &Args) -> Result<()> {
         }
         Mode::Write => {
             fs_err::write(&test_vectors_path, generated)
-                .with_context(|| format!("failed to write {}", test_vectors_path.display()))?;
+                .with_context(|| format!("failed to write `{}`", test_vectors_path.display()))?;
             anstream::println!("Updating: {FILENAME}");
         }
     }

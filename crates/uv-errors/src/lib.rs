@@ -108,7 +108,7 @@ impl<'a> Hints<'a> {
     }
 
     /// Whether the collection is empty.
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 

@@ -18,9 +18,9 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-/// A file indicates that if present, `git reset` has been done and a repo
-/// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
-const CHECKOUT_READY_LOCK: &str = ".ok";
+/// Extension for the marker beside a completed checkout.
+/// See [`GitCheckout::reset`] for why we need this.
+const CHECKOUT_READY_EXTENSION: &str = "ok";
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitError {
@@ -453,6 +453,13 @@ impl GitCheckout {
         revision: GitOid,
         original_remote_url: &DisplaySafeUrl,
     ) -> Result<Self> {
+        // Invalidate readiness before replacing the checkout, including an interrupted clone.
+        match fs_err::remove_file(into.with_extension(CHECKOUT_READY_EXTENSION)) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+
         let dirname = into.parent().unwrap();
         fs_err::create_dir_all(dirname)?;
         match fs_err::remove_dir_all(into) {
@@ -499,7 +506,10 @@ impl GitCheckout {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
-                self.repo.path.join(CHECKOUT_READY_LOCK).exists()
+                self.repo
+                    .path
+                    .with_extension(CHECKOUT_READY_EXTENSION)
+                    .exists()
             }
             _ => false,
         }
@@ -518,18 +528,19 @@ impl GitCheckout {
     }
 
     /// This performs `git reset --hard` to the revision of this checkout and updates submodules,
-    /// with additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
+    /// with additional interrupt protection by a marker file.
     ///
     /// If we're interrupted while performing any of the processes in this method (e.g., we die
     /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
-    /// To enable this we have a dummy file in our checkout, [`.ok`],
-    /// which if present means that the repo has been successfully checked out and is
-    /// ready to go. Hence if we start to update submodules, we make sure this file
-    /// *doesn't* exist, and then once we're done we create the file.
+    /// The marker sits beside the checkout with an [`.ok` extension], so tracked files cannot
+    /// collide with it. It is removed before cloning and created only after preparation succeeds.
+    /// For example, there may be the `checkouts/<repository-key>/0123456789abcdef/` contents
+    /// directory containing `checkouts/<repository-key>/0123456789abcdef/pyproject.toml`, and the
+    /// `checkouts/<repository-key>/0123456789abcdef.ok` marker file besides it.
     ///
-    /// [`.ok`]: CHECKOUT_READY_LOCK
+    /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
     /// using the original remote URL.
     fn reset(
@@ -537,15 +548,12 @@ impl GitCheckout {
         with_lfs: Option<bool>,
         original_remote_url: &DisplaySafeUrl,
     ) -> Result<Option<bool>> {
-        let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
-        let _ = paths::remove_file(&ok_file);
-
         // We want to skip smudge if lfs was disabled for the repository
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
         let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
 
-        debug!("Reset {} to {}", self.repo.path.display(), self.revision);
+        debug!("Reset `{}` to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
         GIT.as_ref()
@@ -611,7 +619,7 @@ impl GitCheckout {
         // When Git LFS is enabled, the objects must also be fetched and
         // validated successfully as part of the corresponding db.
         if with_lfs.is_none() || lfs_validation == Some(true) {
-            paths::create(ok_file)?;
+            paths::create(self.repo.path.with_extension(CHECKOUT_READY_EXTENSION))?;
         }
 
         Ok(lfs_validation)
@@ -685,20 +693,14 @@ fn fetch(
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
-    let oid_to_fetch = if let ReferenceOrOid::Oid(rev) = reference {
+    if let ReferenceOrOid::Oid(rev) = reference {
         let local_object = reference.resolve(repo).ok();
         if let Some(local_object) = local_object {
             if rev == local_object {
                 return Ok(());
             }
         }
-
-        // If we know the reference is a full commit hash, we can just return it without
-        // querying GitHub.
-        Some(rev)
-    } else {
-        None
-    };
+    }
 
     // Translate the reference desired here into an actual list of refspecs
     // which need to get fetched. Additionally record if we're fetching tags.
@@ -729,24 +731,12 @@ fn fetch(
             refspec_strategy = RefspecStrategy::First;
         }
 
-        // For ambiguous references, we can fetch the exact commit (if known); otherwise,
-        // we fetch all branches and tags.
-        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit)) => {
-            // The `oid_to_fetch` is the exact commit we want to fetch. But it could be the exact
-            // commit of a branch or tag. We should only fetch it directly if it's the exact commit
-            // of a short commit hash.
-            if let Some(oid_to_fetch) =
-                oid_to_fetch.filter(|oid| is_short_hash_of(branch_or_tag_or_commit, *oid))
-            {
-                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else {
-                // We don't know what the rev will point to. To handle this
-                // situation we fetch all branches and tags, and then we pray
-                // it's somewhere in there.
-                refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
-                refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
-                tags = true;
-            }
+        // Fetch all branches and tags so ambiguous references can resolve to either a named
+        // reference or a short commit hash.
+        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(_)) => {
+            refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
+            refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
+            tags = true;
         }
 
         ReferenceOrOid::Reference(GitReference::DefaultBranch) => {
@@ -948,15 +938,6 @@ fn redact_git_error(mut error: anyhow::Error, url: &DisplaySafeUrl) -> anyhow::E
     }
 
     anyhow!("{}", redact(&error.to_string()))
-}
-
-/// Whether `rev` is a shorter hash of `oid`.
-fn is_short_hash_of(rev: &str, oid: GitOid) -> bool {
-    let long_hash = oid.to_string();
-    match long_hash.get(..rev.len()) {
-        Some(truncated_long_hash) => truncated_long_hash.eq_ignore_ascii_case(rev),
-        None => false,
-    }
 }
 
 #[cfg(test)]

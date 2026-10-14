@@ -117,9 +117,7 @@ pub enum ResolveError {
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
-    #[error(
-        "In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`"
-    )]
+    #[error("Hash-checking is required, but no trusted hash was provided for: `{0}`")]
     UnhashedPackage(PackageName),
 
     #[error("found conflicting distribution in resolution: {0}")]
@@ -437,7 +435,7 @@ pub struct NoSolutionError {
     /// These version sets are not filtered by `exclude-newer`. See
     /// [`NoSolutionError::included_versions`] instead if filtered versions are needed.
     ///
-    /// These versions are filtered by [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for
+    /// These versions are filtered by [`EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF`] for
     /// deterministic output in tests.
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,

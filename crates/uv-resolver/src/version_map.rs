@@ -11,9 +11,7 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, MinimumLibcVersion,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
-    SourceDistCompatibility, WheelCompatibility,
+    IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -23,6 +21,10 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
+use crate::prioritized_distribution::{
+    HashComparison, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
+    SourceDistCompatibility, WheelCompatibility,
+};
 use crate::yanks::AllowedYanks;
 
 /// A map from versions to distributions.
@@ -645,7 +647,7 @@ impl VersionMapLazy {
                         }
                         None => {
                             warn_user_once!(
-                                "{} is missing an upload date, but user provided: {included_version_cutoff}",
+                                "`{}` is missing an upload date, but user provided: {included_version_cutoff}",
                                 file.filename,
                             );
                             (true, None)
@@ -812,6 +814,14 @@ impl VersionMapLazy {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
+        }
+
+        // Variant wheels cannot be selected, including during universal resolution.
+        // TODO(konsti): Support wheel variants during resolution.
+        if filename.variant().is_some() {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                IncompatibleTag::Variant,
+            ));
         }
 
         // Determine a compatibility for the wheel based on tags.

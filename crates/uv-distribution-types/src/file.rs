@@ -12,7 +12,7 @@ use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
-/// Error converting [`uv_pypi_types::PypiFile`] to [`distribution_type::File`].
+/// Error converting [`uv_pypi_types::PypiFile`] to [`File`].
 #[derive(Debug, thiserror::Error)]
 pub enum FileConversionError {
     #[error("Failed to parse `requires-python`: `{0}`")]
@@ -104,15 +104,12 @@ impl FileLocation {
 
     /// Convert this location to a URL.
     ///
-    /// A relative URL has its base joined to the path. An absolute URL is
-    /// parsed as-is. And a path location is turned into a URL via the `file`
-    /// protocol.
+    /// A relative URL has its base joined to the path. An absolute URL is parsed as-is.
     ///
     /// # Errors
     ///
-    /// This returns an error if any of the URL parsing fails, or if, for
-    /// example, the location is a path and the path isn't valid UTF-8.
-    /// (Because URLs must be valid UTF-8.)
+    /// This returns an error if parsing the base or absolute URL fails, or if the relative path
+    /// cannot be joined to the base URL.
     pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
         match self {
             Self::RelativeUrl(base, path) => {
@@ -142,7 +139,7 @@ impl Display for FileLocation {
     }
 }
 
-/// A [`Url`] represented as a `String`.
+/// A URL represented as a [`SmallString`].
 ///
 /// This type is not guaranteed to be a valid URL, and may error on conversion.
 #[derive(
@@ -164,7 +161,7 @@ impl Display for FileLocation {
 pub struct UrlString(SmallString);
 
 impl UrlString {
-    /// Create a new [`UrlString`] from a [`String`].
+    /// Create a new [`UrlString`] from a [`SmallString`].
     fn new(url: SmallString) -> Self {
         Self(url)
     }
@@ -180,8 +177,7 @@ impl UrlString {
     /// Return the [`UrlString`] with any query parameters and fragments removed.
     pub fn base_str(&self) -> &str {
         self.as_ref()
-            .split_once('?')
-            .or_else(|| self.as_ref().split_once('#'))
+            .split_once(['?', '#'])
             .map(|(path, _)| path)
             .unwrap_or(self.as_ref())
     }
@@ -223,7 +219,7 @@ impl Display for UrlString {
 /// An error that occurs when a [`FileLocation`] is not a valid URL.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ToUrlError {
-    /// An error that occurs when the base URL in [`FileLocation::Relative`]
+    /// An error that occurs when the base URL in [`FileLocation::RelativeUrl`]
     /// could not be parsed as a valid URL.
     #[error("Could not parse base URL `{base}` as a valid URL")]
     InvalidBase {
@@ -234,7 +230,7 @@ pub enum ToUrlError {
         err: DisplaySafeUrlError,
     },
     /// An error that occurs when the base URL could not be joined with
-    /// the relative path in a [`FileLocation::Relative`].
+    /// the relative path in a [`FileLocation::RelativeUrl`].
     #[error("Could not join base URL `{base}` to relative path `{path}`")]
     InvalidJoin {
         /// The base URL that could not be parsed as a valid URL.
@@ -245,7 +241,7 @@ pub enum ToUrlError {
         #[source]
         err: DisplaySafeUrlError,
     },
-    /// An error that occurs when the absolute URL in [`FileLocation::Absolute`]
+    /// An error that occurs when the absolute URL in [`FileLocation::AbsoluteUrl`]
     /// could not be parsed as a valid URL.
     #[error("Could not parse absolute URL `{absolute}` as a valid URL")]
     InvalidAbsolute {
@@ -286,6 +282,12 @@ mod tests {
         assert_eq!(url.base_str(), "https://example.com/path");
 
         let url = UrlString("https://example.com/path#fragment".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path#fragment?query".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path#fragment/part?query".into());
         assert_eq!(url.base_str(), "https://example.com/path");
 
         let url = UrlString("https://example.com/path".into());

@@ -16,17 +16,17 @@ use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {
-    #[error("Unsupported URL prefix `{prefix}` in URL: `{url}` ({message})")]
+    #[error("Unsupported URL prefix `{prefix}` in URL `{url}` ({message})")]
     UnsupportedUrlPrefix {
         prefix: String,
         url: String,
         message: &'static str,
     },
-    #[error("Invalid path in file URL: `{0}`")]
+    #[error("Invalid path in file URL: {0}")]
     InvalidFileUrl(String),
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
-    #[error("Not a valid URL: `{0}`")]
+    #[error("Not a valid URL: {0}")]
     UrlParse(String, #[source] DisplaySafeUrlError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
@@ -590,7 +590,8 @@ impl From<&ParsedDirectoryUrl> for DirectUrl {
 impl From<&ParsedArchiveUrl> for DirectUrl {
     fn from(value: &ParsedArchiveUrl) -> Self {
         Self::ArchiveUrl {
-            url: value.url.to_string(),
+            // Query parameters identify the source, so only strip username and password credentials.
+            url: value.url.without_credentials().to_string(),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
