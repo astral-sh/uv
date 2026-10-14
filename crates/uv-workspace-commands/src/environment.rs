@@ -183,9 +183,6 @@ fn inspect_environment(
             }
             Err(err) => return Err(err.into()),
         };
-        if modules.is_empty() {
-            continue;
-        }
         for module in modules {
             owners.entry(module).or_default().insert(package_id.clone());
         }

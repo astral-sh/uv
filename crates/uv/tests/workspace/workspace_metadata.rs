@@ -2258,7 +2258,6 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
         insta::assert_json_snapshot!(serde_json::json!({
             "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
-            "resolution": metadata["resolution"],
         }), @r#"
         {
           "installed_packages": {
@@ -2275,23 +2274,7 @@ fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
               "version": "0.1.0"
             }
           },
-          "module_owners": null,
-          "resolution": {
-            "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
-              "dependencies": [],
-              "kind": "package",
-              "name": "module-owner-root",
-              "source": {
-                "virtual": "[TEMP_DIR]/"
-              },
-              "version": "0.1.0"
-            },
-            "workspace+[TEMP_DIR]/": {
-              "dependencies": [],
-              "kind": "workspace",
-              "path": "[TEMP_DIR]/"
-            }
-          }
+          "module_owners": null
         }
         "#);
     });
