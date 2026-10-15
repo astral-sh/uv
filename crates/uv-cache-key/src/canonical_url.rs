@@ -7,14 +7,13 @@ use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
 
-/// A wrapper around `Url` which represents a "canonical" version of an original URL.
+/// A wrapper around [`SafeUrl`] which represents a "canonical" version of an original URL.
 ///
-/// A "canonical" url is only intended for internal comparison purposes. It's to help paper over
+/// A "canonical" URL is only intended for internal comparison purposes. It's to help paper over
 /// mistakes such as depending on `github.com/foo/bar` vs. `github.com/foo/bar.git`.
 ///
-/// This is **only** for internal purposes and provides no means to actually read the underlying
-/// string value of the `Url` it contains. This is intentional, because all fetching should still
-/// happen within the context of the original URL.
+/// This is **only** for internal purposes. All fetching should happen within the context of the
+/// original URL, since canonicalization can remove credentials and change paths.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct CanonicalUrl(SafeUrl);
 

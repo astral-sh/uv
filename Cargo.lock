@@ -6144,7 +6144,6 @@ dependencies = [
  "memchr",
  "percent-encoding",
  "seahash",
- "url",
  "uv-redacted",
 ]
 

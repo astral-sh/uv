@@ -8,7 +8,6 @@ use std::num::{
 use std::path::{Path, PathBuf};
 
 use seahash::SeaHasher;
-use url::Url;
 use uv_redacted::SafeUrl;
 use uv_redacted::policy::SerializationPolicy;
 
@@ -215,13 +214,6 @@ impl CacheKey for PathBuf {
 }
 
 impl<P: SerializationPolicy> CacheKey for SafeUrl<P> {
-    #[inline]
-    fn cache_key(&self, state: &mut CacheKeyHasher) {
-        self.as_str().cache_key(state);
-    }
-}
-
-impl CacheKey for Url {
     #[inline]
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         self.as_str().cache_key(state);
