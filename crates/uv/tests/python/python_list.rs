@@ -772,6 +772,67 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     Ok(())
 }
 
+/// Custom catalogs can mix upstream URLs and URLs already pointing to a different host.
+#[test]
+fn python_list_custom_downloads_json_with_mirror() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_collapsed_whitespace();
+    let downloads_json = context.temp_dir.child("python-downloads.json");
+    downloads_json.write_str(indoc! {r#"
+        {
+            "cpython-3.13.5-linux-x86_64-gnu": {
+                "name": "cpython",
+                "arch": {
+                    "family": "x86_64",
+                    "variant": null
+                },
+                "os": "linux",
+                "libc": "gnu",
+                "major": 3,
+                "minor": 13,
+                "patch": 5,
+                "prerelease": "",
+                "url": "https://custom.example.com/cpython-3.13.5.tar.gz",
+                "sha256": null,
+                "variant": null,
+                "build": "20250723"
+            },
+            "cpython-3.12.4-linux-x86_64-gnu": {
+                "name": "cpython",
+                "arch": {
+                    "family": "x86_64",
+                    "variant": null
+                },
+                "os": "linux",
+                "libc": "gnu",
+                "major": 3,
+                "minor": 12,
+                "patch": 4,
+                "prerelease": "",
+                "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
+                "sha256": null,
+                "variant": null,
+                "build": "20240713"
+            }
+        }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--only-downloads")
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(downloads_json.path())
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "https://mirror.example.com"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.13.5-linux-x86_64-gnu https://custom.example.com/cpython-3.13.5.tar.gz
+    cpython-3.12.4-linux-x86_64-gnu https://mirror.example.com/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn python_list_with_mirrors() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])

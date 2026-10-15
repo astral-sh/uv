@@ -107,8 +107,6 @@ pub enum Error {
     },
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
-    #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {1}")]
-    Mirror(&'static str, DisplaySafeUrl),
     #[error("Unable to parse the JSON Python download list at `{0}`")]
     InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
     #[error("This version of uv is too old to support the JSON Python download list at `{0}`")]
@@ -792,6 +790,9 @@ impl ManagedPythonDownload {
     /// For CPython without a user-configured mirror, the default Astral mirror is listed first,
     /// followed by the canonical GitHub URL as a fallback.
     ///
+    /// Mirrors only replace known upstream URL prefixes. Custom URLs in a user-provided download
+    /// list are used unchanged.
+    ///
     /// For all other cases (user mirror explicitly set, PyPy, GraalPy, Pyodide), a single URL
     /// is returned with no fallback.
     pub fn download_urls(
@@ -810,14 +811,10 @@ impl ManagedPythonDownload {
         let astral_mirror_url = custom_astral_mirror_url(astral_mirror_url);
         match self.key.implementation().as_ref() {
             LenientImplementationName::Known(ImplementationName::CPython) => {
-                if let Some(mirror) = mirrors.cpython {
+                if let Some(mirror) = mirrors.cpython
+                    && let Some(suffix) = self.url.strip_prefix(CPYTHON_DOWNLOADS_URL_PREFIX)
+                {
                     // User-configured mirror: use it exclusively, no automatic fallback.
-                    let Some(suffix) = self.url.strip_prefix(CPYTHON_DOWNLOADS_URL_PREFIX) else {
-                        return Err(Error::Mirror(
-                            EnvVars::UV_PYTHON_INSTALL_MIRROR,
-                            DisplaySafeUrl::parse(&self.url)?,
-                        ));
-                    };
                     return Ok(vec![DisplaySafeUrl::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
                     )?]);
@@ -839,14 +836,10 @@ impl ManagedPythonDownload {
             }
 
             LenientImplementationName::Known(ImplementationName::PyPy) => {
-                if let Some(mirror) = mirrors.pypy {
-                    let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
-                    else {
-                        return Err(Error::Mirror(
-                            EnvVars::UV_PYPY_INSTALL_MIRROR,
-                            DisplaySafeUrl::parse(&self.url)?,
-                        ));
-                    };
+                if let Some(mirror) = mirrors.pypy
+                    && let Some(suffix) =
+                        self.url.strip_prefix("https://downloads.python.org/pypy/")
+                {
                     return Ok(vec![DisplaySafeUrl::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
                     )?]);
@@ -854,16 +847,11 @@ impl ManagedPythonDownload {
             }
 
             LenientImplementationName::Known(ImplementationName::GraalPy) => {
-                if let Some(mirror) = mirrors.graalpy {
-                    let Some(suffix) = self
+                if let Some(mirror) = mirrors.graalpy
+                    && let Some(suffix) = self
                         .url
                         .strip_prefix("https://github.com/oracle/graalpython/releases/download/")
-                    else {
-                        return Err(Error::Mirror(
-                            EnvVars::UV_GRAALPY_INSTALL_MIRROR,
-                            DisplaySafeUrl::parse(&self.url)?,
-                        ));
-                    };
+                {
                     return Ok(vec![DisplaySafeUrl::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
                     )?]);
@@ -871,16 +859,11 @@ impl ManagedPythonDownload {
             }
 
             LenientImplementationName::Known(ImplementationName::Pyodide) => {
-                if let Some(mirror) = mirrors.pyodide {
-                    let Some(suffix) = self
+                if let Some(mirror) = mirrors.pyodide
+                    && let Some(suffix) = self
                         .url
                         .strip_prefix("https://github.com/pyodide/pyodide/releases/download/")
-                    else {
-                        return Err(Error::Mirror(
-                            EnvVars::UV_PYODIDE_INSTALL_MIRROR,
-                            DisplaySafeUrl::parse(&self.url)?,
-                        ));
-                    };
+                {
                     return Ok(vec![DisplaySafeUrl::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
                     )?]);
@@ -1201,10 +1184,6 @@ mod tests {
     fn test_download_error_debug() {
         let errors = [
             Error::Request(PythonDownloadRequestError::EmptyRequest),
-            Error::Mirror(
-                "UV_PYTHON_INSTALL_MIRROR",
-                DisplaySafeUrl::parse("file:///mirror").expect("mirror URL should be valid"),
-            ),
             Error::NetworkErrorWithRetries {
                 err: Box::new(Error::Request(
                     PythonDownloadRequestError::InvalidPythonVersion("3.x".to_owned()),
@@ -1223,20 +1202,6 @@ mod tests {
         [
             Request(
                 EmptyRequest,
-            ),
-            Mirror(
-                "UV_PYTHON_INSTALL_MIRROR",
-                DisplaySafeUrl {
-                    scheme: "file",
-                    cannot_be_a_base: false,
-                    username: "",
-                    password: None,
-                    host: None,
-                    port: None,
-                    path: "/mirror",
-                    query: None,
-                    fragment: None,
-                },
             ),
             NetworkErrorWithRetries {
                 err: Request(
@@ -1388,12 +1353,12 @@ mod tests {
     }
 
     #[test]
-    fn test_cpython_mirror_unexpected_download_url_redacts_credentials() {
+    fn test_cpython_mirror_preserves_custom_download_url() {
         let download = cpython_download_for_url(
             "https://user:password@example.com/cpython.tar.gz?X-Amz-Signature=signature&safe=value",
         );
 
-        let error = download
+        let urls = download
             .download_urls_with_astral_mirror(
                 PythonDownloadMirrors {
                     cpython: Some("https://python-mirror.example.com/releases/"),
@@ -1401,9 +1366,45 @@ mod tests {
                 },
                 None,
             )
-            .expect_err("the download URL should not match the CPython mirror format");
+            .expect("custom download URLs should be used unchanged");
 
-        insta::assert_snapshot!(error, @"A mirror was provided via `UV_PYTHON_INSTALL_MIRROR`, but the URL does not match the expected format: https://user:****@example.com/cpython.tar.gz?X-Amz-Signature=****&safe=value");
+        assert_eq!(
+            urls,
+            vec![DisplaySafeUrl::parse(&download.url).expect("custom URL should be valid")]
+        );
+        insta::assert_snapshot!(urls[0], @"https://user:****@example.com/cpython.tar.gz?X-Amz-Signature=****&safe=value");
+    }
+
+    #[test]
+    fn test_mirrors_preserve_custom_download_urls() {
+        for key in [
+            "pypy-3.10.16-linux-x86_64-gnu",
+            "graalpy-3.10.0-linux-x86_64-gnu",
+            "pyodide-3.13.2-emscripten-wasm32-musl",
+        ] {
+            let download = ManagedPythonDownload {
+                key: PythonInstallationKey::from_str(key)
+                    .expect("installation key should be valid"),
+                ..cpython_download_for_url("https://custom.example.com/python.tar.gz")
+            };
+            let urls = download
+                .download_urls_with_astral_mirror(
+                    PythonDownloadMirrors {
+                        pypy: Some("https://mirror.example.com/pypy"),
+                        graalpy: Some("https://mirror.example.com/graalpy"),
+                        pyodide: Some("https://mirror.example.com/pyodide"),
+                        ..PythonDownloadMirrors::default()
+                    },
+                    None,
+                )
+                .expect("custom download URLs should be used unchanged");
+
+            assert_eq!(
+                urls,
+                vec![DisplaySafeUrl::parse(&download.url).expect("custom URL should be valid")],
+                "custom URL should be retained for {key}"
+            );
+        }
     }
 
     #[test]
