@@ -5,7 +5,7 @@ use arcstr::ArcStr;
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use rustc_hash::FxBuildHasher;
-use smallvec::SmallVec;
+use smallvec::{SmallVec, smallvec};
 use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
@@ -236,284 +236,356 @@ fn collect_dnf(
 /// level without any truth table expansion. Combined with the normalization applied by decision
 /// trees, this seems to be sufficient in practice.
 ///
-/// The number of clause comparisons is quadratic. Most user-facing markers are simple; the
-/// indexed path reduces the cost of comparing larger ones.
+/// The number of clause comparisons is quadratic. Interned terms make each comparison cheaper;
+/// dense bit sets and sparse term lists keep index storage proportional to the DNF.
 fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
-    if dnf.len() >= 8 && simplify_indexed(dnf) {
+    if dnf.len() <= 1 {
         return;
     }
-    simplify_linear(dnf);
-}
 
-/// Simplify a DNF using interned terms and bit sets, following [`simplify_linear`]'s removal order.
-/// Each removal affects later comparisons, so reordering them can change the resulting clauses.
-/// Returns `false` without modifying the DNF if a clause repeats a term or the index is too large.
-fn simplify_indexed(dnf: &mut Vec<Vec<MarkerExpression>>) -> bool {
-    const MAX_INDEX_WORDS: usize = 32 * 1024 * 1024 / size_of::<u64>();
+    let InternedDnf { clauses, negated } = InternedDnf::new(dnf);
+    let words = negated.len().div_ceil(64);
 
-    let mut terms = IndexSet::<_, FxBuildHasher>::default();
-    let mut clauses: Vec<Vec<_>> = dnf
-        .iter()
-        .map(|clause| {
-            clause
-                .iter()
-                .map(|term| terms.insert_full(term).0)
-                .collect()
-        })
-        .collect();
-
-    let words = terms.len().div_ceil(64);
-    // A sparse expression can have far more distinct terms than terms per clause.
-    // Bound the dense index to 32 MiB and use the linear algorithm beyond that.
-    let index_words = dnf.len().saturating_mul(words);
-    if index_words > MAX_INDEX_WORDS {
-        return false;
-    }
-    let negated: Vec<_> = terms
-        .iter()
-        .map(|expression| negate_expression(expression).and_then(|term| terms.get_index_of(&term)))
-        .collect();
-    drop(terms);
-
-    // Every clause is empty, so at most one is needed.
     if words == 0 {
         dnf.truncate(1);
-        return true;
+        return;
     }
 
-    // Candidate setup pays off when many clauses reuse relatively few terms. Smaller or sparse
-    // expressions retain direct comparisons, which can stop as soon as a redundant term is found.
-    if clauses.len() >= 256 && clauses.len() > negated.len().saturating_mul(2) {
-        return simplify_candidates(dnf, clauses, &negated, words);
-    }
-
-    // Store each word across all clauses together so membership checks scan contiguous memory.
-    let clause_count = clauses.len();
-    let mut sets = vec![0u64; index_words];
-    for (i, clause) in clauses.iter().enumerate() {
-        for &term in clause {
-            let index = (term / 64) * clause_count + i;
-            // The linear algorithm tracks the first occurrence of a repeated term.
-            // A set cannot represent that distinction.
-            if sets[index] & (1 << (term % 64)) != 0 {
-                return false;
-            }
-            sets[index] |= 1 << (term % 64);
+    // Dense storage is bounded by the number of terms already present in the DNF.
+    // One or two words per clause are also cheap when the terms fit in a small universe.
+    let index_words = clauses.len().saturating_mul(words);
+    let dense = words <= 2 || index_words <= clauses.iter().map(SmallVec::len).sum();
+    if dense {
+        let mut sets: SmallVec<[u64; 8]> = smallvec![0; index_words];
+        let clause_count = clauses.len();
+        // Candidate differences scan whole clauses; direct comparisons scan the same word
+        // across clauses. Choose the memory layout before entering either comparison loop.
+        if clause_count >= 256 && clause_count > negated.len().saturating_mul(2) {
+            let index = DenseIndex::<true> {
+                sets: &mut sets,
+                words,
+                clause_count,
+            };
+            simplify_indexed::<_, true>(dnf, clauses, &negated, index);
+        } else {
+            let index = DenseIndex::<false> {
+                sets: &mut sets,
+                words,
+                clause_count,
+            };
+            simplify_indexed::<_, false>(dnf, clauses, &negated, index);
         }
+    } else {
+        let index = SparseIndex(vec![SmallVec::new(); clauses.len()]);
+        simplify_indexed::<_, false>(dnf, clauses, &negated, index);
     }
-    // One or two words are cheap to scan without consulting clause lengths.
-    let sparse_comparisons = words > 2;
-
-    // A term is redundant when another clause is a subset of this clause with that term negated.
-    for i in 0..clause_count {
-        let clause = &clauses[i];
-        for &skipped in clause {
-            let offset = (skipped / 64) * clause_count;
-            let skipped_word = &sets[offset..offset + clause_count];
-            let skipped_mask = 1 << (skipped % 64);
-            let redundant = clauses.iter().enumerate().any(|(j, other)| {
-                if i == j || skipped_word[j] & skipped_mask != 0 {
-                    return false;
-                }
-                // Short clauses use term lookups instead of scanning mostly empty words.
-                if sparse_comparisons && words > other.len().min(clause.len()) {
-                    other.iter().all(|&term| {
-                        negated[term] == Some(skipped)
-                            || sets[(term / 64) * clause_count + i] & (1 << (term % 64)) != 0
-                    })
-                } else {
-                    sets.chunks_exact(clause_count)
-                        .enumerate()
-                        .all(|(word, column)| {
-                            let mut missing = column[j] & !column[i];
-                            while missing != 0 {
-                                let term = word * 64 + missing.trailing_zeros() as usize;
-                                if negated[term] != Some(skipped) {
-                                    return false;
-                                }
-                                missing &= missing - 1;
-                            }
-                            true
-                        })
-                }
-            });
-            if redundant {
-                sets[offset + i] &= !skipped_mask;
-            }
-        }
-        let mut position = 0;
-        dnf[i].retain(|_| {
-            let term = clause[position];
-            position += 1;
-            sets[(term / 64) * clause_count + i] & (1 << (term % 64)) != 0
-        });
-        // Later comparisons use the surviving terms, including when a dense clause becomes sparse.
-        clauses[i].retain(|&term| sets[(term / 64) * clause_count + i] & (1 << (term % 64)) != 0);
-    }
-
-    // After removing terms, eliminate clauses that contain another surviving clause.
-    let mut redundant_clauses = vec![false; clause_count];
-    for (i, clause) in clauses.iter().enumerate() {
-        redundant_clauses[i] = clauses.iter().enumerate().any(|(j, other)| {
-            i != j
-                && !redundant_clauses[j]
-                && (!sparse_comparisons || other.len() <= clause.len())
-                && if sparse_comparisons && words > other.len() {
-                    other
-                        .iter()
-                        .all(|&term| sets[(term / 64) * clause_count + i] & (1 << (term % 64)) != 0)
-                } else {
-                    sets.chunks_exact(clause_count)
-                        .all(|column| column[j] & !column[i] == 0)
-                }
-        });
-    }
-
-    let mut position = 0;
-    dnf.retain(|_| {
-        let keep = !redundant_clauses[position];
-        position += 1;
-        keep
-    });
-    true
 }
 
-/// Cache viable clause differences when many clauses reuse relatively few terms.
-/// Update the differences after each removal so later checks cannot rely on removed terms.
-/// Returns `false` without modifying the DNF if repeated terms require [`simplify_linear`].
-fn simplify_candidates(
+/// Simplify interned clauses in encounter order using the chosen membership index.
+/// `CACHE` reuses viable differences when many clauses share relatively few terms.
+fn simplify_indexed<I: TermIndex, const CACHE: bool>(
     dnf: &mut Vec<Vec<MarkerExpression>>,
-    mut clauses: Vec<Vec<usize>>,
+    mut clauses: SmallVec<[SmallVec<[usize; 4]>; 4]>,
     negated: &[Option<usize>],
-    words: usize,
-) -> bool {
-    // Store each clause contiguously so candidate differences scan adjacent words.
-    let clause_count = clauses.len();
-    let mut sets = vec![0u64; clause_count * words];
-    for (i, clause) in clauses.iter().enumerate() {
-        for &term in clause {
-            let index = i * words + term / 64;
-            // The linear algorithm tracks the first occurrence of a repeated term.
-            // A set cannot represent that distinction.
-            if sets[index] & (1 << (term % 64)) != 0 {
-                return false;
+    mut index: I,
+) {
+    let repeated: SmallVec<[bool; 8]> = clauses
+        .iter()
+        .enumerate()
+        .map(|(i, clause)| {
+            let mut repeated = false;
+            for &term in clause {
+                repeated |= !index.insert(i, term);
             }
-            sets[index] |= 1 << (term % 64);
+            repeated
+        })
+        .collect();
+    let max_negations = if CACHE {
+        let mut counts = vec![0usize; negated.len()];
+        for &term in negated.iter().flatten() {
+            counts[term] += 1;
         }
-    }
-    // One or two words are cheap to scan without consulting clause lengths.
-    let sparse_comparisons = words > 2;
+        counts.into_iter().max().unwrap_or(0)
+    } else {
+        0
+    };
 
-    // Terms in a candidate clause that are missing from the current clause must be
-    // negations of the term being removed.
-    let mut negation_counts = vec![0usize; negated.len()];
-    for &term in negated.iter().flatten() {
-        negation_counts[term] += 1;
-    }
-    let max_negations = negation_counts.into_iter().max().unwrap_or(0);
-
-    // A term is redundant when another clause is a subset of this clause with that term negated.
-    for i in 0..clause_count {
+    for i in 0..clauses.len() {
         let clause = &clauses[i];
-        let mut candidates: Vec<(usize, SmallVec<[usize; 1]>)> = clauses
-            .iter()
-            .enumerate()
-            .filter(|(j, _)| *j != i)
-            .filter_map(|(j, other)| {
-                let mut missing = SmallVec::new();
-                if sparse_comparisons && words > other.len() {
-                    for &term in other {
-                        if sets[i * words + term / 64] & (1 << (term % 64)) == 0 {
+        let mut candidates = CACHE.then(|| {
+            (0..clauses.len())
+                .filter(|&j| j != i)
+                .filter_map(|j| {
+                    let mut missing = SmallVec::<[usize; 1]>::new();
+                    index
+                        .all_missing_from(j, i, |term| {
                             if missing.len() == max_negations {
-                                return None;
+                                return false;
                             }
                             missing.push(term);
-                        }
-                    }
-                } else {
-                    let differences = sets[j * words..(j + 1) * words]
-                        .iter()
-                        .zip(&sets[i * words..(i + 1) * words])
-                        .map(|(&other, &this)| other & !this);
-                    let mut count = 0;
-                    for difference in differences.clone() {
-                        count += difference.count_ones() as usize;
-                        if count > max_negations {
-                            return None;
-                        }
-                    }
-                    for (word, mut difference) in differences.enumerate() {
-                        while difference != 0 {
-                            missing.push(word * 64 + difference.trailing_zeros() as usize);
-                            difference &= difference - 1;
-                        }
+                            true
+                        })
+                        .then_some((j, missing))
+                })
+                .collect::<Vec<_>>()
+        });
+        let mut removed: SmallVec<[bool; 8]> = if repeated[i] {
+            smallvec![false; clause.len()]
+        } else {
+            SmallVec::new()
+        };
+        for (position, &skipped) in clause.iter().enumerate() {
+            let redundant = if let Some(candidates) = &candidates {
+                candidates.iter().any(|(j, missing)| {
+                    !index.contains(*j, skipped)
+                        && missing.iter().all(|&term| negated[term] == Some(skipped))
+                })
+            } else {
+                (0..clauses.len()).any(|j| {
+                    i != j
+                        && !index.contains(j, skipped)
+                        && index.all_missing_from(j, i, |term| negated[term] == Some(skipped))
+                })
+            };
+            if redundant {
+                if repeated[i] {
+                    removed[position] = true;
+                }
+                // During this clause's simplification, membership follows the first occurrence.
+                // A later duplicate cannot justify a removal once the first has been removed.
+                if !repeated[i] || clause.iter().position(|&term| term == skipped) == Some(position)
+                {
+                    index.remove(i, skipped);
+                    if let Some(candidates) = &mut candidates {
+                        candidates.retain_mut(|(j, missing)| {
+                            if index.contains(*j, skipped) {
+                                if missing.len() == max_negations {
+                                    return false;
+                                }
+                                missing.push(skipped);
+                            }
+                            true
+                        });
                     }
                 }
-                Some((j, missing))
-            })
-            .collect();
-        for &skipped in clause {
-            let offset = skipped / 64;
-            let skipped_mask = 1 << (skipped % 64);
-            let redundant = candidates.iter().any(|(j, missing)| {
-                sets[*j * words + offset] & skipped_mask == 0
-                    && missing.iter().all(|&term| negated[term] == Some(skipped))
-            });
-            if redundant {
-                sets[i * words + offset] &= !skipped_mask;
-                // Removed terms are no longer available to justify a later removal.
-                candidates.retain_mut(|(j, missing)| {
-                    if sets[*j * words + offset] & skipped_mask != 0 {
-                        if missing.len() == max_negations {
-                            return false;
-                        }
-                        missing.push(skipped);
-                    }
-                    true
-                });
             }
         }
         let mut position = 0;
         dnf[i].retain(|_| {
-            let term = clause[position];
+            let keep = if repeated[i] {
+                !removed[position]
+            } else {
+                index.contains(i, clause[position])
+            };
             position += 1;
-            sets[i * words + term / 64] & (1 << (term % 64)) != 0
+            keep
         });
-        // Later comparisons use the surviving terms, including when a dense clause becomes sparse.
-        clauses[i].retain(|&term| sets[i * words + term / 64] & (1 << (term % 64)) != 0);
+        let mut position = 0;
+        clauses[i].retain(|&mut term| {
+            let keep = if repeated[i] {
+                !removed[position]
+            } else {
+                index.contains(i, term)
+            };
+            position += 1;
+            keep
+        });
+        // Later clauses can use any surviving occurrence of a term.
+        if repeated[i] {
+            for &term in &clauses[i] {
+                index.insert(i, term);
+            }
+        }
     }
 
-    // After removing terms, eliminate clauses that contain another surviving clause.
-    let mut redundant_clauses = vec![false; clause_count];
-    for (i, clause) in clauses.iter().enumerate() {
-        redundant_clauses[i] = clauses.iter().enumerate().any(|(j, other)| {
-            i != j
-                && !redundant_clauses[j]
-                && (!sparse_comparisons || other.len() <= clause.len())
-                && if sparse_comparisons && words > other.len() {
-                    other
-                        .iter()
-                        .all(|&term| sets[i * words + term / 64] & (1 << (term % 64)) != 0)
-                } else {
-                    sets[j * words..(j + 1) * words]
-                        .iter()
-                        .zip(&sets[i * words..(i + 1) * words])
-                        .all(|(&other, &this)| other & !this == 0)
-                }
-        });
+    let mut redundant_clauses: SmallVec<[bool; 8]> = smallvec![false; clauses.len()];
+    for i in 0..clauses.len() {
+        redundant_clauses[i] = (0..clauses.len())
+            .any(|j| i != j && !redundant_clauses[j] && index.all_missing_from(j, i, |_| false));
     }
-
     let mut position = 0;
     dnf.retain(|_| {
         let keep = !redundant_clauses[position];
         position += 1;
         keep
     });
-    true
+}
+
+/// Ordered clauses and their negations, with inline storage for common small markers.
+struct InternedDnf {
+    clauses: SmallVec<[SmallVec<[usize; 4]>; 4]>,
+    negated: SmallVec<[Option<usize>; 8]>,
+}
+
+impl InternedDnf {
+    /// Intern expressions once so simplification compares only integer IDs.
+    #[inline]
+    fn new(dnf: &[Vec<MarkerExpression>]) -> Self {
+        if dnf.iter().map(Vec::len).sum::<usize>() <= 8 {
+            // A handful of terms does not need a hash table or a heap allocation.
+            let mut terms: SmallVec<[&MarkerExpression; 8]> = SmallVec::new();
+            let clauses = dnf
+                .iter()
+                .map(|clause| {
+                    clause
+                        .iter()
+                        .map(|term| {
+                            terms
+                                .iter()
+                                .position(|&other| other == term)
+                                .unwrap_or_else(|| {
+                                    let index = terms.len();
+                                    terms.push(term);
+                                    index
+                                })
+                        })
+                        .collect()
+                })
+                .collect();
+            let negated = terms
+                .iter()
+                .map(|expression| {
+                    terms
+                        .iter()
+                        .position(|other| is_negation(expression, other))
+                })
+                .collect();
+            Self { clauses, negated }
+        } else {
+            let mut terms = IndexSet::<_, FxBuildHasher>::default();
+            let clauses = dnf
+                .iter()
+                .map(|clause| {
+                    clause
+                        .iter()
+                        .map(|term| terms.insert_full(term).0)
+                        .collect()
+                })
+                .collect();
+            let negated = terms
+                .iter()
+                .map(|expression| {
+                    negate_expression(expression).and_then(|term| terms.get_index_of(&term))
+                })
+                .collect();
+            Self { clauses, negated }
+        }
+    }
+}
+
+/// Membership queries shared by dense bit sets and sparse, sorted term IDs.
+trait TermIndex {
+    /// Test whether a term is available in a clause.
+    fn contains(&self, clause: usize, term: usize) -> bool;
+    /// Make a term available, returning whether it was absent.
+    fn insert(&mut self, clause: usize, term: usize) -> bool;
+    /// Stop using a term to justify later removals from this clause.
+    fn remove(&mut self, clause: usize, term: usize);
+    /// Test terms in `left` but absent from `right`, stopping on failure.
+    fn all_missing_from(
+        &self,
+        left: usize,
+        right: usize,
+        predicate: impl FnMut(usize) -> bool,
+    ) -> bool;
+}
+
+/// Bit sets laid out by clause for cached differences, or by word for direct comparisons.
+struct DenseIndex<'a, const ROW_MAJOR: bool> {
+    sets: &'a mut [u64],
+    words: usize,
+    clause_count: usize,
+}
+
+impl<const ROW_MAJOR: bool> DenseIndex<'_, ROW_MAJOR> {
+    /// Locate a clause's word in the chosen layout.
+    fn offset(&self, clause: usize, word: usize) -> usize {
+        if ROW_MAJOR {
+            clause * self.words + word
+        } else {
+            word * self.clause_count + clause
+        }
+    }
+}
+
+impl<const ROW_MAJOR: bool> TermIndex for DenseIndex<'_, ROW_MAJOR> {
+    fn contains(&self, clause: usize, term: usize) -> bool {
+        self.sets[self.offset(clause, term / 64)] & (1 << (term % 64)) != 0
+    }
+
+    fn insert(&mut self, clause: usize, term: usize) -> bool {
+        let offset = self.offset(clause, term / 64);
+        let mask = 1 << (term % 64);
+        let absent = self.sets[offset] & mask == 0;
+        self.sets[offset] |= mask;
+        absent
+    }
+
+    fn remove(&mut self, clause: usize, term: usize) {
+        let offset = self.offset(clause, term / 64);
+        self.sets[offset] &= !(1 << (term % 64));
+    }
+
+    fn all_missing_from(
+        &self,
+        left: usize,
+        right: usize,
+        mut predicate: impl FnMut(usize) -> bool,
+    ) -> bool {
+        for word in 0..self.words {
+            let mut missing =
+                self.sets[self.offset(left, word)] & !self.sets[self.offset(right, word)];
+            while missing != 0 {
+                let term = word * 64 + missing.trailing_zeros() as usize;
+                if !predicate(term) {
+                    return false;
+                }
+                missing &= missing - 1;
+            }
+        }
+        true
+    }
+}
+
+/// Sorted term IDs keep storage proportional to the DNF when clauses share few terms.
+struct SparseIndex(Vec<SmallVec<[usize; 4]>>);
+
+impl TermIndex for SparseIndex {
+    fn contains(&self, clause: usize, term: usize) -> bool {
+        self.0[clause].binary_search(&term).is_ok()
+    }
+
+    fn insert(&mut self, clause: usize, term: usize) -> bool {
+        match self.0[clause].binary_search(&term) {
+            Ok(_) => false,
+            Err(position) => {
+                self.0[clause].insert(position, term);
+                true
+            }
+        }
+    }
+
+    fn remove(&mut self, clause: usize, term: usize) {
+        if let Ok(position) = self.0[clause].binary_search(&term) {
+            self.0[clause].remove(position);
+        }
+    }
+
+    fn all_missing_from(
+        &self,
+        left: usize,
+        right: usize,
+        mut predicate: impl FnMut(usize) -> bool,
+    ) -> bool {
+        self.0[left]
+            .iter()
+            .all(|&term| self.contains(right, term) || predicate(term))
+    }
 }
 
 /// Remove redundant terms, then redundant clauses, in encounter order without allocating an index.
 /// Repeated terms are matched by their first position, which a bit set cannot represent.
+#[cfg(test)]
 fn simplify_linear(dnf: &mut Vec<Vec<MarkerExpression>>) {
     for i in 0..dnf.len() {
         let clause = &dnf[i];
@@ -807,9 +879,7 @@ fn negate_expression(expression: &MarkerExpression) -> Option<MarkerExpression> 
 mod tests {
     use uv_pep440::{Operator, Version, VersionSpecifier};
 
-    use super::{
-        collect_dnf, is_negation, negate_expression, simplify, simplify_indexed, simplify_linear,
-    };
+    use super::{collect_dnf, is_negation, negate_expression, simplify, simplify_linear};
     use crate::{MarkerExpression, MarkerTree, MarkerValueVersion};
 
     fn expression(value: &str) -> MarkerExpression {
@@ -867,7 +937,6 @@ mod tests {
             .collect();
         for expressions in [expressions, many_expressions] {
             let mut seed = 17u64;
-            let mut indexed_cases = 0;
             for case in 0..2_000 {
                 let mut next = || {
                     seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
@@ -886,14 +955,9 @@ mod tests {
                 }
                 let mut actual = expected.clone();
                 simplify_linear(&mut expected);
-                if simplify_indexed(&mut actual) {
-                    indexed_cases += 1;
-                } else {
-                    simplify_linear(&mut actual);
-                }
+                simplify(&mut actual);
                 assert_eq!(actual, expected, "case {case}");
             }
-            assert!(indexed_cases >= 1_000);
         }
     }
 
@@ -913,7 +977,7 @@ mod tests {
 
             simplify_linear(&mut expected);
             assert_eq!(expected, vec![terms[..size - 1].to_vec()]);
-            assert!(simplify_indexed(&mut actual));
+            simplify(&mut actual);
             assert_eq!(actual, expected);
         }
     }
@@ -945,9 +1009,6 @@ mod tests {
             ] {
                 let mut expected = dnf.clone();
                 simplify_linear(&mut expected);
-                let mut actual = dnf.clone();
-                assert!(simplify_indexed(&mut actual));
-                assert_eq!(actual, expected);
                 let mut actual = dnf;
                 simplify(&mut actual);
                 assert_eq!(actual, expected);
@@ -955,20 +1016,32 @@ mod tests {
         }
     }
 
+    /// Removing the first occurrence makes a term unavailable within that clause, even if a
+    /// duplicate survives. Later clauses can use the surviving occurrence again.
     #[test]
-    fn indexed_simplification_falls_back_for_repeated_terms() {
-        let term = expression("extra == 'a'");
-        for repeated_clause in [0, 7] {
-            let mut expected: Vec<_> = (0..8)
-                .map(|index| vec![term.clone(); if index == repeated_clause { 2 } else { 1 }])
-                .collect();
-            let mut actual = expected.clone();
-
-            assert!(!simplify_indexed(&mut actual));
-            assert_eq!(actual, expected);
+    fn indexed_simplification_repeated_terms() {
+        let a = expression("extra == 'a'");
+        let b = expression("extra == 'b'");
+        let c = expression("extra == 'c'");
+        let not_a = expression("extra != 'a'");
+        let not_b = expression("extra != 'b'");
+        for count in [3, 8, 130, 256] {
+            let mut actual = vec![
+                vec![a.clone(), b.clone(), a.clone(), c.clone()],
+                vec![not_a.clone(), b.clone()],
+                vec![not_b.clone(), c.clone()],
+            ];
+            // Distinct padding terms exercise sparse storage; repeated padding exercises
+            // the dense index and, at 256 clauses, cached differences.
+            for index in 3..count {
+                let name = if count == 130 { index } else { 0 };
+                actual.push(vec![expression(&format!("extra == 'unrelated-{name}'"))]);
+            }
+            let mut expected = actual.clone();
             simplify_linear(&mut expected);
             simplify(&mut actual);
             assert_eq!(actual, expected);
+            assert_eq!(actual[0], vec![a.clone(), c.clone()]);
         }
     }
 
@@ -995,7 +1068,7 @@ mod tests {
             assert!(actual.len() >= 256);
             let mut expected = actual.clone();
             simplify_linear(&mut expected);
-            assert!(simplify_indexed(&mut actual));
+            simplify(&mut actual);
             assert_eq!(actual, expected);
         }
     }
@@ -1031,20 +1104,8 @@ mod tests {
             }
             let mut expected = actual.clone();
             simplify_linear(&mut expected);
-            assert!(simplify_indexed(&mut actual));
+            simplify(&mut actual);
             assert_eq!(actual, expected, "case {case}");
         }
-    }
-
-    #[test]
-    fn indexed_simplification_limits_dense_storage() {
-        // 16,385 distinct terms in separate clauses require more than 32 MiB of bit sets.
-        let mut actual: Vec<_> = (0..16_385)
-            .map(|index| vec![expression(&format!("extra == 'extra-{index}'"))])
-            .collect();
-        let expected = actual.clone();
-
-        assert!(!simplify_indexed(&mut actual));
-        assert_eq!(actual, expected);
     }
 }
