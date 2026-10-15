@@ -242,6 +242,16 @@ impl<P: SerializationPolicy> SafeUrl<P> {
     /// Return the complete parsed URL for APIs that require [`Url`].
     ///
     /// The returned URL has no display redaction or serialization policy.
+    /// Use this method to pass an owned [`Url`] to an API that requires it.
+    /// Conversion using [`From`] is not supported:
+    ///
+    /// ```compile_fail
+    /// use uv_redacted::SafeUrl;
+    ///
+    /// let url = SafeUrl::parse("https://example.com")?;
+    /// let _: url::Url = url.into();
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn into_unsafe_url(self) -> Url {
         self.0
     }
@@ -412,12 +422,6 @@ impl<P: SerializationPolicy> Debug for SafeUrl<P> {
             )
             .field("fragment", &url.fragment())
             .finish()
-    }
-}
-
-impl<P: SerializationPolicy> From<SafeUrl<P>> for Url {
-    fn from(url: SafeUrl<P>) -> Self {
-        url.0
     }
 }
 

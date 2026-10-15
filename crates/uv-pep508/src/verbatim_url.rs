@@ -372,6 +372,17 @@ impl<P: SerializationPolicy> VerbatimUrl<P> {
     }
 
     /// Convert the [`VerbatimUrl`] into a [`SafeUrl`].
+    ///
+    /// To pass the result to an API that requires [`Url`], call [`SafeUrl::into_unsafe_url`].
+    /// Direct conversion to [`Url`] using [`From`] is not supported:
+    ///
+    /// ```compile_fail
+    /// use uv_pep508::VerbatimUrl;
+    ///
+    /// let url = VerbatimUrl::parse_url("https://example.com")?;
+    /// let _: url::Url = url.into();
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn into_url(self) -> SafeUrl<P> {
         self.url
     }
@@ -428,12 +439,6 @@ impl From<Url> for VerbatimUrl {
 impl<P: SerializationPolicy> From<SafeUrl<P>> for VerbatimUrl<P> {
     fn from(url: SafeUrl<P>) -> Self {
         Self::from_url(url)
-    }
-}
-
-impl<P: SerializationPolicy> From<VerbatimUrl<P>> for Url {
-    fn from(url: VerbatimUrl<P>) -> Self {
-        Self::from(url.url)
     }
 }
 

@@ -2,7 +2,6 @@
 
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, trace};
-use url::Url;
 use uv_client::BaseClient;
 use uv_redacted::SafeUrl;
 
@@ -49,7 +48,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
             "Requesting revocation of the trusted publishing upload token at `{burn_token_url}`"
         );
         self.client
-            .post(Url::from(burn_token_url.clone()))
+            .post(burn_token_url.clone().into_unsafe_url())
             .json(&BurnTokenRequest { token })
             .send()
             .await
@@ -78,7 +77,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         debug!("Querying the trusted publishing audience from `{audience_url}`");
         let response = self
             .client
-            .get(Url::from(audience_url.clone()))
+            .get(audience_url.clone().into_unsafe_url())
             .send()
             .await
             .map_err(|err| TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err))?;
@@ -113,7 +112,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         };
         let response = self
             .client
-            .post(Url::from(mint_token_url.clone()))
+            .post(mint_token_url.clone().into_unsafe_url())
             .json(&mint_token_payload)
             .send()
             .await
