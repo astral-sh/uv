@@ -1005,6 +1005,18 @@ impl MarkerTree {
         simplify::to_dnf(self)
     }
 
+    /// Returns a DNF expression for this marker tree without simplifying or sorting it.
+    ///
+    /// Boolean transformations can avoid the work needed to produce compact, consistently
+    /// ordered marker text. Redundant expressions remain, so evaluating each expression can
+    /// repeat diagnostics that simplification would remove.
+    ///
+    /// Both [`MarkerTree::TRUE`] and [`MarkerTree::FALSE`] return an empty list. Callers that
+    /// need to distinguish these constants must handle them before converting to DNF.
+    pub fn to_unsimplified_dnf(self) -> Vec<Vec<MarkerExpression>> {
+        simplify::to_unsimplified_dnf(self)
+    }
+
     /// Does this marker apply in the given environment?
     pub fn evaluate(self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         self.evaluate_reporter_impl(
@@ -1890,6 +1902,35 @@ mod test {
 
     fn m(s: &str) -> MarkerTree {
         s.parse().unwrap()
+    }
+
+    #[test]
+    fn unsimplified_dnf_constants() {
+        assert!(MarkerTree::TRUE.to_unsimplified_dnf().is_empty());
+        assert!(MarkerTree::FALSE.to_unsimplified_dnf().is_empty());
+    }
+
+    #[test]
+    fn unsimplified_dnf_reconstructs_marker() {
+        for expression in [
+            "extra == 'a' or extra == 'b'",
+            "extra == 'a' and extra != 'a'",
+            "python_full_version != '3.12.*' and (sys_platform == 'linux' or extra == 'a')",
+            "platform_release < 'foo' or extra == 'a'",
+            "'test' in extras or os_name == 'posix'",
+            "python_version in '3.9 3.10' or sys_platform != 'win32'",
+        ] {
+            let marker = m(expression);
+            let reconstructed = marker.to_unsimplified_dnf().into_iter().fold(
+                MarkerTree::FALSE,
+                |marker, clause| {
+                    marker.or(clause.into_iter().fold(MarkerTree::TRUE, |marker, term| {
+                        marker.and(MarkerTree::expression(term))
+                    }))
+                },
+            );
+            assert_eq!(marker, reconstructed, "{expression}");
+        }
     }
 
     #[test]

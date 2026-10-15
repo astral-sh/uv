@@ -822,7 +822,7 @@ pub fn resolve_activated_extras(
     let mut transformed = MarkerTree::FALSE;
 
     // Convert the marker to DNF, then re-build it.
-    for dnf in marker.to_dnf() {
+    for dnf in marker.to_unsimplified_dnf() {
         let mut or = MarkerTree::TRUE;
 
         for marker in dnf {

@@ -21,10 +21,16 @@ use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerT
 ///
 /// We choose DNF as it is easier to simplify for user-facing output.
 pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
-    let mut dnf = Vec::new();
-    collect_dnf(tree, &mut dnf, &mut Vec::new());
+    let mut dnf = to_unsimplified_dnf(tree);
     simplify(&mut dnf);
     sort(&mut dnf);
+    dnf
+}
+
+/// Returns a DNF expression for a given marker tree, without simplification.
+pub(crate) fn to_unsimplified_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
+    let mut dnf = Vec::new();
+    collect_dnf(tree, &mut dnf, &mut Vec::new());
     dnf
 }
 
