@@ -26,7 +26,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 /// priority. This way, all virtual packages of the same name will be applied in a batch. To ensure
 /// determinism, we also track the discovery order of virtual packages as secondary order.
 ///
-/// Packages with [`PubGrubPriority::Root`] are not stored in the priority map.
+/// Packages with the fixed [`PubGrubPriority::Root`] are not stored in the priority map.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities {
     package_priority: FxHashbrownMap<PackageName, PubGrubPriority>,
