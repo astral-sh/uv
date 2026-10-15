@@ -6920,6 +6920,8 @@ dependencies = [
 name = "uv-lock"
 version = "0.0.100"
 dependencies = [
+ "anyhow",
+ "astral-version-ranges",
  "either",
  "fs-err",
  "futures",
@@ -6967,6 +6969,7 @@ dependencies = [
  "uv-redacted",
  "uv-resolver-types",
  "uv-small-str",
+ "uv-static",
  "uv-types",
  "uv-version",
  "uv-warnings",
