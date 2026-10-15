@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -823,7 +824,7 @@ fn installed_variant_matches(installed: &InstalledDist, dist: &ResolvedDist) -> 
     match fs_err::read(path) {
         Ok(contents) => variant.is_some_and(|label| {
             VariantsJsonContent::from_slice(&contents)
-                .is_ok_and(|metadata| metadata.is_compatible_wheel(label))
+                .is_ok_and(|metadata| metadata.is_compatible_wheel(label, &HashSet::new()))
         }),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => variant.is_none(),
         Err(err) => {

@@ -1,4 +1,5 @@
 use std::cmp::Reverse;
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -431,6 +432,7 @@ impl PrioritizedDist {
         &self,
         metadata: &[(&IndexUrl, &VariantsJsonContent)],
     ) -> Option<Self> {
+        let supported = HashSet::new();
         let (best_index, (hash, _, priority, build_tag)) = self
             .0
             .wheels
@@ -444,7 +446,7 @@ impl PrioritizedDist {
                 metadata
                     .iter()
                     .any(|(source, metadata)| {
-                        *source == &wheel.index && metadata.is_compatible(label)
+                        *source == &wheel.index && metadata.is_compatible(label, &supported)
                     })
                     .then_some((index, (*hash, Reverse(label), *priority, build_tag)))
             })

@@ -37,14 +37,34 @@ pub struct VariantsJsonContent {
 }
 
 impl VariantsJsonContent {
-    /// Whether the variant requires no properties.
-    pub fn is_compatible(&self, label: &VariantLabel) -> bool {
-        self.variants.get(label).is_some_and(BTreeMap::is_empty)
+    /// Whether the properties of a variant are supported by the target system.
+    pub fn is_compatible(
+        &self,
+        label: &VariantLabel,
+        supported: &HashSet<(&str, &str, &str)>,
+    ) -> bool {
+        self.variants.get(label).is_some_and(|properties| {
+            properties.iter().all(|(namespace, features)| {
+                features.iter().all(|(feature, values)| {
+                    values.iter().any(|value| {
+                        supported.contains(&(
+                            namespace.0.as_str(),
+                            feature.0.as_str(),
+                            value.0.as_str(),
+                        ))
+                    })
+                })
+            })
+        })
     }
 
     /// Whether wheel-level metadata describes only the given compatible variant.
-    pub fn is_compatible_wheel(&self, label: &VariantLabel) -> bool {
-        self.variants.len() == 1 && self.is_compatible(label)
+    pub fn is_compatible_wheel(
+        &self,
+        label: &VariantLabel,
+        supported: &HashSet<(&str, &str, &str)>,
+    ) -> bool {
+        self.variants.len() == 1 && self.is_compatible(label, supported)
     }
 
     /// Parse and validate the contents of a variant metadata file.
