@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use arcstr::ArcStr;
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use version_ranges::Ranges;
 
@@ -471,14 +472,6 @@ pub enum MarkerValueExtra {
 }
 
 impl MarkerValueExtra {
-    /// Returns the [`ExtraName`] for this value, if it is a valid extra.
-    pub fn as_extra(&self) -> Option<&ExtraName> {
-        match self {
-            Self::Extra(extra) => Some(extra),
-            Self::Arbitrary(_) => None,
-        }
-    }
-
     /// Convert the [`MarkerValueExtra`] to an [`ExtraName`], if possible.
     fn into_extra(self) -> Option<ExtraName> {
         match self {
@@ -880,6 +873,18 @@ impl MarkerTree {
             return disjoint;
         }
         INTERNER.lock().is_disjoint_nontrivial(self.0, other.0)
+    }
+
+    /// Returns whether this marker is unsatisfiable under known environment constraints.
+    ///
+    /// Unlike [`MarkerTree::is_false`], this checks combinations such as `os_name == 'posix'`
+    /// and `sys_platform == 'win32'` even when they occur in different decision branches.
+    /// Relationships not modeled by the marker algebra can still produce false negatives.
+    pub fn is_unreachable(self) -> bool {
+        if self.is_true() || self.is_false() {
+            return self.is_false();
+        }
+        INTERNER.lock().is_unreachable(self.0)
     }
 
     /// Returns the contents of this marker tree, if it contains at least one expression.
@@ -1393,6 +1398,23 @@ impl MarkerTree {
         Self(INTERNER.lock().without_extras(self.0))
     }
 
+    /// Replace extras with the conditions under which they are enabled.
+    ///
+    /// Extras absent from `known_extras` are false. Substitution is simultaneous: extras in a
+    /// replacement marker are not themselves replaced. Shared subgraphs are transformed once,
+    /// without expanding the marker into disjunctive normal form.
+    #[must_use]
+    pub fn resolve_extras(self, known_extras: impl IntoIterator<Item = (ExtraName, Self)>) -> Self {
+        if self.is_true() || self.is_false() {
+            return self;
+        }
+        let known_extras: FxHashMap<_, _> = known_extras
+            .into_iter()
+            .map(|(name, marker)| (name, marker.0))
+            .collect();
+        Self(INTERNER.lock().resolve_extras(self.0, &known_extras))
+    }
+
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
     ///
     /// If the marker did not contain any `extra` expressions, then a marker
@@ -1869,12 +1891,13 @@ mod test {
     use std::str::FromStr;
 
     use insta::assert_snapshot;
+    use rustc_hash::FxHashMap;
 
     use uv_normalize::ExtraName;
     use uv_pep440::Version;
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+    use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
@@ -2016,6 +2039,152 @@ mod test {
                 .unwrap(),
             "python_full_version <= '3.12.1'"
         );
+    }
+
+    /// Replacements can introduce variables ordered before their original parent, and must
+    /// remain untouched even when they contain another extra being resolved.
+    #[test]
+    fn resolve_extras_substitutes_simultaneously() {
+        let known = [
+            (
+                "a".parse().expect("valid extra name"),
+                m("sys_platform == 'darwin' or extra == 'b'"),
+            ),
+            ("b".parse().expect("valid extra name"), MarkerTree::FALSE),
+        ];
+        assert_eq!(
+            m("python_version >= '3.10' and extra == 'a'").resolve_extras(known.clone()),
+            m("python_version >= '3.10' and (sys_platform == 'darwin' or extra == 'b')")
+        );
+        assert_eq!(
+            m("extra != 'a'").resolve_extras(known.clone()),
+            m("sys_platform != 'darwin' and extra != 'b'")
+        );
+        assert!(
+            m("extra == 'missing'")
+                .resolve_extras(known.clone())
+                .is_false()
+        );
+        assert!(
+            m("extra != 'missing'")
+                .resolve_extras(known.clone())
+                .is_true()
+        );
+        assert!(MarkerTree::TRUE.resolve_extras(known.clone()).is_true());
+        assert!(MarkerTree::FALSE.resolve_extras(known).is_false());
+    }
+
+    /// Compare diagram substitution with path expansion, including complemented edges,
+    /// environment restrictions, and replacements that introduce earlier variables.
+    #[test]
+    fn resolve_extras_matches_dnf() {
+        let expressions = [
+            "extra == 'a'",
+            "extra == 'b'",
+            "extra == 'c'",
+            "python_full_version >= '3.10'",
+            "python_full_version != '3.12.*'",
+            "sys_platform == 'darwin'",
+            "sys_platform == 'win32'",
+            "os_name == 'posix'",
+            "platform_release >= '24'",
+            "platform_release < 'foo'",
+            "'linux' in sys_platform",
+            "sys_platform in 'linux darwin'",
+            "'test' in extras",
+            "'dev' in dependency_groups",
+        ]
+        .map(m);
+        let replacements = [
+            MarkerTree::TRUE,
+            MarkerTree::FALSE,
+            m("sys_platform == 'darwin'"),
+            m("os_name == 'posix'"),
+            m("python_version >= '3.11'"),
+            m("extra == 'b'"),
+            m("platform_release < '24'"),
+        ];
+        let mut state = 17u64;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            (state >> 32) as usize
+        };
+        for case in 0..2_000 {
+            let mut marker = expressions[next() % expressions.len()];
+            for _ in 0..12 {
+                let term = expressions[next() % expressions.len()];
+                marker = if next() % 2 == 0 {
+                    marker.and(term)
+                } else {
+                    marker.or(term)
+                };
+                if next() % 3 == 0 {
+                    marker = marker.negate();
+                }
+            }
+            let known: FxHashMap<ExtraName, MarkerTree> = ["a", "b"]
+                .into_iter()
+                .map(|name| {
+                    (
+                        name.parse().expect("valid extra name"),
+                        replacements[next() % replacements.len()],
+                    )
+                })
+                .collect();
+            let expected = if marker.is_true() || marker.is_false() {
+                marker
+            } else {
+                marker
+                    .to_dnf()
+                    .into_iter()
+                    .fold(MarkerTree::FALSE, |result, clause| {
+                        result.or(clause.into_iter().fold(MarkerTree::TRUE, |result, term| {
+                            let term = if let MarkerExpression::Extra {
+                                ref name,
+                                ref operator,
+                            } = term
+                                && let Some(name) = name.as_extra()
+                            {
+                                let replacement =
+                                    known.get(name).copied().unwrap_or(MarkerTree::FALSE);
+                                match operator {
+                                    ExtraOperator::Equal => replacement,
+                                    ExtraOperator::NotEqual => replacement.negate(),
+                                }
+                            } else {
+                                MarkerTree::expression(term)
+                            };
+                            result.and(term)
+                        }))
+                    })
+            };
+            let actual = marker.resolve_extras(known);
+            // Different normalizations can retain different guards against impossible platforms.
+            // Compare in the environment domain modeled by the marker algebra.
+            assert!(
+                actual.and(expected.negate()).is_unreachable()
+                    && expected.and(actual.negate()).is_unreachable(),
+                "case {case}: {marker:?}\nactual: {actual:?}\nexpected: {expected:?}",
+            );
+        }
+    }
+
+    /// This diagram has only two decisions per pair but more than 16 million DNF paths.
+    #[test]
+    fn resolve_extras_shared_subgraphs() {
+        let condition = m("sys_platform == 'darwin'");
+        let mut known = Vec::new();
+        let mut marker = MarkerTree::TRUE;
+        for index in 0..24 {
+            let left = format!("pair-{index:02}-a");
+            let right = format!("pair-{index:02}-b");
+            marker = marker.and(m(&format!("extra == '{left}' or extra == '{right}'")));
+            known.push((left.parse().expect("valid extra name"), condition));
+            known.push((right.parse().expect("valid extra name"), condition));
+        }
+        assert_eq!(marker.resolve_extras(known), condition);
     }
 
     #[test]

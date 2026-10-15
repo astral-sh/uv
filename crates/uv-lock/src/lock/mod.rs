@@ -10270,14 +10270,7 @@ fn marker_is_unreachable(requires_python: &RequiresPython, marker: MarkerTree) -
         return false;
     }
 
-    environment.to_dnf().into_iter().all(|conjunction| {
-        let marker = conjunction
-            .into_iter()
-            .fold(MarkerTree::TRUE, |marker, expression| {
-                marker.and(MarkerTree::expression(expression))
-            });
-        requires_python.simplify_markers(marker).is_false()
-    })
+    environment.is_unreachable()
 }
 
 /// Simplify an edge marker using the PEP 508 conditions that must already hold to reach its parent
@@ -10603,6 +10596,76 @@ mod tests {
     use uv_warnings::anstream;
 
     use super::*;
+
+    /// Path reconstruction checks platform incompatibilities as well as Python bounds.
+    /// The direct query must account for both without enumerating the paths.
+    #[test]
+    fn marker_reachability_matches_dnf() {
+        let expressions: Vec<MarkerTree> = [
+            "extra == 'a'",
+            "extra == 'b'",
+            "python_full_version >= '3.10'",
+            "python_full_version < '3.12'",
+            "python_full_version != '3.11.*'",
+            "python_version in '3.9 3.10'",
+            "sys_platform == 'darwin'",
+            "sys_platform == 'win32'",
+            "os_name == 'posix'",
+            "os_name == 'nt'",
+            "platform_system == 'FreeBSD'",
+            "platform_release >= '24'",
+            "platform_release < 'foo'",
+            "'linux' in sys_platform",
+            "sys_platform in 'linux darwin'",
+            "'test' in extras",
+            "'dev' in dependency_groups",
+        ]
+        .into_iter()
+        .map(|expression| expression.parse().expect("valid marker"))
+        .collect();
+        let mut state = 17u64;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            (state >> 32) as usize
+        };
+        for bounds in [">=3.8", ">=3.10,<3.12", "==3.11.*", ">=3.14"] {
+            let requires_python =
+                RequiresPython::from_specifiers(bounds.parse().expect("valid bounds"));
+            for case in 0..2_000 {
+                let mut marker = expressions[next() % expressions.len()];
+                for _ in 0..16 {
+                    let term = expressions[next() % expressions.len()];
+                    marker = if next() % 2 == 0 {
+                        marker.and(term)
+                    } else {
+                        marker.or(term)
+                    };
+                    if next() % 3 == 0 {
+                        marker = marker.negate();
+                    }
+                }
+                let environment = requires_python.simplify_markers(marker);
+                let environment = requires_python.simplify_markers(environment.without_extras());
+                let expected = if environment.is_true() || environment.is_false() {
+                    environment.is_false()
+                } else {
+                    environment.to_dnf().into_iter().all(|clause| {
+                        let marker = clause.into_iter().fold(MarkerTree::TRUE, |marker, term| {
+                            marker.and(MarkerTree::expression(term))
+                        });
+                        requires_python.simplify_markers(marker).is_false()
+                    })
+                };
+                assert_eq!(
+                    marker_is_unreachable(&requires_python, marker),
+                    expected,
+                    "case {case}, bounds {bounds}: {marker:?}"
+                );
+            }
+        }
+    }
 
     /// Assert a given display snapshot, stripping ANSI color codes.
     macro_rules! assert_stripped_snapshot {

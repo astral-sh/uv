@@ -6,7 +6,7 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 #[derive(Debug, thiserror::Error)]
@@ -819,130 +819,21 @@ pub fn resolve_activated_extras(
         return marker;
     }
 
-    let mut transformed = MarkerTree::FALSE;
-
-    // Convert the marker to DNF, then re-build it.
-    for dnf in marker.to_dnf() {
-        let mut or = MarkerTree::TRUE;
-
-        for marker in dnf {
-            let MarkerExpression::Extra {
-                ref operator,
-                ref name,
-            } = marker
-            else {
-                or = or.and(MarkerTree::expression(marker));
-                continue;
-            };
-
-            let Some(name) = name.as_extra() else {
-                or = or.and(MarkerTree::expression(marker));
-                continue;
-            };
-
-            // Given an extra marker (like `extra == 'extra-7-project-cpu'`), search for the
-            // corresponding conflict; once found, inline the marker of conditions under which the
-            // conflict is known to be true.
-            let mut found = false;
-            for (conflict_item, conflict_marker) in known_conflicts {
-                // Search for the conflict item as an extra.
-                if let Some(extra) = conflict_item.extra() {
-                    let package = conflict_item.package();
-                    let encoded = encode_package_extra(package, extra);
-                    if encoded == *name {
-                        match operator {
-                            ExtraOperator::Equal => {
-                                or = or.and(*conflict_marker);
-                                found = true;
-                                break;
-                            }
-                            ExtraOperator::NotEqual => {
-                                or = or.and(conflict_marker.negate());
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Search for the conflict item as a group.
-                if let Some(group) = conflict_item.group() {
-                    let package = conflict_item.package();
-                    let encoded = encode_package_group(package, group);
-                    if encoded == *name {
-                        match operator {
-                            ExtraOperator::Equal => {
-                                or = or.and(*conflict_marker);
-                                found = true;
-                                break;
-                            }
-                            ExtraOperator::NotEqual => {
-                                or = or.and(conflict_marker.negate());
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Search for the conflict item as a project.
-                if conflict_item.extra().is_none() && conflict_item.group().is_none() {
-                    let package = conflict_item.package();
-                    let encoded = encode_project(package);
-                    if encoded == *name {
-                        match operator {
-                            ExtraOperator::Equal => {
-                                or = or.and(*conflict_marker);
-                                found = true;
-                                break;
-                            }
-                            ExtraOperator::NotEqual => {
-                                or = or.and(conflict_marker.negate());
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Search for an unencoded package extra in the current package scope.
-            if !found {
-                if let Some(package) = scope_package {
-                    let conflict_item = ConflictItem::from((package.clone(), name.clone()));
-                    if let Some(conflict_marker) = known_conflicts.get(&conflict_item) {
-                        match operator {
-                            ExtraOperator::Equal => {
-                                or = or.and(*conflict_marker);
-                                found = true;
-                            }
-                            ExtraOperator::NotEqual => {
-                                or = or.and(conflict_marker.negate());
-                                found = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // If we didn't find the marker in the list of known conflicts, assume it's always
-            // false.
-            if !found {
-                match operator {
-                    ExtraOperator::Equal => {
-                        or = or.and(MarkerTree::FALSE);
-                    }
-                    ExtraOperator::NotEqual => {
-                        or = or.and(MarkerTree::TRUE);
-                    }
-                }
+    let mut replacements = Vec::new();
+    // Encoded conflict names take precedence over unencoded package extras.
+    if let Some(package) = scope_package {
+        for (conflict_item, &condition) in known_conflicts {
+            if conflict_item.package() == package
+                && let Some(extra) = conflict_item.extra()
+            {
+                replacements.push((extra.clone(), condition));
             }
         }
-
-        transformed = transformed.or(or);
     }
-
-    transformed
+    for (conflict_item, &condition) in known_conflicts {
+        replacements.push((encode_conflict_item(conflict_item), condition));
+    }
+    marker.resolve_extras(replacements)
 }
 
 #[cfg(test)]
@@ -1247,5 +1138,42 @@ mod tests {
         let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'bar'").unwrap();
         let cm = resolve_activated_extras(cm, Some(&package), &known_conflicts);
         assert!(cm.is_false());
+    }
+
+    #[test]
+    fn resolve_encoded_conflicts_before_scoped_extras() {
+        let package = create_package("pkg");
+        let known_conflicts = FxHashMap::from_iter([
+            (
+                ConflictItem::from((
+                    package.clone(),
+                    ExtraName::from_str("foo").expect("valid marker or name"),
+                )),
+                MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker or name"),
+            ),
+            (
+                ConflictItem::from((
+                    package.clone(),
+                    ExtraName::from_str("extra-3-pkg-foo").expect("valid marker or name"),
+                )),
+                MarkerTree::TRUE,
+            ),
+            (
+                ConflictItem::from((
+                    package.clone(),
+                    GroupName::from_str("dev").expect("valid marker or name"),
+                )),
+                MarkerTree::from_str("python_version >= '3.11'").expect("valid marker or name"),
+            ),
+            (ConflictItem::from(package.clone()), MarkerTree::TRUE),
+        ]);
+        let marker = MarkerTree::from_str(
+            "extra == 'extra-3-pkg-foo' and extra != 'group-3-pkg-dev' and extra == 'project-3-pkg'",
+        ).expect("valid marker or name");
+        assert_eq!(
+            resolve_activated_extras(marker, Some(&package), &known_conflicts),
+            MarkerTree::from_str("sys_platform == 'darwin' and python_version < '3.11'")
+                .expect("valid marker or name"),
+        );
     }
 }
