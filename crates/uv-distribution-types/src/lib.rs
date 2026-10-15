@@ -79,6 +79,7 @@ pub use crate::file::*;
 pub use crate::hash::*;
 pub use crate::id::*;
 pub use crate::index::*;
+pub use crate::index_entry::*;
 pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
@@ -94,6 +95,7 @@ pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
 pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
+pub use crate::variant_json::*;
 
 mod annotation;
 mod any;
@@ -111,6 +113,7 @@ mod file;
 mod hash;
 mod id;
 mod index;
+mod index_entry;
 mod index_name;
 mod index_url;
 mod installed;
@@ -127,6 +130,7 @@ mod resolved;
 mod specified_requirement;
 mod status_code_strategy;
 mod traits;
+mod variant_json;
 
 #[derive(Debug, Clone)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
