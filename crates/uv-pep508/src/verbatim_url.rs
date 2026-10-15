@@ -9,6 +9,7 @@ use std::sync::LazyLock;
 use arcstr::ArcStr;
 use thiserror::Error;
 #[cfg(feature = "unsafe-url")]
+#[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
@@ -447,6 +448,7 @@ impl<P: SerializationPolicy> Deref for VerbatimUrl<P> {
 }
 
 #[cfg(feature = "unsafe-url")]
+#[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
         Self::from_url(SafeUrl::from_url(url))
@@ -875,6 +877,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "unsafe-url")]
+    #[expect(clippy::disallowed_types, reason = "Exercises the opt-in raw URL API")]
     fn from_raw_url() {
         let raw = Url::parse("https://user:password@EXAMPLE.COM/demo.whl?sig=signature").unwrap();
         let url = VerbatimUrl::from(raw);
