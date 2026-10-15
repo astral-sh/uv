@@ -4039,7 +4039,7 @@ fn transitive_prerelease_redundant_stable_preference_plain_first() {
     context.assert_installed("c", "1.0.0");
 }
 
-/// The user requires a package where five recent versions have distinct Python requirements incompatible with the current version, but an older version is compatible. The repeated conflicts must not change the fixed priority of the Python version constraint.
+/// The user requires a package where five recent versions have distinct Python requirements incompatible with the current version, but an older version is compatible. The repeated conflicts reach the resolver's backtracking threshold (`CONFLICT_THRESHOLD`), but must not change the fixed priority of the Python version constraint.
 ///
 /// ```text
 /// python-greater-than-current-backtrack
