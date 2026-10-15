@@ -32,15 +32,15 @@ use crate::{
     PyProjectToml, error_on_venv, find_roots, write_directory_once, write_file_with_directories,
 };
 
-// Files at or below this size are buffered and written with `write_entry_whole`,
-// which was fastest in wheel-writer benchmarks because it can write final ZIP
-// headers without per-chunk async writes. The 16 MiB limit keeps typical source
-// files on that fast path without buffering very large data files wholesale.
-const WHOLE_FILE_ZIP_ENTRY_LIMIT: u64 = 16 * 1024 * 1024;
-// Buffer size for the large-file streaming fallback. 128 KiB was enough to cut
-// down read/write loop overhead compared to the 8 KiB default while remaining a
-// small fixed allocation for entries that are too large for `write_entry_whole`.
-const ZIP_STREAM_BUFFER_SIZE: usize = 128 * 1024;
+/// Files at or below this size are buffered and written with `write_entry_whole`,
+/// which was fastest in wheel-writer benchmarks because it can write final ZIP
+/// headers without per-chunk async writes. The 16 MiB limit keeps typical source
+/// files on that fast path without buffering very large data files wholesale.
+pub const WHOLE_FILE_ZIP_ENTRY_LIMIT: u64 = 16 * 1024 * 1024;
+/// Buffer size for the large-file streaming fallback. 128 KiB was enough to cut
+/// down read/write loop overhead compared to the 8 KiB default while remaining a
+/// small fixed allocation for entries that are too large for `write_entry_whole`.
+pub const ZIP_STREAM_BUFFER_SIZE: usize = 128 * 1024;
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(

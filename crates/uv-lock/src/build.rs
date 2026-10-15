@@ -124,6 +124,10 @@ pub struct ExportedLock {
 }
 
 impl ExportedLock {
+    pub fn is_required(&self) -> bool {
+        self.mode == ExportMode::Required
+    }
+
     /// Return `None` for errors during automatic export, and propagate errors for required export.
     pub fn skip_on_error<T, E: Display>(&self, result: Result<T, E>) -> Result<Option<T>, E> {
         self.mode.skip_on_error(result.map(Some))
@@ -214,7 +218,7 @@ pub async fn export(
     };
     if !supports_export {
         if mode == ExportMode::Required {
-            bail!("Packaged lock export requires the bundled uv_build backend");
+            bail!("Packaged lock export requires a source directory");
         }
         return Ok(None);
     }

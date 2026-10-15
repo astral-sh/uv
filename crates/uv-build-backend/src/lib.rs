@@ -10,7 +10,10 @@ pub use metadata::check_direct_build;
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, build_source_dist_with_files, list_source_dist};
 use uv_warnings::warn_user_once;
-pub use wheel::{build_editable, build_wheel, build_wheel_with_files, list_wheel, metadata};
+pub use wheel::{
+    WHOLE_FILE_ZIP_ENTRY_LIMIT, ZIP_STREAM_BUFFER_SIZE, build_editable, build_wheel,
+    build_wheel_with_files, list_wheel, metadata,
+};
 
 use rustc_hash::FxHashSet;
 use std::collections::HashSet;
