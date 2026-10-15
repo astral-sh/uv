@@ -242,29 +242,28 @@ fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
     if dnf.len() <= 1 || (dnf.len() >= 8 && simplify_indexed(dnf)) {
         return;
     }
-    simplify_with_queries(dnf, LinearClauses);
+    simplify_with_queries(dnf, ClauseQueries::<false>::Linear(SmallVec::new()));
 }
 
 /// Remove terms and clauses in encounter order using the chosen clause comparisons.
 /// Each removal affects later comparisons, so this order determines the rendered expression.
-fn simplify_with_queries(dnf: &mut Vec<Vec<MarkerExpression>>, mut queries: impl ClauseQueries) {
+fn simplify_with_queries<const CACHE: bool>(
+    dnf: &mut Vec<Vec<MarkerExpression>>,
+    mut queries: ClauseQueries<'_, CACHE>,
+) {
     for clause in 0..dnf.len() {
-        let mut removed = queries.prepare_clause(clause);
+        queries.prepare_clause(clause);
         for term in 0..dnf[clause].len() {
-            if queries.has_subset_with_negated(dnf, clause, term, &removed) {
-                queries.remove_term(clause, term, &mut removed);
+            if queries.has_subset_with_negated(dnf, clause, term) {
+                queries.remove_term(clause, term);
             }
         }
-        queries.finish_clause(dnf, clause, removed);
+        queries.finish_clause(dnf, clause);
     }
 
     let mut redundant = SmallVec::<[usize; 8]>::new();
     for clause in 0..dnf.len() {
-        if (0..dnf.len()).any(|other| {
-            other != clause
-                && redundant.binary_search(&other).is_err()
-                && queries.is_subset(dnf, other, clause)
-        }) {
+        if queries.has_subset(dnf, clause, &redundant) {
             redundant.push(clause);
         }
     }
@@ -279,90 +278,89 @@ fn simplify_with_queries(dnf: &mut Vec<Vec<MarkerExpression>>, mut queries: impl
     }
 }
 
-/// Clause comparisons and index updates used by the ordered simplification pass.
-trait ClauseQueries {
-    /// State needed to track removals while considering one clause.
-    type Removed;
-
-    /// Prepare optional candidate differences and the clause's removal state.
-    fn prepare_clause(&mut self, clause: usize) -> Self::Removed;
-    /// Test whether another clause is a subset after negating one term of the current clause.
-    /// Previously removed terms cannot justify another removal.
-    fn has_subset_with_negated(
-        &self,
-        dnf: &[Vec<MarkerExpression>],
-        clause: usize,
-        term: usize,
-        removed: &Self::Removed,
-    ) -> bool;
-    /// Update membership and cached differences after removing a term.
-    fn remove_term(&mut self, clause: usize, term: usize, removed: &mut Self::Removed);
-    /// Apply the marked removals to the clause and its index.
-    fn finish_clause(
-        &mut self,
-        dnf: &mut [Vec<MarkerExpression>],
-        clause: usize,
-        removed: Self::Removed,
-    );
-    /// Test whether the surviving terms of `left` are contained in `right`.
-    fn is_subset(&self, dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool;
+/// Clause comparisons and removal state used by the ordered simplification pass.
+enum ClauseQueries<'a, const CACHE: bool> {
+    Linear(SmallVec<[usize; 8]>),
+    Indexed(IndexedClauses<'a, CACHE>),
 }
 
-/// Compare expressions directly without allocating an index.
-struct LinearClauses;
-
-impl ClauseQueries for LinearClauses {
-    type Removed = SmallVec<[usize; 8]>;
-
-    fn prepare_clause(&mut self, _clause: usize) -> Self::Removed {
-        SmallVec::new()
-    }
-
-    fn remove_term(&mut self, _clause: usize, term: usize, removed: &mut Self::Removed) {
-        removed.push(term);
-    }
-
-    #[inline]
-    fn finish_clause(
-        &mut self,
-        dnf: &mut [Vec<MarkerExpression>],
-        clause: usize,
-        removed: Self::Removed,
-    ) {
-        for term in removed.into_iter().rev() {
-            dnf[clause].remove(term);
+impl<const CACHE: bool> ClauseQueries<'_, CACHE> {
+    /// Reset term removals or prepare cached differences for the next clause.
+    fn prepare_clause(&mut self, clause: usize) {
+        match self {
+            Self::Linear(removed) => removed.clear(),
+            Self::Indexed(index) => index.prepare_clause(clause),
         }
     }
 
+    /// Test whether another clause is a subset after negating one term of the current clause.
+    /// Previously removed terms cannot justify another removal.
     #[inline]
     fn has_subset_with_negated(
         &self,
         dnf: &[Vec<MarkerExpression>],
         clause: usize,
         term: usize,
-        removed: &Self::Removed,
     ) -> bool {
-        let skipped = &dnf[clause][term];
-        dnf.iter().enumerate().any(|(other, expressions)| {
-            other != clause
-                && expressions.iter().all(|expression| {
-                    if expression == skipped {
-                        return false;
-                    }
-                    if is_negation(expression, skipped) {
-                        return true;
-                    }
-                    // Repeated terms match their first occurrence, even when a later one survives.
-                    dnf[clause]
-                        .iter()
-                        .position(|other| other == expression)
-                        .is_some_and(|position| !removed.contains(&position))
+        match self {
+            Self::Linear(removed) => {
+                let skipped = &dnf[clause][term];
+                dnf.iter().enumerate().any(|(other, expressions)| {
+                    other != clause
+                        && expressions.iter().all(|expression| {
+                            if expression == skipped {
+                                return false;
+                            }
+                            if is_negation(expression, skipped) {
+                                return true;
+                            }
+                            // Repeated terms match their first occurrence, even when a later one survives.
+                            dnf[clause]
+                                .iter()
+                                .position(|other| other == expression)
+                                .is_some_and(|position| !removed.contains(&position))
+                        })
                 })
-        })
+            }
+            Self::Indexed(index) => index.has_subset_with_negated(clause, term),
+        }
     }
 
-    fn is_subset(&self, dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool {
-        dnf[left].iter().all(|term| dnf[right].contains(term))
+    /// Update membership and cached differences after removing a term.
+    fn remove_term(&mut self, clause: usize, term: usize) {
+        match self {
+            Self::Linear(removed) => removed.push(term),
+            Self::Indexed(index) => index.remove_term(clause, term),
+        }
+    }
+
+    /// Apply the marked removals to the clause and its index.
+    fn finish_clause(&mut self, dnf: &mut [Vec<MarkerExpression>], clause: usize) {
+        match self {
+            Self::Linear(removed) => {
+                for term in removed.drain(..).rev() {
+                    dnf[clause].remove(term);
+                }
+            }
+            Self::Indexed(index) => index.finish_clause(dnf, clause),
+        }
+    }
+
+    /// Test whether another surviving clause is a subset of this clause.
+    fn has_subset(
+        &self,
+        dnf: &[Vec<MarkerExpression>],
+        clause: usize,
+        redundant: &[usize],
+    ) -> bool {
+        let mut others = (0..dnf.len())
+            .filter(|&other| other != clause && redundant.binary_search(&other).is_err());
+        match self {
+            Self::Linear(_) => {
+                others.any(|other| dnf[other].iter().all(|term| dnf[clause].contains(term)))
+            }
+            Self::Indexed(index) => others.any(|other| index.is_subset(other, clause)),
+        }
     }
 }
 
@@ -396,12 +394,12 @@ fn simplify_indexed(dnf: &mut Vec<Vec<MarkerExpression>>) -> bool {
 
     // Cache differences only when many clauses reuse relatively few terms.
     if clauses.len() >= 256 && clauses.len() > negated.len().saturating_mul(2) {
-        if let Some(queries) = IndexedClauses::<true>::new(clauses, &negated, words) {
-            simplify_with_queries(dnf, queries);
+        if let Some(index) = IndexedClauses::<true>::new(clauses, &negated, words) {
+            simplify_with_queries(dnf, ClauseQueries::Indexed(index));
             return true;
         }
-    } else if let Some(queries) = IndexedClauses::<false>::new(clauses, &negated, words) {
-        simplify_with_queries(dnf, queries);
+    } else if let Some(index) = IndexedClauses::<false>::new(clauses, &negated, words) {
+        simplify_with_queries(dnf, ClauseQueries::Indexed(index));
         return true;
     }
     false
@@ -475,9 +473,11 @@ impl<'a, const CACHE: bool> IndexedClauses<'a, CACHE> {
                 .iter()
                 .all(|&term| self.contains(right, term) || predicate(term));
         }
+        let left = self.offset(left, 0);
+        let right = self.offset(right, 0);
+        let stride = if CACHE { 1 } else { self.clauses.len() };
         for word in 0..self.words {
-            let mut missing =
-                self.sets[self.offset(left, word)] & !self.sets[self.offset(right, word)];
+            let mut missing = self.sets[left + word * stride] & !self.sets[right + word * stride];
             while missing != 0 {
                 if !predicate(word * 64 + missing.trailing_zeros() as usize) {
                     return false;
@@ -487,11 +487,8 @@ impl<'a, const CACHE: bool> IndexedClauses<'a, CACHE> {
         }
         true
     }
-}
 
-impl<const CACHE: bool> ClauseQueries for IndexedClauses<'_, CACHE> {
-    type Removed = ();
-
+    /// Cache viable clause differences before considering term removals.
     fn prepare_clause(&mut self, clause: usize) {
         if CACHE {
             self.candidates = (0..self.clauses.len())
@@ -511,14 +508,9 @@ impl<const CACHE: bool> ClauseQueries for IndexedClauses<'_, CACHE> {
         }
     }
 
+    /// Test clause membership using cached differences or direct bitset comparisons.
     #[inline]
-    fn has_subset_with_negated(
-        &self,
-        _dnf: &[Vec<MarkerExpression>],
-        clause: usize,
-        term: usize,
-        _removed: &Self::Removed,
-    ) -> bool {
+    fn has_subset_with_negated(&self, clause: usize, term: usize) -> bool {
         let skipped = self.clauses[clause][term];
         let mask = 1 << (skipped % 64);
         if CACHE {
@@ -540,7 +532,8 @@ impl<const CACHE: bool> ClauseQueries for IndexedClauses<'_, CACHE> {
         }
     }
 
-    fn remove_term(&mut self, clause: usize, term: usize, _removed: &mut Self::Removed) {
+    /// Remove a term from membership sets and update candidate differences.
+    fn remove_term(&mut self, clause: usize, term: usize) {
         let skipped = self.clauses[clause][term];
         let offset = self.offset(clause, skipped / 64);
         self.sets[offset] &= !(1 << (skipped % 64));
@@ -557,12 +550,8 @@ impl<const CACHE: bool> ClauseQueries for IndexedClauses<'_, CACHE> {
         }
     }
 
-    fn finish_clause(
-        &mut self,
-        dnf: &mut [Vec<MarkerExpression>],
-        clause: usize,
-        _removed: Self::Removed,
-    ) {
+    /// Retain surviving terms in both the expressions and their interned IDs.
+    fn finish_clause(&mut self, dnf: &mut [Vec<MarkerExpression>], clause: usize) {
         let mut position = 0;
         dnf[clause].retain(|_| {
             let keep = self.contains(clause, self.clauses[clause][position]);
@@ -580,7 +569,8 @@ impl<const CACHE: bool> ClauseQueries for IndexedClauses<'_, CACHE> {
         });
     }
 
-    fn is_subset(&self, _dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool {
+    /// Test whether all surviving terms in `left` occur in `right`.
+    fn is_subset(&self, left: usize, right: usize) -> bool {
         (self.words <= 2 || self.clauses[left].len() <= self.clauses[right].len())
             && self.all_missing_from(left, right, |_| false)
     }
@@ -880,10 +870,11 @@ fn negate_expression(expression: &MarkerExpression) -> Option<MarkerExpression> 
 
 #[cfg(test)]
 mod tests {
+    use smallvec::SmallVec;
     use uv_pep440::{Operator, Version, VersionSpecifier};
 
     use super::{
-        LinearClauses, collect_dnf, is_negation, negate_expression, simplify, simplify_indexed,
+        ClauseQueries, collect_dnf, is_negation, negate_expression, simplify, simplify_indexed,
         simplify_linear, simplify_with_queries,
     };
     use crate::{MarkerExpression, MarkerTree, MarkerValueVersion};
@@ -963,12 +954,15 @@ mod tests {
                 let mut actual = expected.clone();
                 let mut linear = expected.clone();
                 simplify_linear(&mut expected);
-                simplify_with_queries(&mut linear, LinearClauses);
+                simplify_with_queries(&mut linear, ClauseQueries::<false>::Linear(SmallVec::new()));
                 assert_eq!(linear, expected, "linear case {case}");
                 if simplify_indexed(&mut actual) {
                     indexed_cases += 1;
                 } else {
-                    simplify_with_queries(&mut actual, LinearClauses);
+                    simplify_with_queries(
+                        &mut actual,
+                        ClauseQueries::<false>::Linear(SmallVec::new()),
+                    );
                 }
                 assert_eq!(actual, expected, "case {case}");
             }
