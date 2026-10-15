@@ -89,8 +89,8 @@ use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{
-    Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, ResolvedFork,
-    SelectedDistribution,
+    Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionNodeId, ResolutionPackage,
+    ResolvedFork, SelectedDistribution,
 };
 use uv_configuration::ForkStrategy;
 
@@ -845,8 +845,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let Some(env) = resolution.env.end_user_fork_display() {
                     let packages: FxHashSet<_> = resolution
                         .nodes
-                        .keys()
-                        .map(|package| &package.name)
+                        .iter()
+                        .map(|(package, _)| &package.name)
                         .collect();
                     debug!(
                         "Distinct solution for {env} with {} package(s)",
@@ -3108,12 +3108,69 @@ impl<'index> ForkState<'index> {
 
     fn into_resolution(self) -> Resolution<'index> {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
+        // Node order can affect diagnostic order and which artifact hashes `requirements.txt`
+        // emits when it merges the same package version from different sources.
+        let nodes: FxHashMap<_, _> = solution
+            .iter()
+            .filter_map(|(&package, version)| {
+                if let PubGrubPackageInner::Package {
+                    name,
+                    kind,
+                    marker: MarkerTree::TRUE,
+                } = &*self.pubgrub.package_store[package]
+                {
+                    let (url, index) = self.source(name, version);
+                    Some((
+                        ResolutionPackage {
+                            name: name.clone(),
+                            kind: kind.clone(),
+                            url: url.cloned(),
+                            index: index.cloned(),
+                        },
+                        version.clone(),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let nodes: Vec<_> = nodes.into_iter().collect();
+        let node_indices: FxHashMap<_, _> = nodes
+            .iter()
+            .enumerate()
+            .map(|(index, (package, version))| {
+                (
+                    (
+                        &package.name,
+                        &package.kind,
+                        package.url.as_ref(),
+                        package.index.as_ref(),
+                        version,
+                    ),
+                    ResolutionNodeId(index),
+                )
+            })
+            .collect();
+
         let edge_count: usize = solution
             .keys()
             .map(|package| self.pubgrub.incompatibilities[package].len())
             .sum();
         let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
+            let (self_name, self_kind) = match &*self.pubgrub.package_store[*package] {
+                PubGrubPackageInner::Package { name, kind, .. } => (Some(name), kind),
+                PubGrubPackageInner::Root(_) => (None, &PackageNodeKind::Base),
+                PubGrubPackageInner::Python(_)
+                | PubGrubPackageInner::System(_)
+                | PubGrubPackageInner::Marker { .. }
+                | PubGrubPackageInner::Extra { .. }
+                | PubGrubPackageInner::Group { .. } => continue,
+            };
+            let from = self_name.map(|name| {
+                let (url, index) = self.source(name, self_version);
+                node_indices[&(name, self_kind, url, index, self_version)]
+            });
             for id in &self.pubgrub.incompatibilities[package] {
                 let incompatibility = &self.pubgrub.incompatibility_store[*id];
                 let pubgrub::Kind::FromDependencyOf(self_package, dependency_package) =
@@ -3142,20 +3199,7 @@ impl<'index> ForkState<'index> {
                     continue;
                 }
 
-                let self_package = &self.pubgrub.package_store[self_package];
                 let dependency_package = &self.pubgrub.package_store[dependency_package];
-
-                let (self_name, self_kind) = match &**self_package {
-                    PubGrubPackageInner::Package {
-                        name: self_name,
-                        kind: self_kind,
-                        marker: _,
-                    } => (Some(self_name), self_kind),
-
-                    PubGrubPackageInner::Root(_) => (None, &PackageNodeKind::Base),
-
-                    _ => continue,
-                };
 
                 let (name, kind, marker) = match &**dependency_package {
                     PubGrubPackageInner::Package { name, kind, marker } => {
@@ -3196,68 +3240,25 @@ impl<'index> ForkState<'index> {
                     | PubGrubPackageInner::Python(_)
                     | PubGrubPackageInner::System(_) => continue,
                 };
-                let from = self_name.map(|name| {
-                    let (url, index) = self.source(name, self_version);
-                    ResolutionNode {
-                        package: ResolutionPackage {
-                            name: name.clone(),
-                            kind: self_kind.clone(),
-                            url: url.cloned(),
-                            index: index.cloned(),
-                        },
-                        version: self_version.clone(),
-                    }
-                });
-
                 let (url, index) = self.source(name, dependency_version);
-                let to = ResolutionNode {
-                    package: ResolutionPackage {
-                        name: name.clone(),
-                        kind,
-                        url: url.cloned(),
-                        index: index.cloned(),
-                    },
-                    version: dependency_version.clone(),
-                };
-                let edge = ResolutionDependencyEdge { from, to, marker };
+                edges.push(ResolutionDependencyEdge {
+                    from,
+                    to: node_indices[&(name, &kind, url, index, dependency_version)],
+                    marker,
+                });
 
                 // An extra proxy requires both the extra and its base package. A group proxy
                 // only requires the group itself.
                 if let PubGrubPackageInner::Extra { .. } = &**dependency_package {
-                    let mut base_edge = edge.clone();
-                    base_edge.to.package.kind = PackageNodeKind::Base;
-                    edges.push(edge);
-                    edges.push(base_edge);
-                } else {
-                    edges.push(edge);
+                    edges.push(ResolutionDependencyEdge {
+                        from,
+                        to: node_indices
+                            [&(name, &PackageNodeKind::Base, url, index, dependency_version)],
+                        marker,
+                    });
                 }
             }
         }
-
-        let nodes = solution
-            .into_iter()
-            .filter_map(|(package, version)| {
-                if let PubGrubPackageInner::Package {
-                    name,
-                    kind,
-                    marker: MarkerTree::TRUE,
-                } = &*self.pubgrub.package_store[package]
-                {
-                    let (url, index) = self.source(name, &version);
-                    Some((
-                        ResolutionPackage {
-                            name: name.clone(),
-                            kind: kind.clone(),
-                            url: url.cloned(),
-                            index: index.cloned(),
-                        },
-                        version,
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect();
 
         Resolution {
             nodes,
