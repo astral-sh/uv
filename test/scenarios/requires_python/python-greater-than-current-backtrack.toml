@@ -1,5 +1,5 @@
 name = "python-greater-than-current-backtrack"
-description = "The user requires a package where five recent versions have distinct Python requirements incompatible with the current version, but an older version is compatible. The repeated conflicts reach the resolver's backtracking threshold (`CONFLICT_THRESHOLD`), but must not change the fixed priority of the Python version constraint."
+description = "The resolver reaches the backtracking threshold while rejecting newer releases with distinct incompatible Python requirements, then selects an older compatible release."
 
 [root]
 requires = ["a"]
