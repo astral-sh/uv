@@ -100,6 +100,25 @@ jobs:
       contents: read
       id-token: write
 
+  check-cargo-lock-changes:
+    name: "Cargo lockfile changes"
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.repository_owner == 'astral-sh' &&
+        github.event.pull_request.head.repo.full_name != github.repository
+      }}
+    runs-on: github-ubuntu-24.04-x86_64-2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: "Check Cargo lockfile changes"
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/check-cargo-lock-changes.py HEAD^1 HEAD
+
   check-lock:
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
@@ -330,6 +349,7 @@ jobs:
     if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
       - plan
+      - check-cargo-lock-changes
       - check-fmt
       - check-lint
       - check-docs
