@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
-use url::Url;
 use uv_redacted::policy::Raw;
 use uv_redacted::{SafeUrl, SafeUrlError};
 
@@ -30,7 +29,7 @@ impl Service {
     }
 
     /// Validate that the URL scheme is supported.
-    fn check_scheme(url: &Url) -> Result<(), ServiceParseError> {
+    fn check_scheme(url: &SafeUrl) -> Result<(), ServiceParseError> {
         match url.scheme() {
             "https" => Ok(()),
             "http" if matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")) => Ok(()),

@@ -7,7 +7,6 @@ use std::sync::OnceLock;
 use fs_err as fs;
 use thiserror::Error;
 use tracing::warn;
-use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::{EggInfoFilename, ExpandedTags};
@@ -501,8 +500,8 @@ impl InstalledDist {
         )
     }
 
-    /// Return the [`Url`] of the distribution, if it is editable.
-    pub fn as_editable(&self) -> Option<&Url> {
+    /// Return the [`SafeUrl`] of the distribution, if it is editable.
+    pub fn as_editable(&self) -> Option<&SafeUrl> {
         match &self.kind {
             InstalledDistKind::Registry(_) => None,
             InstalledDistKind::Url(dist) => dist.editable.then_some(&dist.url),

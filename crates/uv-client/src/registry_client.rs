@@ -1671,7 +1671,7 @@ impl SimpleDetailMetadata {
         files: Vec<uv_pypi_types::PypiFile>,
         package_name: &PackageName,
         project_status: ProjectStatus,
-        base: &Url,
+        base: &SafeUrl,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 

@@ -1427,6 +1427,27 @@ fn write_wheel_lockfile(context: &TestContext, server: &str, size: u64, hash: &s
     Ok(())
 }
 
+/// Metadata errors from HTTP range requests must redact URL passwords and `sig` query values.
+#[cfg(feature = "test-python")]
+#[test]
+fn remote_wheel_metadata_error_redacts_url() {
+    let context = uv_test::test_context!("3.12");
+    let (server, _guard, _, _) = wheel_server(&context, RangeResponse::Supported, 0);
+    let server = server.replacen("http://", "http://user:password@", 1);
+
+    // The served wheel contains `build_tag` metadata, which does not match the requested name.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--no-index")
+        .arg(format!("tqdm @ {server}/tqdm-1.0.0-py3-none-any.whl?sig=signature&keep=value")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `tqdm @ http://user:****@[LOCALHOST]/tqdm-1.0.0-py3-none-any.whl?sig=****&keep=value`
+      cause: Failed to read metadata: http://user:****@[LOCALHOST]/tqdm-1.0.0-py3-none-any.whl?sig=****&keep=value
+      cause: The .dist-info directory `build_tag-1.0.0` does not start with the normalized package name: tqdm
+    ");
+}
+
 #[test]
 fn direct_url_content_length_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");

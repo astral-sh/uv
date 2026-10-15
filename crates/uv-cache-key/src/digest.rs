@@ -83,7 +83,27 @@ pub fn cache_name(name: &str, max_len: Option<usize>) -> Option<Cow<'_, str>> {
 
 #[cfg(test)]
 mod tests {
+    use url::{ParseError, Url};
+    use uv_redacted::{
+        SafeUrl,
+        policy::{Raw, Stripped},
+    };
+
     use super::*;
+
+    #[test]
+    fn url_policy_preserves_cache_key() -> Result<(), ParseError> {
+        let url = Url::parse("https://user:password@example.com/script.py?sig=signature")?;
+        let expected = cache_digest(&url);
+        let safe_url = SafeUrl::from_url(url);
+        assert_eq!(cache_digest(&safe_url), expected);
+        assert_eq!(
+            cache_digest(&safe_url.clone().with_policy(Stripped)),
+            expected
+        );
+        assert_eq!(cache_digest(&safe_url.with_policy(Raw)), expected);
+        Ok(())
+    }
 
     #[test]
     fn test_cache_name() {

@@ -4,7 +4,6 @@ use std::str::FromStr;
 use http::{HeaderValue, StatusCode};
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
-use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
 use uv_pypi_types::HashAlgorithm;
@@ -31,12 +30,12 @@ pub struct IndexCacheControl {
 
 impl IndexCacheControl {
     /// Return the default Simple API cache control headers for the given index URL, if applicable.
-    fn simple_api_cache_control(_url: &Url) -> Option<HeaderValue> {
+    fn simple_api_cache_control(_url: &SafeUrl) -> Option<HeaderValue> {
         None
     }
 
     /// Return the default files cache control headers for the given index URL, if applicable.
-    fn artifact_cache_control(url: &Url) -> Option<HeaderValue> {
+    fn artifact_cache_control(url: &SafeUrl) -> Option<HeaderValue> {
         let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
             host.eq_ignore_ascii_case("download.pytorch.org")
                 || host.eq_ignore_ascii_case("pypi.nvidia.com")
@@ -494,12 +493,12 @@ impl Index {
         &self.url
     }
 
-    /// Return the raw [`Url`] of the index.
+    /// Return the underlying [`SafeUrl`] of the index.
     pub fn raw_url(&self) -> &SafeUrl {
         self.url.url()
     }
 
-    /// Return the root [`Url`] of the index, if applicable.
+    /// Return the root [`SafeUrl`] of the index, if applicable.
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.

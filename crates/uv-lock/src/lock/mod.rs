@@ -17,7 +17,6 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, instrument, trace};
-use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
@@ -8332,7 +8331,7 @@ enum GitSourceError {
 impl GitSource {
     /// Extracts a Git source reference from the query pairs and the hash
     /// fragment in the given URL.
-    fn from_url(url: &Url) -> Result<Self, GitSourceError> {
+    fn from_url(url: &SafeUrl) -> Result<Self, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
         let mut lfs = GitLfs::Disabled;
@@ -10626,7 +10625,7 @@ mod tests {
 
     #[test]
     fn git_source_rejects_mismatched_exact_revision() -> Result<(), Box<dyn Error>> {
-        let url = Url::parse(
+        let url = SafeUrl::parse(
             "https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
         )?;
         assert_eq!(
@@ -10637,17 +10636,17 @@ mod tests {
             })
         );
 
-        let url = Url::parse(
+        let url = SafeUrl::parse(
             "https://example.com/repository?rev=0DACFD662C64CB4CEB16E6CF65A157A8B715B979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979",
         )?;
         assert!(GitSource::from_url(&url).is_ok());
 
-        let url = Url::parse(
+        let url = SafeUrl::parse(
             "https://example.com/repository?rev=0dacfd6#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
         )?;
         assert!(GitSource::from_url(&url).is_ok());
 
-        let url = Url::parse(
+        let url = SafeUrl::parse(
             "https://example.com/repository?branch=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
         )?;
         assert!(GitSource::from_url(&url).is_ok());

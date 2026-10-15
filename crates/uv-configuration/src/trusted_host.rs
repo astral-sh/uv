@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
-use url::Url;
+use uv_redacted::SafeUrl;
 
 /// A host specification (wildcard, or host, with optional scheme and/or port) for which
 /// certificates are not verified when making HTTPS requests.
@@ -19,8 +19,8 @@ pub enum TrustedHost {
 }
 
 impl TrustedHost {
-    /// Returns `true` if the [`Url`] matches this trusted host.
-    pub fn matches(&self, url: &Url) -> bool {
+    /// Returns `true` if the [`SafeUrl`] matches this trusted host.
+    pub fn matches(&self, url: &SafeUrl) -> bool {
         match self {
             Self::Wildcard => true,
             Self::Host { scheme, host, port } => {
