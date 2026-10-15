@@ -37,7 +37,7 @@ use uv_normalize::{
     DefaultExtras, DefaultGroups, ExtraName, GroupName, InvalidNameError, PackageName,
 };
 use uv_pep440::Version;
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, VerbatimUrl};
+use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
@@ -46,8 +46,8 @@ use uv_warnings::warn_user_once;
 
 use uv_resolver_types::ResolverOutput;
 
-use crate::lock::export::{ExportSelection, ExportableRequirements};
-use crate::lock::{LockErrorKind, Source, WheelTagHint, is_wheel_unreachable};
+use crate::lock::export::{ExportSelection, ExportableRequirements, find_root_package};
+use crate::lock::{Source, WheelTagHint, is_wheel_unreachable};
 use crate::{Installable, LockError};
 
 /// Format an array so that each element is on its own line and has a trailing comma.
@@ -80,8 +80,6 @@ pub enum PylockTomlErrorKind {
     MultiUseMissingGroupMetadata,
     #[error("A multi-use pylock.toml does not support dependency groups with a Python requirement")]
     MultiUseGroupRequiresPython,
-    #[error("A multi-use pylock.toml does not support negative extra markers")]
-    MultiUseNegativeExtraMarker,
     #[error("Multiple active package entries found for `{0}`")]
     DuplicateActivePackage(PackageName),
     #[error(
@@ -847,15 +845,7 @@ impl<'lock> PylockToml {
         {
             return Err(PylockTomlErrorKind::MultiUseWorkspaceRoot);
         }
-        let package = target
-            .lock()
-            .find_by_name(root)
-            .map_err(|_| {
-                LockError::from(LockErrorKind::MultipleRootPackages { name: root.clone() })
-            })?
-            .ok_or_else(|| {
-                LockError::from(LockErrorKind::MissingRootPackage { name: root.clone() })
-            })?;
+        let package = find_root_package(target.lock(), root)?;
         let extras = package
             .provides_extras()
             .iter()
@@ -900,27 +890,6 @@ impl<'lock> PylockToml {
             None
         };
 
-        // A negative marker can become false when a transitive extra is activated, so its
-        // reachability cannot be accumulated by the graph traversal.
-        if target.lock().packages().iter().any(|package| {
-            package.all_dependencies().any(|dependency| {
-                dependency
-                    .simplified_marker
-                    .as_simplified_marker_tree()
-                    .to_dnf()
-                    .into_iter()
-                    .flatten()
-                    .any(|expression| {
-                        if let MarkerExpression::Extra { operator, .. } = expression {
-                            operator == ExtraOperator::NotEqual
-                        } else {
-                            false
-                        }
-                    })
-            })
-        }) {
-            return Err(PylockTomlErrorKind::MultiUseNegativeExtraMarker);
-        }
         let selection =
             ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
         let ExportableRequirements(nodes) = ExportableRequirements::from_lock_impl(
