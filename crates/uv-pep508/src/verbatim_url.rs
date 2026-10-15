@@ -8,6 +8,7 @@ use std::sync::LazyLock;
 
 use arcstr::ArcStr;
 use thiserror::Error;
+#[cfg(feature = "unsafe-url")]
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
@@ -18,7 +19,9 @@ use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::Pep508Url;
 
-/// A wrapper around [`Url`] that preserves the original string.
+/// A wrapper around [`SafeUrl`] that preserves the original string.
+///
+/// The `From<url::Url>` implementation requires the `unsafe-url` feature.
 ///
 /// The serialization policy is stored on the parsed URL. A [`VerbatimUrl`] with
 /// the default [`Unserializable`] policy does not implement [`serde::Serialize`].
@@ -55,6 +58,19 @@ use crate::Pep508Url;
 /// url.serialize_internal(serde_json::value::Serializer)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg_attr(
+    not(feature = "unsafe-url"),
+    doc = r#"
+Without `unsafe-url`, raw URLs cannot be converted directly to [`VerbatimUrl`]:
+
+```compile_fail
+use uv_pep508::VerbatimUrl;
+
+let url = url::Url::parse("https://example.com").unwrap();
+let _: VerbatimUrl = url.into();
+```
+"#
+)]
 #[derive(Clone, Eq)]
 pub struct VerbatimUrl<P: SerializationPolicy = Unserializable> {
     /// The parsed URL.
@@ -373,8 +389,8 @@ impl<P: SerializationPolicy> VerbatimUrl<P> {
 
     /// Convert the [`VerbatimUrl`] into a [`SafeUrl`].
     ///
-    /// To pass the result to an API that requires [`Url`], call [`SafeUrl::into_unsafe_url`].
-    /// Direct conversion to [`Url`] using [`From`] is not supported:
+    /// To pass the result to an API that requires [`url::Url`], call [`SafeUrl::into_unsafe_url`].
+    /// Direct conversion to [`url::Url`] using [`From`] is not supported:
     ///
     /// ```compile_fail
     /// use uv_pep508::VerbatimUrl;
@@ -430,6 +446,7 @@ impl<P: SerializationPolicy> Deref for VerbatimUrl<P> {
     }
 }
 
+#[cfg(feature = "unsafe-url")]
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
         Self::from_url(SafeUrl::from_url(url))
@@ -652,7 +669,7 @@ pub(crate) fn were_vars_expanded(given: &str, expanded: &str) -> bool {
     expanded != given
 }
 
-/// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.
+/// Like [`url::Url::parse`], but only splits the scheme. Derived from the `url` crate.
 pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
     /// <https://url.spec.whatwg.org/#c0-controls-and-space>
     #[inline]
@@ -855,6 +872,19 @@ mod tests {
     use uv_redacted::policy::{Raw, Stripped};
 
     use super::*;
+
+    #[test]
+    #[cfg(feature = "unsafe-url")]
+    fn from_raw_url() {
+        let raw = Url::parse("https://user:password@EXAMPLE.COM/demo.whl?sig=signature").unwrap();
+        let url = VerbatimUrl::from(raw);
+        assert_eq!(
+            url.raw().as_str(),
+            "https://user:password@example.com/demo.whl?sig=signature"
+        );
+        assert_eq!(url.given(), None);
+        assert_snapshot!(url, @"https://user:****@example.com/demo.whl?sig=****");
+    }
 
     #[test]
     #[cfg(feature = "serde")]
