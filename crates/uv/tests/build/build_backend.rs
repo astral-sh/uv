@@ -1087,7 +1087,7 @@ fn license_file_must_be_utf8() -> Result<()> {
     Ok(())
 }
 
-/// License globs must exclude unrelated files, directory symlinks, and dangling symlinks.
+/// License globs must exclude unrelated files and symlinks that do not resolve to regular files.
 #[test]
 fn license_glob_excludes_nonmatching_files() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1129,6 +1129,22 @@ fn license_glob_excludes_nonmatching_files() -> Result<()> {
             "missing",
             context.temp_dir.join("licenses/vendor[1]/dangling-link"),
         )?;
+        context
+            .temp_dir
+            .child("licenses/directory")
+            .create_dir_all()?;
+        fs_err::os::unix::fs::symlink(
+            "../../assets",
+            context.temp_dir.join("licenses/directory/LICENSE.txt"),
+        )?;
+        context
+            .temp_dir
+            .child("licenses/dangling")
+            .create_dir_all()?;
+        fs_err::os::unix::fs::symlink(
+            "missing",
+            context.temp_dir.join("licenses/dangling/LICENSE.txt"),
+        )?;
     }
 
     uv_snapshot!(context.build().arg("--sdist").arg("--wheel").arg("--list"), @"
@@ -1154,6 +1170,43 @@ fn license_glob_excludes_nonmatching_files() -> Result<()> {
     Building wheel...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
+/// Matching directory and dangling symlinks do not satisfy the requirement to match a license file.
+#[test]
+#[cfg(unix)]
+fn license_glob_matching_only_non_files_errors() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        license-files = ["licenses/*"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+    context.temp_dir.child("licenses").create_dir_all()?;
+    context.temp_dir.child("assets").create_dir_all()?;
+    fs_err::os::unix::fs::symlink("../assets", context.temp_dir.join("licenses/directory"))?;
+    fs_err::os::unix::fs::symlink("missing", context.temp_dir.join("licenses/dangling"))?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid project metadata
+      cause: `project.license-files` glob `licenses/*` did not match any files
     ");
 
     Ok(())

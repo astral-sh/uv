@@ -786,17 +786,8 @@ impl PyProjectToml {
                     .strip_prefix(root)
                     .expect("walkdir starts with root");
 
-                if !license_globs.match_file(relative) {
-                    trace!("Not a license files match: {}", relative.user_display());
-                    continue;
-                }
-
-                let file_type = entry.file_type();
-                if !(file_type.is_file() || file_type.is_symlink()) {
-                    trace!(
-                        "Not a file or symlink in license files match: {}",
-                        relative.user_display()
-                    );
+                if !license_globs.match_file(relative) || !entry.path().is_file() {
+                    trace!("Not a license file match: {}", relative.user_display());
                     continue;
                 }
 
