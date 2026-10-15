@@ -174,7 +174,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.15.0-fork.2e501fa4
+          maturin-version: v1.15.0-fork.65b6ccbf
           target: x86_64
           args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
         env:
@@ -279,7 +279,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.15.0-fork.2e501fa4
+          maturin-version: v1.15.0-fork.65b6ccbf
           target: aarch64
           manylinux: 2_17
           args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
@@ -428,7 +428,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           sccache: false
-          maturin-version: v1.15.0-fork.2e501fa4
+          maturin-version: v1.15.0-fork.65b6ccbf
           target: ${{ matrix.platform.target }}
           args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
