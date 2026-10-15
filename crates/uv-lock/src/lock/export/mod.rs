@@ -55,21 +55,24 @@ struct ExportableRequirement<'lock> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
+struct ExportGraph<'lock, 'graph> {
+    graph: Graph<Node<'lock>, Edge<'graph>>,
+    root: NodeIndex,
+    activated_items: FxHashSet<ConflictItem>,
+}
+
 impl<'lock> ExportableRequirements<'lock> {
-    /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
-    ///
-    /// Excluded virtual packages still contribute dependencies.
-    fn from_lock(
+    fn graph<'graph>(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
-        extras: &ExtrasSpecificationWithDefaults,
+        extras: &'graph ExtrasSpecificationWithDefaults,
         groups: &DependencyGroupsWithDefaults,
-        annotate: bool,
-        install_options: &'lock InstallOptions,
-        virtual_packages: VirtualPackages,
-    ) -> Result<Self, LockError> {
+    ) -> Result<ExportGraph<'lock, 'graph>, LockError>
+    where
+        'lock: 'graph,
+    {
         let size_guess = target.lock().packages.len();
-        let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
+        let mut graph = Graph::<Node<'lock>, Edge<'graph>>::with_capacity(size_guess, size_guess);
         let mut node_by_package = vec![None; size_guess];
 
         let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
@@ -309,6 +312,31 @@ impl<'lock> ExportableRequirements<'lock> {
                 }
             }
         }
+
+        Ok(ExportGraph {
+            graph,
+            root,
+            activated_items,
+        })
+    }
+
+    /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
+    ///
+    /// Excluded virtual packages still contribute dependencies.
+    fn from_lock(
+        target: &impl Installable<'lock>,
+        prune: &[PackageName],
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        annotate: bool,
+        install_options: &'lock InstallOptions,
+        virtual_packages: VirtualPackages,
+    ) -> Result<Self, LockError> {
+        let ExportGraph {
+            graph,
+            root,
+            activated_items,
+        } = Self::graph(target, prune, extras, groups)?;
 
         let include_package = |package: &Package| {
             let include_source = match &package.id.source {
