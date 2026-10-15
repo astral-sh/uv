@@ -22,6 +22,7 @@ uv-auth = { workspace = true }
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
+uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-command-support = { workspace = true }
 uv-configuration = { workspace = true }
@@ -35,9 +36,12 @@ uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
+uv-lock = { workspace = true }
+uv-lock-operations = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-preview = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-python-discovery = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolve-operations = { workspace = true }
@@ -49,6 +53,8 @@ uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+async-compression = { workspace = true }
+astral-tokio-tar = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 owo-colors = { workspace = true }

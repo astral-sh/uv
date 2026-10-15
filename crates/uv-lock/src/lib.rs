@@ -1,5 +1,7 @@
 //! Parsing, validation, traversal, and export of lockfiles.
 
+pub mod build;
+
 mod lock;
 
 pub use lock::{
