@@ -56,7 +56,7 @@ jobs:
         run: |
           # cargo-codspeed resolves metadata before passing --locked to Cargo.
           cargo metadata --locked --format-version 1 > /dev/null
-          uv run --only-dev cargo codspeed build --locked -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery --bench git_fetch
+          uv run --only-dev cargo codspeed build --locked -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery --bench git_fetch --bench uv_pep508
 
       - name: "Create artifact archive"
         run: |
