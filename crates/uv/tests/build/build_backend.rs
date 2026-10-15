@@ -1087,6 +1087,52 @@ fn license_file_must_be_utf8() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn license_glob_excludes_nonmatching_files() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        license-files = ["licenses/**/LICENSE.txt"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("licenses/vendor/LICENSE.txt")
+        .write_str("Vendor license")?;
+    context
+        .temp_dir
+        .child("licenses/vendor/thing.bin")
+        .write_binary(&[0xff])?;
+
+    uv_snapshot!(context.build().arg("--sdist").arg("--wheel").arg("--list"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Building project-0.1.0.tar.gz will include the following files:
+    project-0.1.0/PKG-INFO (generated)
+    project-0.1.0/pyproject.toml (generated)
+    project-0.1.0/pyproject.toml.orig (pyproject.toml)
+    project-0.1.0/licenses/vendor/LICENSE.txt (licenses/vendor/LICENSE.txt)
+    project-0.1.0/src/project/__init__.py (src/project/__init__.py)
+    Building project-0.1.0-py3-none-any.whl will include the following files:
+    project/__init__.py (src/project/__init__.py)
+    project-0.1.0.dist-info/licenses/licenses/vendor/LICENSE.txt (licenses/vendor/LICENSE.txt)
+    project-0.1.0.dist-info/WHEEL (generated)
+    project-0.1.0.dist-info/METADATA (generated)
+    ");
+
+    Ok(())
+}
+
 /// Test that a symlinked file (here: license) gets included.
 #[test]
 #[cfg(unix)]

@@ -1,6 +1,7 @@
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex_automata::dfa;
 use regex_automata::dfa::Automaton;
+use std::fs::FileType;
 use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path};
 use tracing::warn;
 
@@ -75,8 +76,8 @@ impl GlobDirFilter {
     /// Whether the path (file or directory) matches any of the globs.
     ///
     /// We include a directory if we are potentially including files it contains.
-    pub fn match_path(&self, path: &Path) -> bool {
-        self.match_directory(path) || self.glob_set.is_match(path)
+    pub fn match_path(&self, path: &Path, file_type: FileType) -> bool {
+        (file_type.is_dir() && self.match_directory(path)) || self.glob_set.is_match(path)
     }
 
     /// Check whether a directory or any of its children can be matched by any of the globs.
@@ -251,7 +252,7 @@ mod tests {
                     .path()
                     .strip_prefix(walkdir_root)
                     .expect("walkdir starts with root");
-                if include_matcher.match_path(relative) {
+                if include_matcher.match_path(relative, entry.file_type()) {
                     // Translate windows paths back to the unix fixture
                     Some(relative.to_str().unwrap().replace(MAIN_SEPARATOR, "/"))
                 } else {

@@ -319,7 +319,9 @@ fn write_source_dist(
             .strip_prefix(source_tree)
             .expect("walkdir starts with root");
 
-        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
+        if !include_matcher.match_path(relative, entry.file_type())
+            || exclude_matcher.is_match(relative)
+        {
             trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }
