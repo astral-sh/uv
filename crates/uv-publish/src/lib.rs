@@ -29,7 +29,7 @@ use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
 use url::Url;
 
-use uv_auth::{Credentials, MissingCredentialsError, Realm};
+use uv_auth::{Credentials, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
@@ -93,20 +93,6 @@ pub enum PublishError {
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
-}
-
-impl PublishError {
-    /// Whether the authentication middleware could not find credentials for the upload.
-    pub fn is_missing_credentials(&self) -> bool {
-        if let Self::PublishSend(_, _, err) = self
-            && let PublishSendError::ReqwestMiddleware(reqwest_middleware::Error::Middleware(err)) =
-                err.as_ref()
-        {
-            err.is::<MissingCredentialsError>()
-        } else {
-            false
-        }
-    }
 }
 
 /// Failure to get the metadata for a specific file.
@@ -658,14 +644,6 @@ impl<'a> PublishSession<'a> {
         self
     }
 
-    /// Return mutable access to user-supplied credentials, excluding trusted publishing tokens.
-    pub fn credentials_mut(&mut self) -> Option<&mut Credentials> {
-        match &mut self.credentials {
-            PublishingCredentials::Supplied(credentials) => Some(credentials),
-            PublishingCredentials::TrustedPublishing(_) => None,
-        }
-    }
-
     /// Expand input globs, associate attestations, and order distributions for publishing.
     ///
     /// This only collects paths. Hashing and content validation happen in [`Self::upload`]
@@ -703,7 +681,7 @@ impl<'a> PublishSession<'a> {
     /// Implements a custom retry and redirect flow since streaming requests cannot be cloned.
     pub async fn upload(
         &mut self,
-        prepared: &PreparedDistribution,
+        prepared: PreparedDistribution,
         reporter: Arc<impl Reporter>,
     ) -> Result<UploadOutcome, PublishError> {
         let (form_metadata, attestations, size) = prepared
@@ -719,7 +697,7 @@ impl<'a> PublishSession<'a> {
         loop {
             let (request, idx) = self
                 .build_upload_request(
-                    prepared,
+                    &prepared,
                     &form_metadata,
                     attestations.as_deref(),
                     &current_registry,
@@ -822,7 +800,7 @@ impl<'a> PublishSession<'a> {
                 Err(err) => {
                     match &err {
                         PublishSendError::Status(..) | PublishSendError::StatusNoBody(..) => {
-                            if self.check_existing(prepared, reporter.clone()).await? {
+                            if self.check_existing(&prepared, reporter.clone()).await? {
                                 // A concurrent upload succeeded, so the right file now exists.
                                 return Ok(UploadOutcome::AlreadyExists);
                             }
@@ -1475,7 +1453,7 @@ mod tests {
         PublishingCredentials, Reporter, UploadOutcome, group_files, source_dist_pkg_info,
     };
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
-    use wiremock::matchers::{basic_auth, method, path};
+    use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct DummyReporter;
@@ -1598,7 +1576,7 @@ mod tests {
             .expect("Valid registry URL");
         let mut session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
-        let result = session.upload(&prepared, Arc::new(DummyReporter)).await;
+        let result = session.upload(prepared, Arc::new(DummyReporter)).await;
         let outcome = match &result {
             Ok(UploadOutcome::Uploaded | UploadOutcome::AlreadyExists) => PublishOutcome::Success,
             Err(_) => PublishOutcome::Failed,
@@ -2228,69 +2206,6 @@ mod tests {
             .finalize(PublishOutcome::DryRun)
             .await
             .expect("Finalization failed");
-    }
-
-    /// Missing credentials can be supplied after the middleware declines to send an upload.
-    #[tokio::test]
-    async fn upload_missing_credentials() {
-        let mock_server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/upload"))
-            .and(basic_auth("ferris", "secret"))
-            .respond_with(ResponseTemplate::new(200))
-            .expect(1)
-            .mount(&mock_server)
-            .await;
-
-        let client = BaseClientBuilder::default()
-            .auth_integration(AuthIntegration::OnlyAuthenticated)
-            .retries(0)
-            .build()
-            .expect("Client should be created");
-        let registry = DisplaySafeUrl::parse(&format!("{}/upload", mock_server.uri()))
-            .expect("Valid registry URL");
-        let mut session = PublishSession::new(
-            registry,
-            PublishingCredentials::Supplied(Credentials::basic(None, None)),
-            &client,
-            &client,
-            client.retry_policy(),
-            TarBackend::default(),
-        );
-        let prepared = PublishSession::prepare(
-            vec!["../../test/links/ok-1.0.0-py3-none-any.whl".to_string()],
-            false,
-        )
-        .expect("Distribution should be found")
-        .pop()
-        .expect("One distribution");
-
-        let err = session
-            .upload(&prepared, Arc::new(DummyReporter))
-            .await
-            .expect_err("Missing credentials");
-        assert!(err.is_missing_credentials());
-        assert!(
-            mock_server
-                .received_requests()
-                .await
-                .expect("Requests should be recorded")
-                .is_empty()
-        );
-
-        *session.credentials_mut().expect("Supplied credentials") =
-            Credentials::basic(Some("ferris".to_string()), Some("secret".to_string()));
-        assert_eq!(
-            session
-                .upload(&prepared, Arc::new(DummyReporter))
-                .await
-                .expect("Upload should succeed"),
-            UploadOutcome::Uploaded
-        );
-        session
-            .finalize(PublishOutcome::Success)
-            .await
-            .expect("Finalization should succeed");
     }
 
     #[tokio::test]

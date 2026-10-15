@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 use tracing::{debug, info, trace};
-use uv_auth::Credentials;
+use uv_auth::{Credentials, CredentialsPrompt};
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -122,6 +122,7 @@ pub async fn publish(
         .keyring(keyring_provider)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
+        .credentials_prompt(CredentialsPrompt::new(prompt_username_and_password))
         // Disable automatic redirect, as the streaming publish request is not cloneable.
         // Rely on custom redirect logic instead.
         .redirect(RedirectPolicy::NoRedirect)
@@ -255,24 +256,7 @@ async fn publish_file(
         return Ok(());
     }
 
-    let uploaded = match session.upload(&prepared, reporter.clone()).await {
-        Ok(uploaded) => uploaded,
-        Err(err) => {
-            // The middleware searches the credential cache and providers before reporting
-            // missing credentials. In that case, it has not sent the request.
-            if err.is_missing_credentials()
-                && let Some(credentials) = session.credentials_mut()
-                && credentials.username().is_none()
-                && credentials.password().is_none()
-                && let Some(prompted) = prompt_username_and_password()?
-            {
-                *credentials = prompted;
-                session.upload(&prepared, reporter).await?
-            } else {
-                return Err(err.into());
-            }
-        }
-    };
+    let uploaded = session.upload(prepared, reporter).await?;
     info!("Upload succeeded");
 
     match uploaded {
@@ -314,8 +298,8 @@ async fn publish_file(
 /// - If the keyring is enabled, the keyring entry for the URL and username
 /// - If trusted publishing is available, the trusted publishing token
 ///
-/// If no credentials are found, the auth middleware does a final check for cached credentials and
-/// otherwise errors without sending the request. The caller can then prompt for credentials.
+/// If no credentials are found, the auth middleware checks the credential cache and providers
+/// before invoking the interactive prompt.
 ///
 /// Returns the publish URL and [`PublishingCredentials`].
 async fn gather_credentials(

@@ -16,7 +16,7 @@ use crate::providers::{
     AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider,
 };
 use crate::{
-    CredentialsCache, KeyringProvider,
+    CredentialsCache, CredentialsPrompt, KeyringProvider,
     cache::FetchUrl,
     credentials::{
         Authentication, AuthenticationError, Credentials, CredentialsFromUrlError, Username,
@@ -25,11 +25,6 @@ use crate::{
     realm::Realm,
 };
 use crate::{Index, TextCredentialStore};
-
-/// No credentials could be found for a request that requires authentication.
-#[derive(Debug, thiserror::Error)]
-#[error("Missing credentials for: {0}")]
-pub struct MissingCredentialsError(DisplaySafeUrl);
 
 /// Cached check for whether we're running in Dependabot.
 static IS_DEPENDABOT: LazyLock<bool> =
@@ -188,6 +183,8 @@ pub struct AuthMiddleware {
     /// Set all endpoints as needing authentication. We never try to send an
     /// unauthenticated request, avoiding cloning an uncloneable request.
     only_authenticated: bool,
+    /// Optional interactive fallback for requests that require authentication.
+    credentials_prompt: Option<CredentialsPrompt>,
     /// Cached S3 credentials to avoid running the credential helper multiple times.
     s3_credential_state: Mutex<S3CredentialState>,
     /// Cached GCS credentials to avoid running the credential helper multiple times.
@@ -213,6 +210,7 @@ impl AuthMiddleware {
             cache: Arc::new(CredentialsCache::default()),
             indexes: Indexes::new(),
             only_authenticated: false,
+            credentials_prompt: None,
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
             gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
             azure_credential_state: Mutex::new(AzureCredentialState::Uninitialized),
@@ -289,6 +287,13 @@ impl AuthMiddleware {
     #[must_use]
     pub fn with_only_authenticated(mut self, only_authenticated: bool) -> Self {
         self.only_authenticated = only_authenticated;
+        self
+    }
+
+    /// Configure an optional prompt for missing credentials on requests that require authentication.
+    #[must_use]
+    pub fn with_credentials_prompt(mut self, prompt: Option<CredentialsPrompt>) -> Self {
+        self.credentials_prompt = prompt;
         self
     }
 
@@ -512,8 +517,24 @@ impl Middleware for AuthMiddleware {
 
         if let Some(response) = response {
             Ok(response)
+        } else if !matches!(auth_policy, AuthPolicy::Never)
+            && let Some(prompt) = &self.credentials_prompt
+            && let Some(credentials) = prompt.credentials().await.map_err(Error::Middleware)?
+        {
+            // The request has not been sent, so its streaming body is still available.
+            retry_request = credentials.authenticate(retry_request).await?;
+            self.complete_request(
+                Some(credentials),
+                retry_request,
+                extensions,
+                next,
+                auth_policy,
+            )
+            .await
         } else {
-            Err(Error::Middleware(MissingCredentialsError(url).into()))
+            Err(Error::Middleware(format_err!(
+                "Missing credentials for: {url}"
+            )))
         }
     }
 }
@@ -896,6 +917,7 @@ fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> Displ
 mod tests {
     use std::assert_matches;
     use std::io::Write;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use http::Method;
     use reqwest::Client;
@@ -961,6 +983,157 @@ mod tests {
                 .await?
                 .status(),
             401
+        );
+
+        Ok(())
+    }
+
+    /// Prompted credentials survive a failed request without prompting again on retry.
+    #[test(tokio::test)]
+    async fn test_credentials_prompt_retry() -> Result<(), Error> {
+        static PROMPTS: AtomicUsize = AtomicUsize::new(0);
+
+        let server = start_test_server("user", "password").await;
+        Mock::given(method("GET"))
+            .and(path_regex("/unavailable"))
+            .and(basic_auth("user", "password"))
+            .respond_with(ResponseTemplate::new(503))
+            .with_priority(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_netrc(None)
+                    .with_text_store(None)
+                    .with_only_authenticated(true)
+                    .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
+                        PROMPTS.fetch_add(1, Ordering::SeqCst);
+                        Ok(Some(Credentials::basic(
+                            Some("user".to_string()),
+                            Some("password".to_string()),
+                        )))
+                    }))),
+            )
+            .build();
+
+        assert_eq!(
+            client
+                .get(format!("{}/unavailable", server.uri()))
+                .send()
+                .await?
+                .status(),
+            503
+        );
+        assert_eq!(client.get(server.uri()).send().await?.status(), 200);
+        assert_eq!(PROMPTS.load(Ordering::SeqCst), 1);
+
+        Ok(())
+    }
+
+    /// Explicit credentials must not be replaced by interactive input, even when incomplete.
+    #[test(tokio::test)]
+    async fn test_credentials_prompt_explicit_credentials() -> Result<(), Error> {
+        let server = start_test_server("user", "password").await;
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_netrc(None)
+                    .with_text_store(None)
+                    .with_only_authenticated(true)
+                    .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
+                        Err(anyhow!("Should not prompt for explicit credentials"))
+                    }))),
+            )
+            .build();
+
+        assert_eq!(
+            client
+                .get(server.uri())
+                .basic_auth("user", Some("invalid"))
+                .send()
+                .await?
+                .status(),
+            401
+        );
+        assert_eq!(
+            client
+                .get(server.uri())
+                .basic_auth("user", None::<&str>)
+                .send()
+                .await?
+                .status(),
+            401
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_credentials_prompt_unavailable() -> Result<(), Error> {
+        let server = start_test_server("user", "password").await;
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_netrc(None)
+                    .with_text_store(None)
+                    .with_only_authenticated(true)
+                    .with_credentials_prompt(Some(CredentialsPrompt::new(|| Ok(None)))),
+            )
+            .build();
+
+        let err = client
+            .get(server.uri())
+            .send()
+            .await
+            .expect_err("A request without credentials must not be sent");
+        insta::with_settings!({filters => [(r"http://127.0.0.1:\d+", "http://[LOCALHOST]")]}, {
+            insta::assert_snapshot!(err, @"Missing credentials for: http://[LOCALHOST]/");
+        });
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("Recorded requests")
+                .is_empty()
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_credentials_prompt_auth_policy_never() -> Result<(), Error> {
+        let server = start_test_server("user", "password").await;
+        let indexes = indexes_for(&Url::parse(&server.uri())?, AuthPolicy::Never);
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_netrc(None)
+                    .with_text_store(None)
+                    .with_indexes(indexes)
+                    .with_only_authenticated(true)
+                    .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
+                        Err(anyhow!("Should not prompt when authentication is disabled"))
+                    }))),
+            )
+            .build();
+
+        let err = client
+            .get(server.uri())
+            .send()
+            .await
+            .expect_err("A request without credentials must not be sent");
+        insta::with_settings!({filters => [(r"http://127.0.0.1:\d+", "http://[LOCALHOST]")]}, {
+            insta::assert_snapshot!(err, @"Missing credentials for: http://[LOCALHOST]/");
+        });
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("Recorded requests")
+                .is_empty()
         );
 
         Ok(())
