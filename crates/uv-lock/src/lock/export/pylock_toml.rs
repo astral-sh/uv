@@ -1295,55 +1295,7 @@ impl<'lock> PylockToml {
                 .into());
             }
 
-            match (
-                package.wheels.is_some(),
-                package.sdist.is_some(),
-                package.directory.is_some(),
-                package.vcs.is_some(),
-                package.archive.is_some(),
-            ) {
-                // `packages.wheels` is mutually exclusive with `packages.directory`, `packages.vcs`, and `packages.archive`.
-                (true, _, true, _, _) => {
-                    return Err(
-                        PylockTomlErrorKind::WheelWithDirectory(package.name.clone()).into(),
-                    );
-                }
-                (true, _, _, true, _) => {
-                    return Err(PylockTomlErrorKind::WheelWithVcs(package.name.clone()).into());
-                }
-                (true, _, _, _, true) => {
-                    return Err(PylockTomlErrorKind::WheelWithArchive(package.name.clone()).into());
-                }
-                // `packages.sdist` is mutually exclusive with `packages.directory`, `packages.vcs`, and `packages.archive`.
-                (_, true, true, _, _) => {
-                    return Err(
-                        PylockTomlErrorKind::SdistWithDirectory(package.name.clone()).into(),
-                    );
-                }
-                (_, true, _, true, _) => {
-                    return Err(PylockTomlErrorKind::SdistWithVcs(package.name.clone()).into());
-                }
-                (_, true, _, _, true) => {
-                    return Err(PylockTomlErrorKind::SdistWithArchive(package.name.clone()).into());
-                }
-                // `packages.directory` is mutually exclusive with `packages.vcs`, and `packages.archive`.
-                (_, _, true, true, _) => {
-                    return Err(PylockTomlErrorKind::DirectoryWithVcs(package.name.clone()).into());
-                }
-                (_, _, true, _, true) => {
-                    return Err(
-                        PylockTomlErrorKind::DirectoryWithArchive(package.name.clone()).into(),
-                    );
-                }
-                // `packages.vcs` is mutually exclusive with `packages.archive`.
-                (_, _, _, true, true) => {
-                    return Err(PylockTomlErrorKind::VcsWithArchive(package.name.clone()).into());
-                }
-                (false, false, false, false, false) => {
-                    return Err(PylockTomlErrorKind::MissingSource(package.name.clone()).into());
-                }
-                _ => {}
-            }
+            package.validate_source()?;
 
             // Validate every active wheel before selecting the compatible candidate. Otherwise an
             // incompatible or malformed wheel can be silently ignored when an sdist is present.
@@ -1482,6 +1434,37 @@ impl<'lock> PylockToml {
 }
 
 impl PylockTomlPackage {
+    /// Check that the package declares exactly one compatible source kind.
+    fn validate_source(&self) -> Result<(), PylockTomlErrorKind> {
+        match (
+            self.wheels.is_some(),
+            self.sdist.is_some(),
+            self.directory.is_some(),
+            self.vcs.is_some(),
+            self.archive.is_some(),
+        ) {
+            (true, _, true, _, _) => {
+                Err(PylockTomlErrorKind::WheelWithDirectory(self.name.clone()))
+            }
+            (true, _, _, true, _) => Err(PylockTomlErrorKind::WheelWithVcs(self.name.clone())),
+            (true, _, _, _, true) => Err(PylockTomlErrorKind::WheelWithArchive(self.name.clone())),
+            (_, true, true, _, _) => {
+                Err(PylockTomlErrorKind::SdistWithDirectory(self.name.clone()))
+            }
+            (_, true, _, true, _) => Err(PylockTomlErrorKind::SdistWithVcs(self.name.clone())),
+            (_, true, _, _, true) => Err(PylockTomlErrorKind::SdistWithArchive(self.name.clone())),
+            (_, _, true, true, _) => Err(PylockTomlErrorKind::DirectoryWithVcs(self.name.clone())),
+            (_, _, true, _, true) => {
+                Err(PylockTomlErrorKind::DirectoryWithArchive(self.name.clone()))
+            }
+            (_, _, _, true, true) => Err(PylockTomlErrorKind::VcsWithArchive(self.name.clone())),
+            (false, false, false, false, false) => {
+                Err(PylockTomlErrorKind::MissingSource(self.name.clone()))
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Convert the [`PylockTomlPackage`] to a TOML [`Table`].
     fn to_toml(&self) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
@@ -1885,19 +1868,12 @@ impl PylockTomlArchive {
         name: &PackageName,
         version: Option<&Version>,
     ) -> Result<Dist, PylockTomlErrorKind> {
+        let filename = self.filename(name)?;
+        let ext = DistExtension::from_path(filename.as_ref())?;
         if let Some(path) = self.path.as_ref() {
-            let filename = path
-                .as_ref()
-                .file_name()
-                .and_then(OsStr::to_str)
-                .ok_or_else(|| {
-                    PylockTomlErrorKind::PathMissingFilename(Box::<Path>::from(path.clone()))
-                })?;
-
-            let ext = DistExtension::from_path(filename)?;
             match ext {
                 DistExtension::Wheel => {
-                    let filename = WheelFilename::from_str(filename)?;
+                    let filename = WheelFilename::from_str(&filename)?;
                     validate_wheel_filename(&filename, name, version)?;
                     let install_path = install_path.join(path);
                     validate_path_size(&install_path, self.size)?;
@@ -1924,11 +1900,6 @@ impl PylockTomlArchive {
                 }
             }
         } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
-            let filename = url
-                .filename()
-                .map_err(|_| PylockTomlErrorKind::UrlMissingFilename(url.clone()))?;
-
-            let ext = DistExtension::from_path(filename.as_ref())?;
             match ext {
                 DistExtension::Wheel => {
                     let filename = WheelFilename::from_str(&filename)?;
@@ -1956,29 +1927,28 @@ impl PylockTomlArchive {
         }
     }
 
-    /// Returns `true` if the [`PylockTomlArchive`] is a wheel.
-    fn is_wheel(&self, name: &PackageName) -> Result<bool, PylockTomlErrorKind> {
+    /// Return the filename for this archive.
+    fn filename(&self, name: &PackageName) -> Result<Cow<'_, str>, PylockTomlErrorKind> {
         if let Some(path) = self.path.as_ref() {
-            let filename = path
-                .as_ref()
+            path.as_ref()
                 .file_name()
                 .and_then(OsStr::to_str)
+                .map(Cow::Borrowed)
                 .ok_or_else(|| {
                     PylockTomlErrorKind::PathMissingFilename(Box::<Path>::from(path.clone()))
-                })?;
-
-            let ext = DistExtension::from_path(filename)?;
-            Ok(matches!(ext, DistExtension::Wheel))
+                })
         } else if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
-            let filename = url
-                .filename()
-                .map_err(|_| PylockTomlErrorKind::UrlMissingFilename(url.clone()))?;
-
-            let ext = DistExtension::from_path(filename.as_ref())?;
-            Ok(matches!(ext, DistExtension::Wheel))
+            url.filename()
+                .map(|filename| Cow::Owned(filename.to_string()))
+                .map_err(|_| PylockTomlErrorKind::UrlMissingFilename(url.clone()))
         } else {
             Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()))
         }
+    }
+
+    /// Returns `true` if the [`PylockTomlArchive`] is a wheel.
+    fn is_wheel(&self, name: &PackageName) -> Result<bool, PylockTomlErrorKind> {
+        Ok(DistExtension::from_path(self.filename(name)?.as_ref())? == DistExtension::Wheel)
     }
 }
 
