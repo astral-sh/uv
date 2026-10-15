@@ -357,6 +357,13 @@ root.mainloop()
 PS> uv run example.pyw
 ```
 
+Use `uvw` instead if you want to avoid opening a console window for `uv` itself, e.g., when running
+a GUI in the background. `uvw` is a Windows-only alias for `uv` and accepts all the same options.
+
+```console
+PS> uvw run example.pyw
+```
+
 ![Run Result](../assets/uv_gui_script_hello_world.png){: style="height:50px;width:150px"}
 
 Similarly, it works with dependencies as well:
@@ -382,6 +389,12 @@ sys.exit(app.exec_())
 
 ```console
 PS> uv run --with PyQt5 example_pyqt.pyw
+```
+
+For GUI scripts that do not use the `.pyw` extension, use `--gui-script`:
+
+```console
+PS> uvw run --gui-script example.py
 ```
 
 ![Run Result](../assets/uv_gui_script_hello_world_pyqt.png){: style="height:50px;width:150px"}
