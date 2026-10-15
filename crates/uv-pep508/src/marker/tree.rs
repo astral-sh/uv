@@ -606,6 +606,14 @@ pub enum ContainerOperator {
 }
 
 impl ContainerOperator {
+    /// Negates this operator.
+    pub(crate) fn negate(self) -> Self {
+        match self {
+            Self::In => Self::NotIn,
+            Self::NotIn => Self::In,
+        }
+    }
+
     /// Creates a [`ContainerOperator`] from an equivalent [`MarkerOperator`].
     ///
     /// Returns `None` if the operator is not supported for containers.
