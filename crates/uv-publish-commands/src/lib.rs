@@ -116,13 +116,14 @@ pub async fn publish(
     //   shouldn't try cloning the request to make an unauthenticated request first, but we want
     //   keyring integration. For trusted publishing, we use an OIDC auth routine without keyring
     //   or other auth integration.
+    let credentials_prompt = CredentialsPrompt::new(prompt_username_and_password);
     let upload_client = client_builder
         .clone()
         .retries(0)
         .keyring(keyring_provider)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
-        .credentials_prompt(CredentialsPrompt::new(prompt_username_and_password))
+        .credentials_prompt(credentials_prompt.clone())
         // Disable automatic redirect, as the streaming publish request is not cloneable.
         // Rely on custom redirect logic instead.
         .redirect(RedirectPolicy::NoRedirect)
@@ -157,7 +158,8 @@ pub async fn publish(
         &oidc_client,
         client_builder.retry_policy(),
         TarBackend::from_env(),
-    );
+    )
+    .with_credentials_prompt(credentials_prompt);
     if let Some(index_url) = check_url {
         let registry_client_builder =
             RegistryClientBuilder::new(client_builder.clone(), cache.clone())

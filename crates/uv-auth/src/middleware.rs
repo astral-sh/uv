@@ -483,15 +483,29 @@ impl Middleware for AuthMiddleware {
 
         // Then, fetch from external services.
         // Here, we use the username from the cache if present.
-        if let Some(credentials) = self
+        let mut fetched_credentials = self
             .fetch_credentials(
                 credentials.as_deref(),
                 retry_request_url,
                 index,
                 auth_policy,
             )
-            .await?
+            .await?;
+
+        // A discovered username alone cannot satisfy a request that requires authentication.
+        // Give the prompt a chance before sending either missing or incomplete credentials.
+        if must_authenticate
+            && !matches!(auth_policy, AuthPolicy::Never)
+            && !fetched_credentials
+                .as_ref()
+                .is_some_and(|credentials| credentials.is_authenticated())
+            && let Some(prompt) = &self.credentials_prompt
+            && let Some(credentials) = prompt.credentials().await.map_err(Error::middleware)?
         {
+            fetched_credentials = Some(Arc::new(Authentication::from(credentials)));
+        }
+
+        if let Some(credentials) = fetched_credentials {
             retry_request = credentials.authenticate(retry_request).await?;
             trace!("Retrying request for `{url}` with {credentials:?}");
             return self
@@ -517,20 +531,6 @@ impl Middleware for AuthMiddleware {
 
         if let Some(response) = response {
             Ok(response)
-        } else if !matches!(auth_policy, AuthPolicy::Never)
-            && let Some(prompt) = &self.credentials_prompt
-            && let Some(credentials) = prompt.credentials().await.map_err(Error::middleware)?
-        {
-            // The request has not been sent, so its streaming body is still available.
-            retry_request = credentials.authenticate(retry_request).await?;
-            self.complete_request(
-                Some(credentials),
-                retry_request,
-                extensions,
-                next,
-                auth_policy,
-            )
-            .await
         } else {
             Err(Error::Middleware(format_err!(
                 "Missing credentials for: {url}"

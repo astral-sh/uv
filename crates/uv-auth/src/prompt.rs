@@ -6,7 +6,6 @@ use tokio::sync::OnceCell;
 use tokio::task::JoinError;
 
 use crate::Credentials;
-use crate::credentials::Authentication;
 
 /// A failure to read credentials or run the credential prompt.
 #[derive(Debug, Error)]
@@ -26,7 +25,7 @@ pub enum CredentialsPromptError {
 #[derive(Debug, Clone)]
 pub struct CredentialsPrompt {
     callback: fn() -> Result<Option<Credentials>, CredentialsPromptError>,
-    credentials: Arc<OnceCell<Option<Arc<Authentication>>>>,
+    credentials: Arc<OnceCell<Option<Credentials>>>,
 }
 
 impl CredentialsPrompt {
@@ -38,15 +37,15 @@ impl CredentialsPrompt {
         }
     }
 
+    /// Return credentials already entered through this prompt, without prompting.
+    pub fn get(&self) -> Option<&Credentials> {
+        self.credentials.get().and_then(Option::as_ref)
+    }
+
     /// Prompt on a blocking thread, retaining the response for subsequent requests.
-    pub(crate) async fn credentials(
-        &self,
-    ) -> Result<Option<Arc<Authentication>>, CredentialsPromptError> {
+    pub async fn credentials(&self) -> Result<Option<Credentials>, CredentialsPromptError> {
         self.credentials
-            .get_or_try_init(|| async {
-                let credentials = tokio::task::spawn_blocking(self.callback).await??;
-                Ok(credentials.map(Authentication::from).map(Arc::new))
-            })
+            .get_or_try_init(|| async { tokio::task::spawn_blocking(self.callback).await? })
             .await
             .cloned()
     }
