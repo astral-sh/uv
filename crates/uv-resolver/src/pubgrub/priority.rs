@@ -163,6 +163,7 @@ impl PubGrubPriorities {
     /// for the package.
     pub(crate) fn mark_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
+            // This package has a fixed root priority.
             return false;
         };
 
