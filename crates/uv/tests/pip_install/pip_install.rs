@@ -15999,6 +15999,28 @@ fn pep_751_lock_version() -> Result<()> {
 }
 
 #[test]
+fn pep_751_incompatible_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        environments = ["python_version < '3.12'"]
+        packages = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The target environment is not supported by the lockfile
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_package_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

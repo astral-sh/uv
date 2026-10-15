@@ -64,6 +64,8 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
+    #[error("The target environment is not supported by the lockfile")]
+    IncompatibleEnvironment,
     #[error("Multiple active package entries found for `{0}`")]
     DuplicateActivePackage(PackageName),
     #[error(
@@ -250,6 +252,8 @@ pub struct PylockToml {
     #[serde(deserialize_with = "deserialize_lock_version")]
     lock_version: Version,
     created_by: String,
+    #[serde(skip_serializing)]
+    environments: Option<Vec<MarkerTree>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_python: Option<RequiresPython>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -686,6 +690,7 @@ impl<'lock> PylockToml {
         Ok(Self {
             lock_version,
             created_by,
+            environments: None,
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
@@ -1054,6 +1059,7 @@ impl<'lock> PylockToml {
         Ok(Self {
             lock_version,
             created_by,
+            environments: None,
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
@@ -1231,6 +1237,14 @@ impl<'lock> PylockToml {
         tags: &Tags,
         build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
+        if let Some(environments) = &self.environments
+            && !environments
+                .iter()
+                .any(|marker| marker.evaluate(markers, &[]))
+        {
+            return Err(PylockTomlErrorKind::IncompatibleEnvironment.into());
+        }
+
         // Convert the extras and dependency groups specifications to a concrete environment.
         let mut graph =
             petgraph::graph::DiGraph::with_capacity(self.packages.len(), self.packages.len());
