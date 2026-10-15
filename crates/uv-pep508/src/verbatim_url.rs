@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use arcstr::ArcStr;
-use regex::regex;
 use thiserror::Error;
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
@@ -556,13 +555,38 @@ pub fn expand_env_vars(s: &str) -> Cow<'_, str> {
         project_root.to_string_lossy().to_string()
     });
 
-    regex!(r"(?P<var>\$\{(?P<name>[A-Z0-9_]+)})").replace_all(s, |caps: &regex::Captures<'_>| {
-        let name = caps.name("name").unwrap().as_str();
-        std::env::var(name).unwrap_or_else(|_| match name {
-            "PROJECT_ROOT" => PROJECT_ROOT_FRAGMENT.to_string(),
-            _ => caps["var"].to_owned(),
-        })
-    })
+    let mut expanded = None;
+    let mut previous_end = 0;
+    for (start, _) in s.match_indices("${") {
+        let remaining = &s[start + 2..];
+        let Some(length) = remaining
+            .bytes()
+            .position(|byte| !byte.is_ascii_uppercase() && !byte.is_ascii_digit() && byte != b'_')
+        else {
+            continue;
+        };
+        if length == 0 || remaining.as_bytes()[length] != b'}' {
+            continue;
+        }
+
+        let name = &remaining[..length];
+        let end = start + 2 + length + 1;
+        let expanded = expanded.get_or_insert_with(|| String::with_capacity(s.len()));
+        expanded.push_str(&s[previous_end..start]);
+        match std::env::var(name) {
+            Ok(value) => expanded.push_str(&value),
+            Err(_) if name == "PROJECT_ROOT" => expanded.push_str(&PROJECT_ROOT_FRAGMENT),
+            Err(_) => expanded.push_str(&s[start..end]),
+        }
+        previous_end = end;
+    }
+
+    if let Some(mut expanded) = expanded {
+        expanded.push_str(&s[previous_end..]);
+        Cow::Owned(expanded)
+    } else {
+        Cow::Borrowed(s)
+    }
 }
 
 /// Returns `true` if [`expand_env_vars`] changed the given value.
@@ -964,6 +988,9 @@ mod tests {
                 ("BAZ", Some("baz")),
                 ("Not-Valid", Some("Not-Valid")),
                 ("TEST_1", Some("Test 1")),
+                ("1", Some("one")),
+                ("EMPTY", Some("")),
+                ("LITERAL", Some("${BAR}")),
                 ("PROJECT_ROOT", None),
             ],
             || {
@@ -983,6 +1010,7 @@ mod tests {
                     Cow::Borrowed("${Not-Valid}")
                 );
                 assert_eq!(expand_env_vars("${}"), Cow::Borrowed("${}"));
+                assert_eq!(expand_env_vars("${BÁR}"), Cow::Borrowed("${BÁR}"));
 
                 // Missing
                 assert_eq!(expand_env_vars("${FOO}"), "${FOO}");
@@ -1006,6 +1034,12 @@ mod tests {
 
                 // Weird
                 assert_eq!(expand_env_vars("${${TEST_1}}"), "${Test 1}");
+                assert_eq!(expand_env_vars("${INVALID-${BAR}}"), "${INVALID-bar}");
+                assert_eq!(expand_env_vars("é${BAR}🦀${BAZ}"), "ébar🦀baz");
+                assert_eq!(expand_env_vars("${BAR}${BAZ"), "bar${BAZ");
+                assert_eq!(expand_env_vars("${1}"), "one");
+                assert_eq!(expand_env_vars("${EMPTY}"), "");
+                assert_eq!(expand_env_vars("${LITERAL}"), "${BAR}");
 
                 // PROJECT_ROOT
                 let cwd = std::env::current_dir().unwrap();
