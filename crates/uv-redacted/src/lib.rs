@@ -128,11 +128,20 @@ fn has_credential_like_pattern(s: &str) -> bool {
 impl SafeUrl {
     #[inline]
     pub fn parse(input: &str) -> Result<Self, SafeUrlError> {
-        let url = Url::parse(input)?;
+        let url = Self::parse_relaxed(input)?;
 
         Self::reject_ambiguous_credentials(input, &url)?;
 
-        Ok(Self(url, PhantomData))
+        Ok(url)
+    }
+
+    /// Parse a URL using [`Url::parse`] without the ambiguous-credential check.
+    ///
+    /// Unlike [`Self::parse`], this accepts ambiguous inputs whose path or fragment
+    /// may contain credentials. Those parts are not redacted when formatted.
+    #[inline]
+    pub fn parse_relaxed(input: &str) -> Result<Self, url::ParseError> {
+        Url::parse(input).map(Self::from_url)
     }
 
     /// Reject some ambiguous cases, e.g., `https://user/name:password@domain/a/b/c`
@@ -510,6 +519,20 @@ mod tests {
     use insta::assert_debug_snapshot;
 
     use super::*;
+
+    #[test]
+    fn parse_relaxed() -> Result<(), url::ParseError> {
+        let input = "https://user/name:password@example.com/project";
+        let url = SafeUrl::parse_relaxed(input)?;
+        assert_eq!(url.host_str(), Some("user"));
+        assert_eq!(url.path(), "/name:password@example.com/project");
+        insta::assert_snapshot!(SafeUrl::parse(input).unwrap_err(), @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@example.com/project");
+        assert_eq!(
+            SafeUrl::parse_relaxed("https://").unwrap_err(),
+            url::ParseError::EmptyHost
+        );
+        Ok(())
+    }
 
     #[test]
     fn from_url_no_credentials() {

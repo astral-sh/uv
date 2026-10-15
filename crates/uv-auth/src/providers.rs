@@ -6,7 +6,7 @@ use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use tracing::debug;
-use url::{ParseError, Url};
+use url::ParseError;
 
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::SafeUrl;
@@ -196,7 +196,7 @@ fn endpoint_url(env_var: &str) -> Result<Option<SafeUrl>, ParseError> {
     let Some(endpoint_url) = std::env::var(env_var).ok() else {
         return Ok(None);
     };
-    Url::parse(&endpoint_url).map(SafeUrl::from_url).map(Some)
+    SafeUrl::parse_relaxed(&endpoint_url).map(Some)
 }
 
 /// Returns `true` if `url` is within the configured S3, GCS, or Azure-compatible endpoint URL.

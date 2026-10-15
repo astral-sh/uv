@@ -3,7 +3,6 @@ use std::fmt::Debug;
 
 use same_file::is_same_file;
 use tracing::{debug, trace};
-use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
@@ -18,6 +17,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{AbiTag, IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
+use uv_redacted::SafeUrl;
 
 use crate::InstallationStrategy;
 
@@ -334,7 +334,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
 
-                let Some(installed_path) = Url::parse(installed_url)
+                let Some(installed_path) = SafeUrl::parse_relaxed(installed_url)
                     .ok()
                     .and_then(|url| url.to_file_path().ok())
                 else {
@@ -401,7 +401,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                let Some(installed_path) = Url::parse(installed_url)
+                let Some(installed_path) = SafeUrl::parse_relaxed(installed_url)
                     .ok()
                     .and_then(|url| url.to_file_path().ok())
                 else {
