@@ -1240,7 +1240,7 @@ impl<'lock> PylockToml {
         if let Some(environments) = &self.environments
             && !environments
                 .iter()
-                .any(|marker| marker.evaluate_pep751(markers, extras, groups))
+                .any(|marker| marker.evaluate(markers, &[]))
         {
             return Err(PylockTomlErrorKind::IncompatibleEnvironment.into());
         }
