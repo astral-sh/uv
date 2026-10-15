@@ -12,7 +12,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{
     DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
 };
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra};
 use uv_pypi_types::{ConflictItem, ConflictSet, Conflicts};
 
@@ -26,7 +26,7 @@ pub(crate) use crate::lock::export::metadata::{
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::lock::{LockErrorKind, PackageIndex, Source};
-use crate::{Installable, InstallableRootKind, LockError, Package};
+use crate::{Installable, InstallableRootKind, Lock, LockError, Package};
 
 pub mod cyclonedx_json;
 mod metadata;
@@ -55,9 +55,12 @@ struct ExportableRequirement<'lock> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
+/// How to represent selected extras and dependency groups in exported requirements.
 #[derive(Clone, Copy)]
 enum ExportSelection<'a> {
+    /// Resolve selections at export time.
     Activated,
+    /// Retain selections as PEP 751 markers for installation.
     MarkSelections {
         default_groups: &'a DependencyGroupsWithDefaults,
         synthetic_default: Option<&'a GroupName>,
@@ -153,15 +156,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 continue;
             }
 
-            let dist = target
-                .lock()
-                .find_by_name(root_name)
-                .map_err(|_| LockErrorKind::MultipleRootPackages {
-                    name: root_name.clone(),
-                })?
-                .ok_or_else(|| LockErrorKind::MissingRootPackage {
-                    name: root_name.clone(),
-                })?;
+            let dist = find_root_package(target.lock(), root_name)?;
 
             if root_kind == InstallableRootKind::Production && groups.prod() {
                 // Track the activated package in the list of known conflicts.
@@ -391,6 +386,25 @@ impl<'lock> ExportableRequirements<'lock> {
             }
         }
 
+        // Multi-use export rejects negative extra markers on selected edges.
+        if selection.marks_selections()
+            && graph.edge_weights().any(|edge| {
+                edge.marker()
+                    .to_dnf()
+                    .into_iter()
+                    .flatten()
+                    .any(|expression| {
+                        if let MarkerExpression::Extra { operator, .. } = expression {
+                            operator == ExtraOperator::NotEqual
+                        } else {
+                            false
+                        }
+                    })
+            })
+        {
+            return Err(LockErrorKind::MultiUseNegativeExtraMarker.into());
+        }
+
         let include_package = |package: &Package| {
             let include_source = match &package.id.source {
                 Source::Virtual(_) => virtual_packages == VirtualPackages::Include,
@@ -452,6 +466,17 @@ impl<'lock> ExportableRequirements<'lock> {
 
         Ok(Self(nodes))
     }
+}
+
+/// Find the unique locked package for an export root.
+fn find_root_package<'lock>(
+    lock: &'lock Lock,
+    name: &PackageName,
+) -> Result<&'lock Package, LockError> {
+    Ok(lock
+        .find_by_name(name)
+        .map_err(|_| LockErrorKind::MultipleRootPackages { name: name.clone() })?
+        .ok_or_else(|| LockErrorKind::MissingRootPackage { name: name.clone() })?)
 }
 
 /// A node in the graph.
