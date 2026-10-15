@@ -45,23 +45,8 @@ pub(crate) fn from_state(
     options: Options,
 ) -> Result<ResolverOutput, ResolveError> {
     let size_guess = resolutions[0].nodes.len();
-    let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions.as_slice() {
-        // In the case of a singleton marker, we only include it if it's not
-        // always true. Otherwise, we keep our `fork_markers` empty as there
-        // are no forks.
-        resolution
-            .env
-            .try_universal_markers()
-            .into_iter()
-            .filter(|marker| !marker.is_true())
-            .collect()
-    } else {
-        resolutions
-            .iter()
-            .map(|resolution| resolution.env.try_universal_markers().unwrap_or_default())
-            .collect()
-    };
-
+    let has_forks = resolutions.len() > 1;
+    let mut fork_markers = Vec::new();
     let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
         Graph::with_capacity(size_guess, size_guess);
     let mut inverse: FxHashMap<ResolutionNode, NodeIndex<u32>> =
@@ -74,6 +59,10 @@ pub(crate) fn from_state(
     let mut seen = FxHashSet::default();
     for resolution in resolutions {
         let marker = resolution.env.try_universal_markers().unwrap_or_default();
+        // A single unconditional resolution has no fork markers.
+        if has_forks || !marker.is_true() {
+            fork_markers.push(marker);
+        }
         let mut node_indices = Vec::with_capacity(resolution.nodes.len());
         // Add every package to the graph.
         for (package, selected) in resolution.nodes {
@@ -81,32 +70,33 @@ pub(crate) fn from_state(
                 package,
                 version: selected.version().clone(),
             };
-            let node_index = match inverse.entry(node) {
-                Entry::Occupied(entry) => *entry.get(),
-                Entry::Vacant(entry) => {
-                    let package = &entry.key().package;
-                    let package_role = if project == Some(&package.name) {
-                        PackageRole::Project
-                    } else if workspace_members.contains(&package.name) {
-                        PackageRole::WorkspaceMember
-                    } else {
-                        PackageRole::Dependency
-                    };
-                    let node = add_version(
-                        &mut graph,
-                        &mut diagnostics,
-                        preferences,
-                        hasher,
-                        index,
-                        package,
-                        selected,
-                        package_role,
-                    );
-                    entry.insert(node);
-                    node
+            let entry = match inverse.entry(node) {
+                Entry::Occupied(entry) => {
+                    node_indices.push(*entry.get());
+                    continue;
                 }
+                Entry::Vacant(entry) => entry,
             };
-            node_indices.push(node_index);
+            let package = &entry.key().package;
+            let package_role = if project == Some(&package.name) {
+                PackageRole::Project
+            } else if workspace_members.contains(&package.name) {
+                PackageRole::WorkspaceMember
+            } else {
+                PackageRole::Dependency
+            };
+            let node = add_version(
+                &mut graph,
+                &mut diagnostics,
+                preferences,
+                hasher,
+                index,
+                package,
+                selected,
+                package_role,
+            );
+            entry.insert(node);
+            node_indices.push(node);
         }
 
         // Add every edge to the graph, propagating the marker for the current fork, if
