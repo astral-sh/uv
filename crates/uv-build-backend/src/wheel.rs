@@ -618,7 +618,7 @@ fn wheel_subdir_from_globs(
             .strip_prefix(src)
             .expect("walkdir starts with root");
 
-        if !matcher.match_path(relative) || is_excluded(entry.path()) {
+        if !matcher.match_path(relative, &entry) || is_excluded(entry.path()) {
             trace!("Excluding {}: {}", globs_field, relative.user_display());
             continue;
         }

@@ -1087,6 +1087,91 @@ fn license_file_must_be_utf8() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn license_glob_excludes_nonmatching_files() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        license-files = ["licenses/**/LICENSE.txt"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("licenses/vendor/LICENSE.txt")
+        .write_str("Vendor license")?;
+    context
+        .temp_dir
+        .child("licenses/vendor/thing.bin")
+        .write_binary(&[0xff])?;
+    #[cfg(unix)]
+    fs_err::os::unix::fs::symlink(
+        "thing.bin",
+        context.temp_dir.join("licenses/vendor/symlink.bin"),
+    )?;
+
+    uv_snapshot!(context.build().arg("--sdist").arg("--wheel").arg("--list"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Building project-0.1.0.tar.gz will include the following files:
+    project-0.1.0/PKG-INFO (generated)
+    project-0.1.0/pyproject.toml (generated)
+    project-0.1.0/pyproject.toml.orig (pyproject.toml)
+    project-0.1.0/licenses/vendor/LICENSE.txt (licenses/vendor/LICENSE.txt)
+    project-0.1.0/src/project/__init__.py (src/project/__init__.py)
+    Building project-0.1.0-py3-none-any.whl will include the following files:
+    project/__init__.py (src/project/__init__.py)
+    project-0.1.0.dist-info/licenses/licenses/vendor/LICENSE.txt (licenses/vendor/LICENSE.txt)
+    project-0.1.0.dist-info/WHEEL (generated)
+    project-0.1.0.dist-info/METADATA (generated)
+    ");
+
+    Ok(())
+}
+
+/// A symlinked module directory must not produce a source distribution without its code.
+#[test]
+#[cfg(unix)]
+fn symlinked_module_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("real-package/__init__.py").touch()?;
+    context.temp_dir.child("src").create_dir_all()?;
+    fs_err::os::unix::fs::symlink("../real-package", context.temp_dir.join("src/project"))?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--sdist"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to write tar archive to `dist/project-0.1.0.tar.gz`
+      cause: failed to read archive file payload source
+      cause: failed to read from file `[TEMP_DIR]/src/project`: Is a directory (os error 21)
+    ");
+
+    Ok(())
+}
+
 /// Test that a symlinked file (here: license) gets included.
 #[test]
 #[cfg(unix)]
