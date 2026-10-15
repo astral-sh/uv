@@ -73,12 +73,17 @@ impl GlobDirFilter {
         Ok(Self { glob_set, dfa })
     }
 
+    /// Whether a file path matches any complete glob.
+    pub fn match_file(&self, path: &Path) -> bool {
+        self.glob_set.is_match(path)
+    }
+
     /// Whether the entry at the given relative path matches any of the globs.
     ///
     /// We include a directory if we are potentially including files it contains. Symlinks whose
     /// target is not known to be a file are included conservatively so callers can handle them.
     pub fn match_path(&self, path: &Path, entry: &DirEntry) -> bool {
-        if self.glob_set.is_match(path) {
+        if self.match_file(path) {
             return true;
         }
 

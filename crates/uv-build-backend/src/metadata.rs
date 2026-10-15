@@ -421,31 +421,12 @@ impl PyProjectToml {
         self.project.readme.as_ref()
     }
 
-    /// The license files that need to be included in the source distribution.
-    pub(crate) fn license_files_source_dist(&self) -> impl Iterator<Item = &str> {
-        let license_file = self
-            .project
+    /// The pre-PEP 639 license file, which is included in the source distribution.
+    pub(crate) fn legacy_license_file(&self) -> Option<&str> {
+        self.project
             .license
             .as_ref()
             .and_then(|license| license.file())
-            .into_iter();
-        let license_files = self
-            .project
-            .license_files
-            .iter()
-            .flatten()
-            .map(String::as_str);
-        license_files.chain(license_file)
-    }
-
-    /// The license files that need to be included in the wheel.
-    pub(crate) fn license_files_wheel(&self) -> impl Iterator<Item = &str> {
-        // The pre-PEP 639 `license = { file = "..." }` is included inline in `METADATA`.
-        self.project
-            .license_files
-            .iter()
-            .flatten()
-            .map(String::as_str)
     }
 
     /// Borrow the configured settings, or construct defaults when the table is absent.
@@ -805,17 +786,8 @@ impl PyProjectToml {
                     .strip_prefix(root)
                     .expect("walkdir starts with root");
 
-                if !license_globs.match_path(relative, &entry) {
-                    trace!("Not a license files match: {}", relative.user_display());
-                    continue;
-                }
-
-                let file_type = entry.file_type();
-                if !(file_type.is_file() || file_type.is_symlink()) {
-                    trace!(
-                        "Not a file or symlink in license files match: {}",
-                        relative.user_display()
-                    );
+                if !license_globs.match_file(relative) || !entry.path().is_file() {
+                    trace!("Not a license file match: {}", relative.user_display());
                     continue;
                 }
 
