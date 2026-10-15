@@ -173,7 +173,7 @@ jobs:
           sccache: false
           maturin-version: v1.15.0
           target: x86_64
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO_PROFILE_RELEASE_DEBUG: full
           CARGO_PROFILE_RELEASE_STRIP: none
@@ -276,7 +276,7 @@ jobs:
           maturin-version: v1.15.0
           target: aarch64
           manylinux: 2_17
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO_PROFILE_RELEASE_DEBUG: full
           CARGO_PROFILE_RELEASE_STRIP: none
@@ -421,7 +421,7 @@ jobs:
           sccache: false
           maturin-version: v1.15.0
           target: ${{ matrix.platform.target }}
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
           CARGO_PROFILE_RELEASE_DEBUG: full
           CARGO_PROFILE_RELEASE_STRIP: none
@@ -575,7 +575,7 @@ jobs:
           container: quay.io/pypa/manylinux2014
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
             rustup target add ${{ matrix.target }}
@@ -741,7 +741,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
@@ -880,7 +880,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
             rustup component add llvm-tools-preview
@@ -1014,7 +1014,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             if command -v yum &> /dev/null; then
                 yum update -y
@@ -1139,7 +1139,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
@@ -1262,7 +1262,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             rustup component add llvm-tools-preview
             CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols scripts/install-cargo-extensions.sh
@@ -1398,7 +1398,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
-          args: --release --strip --debug-symbols-dir symbols --locked --out dist --features self-update --compatibility ${{ matrix.platform.arch == 'riscv64' && '2_31' || '2_17'}} --compatibility pypi
+          args: --release --strip --debug-symbols --debug-symbols-out symbols --locked --out dist --features self-update --compatibility ${{ matrix.platform.arch == 'riscv64' && '2_31' || '2_17'}} --compatibility pypi
           docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |

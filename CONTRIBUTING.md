@@ -398,15 +398,16 @@ Optimization remains enabled, including PGO and LTO where configured. Some varia
 caller frames may be unavailable or incomplete even with full symbols.
 
 The release workflow sets full debug information only for uv's release builds. Maturin's
-`--strip --debug-symbols-dir symbols` exports companions under `symbols/<wheel-filename>.symbols/`
-while writing a stripped wheel. The packaging action archives those companions and extracts the
-finished wheel executables for standalone archives. Cargo-dist registers the archives and their
-checksum sidecars through `extra-artifacts`; installers continue to select only executable archives.
-Cargo's build outputs remain unstripped. Release signing checks that executable debug identities and
-embedded SBOMs remain unchanged.
+`--strip --debug-symbols --debug-symbols-out symbols` exports companions under
+`symbols/<wheel-filename>.symbols/` while writing a stripped wheel. The packaging action archives
+those companions and extracts the finished wheel executables for standalone archives. Cargo-dist
+registers the archives and their checksum sidecars through `extra-artifacts`; installers continue to
+select only executable archives. Cargo's build outputs remain unstripped. Release signing checks
+that executable debug identities and embedded SBOMs remain unchanged.
 
-This integration requires a Maturin release that implements `--debug-symbols-dir`. The workflow's
-current 1.15.0 pin must be updated before these builds can run.
+This integration requires a Maturin release that implements `--debug-symbols` and
+`--debug-symbols-out`. The workflow's current 1.15.0 pin must be updated before these builds can
+run.
 
 Maturin owns symbol extraction, stripping, companion matching, and wheel `RECORD` generation. The
 shared `verify-release` action checks signed executable identities and SBOMs against the unsigned
