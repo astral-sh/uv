@@ -380,6 +380,30 @@ impl<'lock> ExportableRequirements<'lock> {
 
         Ok(Self(nodes))
     }
+
+    /// Collect packages from every dependency branch for source checks.
+    fn all_packages(
+        target: &impl Installable<'lock>,
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        install_options: &'lock InstallOptions,
+    ) -> Result<Vec<&'lock Package>, LockError> {
+        let graph = Self::graph(target, &[], extras, groups)?.graph;
+        Ok(graph
+            .node_weights()
+            .filter_map(|node| match node {
+                Node::Root => None,
+                Node::Package(package) => Some(*package),
+            })
+            .filter(|package| {
+                install_options.include_package(
+                    package.as_install_target(),
+                    target.project_name(),
+                    target.lock().members(),
+                )
+            })
+            .collect())
+    }
 }
 
 /// A node in the graph.

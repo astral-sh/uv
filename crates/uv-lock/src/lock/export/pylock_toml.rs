@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf, absolute};
 use std::str::FromStr;
@@ -46,7 +46,7 @@ use uv_resolver_types::ResolverOutput;
 
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, is_wheel_unreachable};
-use crate::{Installable, LockError};
+use crate::{Installable, LockError, Package};
 
 /// Format an array so that each element is on its own line and has a trailing comma.
 fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value>>) -> Array {
@@ -68,6 +68,10 @@ pub enum PylockTomlErrorKind {
     IncompatibleEnvironment,
     #[error("Multiple active package entries found for `{0}`")]
     DuplicateActivePackage(PackageName),
+    #[error("Package entries for `{0}` may be active in the same environment")]
+    OverlappingPackages(PackageName),
+    #[error("Registry package `{0}` has no version")]
+    RegistryVersionMissing(PackageName),
     #[error(
         "Archive `{}` has size {actual}, but the lockfile records {expected}",
         path.display()
@@ -145,6 +149,8 @@ pub enum PylockTomlErrorKind {
     WheelNameMismatch(WheelFilename, PackageName),
     #[error("Wheel filename `{0}` does not match package version `{1}`")]
     WheelVersionMismatch(WheelFilename, Version),
+    #[error("Source distribution filename `{0}` does not match package version `{1}`")]
+    SdistVersionMismatch(SourceDistFilename, Version),
     #[error("Failed to convert path to URL")]
     PathToUrl,
     #[error(
@@ -447,6 +453,34 @@ struct PylockTomlAttestationIdentity {
 }
 
 impl<'lock> PylockToml {
+    /// Collect packages from all selected dependency branches for source checks.
+    pub(crate) fn packages_for_source_check(
+        target: &impl Installable<'lock>,
+        extras: &ExtrasSpecificationWithDefaults,
+        dev: &DependencyGroupsWithDefaults,
+        install_options: &'lock InstallOptions,
+    ) -> Result<Vec<&'lock Package>, PylockTomlErrorKind> {
+        Ok(ExportableRequirements::all_packages(
+            target,
+            extras,
+            dev,
+            install_options,
+        )?)
+    }
+
+    /// Find a workspace dependency among the packages selected for export.
+    pub(crate) fn workspace_dependency(
+        target: &impl Installable<'lock>,
+        packages: &[&'lock Package],
+    ) -> Option<&'lock PackageName> {
+        packages
+            .iter()
+            .find(|package| {
+                target.lock().is_workspace_package(package) && package.id.source.is_local()
+            })
+            .map(|package| package.name())
+    }
+
     /// Construct a [`PylockToml`] from a [`ResolverOutput`].
     ///
     /// If `tags` is provided, only wheels compatible with the given tags will be included.
@@ -1091,6 +1125,82 @@ impl<'lock> PylockToml {
                     .flatten()
                     .any(|wheel| wheel.hashes.is_empty())
         })
+    }
+
+    /// Validate package sources and markers for every environment.
+    ///
+    /// Marker overlap checks are conservative: complex disjoint expressions may not be recognized
+    /// as such.
+    pub(crate) fn validate_packaged_packages(&self) -> Result<(), PylockTomlErrorKind> {
+        let mut markers = HashMap::new();
+        for package in &self.packages {
+            if let Some(previous) = markers.get_mut(&package.name) {
+                if !package.marker.is_disjoint(*previous) {
+                    return Err(PylockTomlErrorKind::OverlappingPackages(
+                        package.name.clone(),
+                    ));
+                }
+                *previous = package.marker.or(*previous);
+            } else {
+                markers.insert(&package.name, package.marker);
+            }
+
+            package.validate_source()?;
+            if let Some(archive) = &package.archive {
+                let filename = archive.filename(&package.name)?;
+                if DistExtension::from_path(filename.as_ref())? == DistExtension::Wheel {
+                    validate_wheel_filename(
+                        &WheelFilename::from_str(&filename)?,
+                        &package.name,
+                        package.version.as_ref(),
+                    )?;
+                }
+                continue;
+            }
+            if let Some(vcs) = &package.vcs {
+                if vcs.url.is_none() && vcs.path.is_none() {
+                    return Err(PylockTomlErrorKind::VcsMissingPathUrl(package.name.clone()));
+                }
+                continue;
+            }
+            if package.directory.is_some() {
+                continue;
+            }
+            if package.sdist.is_none() && package.wheels.as_ref().is_none_or(Vec::is_empty) {
+                return Err(PylockTomlErrorKind::MissingSource(package.name.clone()));
+            }
+            let version = package
+                .version
+                .as_ref()
+                .ok_or_else(|| PylockTomlErrorKind::RegistryVersionMissing(package.name.clone()))?;
+            for wheel in package.wheels.iter().flatten() {
+                if wheel.path.is_none() && wheel.url.is_none() {
+                    return Err(PylockTomlErrorKind::WheelMissingPathUrl(
+                        package.name.clone(),
+                    ));
+                }
+                let filename = wheel.filename(&package.name)?;
+                validate_wheel_filename(&filename, &package.name, Some(version))?;
+            }
+            if let Some(sdist) = &package.sdist {
+                if sdist.path.is_none() && sdist.url.is_none() {
+                    return Err(PylockTomlErrorKind::SdistMissingPathUrl(
+                        package.name.clone(),
+                    ));
+                }
+                let filename = sdist.filename(&package.name)?;
+                let filename: &str = filename.as_ref().as_ref();
+                let extension = SourceDistExtension::from_path(filename)?;
+                let filename = SourceDistFilename::parse(filename, extension, &package.name)?;
+                if filename.version != *version {
+                    return Err(PylockTomlErrorKind::SdistVersionMismatch(
+                        filename,
+                        version.clone(),
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Download and hash all distribution files that are missing hashes, e.g., because the

@@ -40,11 +40,13 @@ uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-resolver-types = { workspace = true }
 uv-small-str = { workspace = true }
+uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
+anyhow = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
@@ -66,6 +68,7 @@ toml_parser = { workspace = true }
 toml_writer = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+version-ranges = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
