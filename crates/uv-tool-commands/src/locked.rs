@@ -653,6 +653,7 @@ pub(super) async fn resolve(
     }
     let mut groups = lock.default_groups.clone();
     groups.extend(requirement.groups.iter().cloned());
+    lock.validate_environment(markers.markers())?;
     groups.sort_unstable();
     groups.dedup();
     // Only packages selected for this environment can contribute artifacts to the installation.
