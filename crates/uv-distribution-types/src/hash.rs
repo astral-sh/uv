@@ -33,7 +33,8 @@ pub enum ArchiveHashPolicy<'a> {
     /// Hashes should be validated against a pre-defined list of hashes, and every digest must
     /// match. If necessary, hashes should be generated so as to ensure that the archive is valid.
     All(&'a [HashDigest]),
-    /// At least one hash in each group must match.
+    /// At least one hash in each group must match. A SHA-256 digest binds the verified archive
+    /// for subsequent use even when all supplied hashes use weaker algorithms.
     AllOfAny(&'a ArchiveHashGroups),
 }
 
@@ -113,7 +114,10 @@ impl<'a> ArchiveHashPolicy<'a> {
                 !required.is_empty() && required.iter().all(|hash| hashes.contains(hash))
             }
             Self::AllOfAny(groups) => {
-                !groups.groups.is_empty()
+                hashes
+                    .iter()
+                    .any(|hash| hash.algorithm() == HashAlgorithm::Sha256)
+                    && !groups.groups.is_empty()
                     && groups.groups.iter().all(|group| {
                         !group.is_empty() && group.iter().any(|hash| hashes.contains(hash))
                     })
@@ -327,8 +331,12 @@ mod tests {
             policy.algorithms(),
             vec![HashAlgorithm::Md5, HashAlgorithm::Sha256]
         );
-        assert!(!vec![md5.clone()].has_digests(policy));
-        assert!(vec![md5, sha256].has_digests(policy));
+        let weak_hashes = vec![md5.clone()];
+        assert!(!weak_hashes.has_digests(policy));
+        assert!(!weak_hashes.satisfies(policy));
+        let secure_hashes = vec![md5, sha256];
+        assert!(secure_hashes.has_digests(policy));
+        assert!(secure_hashes.satisfies(policy));
         Ok(())
     }
 
