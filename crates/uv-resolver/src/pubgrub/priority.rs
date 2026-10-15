@@ -48,6 +48,8 @@ impl PubGrubPriorities {
                 PubGrubTiebreaker::from(u32::try_from(len).expect("Less than 2**32 packages"))
             });
 
+        // Virtual packages without a real package attached (such as the root package or Python
+        // constraints) have a fixed priority.
         let Some(name) = package.name_no_root() else {
             return;
         };
@@ -163,7 +165,8 @@ impl PubGrubPriorities {
     /// for the package.
     pub(crate) fn mark_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
-            // This package has a fixed root priority.
+            // Virtual packages without a real package attached (such as the root package or Python
+            // constraints) have a fixed priority.
             return false;
         };
 
@@ -192,7 +195,8 @@ impl PubGrubPriorities {
     /// marked as conflicting above the threshold.
     pub(crate) fn mark_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
-            // This package has a fixed root priority.
+            // Virtual packages without a real package attached (such as the root package or Python
+            // constraints) have a fixed priority.
             return false;
         };
 
