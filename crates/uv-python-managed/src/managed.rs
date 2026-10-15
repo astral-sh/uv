@@ -508,6 +508,23 @@ impl ManagedPythonInstallation {
         self.build.as_deref()
     }
 
+    /// Return whether this installation matches a requested build version.
+    pub fn matches_build_constraint(&self, requested_build: &str) -> bool {
+        let Some(installation_build) = self.build() else {
+            debug!(
+                "Skipping managed installation `{self}`: a build version was requested but is not recorded for this installation"
+            );
+            return false;
+        };
+        if installation_build != requested_build {
+            debug!(
+                "Skipping managed installation `{self}`: requested build version `{requested_build}` does not match installation build version `{installation_build}`"
+            );
+            return false;
+        }
+        true
+    }
+
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
         PythonInstallationMinorVersionKey::ref_cast(&self.key)
     }

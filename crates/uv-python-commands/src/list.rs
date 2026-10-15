@@ -17,7 +17,7 @@ use uv_python_managed::ManagedPythonInstallations;
 use uv_python_managed::downloads::{Error as PythonDownloadError, ManagedPythonDownloadList};
 use uv_python_types::{
     EnvironmentPreference, PythonArchitecture, PythonDownloadRequest, PythonDownloads,
-    PythonPreference, PythonRequest, PythonSource,
+    PythonPreference, PythonRequest, PythonSource, python_build_versions_from_env,
 };
 use uv_settings::PythonInstallMirrors;
 
@@ -97,7 +97,7 @@ pub async fn list(
     {
         let request = if all_platforms {
             base_download_request
-        } else if all_arches {
+        } else if all_arches && base_download_request.arch.is_none() {
             base_download_request.fill_platform()?.with_any_arch()
         } else {
             base_download_request.fill_platform()?
@@ -183,9 +183,15 @@ pub async fn list(
             // Discovery only returns interpreters that can run on the host. Foreign managed
             // installations can be identified from their installation keys without running them.
             let host = Platform::from_env()?;
+            let build_versions = python_build_versions_from_env()?;
             for installation in ManagedPythonInstallations::from_settings(None)?.find_all()? {
                 if host.supports(installation.platform())
                     || !request.satisfied_by_key(installation.key())
+                    || build_versions
+                        .get(&installation.implementation())
+                        .is_some_and(|requested_build| {
+                            !installation.matches_build_constraint(requested_build)
+                        })
                 {
                     continue;
                 }
