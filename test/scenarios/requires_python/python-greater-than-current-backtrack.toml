@@ -1,5 +1,5 @@
 name = "python-greater-than-current-backtrack"
-description = "The user requires a package where recent versions require a Python version greater than the current version, but an older version is compatible."
+description = "The user requires a package where five recent versions have distinct Python requirements incompatible with the current version, but an older version is compatible. The repeated conflicts must not change the fixed priority of the Python version constraint."
 
 [root]
 requires = ["a"]
@@ -21,6 +21,12 @@ requires_python = ">=3.11"
 
 [packages.a.versions."4.0.0"]
 requires_python = ">=3.12"
+
+[packages.a.versions."5.0.0"]
+requires_python = ">=3.13"
+
+[packages.a.versions."6.0.0"]
+requires_python = ">=3.14"
 
 [environment]
 python = "3.9"

@@ -25,6 +25,8 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 /// Our main priority is the package name, the earlier we encounter a package, the higher its
 /// priority. This way, all virtual packages of the same name will be applied in a batch. To ensure
 /// determinism, we also track the discovery order of virtual packages as secondary order.
+///
+/// Root, Python, and system packages have fixed priorities and are not stored in the priority map.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities {
     package_priority: FxHashbrownMap<PackageName, PubGrubPriority>,
@@ -46,8 +48,6 @@ impl PubGrubPriorities {
                 PubGrubTiebreaker::from(u32::try_from(len).expect("Less than 2**32 packages"))
             });
 
-        // The root package and Python constraints have no explicit priority, the root package is
-        // always first and the Python version (range) is fixed.
         let Some(name) = package.name_no_root() else {
             return;
         };
@@ -163,11 +163,6 @@ impl PubGrubPriorities {
     /// for the package.
     pub(crate) fn mark_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
-            // Not a correctness bug
-            debug_assert!(
-                false,
-                "URL packages must not be involved in conflict handling"
-            );
             return false;
         };
 
@@ -196,11 +191,6 @@ impl PubGrubPriorities {
     /// marked as conflicting above the threshold.
     pub(crate) fn mark_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
-            // Not a correctness bug
-            debug_assert!(
-                false,
-                "URL packages must not be involved in conflict handling"
-            );
             return false;
         };
 

@@ -4039,7 +4039,7 @@ fn transitive_prerelease_redundant_stable_preference_plain_first() {
     context.assert_installed("c", "1.0.0");
 }
 
-/// The user requires a package where recent versions require a Python version greater than the current version, but an older version is compatible.
+/// The user requires a package where five recent versions have distinct Python requirements incompatible with the current version, but an older version is compatible. The repeated conflicts must not change the fixed priority of the Python version constraint.
 ///
 /// ```text
 /// python-greater-than-current-backtrack
@@ -4050,15 +4050,21 @@ fn transitive_prerelease_redundant_stable_preference_plain_first() {
 /// │       ├── satisfied by a-1.0.0
 /// │       ├── satisfied by a-2.0.0
 /// │       ├── satisfied by a-3.0.0
-/// │       └── satisfied by a-4.0.0
+/// │       ├── satisfied by a-4.0.0
+/// │       ├── satisfied by a-5.0.0
+/// │       └── satisfied by a-6.0.0
 /// └── a
 ///     ├── a-1.0.0
 ///     ├── a-2.0.0
 ///     │   └── requires python>=3.10 (incompatible with environment)
 ///     ├── a-3.0.0
 ///     │   └── requires python>=3.11 (incompatible with environment)
-///     └── a-4.0.0
-///         └── requires python>=3.12 (incompatible with environment)
+///     ├── a-4.0.0
+///     │   └── requires python>=3.12 (incompatible with environment)
+///     ├── a-5.0.0
+///     │   └── requires python>=3.13 (incompatible with environment)
+///     └── a-6.0.0
+///         └── requires python>=3.14 (incompatible with environment)
 /// ```
 #[test]
 fn python_greater_than_current_backtrack() {
