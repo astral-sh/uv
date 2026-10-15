@@ -8,9 +8,9 @@ mod wheel;
 pub(crate) use metadata::PyProjectToml;
 pub use metadata::check_direct_build;
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
-pub use source_dist::{build_source_dist, list_source_dist};
+pub use source_dist::{build_source_dist, build_source_dist_with_files, list_source_dist};
 use uv_warnings::warn_user_once;
-pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
+pub use wheel::{build_editable, build_wheel, build_wheel_with_files, list_wheel, metadata};
 
 use rustc_hash::FxHashSet;
 use std::cmp::Ordering;
@@ -129,6 +129,69 @@ trait DirectoryWriter {
     fn close(self, dist_info_dir: &str) -> Result<(), Error>;
 }
 
+/// Skip source files that would conflict with files supplied by the frontend.
+struct FilteredWriter<W> {
+    writer: W,
+    paths: Vec<String>,
+}
+
+impl<W> FilteredWriter<W> {
+    fn new(writer: W, paths: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            writer,
+            paths: paths.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// Compare portable archive paths without conflating partial path components.
+fn archive_path_is_at_or_below(path: &str, prefix: &str) -> bool {
+    path.get(..prefix.len())
+        .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
+        && path
+            .as_bytes()
+            .get(prefix.len())
+            .is_none_or(|next| *next == b'/')
+}
+
+/// Return whether a source file would conflict with a frontend file in an archive.
+pub fn source_file_conflicts_with_frontend_file(source: &str, frontend: &str) -> bool {
+    archive_path_is_at_or_below(source, frontend) || archive_path_is_at_or_below(frontend, source)
+}
+
+impl<W: DirectoryWriter> DirectoryWriter for FilteredWriter<W> {
+    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        self.writer.write_bytes(path, bytes)
+    }
+
+    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        if self
+            .paths
+            .iter()
+            .any(|reserved| source_file_conflicts_with_frontend_file(path, reserved))
+        {
+            debug!("Skipping included file `{path}`: supplied by the build frontend");
+            return Ok(());
+        }
+        self.writer.write_file(path, file)
+    }
+
+    fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        if self
+            .paths
+            .iter()
+            .any(|reserved| archive_path_is_at_or_below(directory, reserved))
+        {
+            return Ok(());
+        }
+        self.writer.write_directory(directory)
+    }
+
+    fn close(self, dist_info_dir: &str) -> Result<(), Error> {
+        self.writer.close(dist_info_dir)
+    }
+}
+
 fn write_directory_once(
     writer: &mut impl DirectoryWriter,
     directories: &mut FxHashSet<PathBuf>,
@@ -141,12 +204,11 @@ fn write_directory_once(
     Ok(())
 }
 
-fn write_file_with_directories(
+fn write_parent_directories(
     writer: &mut impl DirectoryWriter,
     directories: &mut FxHashSet<PathBuf>,
     prefix: &Path,
     relative: &Path,
-    source: &Path,
 ) -> Result<(), Error> {
     if let Some(parent) = relative.parent() {
         let mut directory = PathBuf::new();
@@ -155,7 +217,17 @@ fn write_file_with_directories(
             write_directory_once(writer, directories, &prefix.join(&directory))?;
         }
     }
+    Ok(())
+}
 
+fn write_file_with_directories(
+    writer: &mut impl DirectoryWriter,
+    directories: &mut FxHashSet<PathBuf>,
+    prefix: &Path,
+    relative: &Path,
+    source: &Path,
+) -> Result<(), Error> {
+    write_parent_directories(writer, directories, prefix, relative)?;
     let entry_path = prefix.join(relative).portable_display().to_string();
     writer.write_file(&entry_path, source)
 }
@@ -540,6 +612,92 @@ mod tests {
 
         hint: Characters can be escaped with a backslash
         "#);
+    }
+
+    #[test]
+    fn frontend_files() -> Result<(), Box<dyn std::error::Error>> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let source = TempDir::new()?;
+        let output = TempDir::new()?;
+        fs_err::create_dir_all(source.path().join("src/example"))?;
+        fs_err::write(source.path().join("src/example/__init__.py"), "")?;
+        fs_err::write(source.path().join("LICENSE"), "source license")?;
+        fs_err::write(source.path().join("conflict.txt"), "source file")?;
+        fs_err::create_dir_all(source.path().join("generated/data.txt"))?;
+        fs_err::write(
+            source.path().join("generated/data.txt/source.txt"),
+            "source file",
+        )?;
+        fs_err::write(
+            source.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "example"
+            version = "1.0.0"
+            license-files = ["LICENSE"]
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<2"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            source-include = ["conflict.txt", "generated/**"]
+            "#},
+        )?;
+
+        let source_files: &[(&str, &[u8])] = &[
+            ("conflict.txt", b"frontend file"),
+            ("generated/data.txt", b"generated data"),
+        ];
+        let filename = build_source_dist_with_files(
+            source.path(),
+            output.path(),
+            MOCK_UV_VERSION,
+            false,
+            TarBackend::default(),
+            source_files,
+        )?;
+        let archive = output.path().join(filename.to_string());
+        let extracted = TempDir::new()?;
+        unpack_sdist(&archive, extracted.path())?;
+        let root = extracted.path().join("example-1.0.0");
+        assert_snapshot!(fs_err::read_to_string(root.join("conflict.txt"))?, @"frontend file");
+        assert_snapshot!(fs_err::read_to_string(root.join("generated/data.txt"))?, @"generated data");
+        assert_eq!(
+            sdist_contents(&archive)
+                .iter()
+                .filter(|path| path.ends_with("/conflict.txt"))
+                .count(),
+            1
+        );
+
+        let wheel_files: &[(&str, &[u8])] = &[
+            (
+                "example-1.0.0.dist-info/licenses/LICENSE",
+                b"frontend license",
+            ),
+            ("custom/data.txt", b"wheel data"),
+        ];
+        let filename = build_wheel_with_files(
+            source.path(),
+            output.path(),
+            None,
+            MOCK_UV_VERSION,
+            false,
+            wheel_files,
+        )?;
+        let wheel = output.path().join(filename.to_string());
+        assert_snapshot!(wheel_entry(&wheel, "example-1.0.0.dist-info/licenses/LICENSE"), @"frontend license");
+        assert_snapshot!(wheel_entry(&wheel, "custom/data.txt"), @"wheel data");
+        assert_eq!(
+            wheel_contents(&wheel)
+                .iter()
+                .filter(|path| path.ends_with("/licenses/LICENSE"))
+                .count(),
+            1
+        );
+
+        Ok(())
     }
 
     /// File listings, generated archives and archive contents for both a build with
