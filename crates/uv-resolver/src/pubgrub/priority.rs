@@ -26,7 +26,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 /// priority. This way, all virtual packages of the same name will be applied in a batch. To ensure
 /// determinism, we also track the discovery order of virtual packages as secondary order.
 ///
-/// Packages with the fixed [`PubGrubPriority::Root`] priority are not stored in the priority map.
+/// Packages with [`PubGrubPriority::Root`] are not stored in the priority map.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities {
     package_priority: FxHashbrownMap<PackageName, PubGrubPriority>,
@@ -192,6 +192,7 @@ impl PubGrubPriorities {
     /// marked as conflicting above the threshold.
     pub(crate) fn mark_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
+            // This package has a fixed root priority.
             return false;
         };
 
@@ -248,7 +249,7 @@ pub(crate) enum PubGrubPriority {
     /// [`ForkUrls`].
     DirectUrl(Reverse<usize>),
 
-    /// The package is the root package.
+    /// The highest priority, reserved for packages whose priority is fixed.
     Root,
 }
 
