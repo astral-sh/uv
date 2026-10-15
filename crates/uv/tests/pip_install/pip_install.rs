@@ -16014,7 +16014,7 @@ fn pep_751_incompatible_environment() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The target environment does not match any environment in the lockfile
+    error: The target environment is not supported by the lockfile
     ");
 
     Ok(())

@@ -64,7 +64,7 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
-    #[error("The target environment does not match any environment in the lockfile")]
+    #[error("The target environment is not supported by the lockfile")]
     IncompatibleEnvironment,
     #[error("Multiple active package entries found for `{0}`")]
     DuplicateActivePackage(PackageName),
