@@ -651,6 +651,9 @@ pub(super) async fn resolve(
     groups.extend(requirement.groups.iter().cloned());
     groups.sort_unstable();
     groups.dedup();
+    // Only packages selected for this environment can contribute artifacts to the installation.
+    lock.packages
+        .retain(|package| package.is_active(markers.markers(), &requirement.extras, &groups));
     let modified = !spec.overrides.is_empty()
         || !spec.override_dependencies.is_empty()
         || !spec.excludes.is_empty();
@@ -883,7 +886,7 @@ pub(super) async fn resolve(
             .filter(|artifact| {
                 artifact.index.as_str().trim_end_matches('/')
                     == index.without_credentials().as_str().trim_end_matches('/')
-                    && artifact.url == url
+                    && artifact.location() == url.as_str()
                     && artifact.filename == filename
             })
             .peekable();
@@ -906,7 +909,11 @@ pub(super) async fn resolve(
                 .cloned()
                 .collect();
             constraints.extend(index_hashes.into_iter().map(|hash| vec![hash]));
-            constraints.extend(artifact.url_hashes.iter().cloned().map(|hash| vec![hash]));
+            constraints.extend(
+                parse_all_url_hashes(&artifact.url)?
+                    .into_iter()
+                    .map(|hash| vec![hash]),
+            );
         }
         let (wheel, verified) = match dist.as_ref() {
             Dist::Source(_) if !constraints.is_empty() => {
@@ -1690,7 +1697,7 @@ async fn validate_artifact_urls(
                 && artifacts.iter().all(|(url, filename)| {
                     let mut location = (*url).clone();
                     location.set_fragment(None);
-                    expected.iter().any(|artifact| artifact.url == location && artifact.filename == *filename)
+                    expected.iter().any(|artifact| artifact.location() == location.as_str() && artifact.filename == *filename)
                 })
             {
                 return Ok(expected);
@@ -1714,13 +1721,13 @@ async fn validate_artifact_urls(
                 let mut location = url.clone();
                 // Simple API HTML links may include a hash fragment, which is not sent to the server.
                 location.set_fragment(None);
-                if !expected.iter().any(|artifact| artifact.url == location) {
+                if !expected.iter().any(|artifact| artifact.location() == location.as_str()) {
                     bail!(
                         "URL for `{}=={version}` is not listed by {index}: {url}",
                         package.name,
                     );
                 }
-                if !expected.iter().any(|artifact| artifact.url == location && artifact.filename == filename) {
+                if !expected.iter().any(|artifact| artifact.location() == location.as_str() && artifact.filename == filename) {
                     bail!("Filename `{filename}` for `{}=={version}` does not match the file listed at {url} by {index}", package.name);
                 }
             }
@@ -1738,7 +1745,16 @@ struct IndexedArtifact {
     url: uv_redacted::DisplaySafeUrl,
     requires_python: Option<Arc<VersionSpecifiers>>,
     hashes: HashDigests,
-    url_hashes: Vec<HashDigest>,
+}
+
+impl IndexedArtifact {
+    /// Return the URL sent to the server, excluding the fragment containing any hashes.
+    fn location(&self) -> &str {
+        self.url
+            .as_str()
+            .split_once('#')
+            .map_or(self.url.as_str(), |(location, _)| location)
+    }
 }
 
 fn same_index(left: &IndexUrl, right: &IndexUrl) -> bool {
@@ -1768,16 +1784,12 @@ fn index_artifacts(
                     let files =
                         rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)?;
                     for (filename, file) in files.all(package) {
-                        let mut url = file.url.to_url()?;
-                        let url_hashes = parse_all_url_hashes(&url)?;
-                        url.set_fragment(None);
                         artifacts.push(IndexedArtifact {
                             index: configured_index.without_credentials().into_owned(),
                             filename,
-                            url,
+                            url: file.url.to_url()?,
                             requires_python: file.requires_python,
                             hashes: file.hashes,
-                            url_hashes,
                         });
                     }
                 }
