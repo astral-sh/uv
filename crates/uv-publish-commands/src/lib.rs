@@ -146,7 +146,6 @@ pub async fn publish(
         keyring_provider,
         &oidc_client,
         check_url.as_ref(),
-        Prompt::Enabled,
         printer,
     )
     .await?;
@@ -256,7 +255,24 @@ async fn publish_file(
         return Ok(());
     }
 
-    let uploaded = session.upload(prepared, reporter).await?;
+    let uploaded = match session.upload(&prepared, reporter.clone()).await {
+        Ok(uploaded) => uploaded,
+        Err(err) => {
+            // The middleware searches the credential cache and providers before reporting
+            // missing credentials. In that case, it has not sent the request.
+            if err.is_missing_credentials()
+                && let Some(credentials) = session.credentials_mut()
+                && credentials.username().is_none()
+                && credentials.password().is_none()
+                && let Some(prompted) = prompt_username_and_password()?
+            {
+                *credentials = prompted;
+                session.upload(&prepared, reporter).await?
+            } else {
+                return Err(err.into());
+            }
+        }
+    };
     info!("Upload succeeded");
 
     match uploaded {
@@ -273,18 +289,10 @@ async fn publish_file(
     Ok(())
 }
 
-/// Whether to allow prompting for username and password.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Prompt {
-    Enabled,
-    #[allow(dead_code)]
-    Disabled,
-}
-
 /// Unify the different possible source for username and password information.
 ///
-/// Possible credential sources are environment variables, the CLI, the URL, the keyring, trusted
-/// publishing or a prompt.
+/// Possible credential sources are environment variables, the CLI, the URL, the keyring, or trusted
+/// publishing.
 ///
 /// The username can come from, in order:
 ///
@@ -295,7 +303,6 @@ enum Prompt {
 ///     overrides the environment variable
 /// - If trusted publishing is available, it is `__token__`
 /// - (We currently do not read the username from the keyring)
-/// - If stderr is a tty, prompt the user
 ///
 /// The password can come from, in order:
 ///
@@ -306,10 +313,9 @@ enum Prompt {
 ///     the environment variable
 /// - If the keyring is enabled, the keyring entry for the URL and username
 /// - If trusted publishing is available, the trusted publishing token
-/// - If stderr is a tty, prompt the user
 ///
 /// If no credentials are found, the auth middleware does a final check for cached credentials and
-/// otherwise errors without sending the request.
+/// otherwise errors without sending the request. The caller can then prompt for credentials.
 ///
 /// Returns the publish URL and [`PublishingCredentials`].
 async fn gather_credentials(
@@ -320,7 +326,6 @@ async fn gather_credentials(
     keyring_provider: KeyringProviderType,
     oidc_client: &BaseClient,
     check_url: Option<&IndexUrl>,
-    prompt: Prompt,
     printer: Printer,
 ) -> Result<(DisplaySafeUrl, PublishingCredentials)> {
     // Support reading username and password from the URL, for symmetry with the index API.
@@ -360,15 +365,6 @@ async fn gather_credentials(
         }
         TrustedPublishResult::Skipped => None,
         TrustedPublishResult::Ignored(err) => Some(err),
-    };
-
-    let (username, mut password) = if username.is_none() && password.is_none() {
-        match prompt {
-            Prompt::Enabled => prompt_username_and_password()?,
-            Prompt::Disabled => (None, None),
-        }
-    } else {
-        (username, password)
     };
 
     if password.is_some() && username.is_none() {
@@ -438,17 +434,17 @@ async fn gather_credentials(
     Ok((publish_url, PublishingCredentials::Supplied(credentials)))
 }
 
-fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
+fn prompt_username_and_password() -> Result<Option<Credentials>> {
     let term = Term::stderr();
     if !term.is_term() {
-        return Ok((None, None));
+        return Ok(None);
     }
     let username_prompt = "Enter username ('__token__' if using a token): ";
     let password_prompt = "Enter password: ";
     let username = uv_console::input(username_prompt, &term).context("Failed to read username")?;
     let password =
         uv_console::password(password_prompt, &term).context("Failed to read password")?;
-    Ok((Some(username), Some(password)))
+    Ok(Some(Credentials::basic(Some(username), Some(password))))
 }
 
 #[cfg(test)]
@@ -475,7 +471,6 @@ mod tests {
             KeyringProviderType::Disabled,
             &client,
             None,
-            Prompt::Disabled,
             Printer::Quiet,
         )
         .await

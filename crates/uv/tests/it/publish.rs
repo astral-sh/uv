@@ -567,6 +567,128 @@ async fn read_index_credential_env_vars_for_check_url() {
     );
 }
 
+/// The index check supplies the username needed by keyring for the upload. An interactive
+/// terminal must not prompt before the authentication middleware can use those credentials.
+#[cfg(all(unix, feature = "test-python"))]
+#[tokio::test]
+async fn index_keyring_does_not_prompt() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("test/packages/keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {
+            r#"
+        [[tool.uv.index]]
+        name = "private-index"
+        url = "{index_uri}/simple/"
+        publish-url = "{index_uri}/upload"
+        "#,
+            index_uri = server.uri()
+        })
+        .unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .and(basic_auth("VssSessionToken", "secret"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("VssSessionToken", "secret"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Give stderr a terminal, while keeping stdin closed so any prompt fails. Drain the terminal
+    // concurrently to avoid blocking the child, and bound its lifetime if it waits for input.
+    context
+        .temp_dir
+        .child("terminal.py")
+        .write_str(indoc! {r"
+        import errno
+        import os
+        import subprocess
+        import sys
+        import threading
+
+        master, slave = os.openpty()
+        process = subprocess.Popen(
+            sys.argv[1:], stdin=subprocess.DEVNULL, stderr=slave
+        )
+        os.close(slave)
+
+        def drain():
+            while True:
+                try:
+                    chunk = os.read(master, 65536)
+                except OSError as error:
+                    if error.errno == errno.EIO:
+                        return
+                    raise
+                if not chunk:
+                    return
+                sys.stderr.buffer.write(chunk)
+                sys.stderr.buffer.flush()
+
+        reader = threading.Thread(target=drain)
+        reader.start()
+        try:
+            process.wait(timeout=30)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+            reader.join()
+            os.close(master)
+        sys.exit(process.returncode)
+        "})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("terminal.py")
+        .arg(context.publish().get_program())
+        .arg("publish")
+        .arg("--index")
+        .arg("private-index")
+        .arg("--trusted-publishing")
+        .arg("never")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg(dummy_wheel())
+        .env("TERM", "dumb")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv))
+        .env(EnvVars::index_username("PRIVATE_INDEX"), "VssSessionToken")
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, json!({
+            format!("{}/simple/", server.uri()): {"VssSessionToken": "secret"},
+            format!("{}/upload", server.uri()): {"VssSessionToken": "secret"},
+        }).to_string()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Keyring request for VssSessionToken@http://[LOCALHOST]/simple/
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Keyring request for VssSessionToken@http://[LOCALHOST]/upload
+    ");
+}
+
 #[tokio::test]
 async fn check_url_missing_package_ignores_content_type() {
     let context = uv_test::test_context!("3.12").with_filtered_sizes();

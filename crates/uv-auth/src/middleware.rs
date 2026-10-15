@@ -26,6 +26,11 @@ use crate::{
 };
 use crate::{Index, TextCredentialStore};
 
+/// No credentials could be found for a request that requires authentication.
+#[derive(Debug, thiserror::Error)]
+#[error("Missing credentials for: {0}")]
+pub struct MissingCredentialsError(DisplaySafeUrl);
+
 /// Cached check for whether we're running in Dependabot.
 static IS_DEPENDABOT: LazyLock<bool> =
     LazyLock::new(|| std::env::var(EnvVars::DEPENDABOT).is_ok_and(|value| value == "true"));
@@ -508,9 +513,7 @@ impl Middleware for AuthMiddleware {
         if let Some(response) = response {
             Ok(response)
         } else {
-            Err(Error::Middleware(format_err!(
-                "Missing credentials for: {url}"
-            )))
+            Err(Error::Middleware(MissingCredentialsError(url).into()))
         }
     }
 }
