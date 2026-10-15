@@ -2274,6 +2274,141 @@ fn packaged_lock_artifact_urls() -> Result<()> {
 }
 
 #[test]
+fn packaged_lock_ignores_inactive_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    let lock = formatdoc! {r#"
+        lock-version = "1.0"
+        created-by = "test"
+
+        [[packages]]
+        name = "idna"
+        version = "3.3"
+        marker = "python_version < '3.12'"
+        index = "https://unconfigured.example/simple"
+        wheels = [{{ url = "https://unconfigured.example/idna-3.3-py3-none-any.whl", hashes = {{ sha256 = "{}" }} }}]
+    "#, "0".repeat(64)};
+    let (filename, wheel) = generate_wheel_with_files(
+        &"locked-tool".parse()?,
+        &"1.0.0".parse()?,
+        &["idna==3.3 ; python_version < '3.12'".parse()?],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[
+            ("locked_tool-1.0.0.dist-info/pylock.toml", &lock),
+            (
+                "locked_tool-1.0.0.dist-info/entry_points.txt",
+                "[console_scripts]\nlocked-tool = locked_tool.cli:main\n",
+            ),
+        ],
+    );
+    context.temp_dir.child("wheels").create_dir_all()?;
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&wheel)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.tool_install()
+            .args([
+                "--locked", "--preview-features", "locked-tools", "--no-index", "--find-links",
+                "wheels", "locked-tool",
+            ])
+            .env(EnvVars::PATH, context.temp_dir.child("bin").path()),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + locked-tool==1.0.0
+    Installed 1 executable: locked-tool
+    "
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn packaged_lock_ignores_unrelated_index_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_tool_dirs();
+    let server = MockServer::start().await;
+    let index = format!("{}/simple", server.uri());
+    let (filename, wheel) = generate_wheel_with_files(
+        &"idna".parse()?,
+        &"3.3".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let url = format!("{}/{filename}", server.uri());
+    let hash = hex::encode(Sha256::digest(&wheel));
+    Mock::given(method("GET"))
+        .and(path("/simple/idna/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "meta": {"api-version": "1.1"},
+                    "name": "idna",
+                    "files": [
+                        {"filename": filename, "url": url, "hashes": {"sha256": hash}},
+                        {
+                            "filename": "idna-3.3-cp313-cp313-win_amd64.whl",
+                            "url": format!("{}/unrelated.whl#sha256=invalid", server.uri()),
+                            "hashes": {}
+                        }
+                    ]
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+    let lock = formatdoc! {r#"
+        lock-version = "1.0"
+        created-by = "test"
+
+        [[packages]]
+        name = "idna"
+        version = "3.3"
+        index = "{index}"
+        wheels = [{{ url = "{url}", hashes = {{ sha256 = "{hash}" }} }}]
+    "#};
+    context.temp_dir.child("wheels").create_dir_all()?;
+    tool(&context, "1.0.0", Some(&lock), None)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.tool_install()
+            .args([
+                "--locked", "--preview-features", "locked-tools", "--index-url", &index,
+                "--find-links", "wheels", "locked-tool",
+            ])
+            .env(EnvVars::PATH, context.temp_dir.child("bin").path()),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed [N] packages in [TIME]
+     + idna==3.3
+     + locked-tool==1.0.0
+    Installed 1 executable: locked-tool
+    "
+    );
+    Ok(())
+}
+
+#[test]
 fn packaged_lock_non_registry_sources() -> Result<()> {
     // None of these sources may be accessed while validating a packaged lock.
     for source in [
