@@ -2418,6 +2418,53 @@ async fn packaged_lock_ignores_unrelated_index_hashes() -> Result<()> {
 }
 
 #[test]
+fn packaged_lock_respects_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .write_str("def main(): pass\n")?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+
+        [project.scripts]
+        locked-tool = "locked_tool:main"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+
+        [tool.uv]
+        environments = ["python_version < '3.12'"]
+        "#})?;
+    context.lock().arg("--offline").assert().success();
+    context
+        .build()
+        .args(["--offline", "--preview-features", "locked-tools", "--wheel"])
+        .assert()
+        .success();
+    uv_snapshot!(
+        context.filters(),
+        context.tool_install().args([
+            "--offline", "--locked", "--preview-features", "locked-tools", "--from",
+            "./dist/locked_tool-1.0.0-py3-none-any.whl", "locked-tool",
+        ]),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The target environment is not supported by the lockfile
+    "
+    );
+    Ok(())
+}
+
+#[test]
 fn packaged_lock_non_registry_sources() -> Result<()> {
     // None of these sources may be accessed while validating a packaged lock.
     for source in [
