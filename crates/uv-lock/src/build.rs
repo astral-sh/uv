@@ -9,8 +9,10 @@ use uv_configuration::{
     DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
 };
 use uv_distribution::DistributionDatabase;
+use uv_distribution_filename::SourceDistFilename;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, MetadataHashPolicy, Requirement, RequiresPython, SourceUrl,
+    BuildableSource, DirectorySourceUrl, MetadataHashPolicy, PYPI_URL, Requirement, RequiresPython,
+    SourceUrl,
 };
 use uv_fs::is_same_file_allow_missing;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -24,6 +26,9 @@ use uv_workspace::Workspace;
 use version_ranges::Ranges;
 
 use crate::{Installable, Lock, PylockToml};
+
+/// Maximum size of core metadata read when validating a packaged lock.
+pub const MAX_CORE_METADATA_SIZE: u64 = 16 * 1024 * 1024;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -188,13 +193,126 @@ fn metadata_matches(
         )?)
 }
 
+/// Read a lock from an extracted source distribution, checking its metadata before reuse.
+pub fn from_sdist(
+    source_tree: &Path,
+    filename: Option<&SourceDistFilename>,
+    preview: Preview,
+) -> Result<Option<ExportedLock>> {
+    let environment_export = parse_boolish_environment_variable(EnvVars::UV_EXPORT_LOCK)?;
+    let pyproject = match fs_err::read_to_string(source_tree.join("pyproject.toml")) {
+        Ok(pyproject) => pyproject,
+        Err(error)
+            if error.kind() == io::ErrorKind::NotFound && environment_export != Some(true) =>
+        {
+            return Ok(None);
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let raw: toml::Value = toml::from_str(&pyproject)?;
+    let Some(mode) = ExportMode::from_pyproject(&raw, environment_export, preview)? else {
+        return Ok(None);
+    };
+    mode.skip_on_error(from_sdist_inner(source_tree, filename, mode))
+}
+
+fn from_sdist_inner(
+    source_tree: &Path,
+    filename: Option<&SourceDistFilename>,
+    mode: ExportMode,
+) -> Result<Option<ExportedLock>> {
+    let path = source_tree.join("pylock.toml");
+    let file_metadata = match fs_err::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if mode == ExportMode::Automatic {
+                return Ok(None);
+            }
+            bail!("Cannot export a lock: the source distribution has no `pylock.toml`")
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if !file_metadata.is_file() || file_metadata.len() > 16 * 1024 * 1024 {
+        bail!("The source distribution has an invalid `pylock.toml` file");
+    }
+    let mut contents = fs_err::read_to_string(&path)?;
+    let raw: toml::Value = toml::from_str(&contents)?;
+    let lock: PylockToml = toml::from_str(&contents)?;
+    if mode == ExportMode::Automatic
+        && (!has_only_pypi_sources(&lock) || !has_only_expected_urls(raw.clone()))
+    {
+        return Ok(None);
+    }
+    if lock.has_missing_hashes()
+        || (mode == ExportMode::Automatic && lock.has_non_registry_sources())
+    {
+        bail!("The source distribution has an unsupported `pylock.toml`");
+    }
+    if mode == ExportMode::Automatic && contents.contains('#') {
+        contents = toml::to_string(&raw)?;
+        if toml::from_str::<toml::Value>(&contents)? != raw {
+            bail!("Cannot sanitize the source distribution's `pylock.toml`");
+        }
+    }
+    lock.validate_packaged_packages()
+        .context("The source distribution has an invalid `pylock.toml`")?;
+    let pkg_info = source_tree.join("PKG-INFO");
+    let info_metadata = fs_err::symlink_metadata(&pkg_info)?;
+    if !info_metadata.is_file() || info_metadata.len() > MAX_CORE_METADATA_SIZE {
+        bail!("The source distribution has an invalid `PKG-INFO` file");
+    }
+    let metadata = ResolutionMetadata::parse_pkg_info(&fs_err::read(&pkg_info)?)?;
+    if metadata.dynamic {
+        bail!("The source distribution has a dynamic version in `PKG-INFO`");
+    }
+    let requires_python = lock
+        .requires_python
+        .clone()
+        .unwrap_or_else(|| RequiresPython::from_specifiers(VersionSpecifiers::default()));
+    let filename = filename.context("Cannot verify the source distribution filename")?;
+    if metadata.name != filename.name || metadata.version != filename.version {
+        bail!("The source distribution's metadata does not match its filename");
+    }
+    let project_python = metadata
+        .requires_python
+        .clone()
+        .map(release_specifiers_to_ranges)
+        .unwrap_or_else(Ranges::full);
+    let lock_python = release_specifiers_to_ranges(requires_python.specifiers().clone());
+    if !project_python.subset_of(&lock_python) {
+        bail!("The source distribution's lock does not cover its supported Python versions");
+    }
+    Ok(Some(ExportedLock {
+        pylock: contents,
+        mode,
+        root: source_tree.to_path_buf(),
+        requires_python,
+        metadata,
+    }))
+}
+
+/// Return whether the URL is the PyPI simple index, with or without a trailing slash.
+fn is_pypi_index_url(url: &str) -> bool {
+    url.strip_suffix('/').unwrap_or(url) == PYPI_URL.as_str()
+}
+
+/// Check the package indexes recorded in the source distribution's lock.
+fn has_only_pypi_sources(lock: &PylockToml) -> bool {
+    lock.packages.iter().all(|package| {
+        package
+            .index
+            .as_ref()
+            .is_none_or(|index| is_pypi_index_url(index.as_str()))
+            && !package.has_non_registry_source()
+    })
+}
+
 /// Export the runtime dependencies of the project supplied by the distribution.
 pub async fn export(
     source_tree: &Path,
     workspace: Option<&Workspace>,
     database: &DistributionDatabase<'_, impl BuildContext>,
     preview: Preview,
-    supports_export: bool,
 ) -> Result<Option<ExportedLock>> {
     let environment_export = parse_boolish_environment_variable(EnvVars::UV_EXPORT_LOCK)?;
     let pyproject_path = source_tree.join("pyproject.toml");
@@ -216,12 +334,6 @@ pub async fn export(
     let Some(mode) = ExportMode::from_pyproject(&raw, environment_export, preview)? else {
         return Ok(None);
     };
-    if !supports_export {
-        if mode == ExportMode::Required {
-            bail!("Packaged lock export requires a source directory");
-        }
-        return Ok(None);
-    }
     mode.skip_on_error(
         export_inner(
             source_tree,

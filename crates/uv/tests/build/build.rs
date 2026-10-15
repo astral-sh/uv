@@ -5599,6 +5599,270 @@ fn build_packaged_lock_skipped_sdist() -> Result<()> {
         fs_err::read(built_sdist.path())?
     );
 
+    uv_snapshot!(context.filters(), build_with_uv_build(&context).env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--offline", "--preview-features", "locked-tools", "--no-build-isolation", "--wheel", "dist/locked_tool-1.0.0.tar.gz"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/dist/locked_tool-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: Cannot export a lock: the source distribution has no `pylock.toml`
+    ");
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "dist/locked_tool-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    assert!(
+        !zip_file_names(
+            context
+                .temp_dir
+                .child("dist/locked_tool-1.0.0-py3-none-any.whl")
+                .path()
+        )?
+        .contains(&"locked_tool-1.0.0.dist-info/pylock.toml".to_string())
+    );
+    Ok(())
+}
+
+/// Reject overlapping versions even when neither version is active on the build machine.
+#[test]
+fn build_sdist_with_invalid_packaged_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [build-system]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("PKG-INFO").write_str(indoc! {"
+        Metadata-Version: 2.4
+        Name: example
+        Version: 1.0.0
+        Requires-Python: >=3.12
+    "})?;
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+        [[packages]]
+        name = "dependency"
+        version = "1.0.0"
+        marker = "sys_platform == 'win32'"
+        index = "https://pypi.org/simple"
+        wheels = [{ url = "https://artifacts.example/dependency-1.0.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        [[packages]]
+        name = "dependency"
+        version = "2.0.0"
+        marker = "python_version >= '3.13'"
+        index = "https://pypi.org/simple"
+        wheels = [{ url = "https://artifacts.example/dependency-2.0.0-py3-none-any.whl", hashes = { sha256 = "2222222222222222222222222222222222222222222222222222222222222222" } }]
+    "#})?;
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+        import tarfile
+        with tarfile.open("example-1.0.0.tar.gz", "w:gz") as archive:
+            archive.add("pyproject.toml", arcname="example-1.0.0/pyproject.toml")
+            archive.add("PKG-INFO", arcname="example-1.0.0/PKG-INFO")
+            archive.add("pylock.toml", arcname="example-1.0.0/pylock.toml")
+    "#})
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--offline", "--preview-features", "locked-tools", "--wheel", "example-1.0.0.tar.gz"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/example-1.0.0.tar.gz`
+      cause: Failed to package the project lock
+      cause: The source distribution has an invalid `pylock.toml`
+      cause: Package entries for `dependency` may be active in the same environment
+    ");
+    Ok(())
+}
+
+/// Reusing an extracted lock must not hide a duplicate archive entry.
+#[test]
+fn build_sdist_with_duplicate_packaged_lock() {
+    let context = uv_test::test_context!("3.12");
+    context.python_command().arg("-c").arg(indoc! {r#"
+        import warnings, zipfile
+        with warnings.catch_warnings(), zipfile.ZipFile("example-1.0.0.zip", "w") as archive:
+            warnings.simplefilter("ignore", UserWarning)
+            archive.writestr("example-1.0.0/pyproject.toml", '[build-system]\nbuild-backend = "uv_build"\n')
+            archive.writestr("example-1.0.0/PKG-INFO", "Metadata-Version: 2.4\nName: example\nVersion: 1.0.0\n")
+            archive.writestr("example-1.0.0/pylock.toml", 'lock-version = "1.0"\ncreated-by = "uv"\npackages = []\n')
+            archive.writestr("example-1.0.0/pylock.toml", 'lock-version = "1.0"\ncreated-by = "uv"\npackages = []\n')
+    "#}).assert().success();
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_EXPORT_LOCK, "true")
+        .args(["--offline", "--preview-features", "locked-tools", "--wheel", "example-1.0.0.zip"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/example-1.0.0.zip`
+      cause: Failed to package the project lock
+      cause: Source distribution has an invalid or duplicate pylock.toml file
+    ");
+}
+
+/// Automatic reuse must not carry private data from comments into the wheel.
+#[test]
+fn build_sdist_with_private_lock_comment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("src/example/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        source-include = ["pylock.toml"]
+    "#})?;
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+        packages = []
+        # https://private.example/secret
+    "#})?;
+    context
+        .build()
+        .args(["--offline", "--sdist"])
+        .assert()
+        .success();
+    write_uv_build_backend(&context)?;
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "dist/example-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("dist/example-1.0.0-py3-none-any.whl") as wheel:
+            print(wheel.read("example-1.0.0.dist-info/pylock.toml").decode(), end="")
+    "#}), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+    packages = []
+    "#);
+    Ok(())
+}
+
+/// A lock with platform-specific versions remains usable when rebuilt from its source distribution.
+#[test]
+fn build_sdist_with_forked_packaged_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("src/example/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        dependency = { index = "pypi-explicit" }
+
+        [[tool.uv.index]]
+        name = "pypi-explicit"
+        url = "https://pypi.org/simple/"
+        explicit = true
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "dependency"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple/" }
+        resolution-markers = ["sys_platform == 'win32'"]
+        wheels = [{ url = "https://artifacts.example:8443/packages/dependency-1.0.0-py3-none-any.whl", hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }]
+
+        [[package]]
+        name = "dependency"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple/" }
+        resolution-markers = ["sys_platform != 'win32'"]
+        wheels = [{ url = "https://artifacts.example/packages/dependency-2.0.0-py3-none-any.whl", hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }]
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "dependency", version = "1.0.0", source = { registry = "https://pypi.org/simple/" }, marker = "sys_platform == 'win32'" },
+            { name = "dependency", version = "2.0.0", source = { registry = "https://pypi.org/simple/" }, marker = "sys_platform != 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "dependency", index = "https://pypi.org/simple/" }]
+    "#})?;
+    context
+        .build()
+        .args(["--offline", "--preview-features", "locked-tools", "--sdist"])
+        .assert()
+        .success();
+    write_uv_build_backend(&context)?;
+    build_with_uv_build(&context)
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--no-build-isolation",
+            "--wheel",
+            "dist/example-1.0.0.tar.gz",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import tomllib, zipfile
+        with zipfile.ZipFile("dist/example-1.0.0-py3-none-any.whl") as wheel:
+            lock = tomllib.loads(wheel.read("example-1.0.0.dist-info/pylock.toml").decode())
+            print([(package["version"], package["marker"]) for package in lock["packages"]])
+    "#}), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [('1.0.0', "sys_platform == 'win32'"), ('2.0.0', "sys_platform != 'win32'")]
+    "#);
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use async_compression::tokio::bufread::GzipDecoder;
+use async_compression::tokio::bufread::{GzipDecoder, ZstdDecoder};
 use async_compression::tokio::write::GzipEncoder;
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::base::write::ZipFileWriter;
@@ -15,13 +15,13 @@ use tokio::io::{
 };
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use uv_build_backend::{WHOLE_FILE_ZIP_ENTRY_LIMIT, ZIP_STREAM_BUFFER_SIZE};
-use uv_distribution_filename::{SourceDistFilename, WheelFilename};
+use uv_distribution_filename::{
+    LegacySourceDistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
+};
 use uv_install_wheel::{RecordEntry, read_record};
-use uv_lock::build::ExportedLock;
+use uv_lock::build::{ExportedLock, MAX_CORE_METADATA_SIZE};
 use uv_metadata::find_archive_dist_info;
 use uv_pypi_types::ResolutionMetadata;
-
-const MAX_CORE_METADATA_SIZE: u64 = 16 * 1024 * 1024;
 
 pub(super) async fn verify_sdist_metadata(
     path: &Path,
@@ -40,7 +40,30 @@ pub(super) async fn verify_sdist_metadata(
 
 async fn sdist_metadata(path: &Path, filename: &SourceDistFilename) -> Result<ResolutionMetadata> {
     let input = fs_err::tokio::File::open(path).await?;
-    let contents = sdist_tar_contents(GzipDecoder::new(BufReader::new(input)), filename).await?;
+    let contents = match filename.extension {
+        SourceDistExtension::TarGz
+        | SourceDistExtension::Legacy(LegacySourceDistExtension::Tgz) => {
+            sdist_tar_contents(GzipDecoder::new(BufReader::new(input)), filename).await?
+        }
+        SourceDistExtension::Legacy(LegacySourceDistExtension::Tar) => {
+            sdist_tar_contents(BufReader::new(input), filename).await?
+        }
+        SourceDistExtension::Legacy(LegacySourceDistExtension::TarZst) => {
+            sdist_tar_contents(ZstdDecoder::new(BufReader::new(input)), filename).await?
+        }
+        SourceDistExtension::Legacy(LegacySourceDistExtension::Zip) => {
+            sdist_zip_contents(input, filename).await?
+        }
+        SourceDistExtension::Legacy(
+            LegacySourceDistExtension::TarBz2
+            | LegacySourceDistExtension::TarLz
+            | LegacySourceDistExtension::TarLzma
+            | LegacySourceDistExtension::TarXz
+            | LegacySourceDistExtension::Tbz
+            | LegacySourceDistExtension::Tlz
+            | LegacySourceDistExtension::Txz,
+        ) => bail!("Unsupported source distribution compression"),
+    };
     if !contents.pyproject_seen {
         bail!("Source distribution has no pyproject.toml file");
     }
@@ -120,6 +143,50 @@ async fn sdist_tar_contents<R: tokio::io::AsyncRead + Unpin>(
                 .await?;
                 if contents.len() as u64 > MAX_CORE_METADATA_SIZE {
                     bail!("Source distribution PKG-INFO is too large");
+                }
+                result.metadata = Some(ResolutionMetadata::parse_pkg_info(&contents)?);
+            }
+            SdistFile::Other => {}
+        }
+    }
+    Ok(result)
+}
+
+async fn sdist_zip_contents(
+    input: fs_err::tokio::File,
+    filename: &SourceDistFilename,
+) -> Result<SdistContents> {
+    let mut archive = ZipFileReader::new(BufReader::new(input).compat()).await?;
+    let mut result = SdistContents::default();
+    for index in 0..archive.file().entries().len() {
+        let entry = &archive.file().entries()[index];
+        let file = sdist_file(Path::new(entry.filename().as_str()?), filename)?;
+        let regular = !entry.dir()?
+            && entry.unix_permissions().is_none_or(|mode| {
+                let file_type = mode & 0o170_000;
+                file_type == 0 || file_type == 0o100_000
+            });
+        match file {
+            SdistFile::Lock => record_sdist_file(&mut result.lock_seen, regular, "pylock.toml")?,
+            SdistFile::Pyproject => {
+                record_sdist_file(&mut result.pyproject_seen, regular, "pyproject.toml")?;
+            }
+            SdistFile::Metadata => {
+                if result.metadata.is_some() || !regular {
+                    bail!("Source distribution has an invalid or duplicate PKG-INFO file");
+                }
+                let mut entry = archive.reader_with_entry(index).await?;
+                let mut contents = Vec::new();
+                AsyncReadExt::read_to_end(
+                    &mut AsyncReadExt::take(&mut entry, MAX_CORE_METADATA_SIZE + 1),
+                    &mut contents,
+                )
+                .await?;
+                if contents.len() as u64 > MAX_CORE_METADATA_SIZE {
+                    bail!("Source distribution PKG-INFO is too large");
+                }
+                if entry.compute_hash() != entry.entry().crc32() {
+                    bail!("Source distribution PKG-INFO has an invalid checksum");
                 }
                 result.metadata = Some(ResolutionMetadata::parse_pkg_info(&contents)?);
             }
