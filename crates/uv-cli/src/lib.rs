@@ -5917,15 +5917,15 @@ pub struct PythonListArgs {
     #[arg(long)]
     all_versions: bool,
 
-    /// List Python downloads for all platforms.
+    /// List Python versions for all platforms.
     ///
-    /// By default, only downloads for the current platform are shown.
+    /// By default, only Python versions for the current platform are shown.
     #[arg(long)]
     all_platforms: bool,
 
-    /// List Python downloads for all architectures.
+    /// List Python versions for all architectures.
     ///
-    /// By default, only downloads for the current architecture are shown.
+    /// By default, only Python versions for the current architecture are shown.
     #[arg(long, alias = "all_architectures")]
     all_arches: bool,
 
