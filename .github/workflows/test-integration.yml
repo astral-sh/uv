@@ -13,10 +13,10 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
-  # Apply a dependency cutoff to tests that don't use a lockfile
-  CI_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
+  # Stabilize unlocked PyPI resolutions; registry tests unset this to use their script's lockfile.
+  UV_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
   UV_LOCKED: 1
 
 jobs:
@@ -95,8 +95,6 @@ jobs:
         run: conda info
 
       - name: "Install a package"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         shell: bash -el {0}
         run: |
           echo "$CONDA_PREFIX"
@@ -130,8 +128,6 @@ jobs:
         run: conda info
 
       - name: "Install a package with macOS macOS 11.0 wheels"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         shell: bash -el {0}
         run: |
           # greenlet has `macosx_11_0_universal2` wheels. Previously, conda interpreters on Intel
@@ -186,8 +182,6 @@ jobs:
           .venv/bin/python --version
 
       - name: "Check install"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv pip install -v anyio
 
@@ -269,8 +263,6 @@ jobs:
           .venv/Scripts/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
 
       - name: "Check install"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv pip install -v anyio
 
@@ -315,8 +307,6 @@ jobs:
           .venv/Scripts/python -c "import sys; exit(1) if 'ARM64' not in sys.version else exit(0)"
 
       - name: "Check install"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv pip install -v anyio
 
@@ -363,8 +353,6 @@ jobs:
           .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' not in sys.version else exit(0)"
 
       - name: "Check install"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv pip install -v anyio
 
@@ -393,8 +381,6 @@ jobs:
 
       # https://github.com/astral-sh/uv/issues/16204
       - name: "Check temporary environment creation"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv run -p $env:LOCALAPPDATA\Python\pythoncore-3.14-64\python.exe --with numpy python -c "import sys; print(sys.executable)"
 
@@ -478,8 +464,6 @@ jobs:
           .venv/bin/python --version
 
       - name: "Check install"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv pip install anyio
 
@@ -573,8 +557,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           .\uv.exe pip install anyio
 
@@ -640,8 +622,6 @@ jobs:
           .venv/bin/python --version
 
       - name: "Check install"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv pip install anyio
 
@@ -701,8 +681,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           .\uv.exe pip install anyio
 
@@ -724,8 +702,6 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Create a native virtual environment"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv venv venv-native -p 3.12
           # We use features added in 0.30.3 but there is no known breakage in
@@ -742,9 +718,11 @@ jobs:
           echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
 
       - name: "Create Pyodide virtual environment"
+        env:
+          # The bundled Pyodide index does not include upload dates.
+          UV_EXCLUDE_NEWER: "false"
         run: |
-          # The bundled Pyodide index does not include upload dates, so run outside the
-          # repository to avoid applying its exclude-newer setting.
+          # Run outside the repository so its project configuration does not affect the install.
           PYODIDE_VENV="$RUNNER_TEMP/venv-pyodide"
           ./uv venv -p "$PYODIDE_PYTHON" "$PYODIDE_VENV"
           source "$PYODIDE_VENV/bin/activate"
@@ -758,8 +736,6 @@ jobs:
           ./uv python install cpython-3.13.2-emscripten-wasm32-musl
 
       - name: "Create a Pyodide virtual environment using uv installed Python"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           ./uv venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide2
           # TODO: be able to install Emscripten wheels here...
@@ -784,8 +760,6 @@ jobs:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
       - name: "Create a native virtual environment"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: |
           .\uv.exe venv venv-native -p 3.13
           .\uv.exe pip install -p venv-native\Scripts\python.exe pyodide-build==0.31.1 pip
@@ -800,6 +774,9 @@ jobs:
           echo "PYODIDE_INDEX=$env:PYODIDE_INDEX" >> $env:GITHUB_ENV
 
       - name: "Create Pyodide virtual environment"
+        env:
+          # The bundled Pyodide index does not include upload dates.
+          UV_EXCLUDE_NEWER: "false"
         run: |
           .\uv.exe venv -p $env:PYODIDE_PYTHON venv-pyodide
           & .\venv-pyodide\Scripts\Activate.ps1
@@ -856,7 +833,7 @@ jobs:
       - name: "Run uv on Windows NanoServer"
         run: |
           docker run --rm `
-            -e "UV_EXCLUDE_NEWER=$env:CI_EXCLUDE_NEWER" `
+            -e UV_EXCLUDE_NEWER `
             -v "${{ github.workspace }}:C:\uv" `
             mcr.microsoft.com/powershell:lts-nanoserver-ltsc2022 `
             pwsh -ExecutionPolicy Bypass -File C:\uv\test\integration\windows-nanoserver.ps1
@@ -866,7 +843,6 @@ jobs:
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     env:
-      UV_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
       # This job creates and updates test projects without existing lockfiles.
       UV_LOCKED: 0
     steps:
@@ -926,8 +902,6 @@ jobs:
     name: "free-threaded on github actions"
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    env:
-      UV_EXCLUDE_NEWER: "2026-10-11T00:00:00Z"
     steps:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -1046,7 +1020,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Run public registry tests"
-        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
+        run: env -u UV_EXCLUDE_NEWER ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
         env:
           UV_TEST_ASTRAL_PKG: transformer-engine
           UV_TEST_ASTRAL_PUBLIC: "true"
@@ -1128,7 +1102,7 @@ jobs:
           echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
 
       - name: "Run registry tests with environment variable backend"
-        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
+        run: env -u UV_EXCLUDE_NEWER ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
         env:
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
@@ -1158,7 +1132,7 @@ jobs:
           UV_TEST_GITLAB_USERNAME: token
 
       - name: "Run registry tests with text store backend"
-        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
+        run: env -u UV_EXCLUDE_NEWER ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
@@ -1220,7 +1194,7 @@ jobs:
           ./uv build -v crates/uv-build
 
           # Test the main path (`build_wheel`) through pip
-          ./uv venv -v --seed --exclude-newer "$CI_EXCLUDE_NEWER"
+          ./uv venv -v --seed
           ./uv run --no-project python -m pip install -v test/packages/built-by-uv --find-links crates/uv-build/dist --no-index --no-deps
           ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
 
@@ -1233,7 +1207,7 @@ jobs:
           # Test both `build_wheel` and `build_sdist` through the official `build`
           rm -rf test/packages/built-by-uv/dist/
           ./uv venv -c -v
-          ./uv pip install build --exclude-newer "$CI_EXCLUDE_NEWER"
+          ./uv pip install build
           # Add the uv binary to PATH for `build` to find
           PATH="$(pwd):$PATH" UV_OFFLINE=1 UV_FIND_LINKS=crates/uv-build/dist ./uv run --no-project python -m build -v --installer uv test/packages/built-by-uv
           ./uv pip install -v test/packages/built-by-uv/dist/*.tar.gz --find-links crates/uv-build/dist --offline --no-deps
@@ -1264,8 +1238,6 @@ jobs:
         run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xvz
 
       - name: "Check cache compatibility"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-x86_64-unknown-linux-gnu/uv
 
   cache-test-macos-aarch64:
@@ -1293,6 +1265,4 @@ jobs:
         run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz" | tar -xvz
 
       - name: "Check cache compatibility"
-        env:
-          UV_EXCLUDE_NEWER: ${{ env.CI_EXCLUDE_NEWER }}
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
