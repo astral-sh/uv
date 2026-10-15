@@ -801,7 +801,7 @@ async fn build_package(
     );
     let mut exported_lock = match &source.source {
         Source::Directory(source_tree) => {
-            lock::export(source_tree, workspace.ok(), &database, preview, true)
+            lock::export(source_tree, workspace.ok(), &database, preview)
                 .await
                 .map_err(Error::BuildLock)?
                 .map(Arc::new)
@@ -1033,9 +1033,27 @@ async fn build_package(
                 Err(err) => return Err(err.into()),
             };
 
-            lock::export(&extracted, None, &database, preview, false)
-                .await
-                .map_err(Error::BuildLock)?;
+            let mut exported_lock = lock::from_sdist(
+                &extracted,
+                source_dist.as_ref().and_then(|filename| match filename {
+                    DistFilename::SourceDistFilename(filename) => Some(filename),
+                    DistFilename::WheelFilename(_) => None,
+                }),
+                preview,
+            )
+            .map_err(Error::BuildLock)?
+            .map(Arc::new);
+            if let (Some(lock), Some(DistFilename::SourceDistFilename(filename))) =
+                (&exported_lock, &source_dist)
+                && lock
+                    .skip_on_error(
+                        archive::verify_sdist_metadata(source.path(), filename, lock).await,
+                    )
+                    .map_err(Error::BuildLock)?
+                    .is_none()
+            {
+                exported_lock = None;
+            }
             let wheel_build = build_wheel(
                 &extracted,
                 output_dir,
@@ -1051,7 +1069,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 source_dist.as_ref(),
-                None,
+                exported_lock.clone(),
             )
             .await?;
             build_results.push(wheel_build);
