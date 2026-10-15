@@ -14,7 +14,7 @@ use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::{DistributionDatabase, LocalWheel, LoweredExtraBuildDependencies};
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuiltDist, CachedDist, Dist, Edge, Hashed, Name,
+    ArchiveHashGroups, ArchiveHashPolicy, BuiltDist, CachedDist, Dist, Edge, Hashed, Name,
     NameRequirementSpecification, Node, Requirement, RequirementSource, Resolution, ResolvedDist,
     UnresolvedRequirement, parse_all_url_hashes,
 };
@@ -630,23 +630,20 @@ async fn verify_hash_constraints(
             continue;
         }
         let binding = verified.as_ref().context("Missing verified archive hash")?;
-        let mut matched = None;
-        for hash in constraint {
-            let expected = [binding.clone(), hash.clone()];
-            let policy = ArchiveHashPolicy::All(&expected);
-            if let Ok(candidate) = database.get_or_build_wheel(dist, tags, policy).await
-                && candidate.satisfies(policy)
-            {
-                matched = Some((candidate, hash.clone()));
-                break;
+        let groups = ArchiveHashGroups::new(vec![vec![binding.clone()], constraint.to_vec()]);
+        let policy = ArchiveHashPolicy::AllOfAny(&groups);
+        if let Ok(candidate) = database.get_or_build_wheel(dist, tags, policy).await
+            && candidate.satisfies(policy)
+            && let Some(hash) = constraint
+                .iter()
+                .find(|hash| candidate.hashes().contains(hash))
+        {
+            if hash_rank(hash) > hash_rank(binding) {
+                verified = Some(hash.clone());
             }
-        }
-        let Some((candidate, hash)) = matched else {
+            wheel = candidate;
+        } else {
             bail!("The selected artifact for `{dist}` does not match the required hashes");
-        };
-        wheel = candidate;
-        if hash_rank(&hash) > hash_rank(binding) {
-            verified = Some(hash);
         }
     }
     Ok((wheel, verified))
