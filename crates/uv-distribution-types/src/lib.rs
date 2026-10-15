@@ -47,7 +47,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use memchr::memchr3;
-use url::Url;
 
 use uv_distribution_filename::{
     DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
@@ -62,6 +61,7 @@ use uv_pypi_types::{
     ParsedUrl, VerbatimParsedUrl,
 };
 use uv_redacted::SafeUrl;
+use uv_redacted::policy::SerializationPolicy;
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -1209,14 +1209,14 @@ impl RemoteSource for File {
     }
 }
 
-impl RemoteSource for Url {
+impl<P: SerializationPolicy> RemoteSource for SafeUrl<P> {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
         let mut path_segments = self
             .path_segments()
-            .ok_or_else(|| Error::MissingPathSegments(SafeUrl::ref_cast(self).to_string()))?;
+            .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
-        // This is guaranteed by the contract of `Url::path_segments`.
+        // This is guaranteed by the contract of `url::Url::path_segments`.
         let last = path_segments
             .next_back()
             .expect("path segments is non-empty");
@@ -1777,6 +1777,7 @@ impl Identifier for BuildableSource<'_> {
 mod test {
     use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
     use uv_redacted::SafeUrl;
+    use uv_redacted::policy::{Raw, Stripped};
 
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
@@ -1836,7 +1837,7 @@ mod test {
                 "mailto:ferris@example.com?token=kept#fragment",
             ),
         ] {
-            let url = url::Url::parse(input).unwrap();
+            let url = SafeUrl::parse(input).unwrap().with_policy(Raw);
             let error = RemoteSource::filename(&url).unwrap_err();
             let crate::Error::MissingPathSegments(payload) = &error else {
                 panic!("expected missing path segments");
@@ -1855,7 +1856,7 @@ mod test {
         }
 
         let input = "https://example.org/demo%20name.whl?sig=sentinel";
-        let url = url::Url::parse(input).unwrap();
+        let url = SafeUrl::parse(input).unwrap().with_policy(Stripped);
         assert_eq!(RemoteSource::filename(&url).unwrap(), "demo name.whl");
         assert_eq!(url.as_str(), input);
     }
