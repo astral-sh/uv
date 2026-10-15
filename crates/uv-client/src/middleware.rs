@@ -20,7 +20,8 @@ impl Middleware for AzureStorageMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        if AzureEndpointProvider::is_azure_endpoint(request.url(), self.preview)? {
+        if AzureEndpointProvider::is_azure_endpoint(SafeUrl::ref_cast(request.url()), self.preview)?
+        {
             // Anonymous requests need 2019-12-12 or later to return a 401
             // bearer challenge instead of 409 when account-level public access
             // is disabled. Use the earliest such version supported by Azure

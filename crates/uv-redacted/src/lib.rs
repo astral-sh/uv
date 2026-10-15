@@ -230,6 +230,13 @@ impl<P: SerializationPolicy> SafeUrl<P> {
         self.with_policy(Unserializable)
     }
 
+    /// Return the complete parsed URL for APIs that require [`Url`].
+    ///
+    /// The returned URL has no display redaction or serialization policy.
+    pub fn into_unsafe_url(self) -> Url {
+        self.0
+    }
+
     /// Serialize the normalized URL according to its policy.
     ///
     /// This inherent method prevents method lookup from bypassing the policy
