@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use insta::{assert_json_snapshot, assert_snapshot, with_settings};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -34,7 +33,7 @@ async fn test_user_agent_has_version() -> Result<()> {
         .cached_client()
         .uncached()
         .for_host(&url)
-        .get(Url::from(url))
+        .get(url)
         .send()
         .await?;
 
@@ -93,7 +92,7 @@ async fn test_user_agent_has_subcommand() -> Result<()> {
         .cached_client()
         .uncached()
         .for_host(&url)
-        .get(Url::from(url))
+        .get(url)
         .send()
         .await?;
 
@@ -188,7 +187,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         .cached_client()
         .uncached()
         .for_host(&url)
-        .get(Url::from(url))
+        .get(url)
         .send()
         .await?;
 

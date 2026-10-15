@@ -15,7 +15,6 @@ use tokio::io::{AsyncRead, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
-use url::Url;
 
 use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
@@ -1607,7 +1606,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
@@ -1625,7 +1624,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(Url::from(url))
+            .get(url)
             .header(
                 "accept-encoding",
                 reqwest::header::HeaderValue::from_static("identity"),

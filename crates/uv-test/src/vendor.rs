@@ -215,7 +215,7 @@ async fn ensure_cached_artifact(artifact: &VendorArtifact, path: &Path) -> Resul
         .with_context(|| format!("invalid vendor artifact URL `{}`", artifact.url))?;
     let response = client
         .for_host(&url)
-        .get(reqwest::Url::from(url))
+        .get(url)
         .send()
         .await
         .with_context(|| format!("failed to download `{}`", artifact.url))?

@@ -10,9 +10,7 @@ use http::header::{
     PROXY_AUTHORIZATION, REFERER, TRANSFER_ENCODING, WWW_AUTHENTICATE,
 };
 use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
-use reqwest::{
-    Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
-};
+use reqwest::{Certificate, Client, ClientBuilder, NoProxy, Proxy, Request, Response, multipart};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{Jitter, RetryTransientMiddleware};
@@ -34,6 +32,7 @@ use uv_platform_tags::Platform;
 use uv_preview::Preview;
 use uv_redacted::SafeUrl;
 use uv_redacted::SafeUrlError;
+use uv_redacted::policy::SerializationPolicy;
 use uv_static::EnvVars;
 use uv_threads::min_stack_size;
 use uv_version::version;
@@ -880,18 +879,18 @@ pub struct RedirectClientWithMiddleware {
 
 impl RedirectClientWithMiddleware {
     /// Convenience method to make a `GET` request to a URL.
-    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
-        RequestBuilder::new(self.client.get(url), self)
+    pub fn get<P: SerializationPolicy>(&self, url: SafeUrl<P>) -> RequestBuilder<'_> {
+        RequestBuilder::new(self.client.get(url.into_unsafe_url()), self)
     }
 
     /// Convenience method to make a `POST` request to a URL.
-    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
-        RequestBuilder::new(self.client.post(url), self)
+    pub fn post<P: SerializationPolicy>(&self, url: SafeUrl<P>) -> RequestBuilder<'_> {
+        RequestBuilder::new(self.client.post(url.into_unsafe_url()), self)
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
-    pub(crate) fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
-        RequestBuilder::new(self.client.head(url), self)
+    pub(crate) fn head<P: SerializationPolicy>(&self, url: SafeUrl<P>) -> RequestBuilder<'_> {
+        RequestBuilder::new(self.client.head(url.into_unsafe_url()), self)
     }
 
     /// Executes a request, applying the redirect policy.

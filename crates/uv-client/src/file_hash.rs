@@ -2,7 +2,6 @@ use std::path::Path;
 
 use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use url::Url;
 
 use uv_extract::hash::{HashReader, Hasher};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -41,7 +40,7 @@ impl RegistryClient {
         } else {
             let response = self
                 .uncached_client(url)
-                .get(Url::from(url.clone()))
+                .get(url.clone())
                 .header(
                     // `reqwest` defaults to accepting compressed responses.
                     // Specify identity encoding to get consistent .whl downloading

@@ -10,7 +10,6 @@ use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
@@ -467,7 +466,7 @@ async fn send_request_to_with_cert(
         .cached_client()
         .uncached()
         .for_host(url)
-        .get(Url::from(url.clone()))
+        .get(url.clone())
         .send()
         .await
 }

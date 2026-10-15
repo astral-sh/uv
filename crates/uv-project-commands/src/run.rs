@@ -17,7 +17,6 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, trace, warn};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -1609,11 +1608,7 @@ impl ParsedRunCommand {
         client_builder: &BaseClientBuilder<'_>,
     ) -> anyhow::Result<tempfile::NamedTempFile> {
         let client = client_builder.build()?;
-        let mut response = client
-            .for_host(url)
-            .get(Url::from(url.clone()))
-            .send()
-            .await?;
+        let mut response = client.for_host(url).get(url.clone()).send().await?;
 
         let gist_url;
         // If it's a Gist URL, use the GitHub API to get the raw URL.
@@ -1621,11 +1616,7 @@ impl ParsedRunCommand {
             gist_url = resolve_gist_url(SafeUrl::ref_cast(response.url()), client_builder).await?;
             url = &gist_url;
 
-            response = client
-                .for_host(url)
-                .get(Url::from(url.clone()))
-                .send()
-                .await?;
+            response = client.for_host(url).get(url.clone()).send().await?;
         }
 
         let file_stem = url
@@ -1933,9 +1924,7 @@ async fn resolve_gist_url(
 
     // Build the request with appropriate headers.
     let api_url_parsed = SafeUrl::parse(&api_url)?;
-    let mut request = client
-        .for_host(&api_url_parsed)
-        .get(Url::from(api_url_parsed));
+    let mut request = client.for_host(&api_url_parsed).get(api_url_parsed);
     request = request.header("Accept", "application/vnd.github.v3+json");
 
     // Add GitHub token, if available.
