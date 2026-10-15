@@ -150,6 +150,11 @@ async fn packaged_lock_overrides_and_excludes() -> Result<()> {
             .await;
     }
     let mut lock = String::from("lock-version = \"1.0\"\ncreated-by = \"test\"\n");
+    let (_, _, beta_hash) = locked_files.get("beta").context("missing beta hash")?;
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str(&format!("beta>=1 --hash=sha256:{beta_hash}\n"))?;
     for (name, (version, url, hash)) in locked_files {
         writeln!(
             lock,
@@ -201,7 +206,11 @@ async fn packaged_lock_overrides_and_excludes() -> Result<()> {
         .child("unused-exclude.txt")
         .write_str("unused-package\n")?;
 
-    uv_snapshot!(context.filters(), context.tool_run().args(["--locked", "--preview-features", "locked-tools", "--index-url", &index, "--find-links", "wheels", "--override", "overrides.txt", "locked-tool"]), @"
+    uv_snapshot!(context.filters(), context.tool_run().args([
+        "--locked", "--preview-features", "locked-tools", "--index-url", &index,
+        "--find-links", "wheels", "--override", "overrides.txt", "--constraint",
+        "constraints.txt", "locked-tool",
+    ]), @"
     exit_code: 0 (success)
     ----- stdout -----
     3.5
