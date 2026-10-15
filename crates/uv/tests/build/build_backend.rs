@@ -1087,6 +1087,7 @@ fn license_file_must_be_utf8() -> Result<()> {
     Ok(())
 }
 
+/// License globs must exclude unrelated files, directory symlinks, and dangling symlinks.
 #[test]
 fn license_glob_excludes_nonmatching_files() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1107,17 +1108,28 @@ fn license_glob_excludes_nonmatching_files() -> Result<()> {
     context.temp_dir.child("src/project/__init__.py").touch()?;
     context
         .temp_dir
-        .child("licenses/vendor/LICENSE.txt")
+        .child("licenses/vendor[1]/LICENSE.txt")
         .write_str("Vendor license")?;
     context
         .temp_dir
-        .child("licenses/vendor/thing.bin")
+        .child("licenses/vendor[1]/thing.bin")
         .write_binary(&[0xff])?;
     #[cfg(unix)]
-    fs_err::os::unix::fs::symlink(
-        "thing.bin",
-        context.temp_dir.join("licenses/vendor/symlink.bin"),
-    )?;
+    {
+        fs_err::os::unix::fs::symlink(
+            "thing.bin",
+            context.temp_dir.join("licenses/vendor[1]/symlink.bin"),
+        )?;
+        context.temp_dir.child("assets").create_dir_all()?;
+        fs_err::os::unix::fs::symlink(
+            "../../assets",
+            context.temp_dir.join("licenses/vendor[1]/assets-link"),
+        )?;
+        fs_err::os::unix::fs::symlink(
+            "missing",
+            context.temp_dir.join("licenses/vendor[1]/dangling-link"),
+        )?;
+    }
 
     uv_snapshot!(context.build().arg("--sdist").arg("--wheel").arg("--list"), @"
     exit_code: 0 (success)
@@ -1126,13 +1138,22 @@ fn license_glob_excludes_nonmatching_files() -> Result<()> {
     project-0.1.0/PKG-INFO (generated)
     project-0.1.0/pyproject.toml (generated)
     project-0.1.0/pyproject.toml.orig (pyproject.toml)
-    project-0.1.0/licenses/vendor/LICENSE.txt (licenses/vendor/LICENSE.txt)
+    project-0.1.0/licenses/vendor[1]/LICENSE.txt (licenses/vendor[1]/LICENSE.txt)
     project-0.1.0/src/project/__init__.py (src/project/__init__.py)
     Building project-0.1.0-py3-none-any.whl will include the following files:
     project/__init__.py (src/project/__init__.py)
-    project-0.1.0.dist-info/licenses/licenses/vendor/LICENSE.txt (licenses/vendor/LICENSE.txt)
+    project-0.1.0.dist-info/licenses/licenses/vendor[1]/LICENSE.txt (licenses/vendor[1]/LICENSE.txt)
     project-0.1.0.dist-info/WHEEL (generated)
     project-0.1.0.dist-info/METADATA (generated)
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("--wheel"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
 
     Ok(())

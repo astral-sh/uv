@@ -91,6 +91,7 @@ fn source_dist_matcher(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     settings: &BuildBackendSettings,
+    license_files: &[String],
     show_warnings: bool,
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
@@ -140,10 +141,14 @@ fn source_dist_matcher(
     }
 
     // Include the license files
-    for license_files in pyproject_toml.license_files_source_dist() {
-        trace!("Including license files at: {license_files}`");
+    for license_file in license_files {
+        trace!("Including license file at: {license_file}");
+        let glob = Glob::new(&globset::escape(license_file)).expect("escaped globset is parseable");
+        include_globs.push(glob);
+    }
+    if let Some(license_file) = pyproject_toml.legacy_license_file() {
         let glob = PortableGlobParser::Pep639
-            .parse(license_files)
+            .parse(license_file)
             .map_err(|err| Error::PortableGlob {
                 field: "project.license-files".to_string(),
                 source: err,
@@ -275,8 +280,13 @@ fn write_source_dist(
         &pyproject_path,
     )?;
 
-    let (include_matcher, exclude_matcher) =
-        source_dist_matcher(source_tree, &pyproject_toml, &settings, show_warnings)?;
+    let (include_matcher, exclude_matcher) = source_dist_matcher(
+        source_tree,
+        &pyproject_toml,
+        &settings,
+        &metadata.license_files,
+        show_warnings,
+    )?;
 
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
