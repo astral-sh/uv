@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{mem, thread};
 
+use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
@@ -23,9 +24,8 @@ use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, InstalledDistKind, Name, RemoteSource, Requirement,
-    RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent,
-    VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
+    ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -1360,16 +1360,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             && let CandidateDist::Compatible(CompatibleDist::InstalledDist(installed)) =
                 candidate.dist()
         {
-            installed_has_variant = match &installed.kind {
-                InstalledDistKind::Registry(_) | InstalledDistKind::Url(_) => installed
-                    .install_path()
-                    .join("variant.json")
-                    .try_exists()
-                    .unwrap_or(true),
-                InstalledDistKind::EggInfoFile(_)
-                | InstalledDistKind::EggInfoDirectory(_)
-                | InstalledDistKind::LegacyEditable(_) => false,
-            };
+            installed_has_variant = installed
+                .variant_metadata_path()
+                .is_some_and(|path| path.try_exists().unwrap_or(true));
             if (preview_variants || installed_has_variant)
                 && let Some(alternative) = self.selector.select_no_preference(
                     name,
@@ -1397,12 +1390,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // With unsafe-best-match, variants on any index may become compatible after their
             // properties are checked. Consider the candidates in index order.
             let candidates = if self.selector.index_strategy() == &IndexStrategy::UnsafeBestMatch {
-                version_maps
-                    .iter()
-                    .filter_map(|version_map| version_map.get(candidate.version()))
-                    .collect::<Vec<_>>()
+                Either::Left(
+                    version_maps
+                        .iter()
+                        .filter_map(|version_map| version_map.get(candidate.version())),
+                )
             } else {
-                vec![prioritized]
+                Either::Right(std::iter::once(prioritized))
             };
 
             let mut variant_prioritized = None;
@@ -1412,44 +1406,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for variants_json in candidate_dist.variants_json() {
                     if candidate_dist.has_variants(&variants_json.index) {
                         responses.push((
-                            variants_json.index.clone(),
+                            &variants_json.index,
                             requests.request_variants_json(variants_json)?.wait(),
                         ));
                     }
                 }
-                let metadata = responses
-                    .iter()
-                    .filter_map(|(index, response)| {
-                        response
-                            .as_ref()
-                            .as_ref()
-                            .ok()
-                            .map(|metadata| (index.clone(), metadata))
-                    })
-                    .collect::<Vec<_>>();
-                variant_metadata_offline |= responses.iter().any(|(_, response)| {
-                    matches!(
-                        response.as_ref().as_ref(),
-                        Err(MetadataUnavailable::Offline | MetadataUnavailable::Network(_))
-                    )
-                });
-                variant_prioritized = candidate_dist.prioritize_variants(&metadata);
-                if variant_prioritized.is_some() {
+                let mut metadata = Vec::with_capacity(responses.len());
+                for (index, response) in &responses {
+                    match response.as_ref() {
+                        Ok(content) => metadata.push((*index, content)),
+                        Err(reason) => {
+                            if let MetadataUnavailable::Offline | MetadataUnavailable::Network(_) =
+                                reason
+                            {
+                                variant_metadata_offline = true;
+                            }
+                            if unavailable_metadata.is_none()
+                                && std::ptr::eq(candidate_dist, prioritized)
+                            {
+                                unavailable_metadata = Some(reason.clone());
+                            }
+                        }
+                    }
+                }
+                if let Some(selected) = candidate_dist.prioritize_variants(&metadata) {
+                    variant_prioritized = Some(Cow::Owned(selected));
                     break;
                 }
                 if candidate_dist.get().is_some() {
-                    if !std::ptr::eq(candidate_dist, prioritized) {
-                        variant_prioritized = Some(candidate_dist.clone());
-                    }
+                    variant_prioritized = Some(Cow::Borrowed(candidate_dist));
                     break;
-                }
-                if std::ptr::eq(candidate_dist, prioritized)
-                    && candidate.compatible().is_none()
-                    && let Some(reason) = responses
-                        .iter()
-                        .find_map(|(_, response)| response.as_ref().as_ref().err())
-                {
-                    unavailable_metadata = Some(reason.clone());
                 }
             }
             if variant_prioritized.is_none()

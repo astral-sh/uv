@@ -357,6 +357,18 @@ impl InstalledDist {
         }
     }
 
+    /// Return the path to this distribution's wheel variant metadata, if it has a `.dist-info` directory.
+    pub fn variant_metadata_path(&self) -> Option<PathBuf> {
+        match &self.kind {
+            InstalledDistKind::Registry(_) | InstalledDistKind::Url(_) => {
+                Some(self.install_path().join("variant.json"))
+            }
+            InstalledDistKind::EggInfoFile(_)
+            | InstalledDistKind::EggInfoDirectory(_)
+            | InstalledDistKind::LegacyEditable(_) => None,
+        }
+    }
+
     /// Return the [`Version`] of the distribution.
     pub fn version(&self) -> &Version {
         match &self.kind {

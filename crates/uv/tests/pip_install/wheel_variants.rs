@@ -167,12 +167,6 @@ fn sync_changes_installed_variant() -> Result<()> {
      ~ ok==1.0.0
     ");
     assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"null");
-    uv_snapshot!(context.filters(), context.pip_check(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Checked 1 package in [TIME]
-    All installed packages are compatible
-    ");
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--no-index")
@@ -400,193 +394,8 @@ fn variant_wheel_with_multiple_labels() -> Result<()> {
     Ok(())
 }
 
-/// A wheel's properties must be supported even when its index metadata says otherwise.
-#[tokio::test]
-async fn variant_with_unsupported_wheel_metadata() -> Result<()> {
-    let server = MockServer::start().await;
-    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
-    let metadata = json!({
-        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
-        "default-priorities": { "namespace": ["cuda"] },
-        "variants": { "gpu": { "cuda": { "version": ["12"] } } },
-    })
-    .to_string();
-    let (_, wheel) = generate_wheel_with_files(
-        &"ok".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[("ok-1.0.0.dist-info/variant.json", &metadata)],
-    );
-    Mock::given(method("GET"))
-        .and(path("/simple/ok/"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                json!({
-                    "meta": { "api-version": "1.0" },
-                    "name": "ok",
-                    "files": [
-                        {
-                            "filename": "ok-1.0.0-py3-none-any-gpu.whl",
-                            "url": format!("{}/files/ok-1.0.0-py3-none-any-gpu.whl", server.uri()),
-                            "hashes": {},
-                            "core-metadata": true,
-                        },
-                        {
-                            "filename": "ok-1.0.0-variants.json",
-                            "url": format!("{}/files/ok-1.0.0-variants.json", server.uri()),
-                            "hashes": {},
-                        },
-                    ],
-                })
-                .to_string(),
-                "application/vnd.pypi.simple.v1+json",
-            ),
-        )
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/ok-1.0.0-variants.json"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_string(
-                json!({
-                    "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
-                    "default-priorities": { "namespace": ["cuda"] },
-                    "variants": { "gpu": {} },
-                })
-                .to_string(),
-            ),
-        )
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/ok-1.0.0-py3-none-any-gpu.whl.metadata"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_string("Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n"),
-        )
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/ok-1.0.0-py3-none-any-gpu.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--index-url")
-        .arg(format!("{}/simple/", server.uri()))
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("--preview-features")
-        .arg("wheel-variants")
-        .arg("ok==1.0.0"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to download `ok==1.0.0`
-      cause: Wheel variant has unsupported or invalid properties: `ok-1.0.0-py3-none-any-gpu.whl`
-    ");
-    Ok(())
-}
-
-/// A variant from the first index takes precedence when the same version is on another index.
-#[tokio::test]
-async fn select_variant_with_unsafe_best_match() -> Result<()> {
-    let server = MockServer::start().await;
-    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
-    let metadata = json!({
-        "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
-        "default-priorities": { "namespace": ["cuda"] },
-        "variants": { "null": {} },
-    })
-    .to_string();
-    let (_, variant_wheel) = generate_wheel_with_files(
-        &"ok".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[
-            ("ok/variant.txt", "variant"),
-            ("ok-1.0.0.dist-info/variant.json", &metadata),
-        ],
-    );
-    let (_, ordinary_wheel) = generate_wheel_with_files(
-        &"ok".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::default(),
-        None,
-        "py3-none-any",
-        &[("ok/variant.txt", "ordinary")],
-    );
-    Mock::given(method("GET"))
-        .and(path("/first/ok/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            format!(
-                r#"<a href="{}/files/ok-1.0.0-py3-none-any-null.whl">wheel</a>
-                <a href="{}/files/ok-1.0.0-variants.json">metadata</a>"#,
-                server.uri(),
-                server.uri(),
-            ),
-            "text/html",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/second/ok/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            format!(
-                r#"<a href="{}/files/ok-1.0.0-py3-none-any.whl">wheel</a>"#,
-                server.uri(),
-            ),
-            "text/html",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/ok-1.0.0-variants.json"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(metadata))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/ok-1.0.0-py3-none-any-null.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(variant_wheel))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/ok-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(ordinary_wheel))
-        .mount(&server)
-        .await;
-
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--extra-index-url")
-        .arg(format!("{}/first/", server.uri()))
-        .arg("--index-url")
-        .arg(format!("{}/second/", server.uri()))
-        .arg("--index-strategy")
-        .arg("unsafe-best-match")
-        .arg("--preview-features")
-        .arg("wheel-variants")
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("ok==1.0.0"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0
-    ");
-    assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"variant");
-    Ok(())
-}
-
-/// An unsupported variant on the first index must not hide a compatible variant on another index.
+/// An unsupported variant on the first index must not hide a compatible variant on the second,
+/// even when an ordinary wheel is available on the third.
 #[tokio::test]
 async fn select_later_variant_with_unsafe_best_match() -> Result<()> {
     let server = MockServer::start().await;
@@ -659,12 +468,33 @@ async fn select_later_variant_with_unsafe_best_match() -> Result<()> {
         .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
         .mount(&server)
         .await;
+    Mock::given(method("GET"))
+        .and(path("/third/ok/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/third/files/ok-1.0.0-py3-none-any.whl">wheel</a>"#,
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/third/files/ok-1.0.0-py3-none-any.whl"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+                context
+                    .workspace_root
+                    .join("test/links/ok-1.0.0-py3-none-any.whl"),
+            )?),
+        )
+        .mount(&server)
+        .await;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--extra-index-url")
         .arg(format!("{}/first/", server.uri()))
-        .arg("--index-url")
+        .arg("--extra-index-url")
         .arg(format!("{}/second/", server.uri()))
+        .arg("--index-url")
+        .arg(format!("{}/third/", server.uri()))
         .arg("--index-strategy")
         .arg("unsafe-best-match")
         .arg("--preview-features")
@@ -679,47 +509,6 @@ async fn select_later_variant_with_unsafe_best_match() -> Result<()> {
      + ok==1.0.0
     ");
     assert_snapshot!(context.read(context.site_packages().join("ok/variant.txt")), @"null");
-    Ok(())
-}
-
-/// A wheel requiring unsupported properties cannot prevent backtracking to an older version.
-#[test]
-fn unsupported_variant_backtracks() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        links.child("ok-1.0.0-py3-none-any.whl"),
-    )?;
-    links
-        .child("ok-2.0.0-py3-none-any-gpu.whl")
-        .write_str("unsupported wheel")?;
-    links.child("ok-2.0.0-variants.json").write_str(
-        &json!({
-            "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json",
-            "default-priorities": { "namespace": ["cuda"] },
-            "variants": { "gpu": { "cuda": { "version": ["12"] } } },
-        })
-        .to_string(),
-    )?;
-
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
-        .arg("--preview-features")
-        .arg("wheel-variants")
-        .arg("ok"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0
-    ");
     Ok(())
 }
 

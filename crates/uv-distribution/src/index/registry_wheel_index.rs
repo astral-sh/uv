@@ -18,6 +18,7 @@ use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
+use crate::download::variant_compatible;
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
@@ -190,7 +191,10 @@ impl<'a> RegistryWheelIndex<'a> {
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
     pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
-        self.get_impl(name).iter().rev()
+        self.get_impl(name)
+            .iter()
+            .rev()
+            .filter(|entry| variant_compatible(&entry.dist.filename, &entry.dist.path))
     }
 
     /// Get an entry in the index.
@@ -250,9 +254,7 @@ impl<'a> RegistryWheelIndex<'a> {
                             if let Some(wheel) =
                                 CachedWheel::from_http_pointer(wheel_dir.join(file), cache)
                             {
-                                if wheel.filename.tag_compatibility(tags).is_compatible()
-                                    && wheel.variant_compatible()
-                                {
+                                if wheel.filename.tag_compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_package(
                                         &wheel.filename.name,
@@ -278,9 +280,7 @@ impl<'a> RegistryWheelIndex<'a> {
                             if let Some(wheel) =
                                 CachedWheel::from_local_pointer(wheel_dir.join(file), cache)
                             {
-                                if wheel.filename.tag_compatibility(tags).is_compatible()
-                                    && wheel.variant_compatible()
-                                {
+                                if wheel.filename.tag_compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_package(
                                         &wheel.filename.name,
@@ -403,8 +403,8 @@ impl<'a> RegistryWheelIndex<'a> {
                 .then_with(|| {
                     a.dist
                         .filename
-                        .compatibility(tags)
-                        .cmp(&b.dist.filename.compatibility(tags))
+                        .tag_compatibility(tags)
+                        .cmp(&b.dist.filename.tag_compatibility(tags))
                         .then_with(|| a.built.cmp(&b.built))
                 })
         });

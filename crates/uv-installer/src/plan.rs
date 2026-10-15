@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,13 +10,13 @@ use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
+    check_supported_wheel_variant,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, InstalledDistKind, Name,
-    PackageConfigSettings, RequirementSource, Resolution, ResolvedDist, SourceDist,
-    VariantsJsonContent,
+    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
+    RequirementSource, Resolution, ResolvedDist, SourceDist, VariantsJsonContent,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -343,16 +342,8 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
-            // TODO(konsti): Support variant wheels from non-registry sources.
-            if let Some(filename) = dist.wheel_filename()
-                && filename.variant().is_some()
-                && (!uv_preview::is_enabled(uv_preview::PreviewFeature::WheelVariants)
-                    || !matches!(dist, ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Built(BuiltDist::Registry(_)))))
-            {
-                return Err(uv_distribution::Error::UnsupportedWheelVariant(Box::new(
-                    filename.clone(),
-                ))
-                .into());
+            if let ResolvedDist::Installable { dist, .. } = dist {
+                check_supported_wheel_variant(dist)?;
             }
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
@@ -825,19 +816,14 @@ fn installed_variant_matches(installed: &InstalledDist, dist: &ResolvedDist) -> 
     }
 
     let variant = dist.wheel_filename().and_then(WheelFilename::variant);
-    match &installed.kind {
-        InstalledDistKind::Registry(_) | InstalledDistKind::Url(_) => {}
-        InstalledDistKind::EggInfoFile(_)
-        | InstalledDistKind::EggInfoDirectory(_)
-        | InstalledDistKind::LegacyEditable(_) => return variant.is_none(),
-    }
+    let Some(path) = installed.variant_metadata_path() else {
+        return variant.is_none();
+    };
 
-    match fs_err::read(installed.install_path().join("variant.json")) {
+    match fs_err::read(path) {
         Ok(contents) => variant.is_some_and(|label| {
-            VariantsJsonContent::from_slice(&contents).is_ok_and(|metadata| {
-                metadata.contains_only_variant(label)
-                    && metadata.is_compatible(label, &HashSet::new())
-            })
+            VariantsJsonContent::from_slice(&contents)
+                .is_ok_and(|metadata| metadata.is_compatible_wheel(label))
         }),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => variant.is_none(),
         Err(err) => {

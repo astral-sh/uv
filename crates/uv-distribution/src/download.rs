@@ -1,14 +1,29 @@
-use std::collections::HashSet;
 use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{BuildInfo, CachedDist, Dist, Hashed, VariantsJsonContent};
-use uv_metadata::read_flat_wheel_metadata;
+use uv_distribution_types::{BuildInfo, BuiltDist, CachedDist, Dist, Hashed, VariantsJsonContent};
+use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
 use crate::Error;
+
+/// Reject wheel variants unless the preview is enabled and the source supports index-level metadata.
+pub fn check_supported_wheel_variant(dist: &Dist) -> Result<(), Error> {
+    if let Dist::Built(built) = dist
+        && built.wheel_filename().variant().is_some()
+        && match built {
+            BuiltDist::Registry(_) => !uv_preview::is_enabled(PreviewFeature::WheelVariants),
+            BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => true,
+        }
+    {
+        return Err(Error::UnsupportedWheelVariant(Box::new(
+            built.wheel_filename().clone(),
+        )));
+    }
+    Ok(())
+}
 
 /// Whether an extracted wheel's variant properties are supported by the target system.
 pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> bool {
@@ -19,7 +34,7 @@ pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> bo
         return false;
     }
 
-    let Ok(dist_info) = uv_metadata::find_flat_dist_info(filename, archive) else {
+    let Ok(dist_info) = find_flat_dist_info(filename, archive) else {
         return false;
     };
     let path = archive.join(format!("{dist_info}.dist-info/variant.json"));
@@ -29,7 +44,7 @@ pub(crate) fn variant_compatible(filename: &WheelFilename, archive: &Path) -> bo
     let Ok(metadata) = VariantsJsonContent::from_slice(&contents) else {
         return false;
     };
-    metadata.contains_only_variant(label) && metadata.is_compatible(label, &HashSet::new())
+    metadata.is_compatible_wheel(label)
 }
 
 /// A locally available wheel.

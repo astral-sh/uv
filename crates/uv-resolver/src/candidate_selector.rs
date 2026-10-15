@@ -881,9 +881,9 @@ pub(crate) enum CandidateDist<'a> {
     },
 }
 
-impl CandidateDist<'_> {
+impl<'a> CandidateDist<'a> {
     /// For an installable dist, return the prioritized distribution.
-    fn prioritized(&self) -> Option<&PrioritizedDist> {
+    fn prioritized(&self) -> Option<&'a PrioritizedDist> {
         match self {
             Self::Compatible(dist) => dist.prioritized(),
             Self::Incompatible {
@@ -1005,7 +1005,7 @@ impl<'a> Candidate<'a> {
     }
 
     /// Return the prioritized distribution for the candidate.
-    pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
+    pub(crate) fn prioritized(&self) -> Option<&'a PrioritizedDist> {
         self.dist.prioritized()
     }
 }

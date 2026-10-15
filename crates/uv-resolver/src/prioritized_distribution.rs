@@ -1,5 +1,4 @@
 use std::cmp::Reverse;
-use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -122,7 +121,7 @@ impl Name for CompatibleDist<'_> {
     }
 }
 
-impl CompatibleDist<'_> {
+impl<'a> CompatibleDist<'a> {
     /// Return whether a usable source distribution or a wheel matching [`RequiresPython`] exists.
     ///
     /// Wheel compatibility must be checked against the current Python range when a resolver fork
@@ -147,7 +146,7 @@ impl CompatibleDist<'_> {
     }
 
     // For installable distributions, return the prioritized distribution it was derived from.
-    pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
+    pub(crate) fn prioritized(&self) -> Option<&'a PrioritizedDist> {
         match self {
             Self::InstalledDist(_) => None,
             Self::SourceDist { prioritized, .. }
@@ -430,49 +429,37 @@ impl PrioritizedDist {
     /// Select among wheels whose properties are known to be supported.
     pub(crate) fn prioritize_variants(
         &self,
-        metadata: &[(IndexUrl, &VariantsJsonContent)],
+        metadata: &[(&IndexUrl, &VariantsJsonContent)],
     ) -> Option<Self> {
-        let mut prioritized = self.clone();
-        let mut found_variant = false;
-        for (wheel, compatibility) in &mut prioritized.0.wheels {
-            if let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility
-                && let Some(label) = wheel.filename.variant()
-                && metadata.iter().any(|(index, metadata)| {
-                    index == &wheel.index && metadata.is_compatible(label, &HashSet::new())
-                })
-            {
-                *compatibility =
-                    WheelCompatibility::Compatible(*hash, *priority, build_tag.clone());
-                found_variant = true;
-            }
-        }
-        if !found_variant {
-            return None;
-        }
-
-        prioritized.0.best_wheel_index = prioritized
+        let (best_index, (hash, _, priority, build_tag)) = self
             .0
             .wheels
             .iter()
             .enumerate()
             .filter_map(|(index, (wheel, compatibility))| {
-                let WheelCompatibility::Compatible(hash, priority, build_tag) = compatibility
-                else {
+                let WheelCompatibility::Variant(hash, priority, build_tag) = compatibility else {
                     return None;
                 };
-                Some((
-                    index,
-                    (
-                        hash,
-                        wheel.filename.variant().is_some(),
-                        Reverse(wheel.filename.variant()),
-                        priority,
-                        build_tag,
-                    ),
-                ))
+                let label = wheel.filename.variant()?;
+                metadata
+                    .iter()
+                    .any(|(source, metadata)| {
+                        *source == &wheel.index && metadata.is_compatible(label)
+                    })
+                    .then_some((index, (*hash, Reverse(label), *priority, build_tag)))
             })
-            .max_by(|(_, left), (_, right)| left.cmp(right))
-            .map(|(index, _)| index);
+            .max_by(|(_, left), (_, right)| left.cmp(right))?;
+
+        if let Some((_, WheelCompatibility::Compatible(existing_hash, ..))) = self.best_wheel()
+            && *existing_hash > hash
+        {
+            return None;
+        }
+
+        let mut prioritized = self.clone();
+        prioritized.0.wheels[best_index].1 =
+            WheelCompatibility::Compatible(hash, priority, build_tag.clone());
+        prioritized.0.best_wheel_index = Some(best_index);
         Some(prioritized)
     }
 
