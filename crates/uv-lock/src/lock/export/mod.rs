@@ -48,16 +48,21 @@ struct ExportableRequirement<'lock> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
+struct ExportGraph<'lock, 'graph> {
+    graph: Graph<Node<'lock>, Edge<'graph>>,
+    activated_items: FxHashMap<ConflictItem, MarkerTree>,
+}
+
 impl<'lock> ExportableRequirements<'lock> {
-    /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
-    fn from_lock(
+    fn graph<'graph>(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
-        extras: &ExtrasSpecificationWithDefaults,
+        extras: &'graph ExtrasSpecificationWithDefaults,
         groups: &DependencyGroupsWithDefaults,
-        annotate: bool,
-        install_options: &'lock InstallOptions,
-    ) -> Result<Self, LockError> {
+    ) -> Result<ExportGraph<'lock, 'graph>, LockError>
+    where
+        'lock: 'graph,
+    {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut inverse = vec![None; size_guess];
@@ -313,6 +318,26 @@ impl<'lock> ExportableRequirements<'lock> {
                 }
             }
         }
+
+        Ok(ExportGraph {
+            graph,
+            activated_items,
+        })
+    }
+
+    /// Generate the set of exportable [`ExportableRequirement`] entries from the given lockfile.
+    fn from_lock(
+        target: &impl Installable<'lock>,
+        prune: &[PackageName],
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        annotate: bool,
+        install_options: &'lock InstallOptions,
+    ) -> Result<Self, LockError> {
+        let ExportGraph {
+            graph,
+            activated_items,
+        } = Self::graph(target, prune, extras, groups)?;
 
         // Determine the reachability of each node in the graph.
         let mut reachability = conflict_marker_reachability(&graph, &[], &activated_items);
