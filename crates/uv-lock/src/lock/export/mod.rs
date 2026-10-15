@@ -12,7 +12,7 @@ use uv_configuration::{
     DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerTree;
+use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree};
 use uv_pypi_types::ConflictItem;
 
 use uv_resolver_types::graph_ops::Reachable;
@@ -26,7 +26,7 @@ pub(crate) use crate::lock::export::metadata::{
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::lock::{LockErrorKind, PackageIndex};
-use crate::{Installable, InstallableRootKind, LockError, Package};
+use crate::{Installable, InstallableRootKind, Lock, LockError, Package};
 
 pub mod cyclonedx_json;
 mod metadata;
@@ -48,9 +48,12 @@ struct ExportableRequirement<'lock> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
+/// How to represent selected extras and dependency groups in exported requirements.
 #[derive(Clone, Copy)]
 enum ExportSelection<'a> {
+    /// Resolve selections at export time.
     Activated,
+    /// Retain selections as PEP 751 markers for installation.
     MarkSelections {
         default_groups: &'a DependencyGroupsWithDefaults,
         synthetic_default: Option<&'a GroupName>,
@@ -141,15 +144,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 continue;
             }
 
-            let dist = target
-                .lock()
-                .find_by_name(root_name)
-                .map_err(|_| LockErrorKind::MultipleRootPackages {
-                    name: root_name.clone(),
-                })?
-                .ok_or_else(|| LockErrorKind::MissingRootPackage {
-                    name: root_name.clone(),
-                })?;
+            let dist = find_root_package(target.lock(), root_name)?;
 
             if root_kind == InstallableRootKind::Production {
                 // Track the activated package in the list of known conflicts.
@@ -206,10 +201,11 @@ impl<'lock> ExportableRequirements<'lock> {
                 })
                 .flatten()
             {
+                let group_marker = selection.group_marker(group);
                 // Track the activated group in the list of known conflicts.
                 activated_items.insert(
                     ConflictItem::from((dist.id.name.clone(), group.clone())),
-                    selection.group_marker(group),
+                    group_marker,
                 );
 
                 if prune.contains(&dep.package_id.name) {
@@ -233,7 +229,7 @@ impl<'lock> ExportableRequirements<'lock> {
                         marker: dep
                             .simplified_marker
                             .as_simplified_marker_tree()
-                            .and(selection.group_marker(group)),
+                            .and(group_marker),
                         dep_extras: dep.extra.iter().collect(),
                     },
                 );
@@ -387,6 +383,26 @@ impl<'lock> ExportableRequirements<'lock> {
             }
         }
 
+        // A negative extra marker can become false as transitive extras are activated, so its
+        // reachability cannot be accumulated by the graph traversal. Only selected edges matter.
+        if selection.marks_selections()
+            && graph.edge_weights().any(|edge| {
+                edge.marker()
+                    .to_dnf()
+                    .into_iter()
+                    .flatten()
+                    .any(|expression| {
+                        if let MarkerExpression::Extra { operator, .. } = expression {
+                            operator == ExtraOperator::NotEqual
+                        } else {
+                            false
+                        }
+                    })
+            })
+        {
+            return Err(LockErrorKind::MultiUseNegativeExtraMarker.into());
+        }
+
         // Determine the reachability of each node in the graph.
         let mut reachability = conflict_marker_reachability(
             &graph,
@@ -433,6 +449,17 @@ impl<'lock> ExportableRequirements<'lock> {
 
         Ok(Self(nodes))
     }
+}
+
+/// Find the unique locked package for an export root.
+fn find_root_package<'lock>(
+    lock: &'lock Lock,
+    name: &PackageName,
+) -> Result<&'lock Package, LockError> {
+    Ok(lock
+        .find_by_name(name)
+        .map_err(|_| LockErrorKind::MultipleRootPackages { name: name.clone() })?
+        .ok_or_else(|| LockErrorKind::MissingRootPackage { name: name.clone() })?)
 }
 
 /// A node in the graph.

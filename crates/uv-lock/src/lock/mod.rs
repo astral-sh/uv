@@ -10135,6 +10135,9 @@ enum LockErrorKind {
         /// The ID of the package.
         name: PackageName,
     },
+    /// A selected dependency uses a negative extra marker in a multi-use export.
+    #[error("A multi-use pylock.toml does not support negative extra markers")]
+    MultiUseNegativeExtraMarker,
     /// An error that occurs when a concrete root package does not belong to the lock.
     #[error("Could not find root package `{id}` in lock", id = id.cyan())]
     RootPackageMissingFromLock {

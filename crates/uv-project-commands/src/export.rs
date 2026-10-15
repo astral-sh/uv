@@ -150,6 +150,39 @@ fn resolve_lockfile_groups(
     workspace.resolve_groups(groups, project)
 }
 
+/// Determine the export format from the explicit option or output file.
+fn resolve_export_format(
+    format: Option<ExportFormat>,
+    output_file: Option<&Path>,
+) -> Result<ExportFormat> {
+    if output_file
+        .and_then(Path::file_name)
+        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
+    {
+        return Err(anyhow!(
+            "`pyproject.toml` is not a supported output format for `{}` (supported formats: {})",
+            "uv export".green(),
+            ExportFormat::value_variants()
+                .iter()
+                .filter_map(clap::ValueEnum::to_possible_value)
+                .map(|value| value.get_name().to_string())
+                .join(", ")
+        ));
+    }
+
+    Ok(format.unwrap_or_else(|| {
+        if output_file
+            .and_then(Path::file_name)
+            .and_then(OsStr::to_str)
+            .is_some_and(is_pylock_toml)
+        {
+            ExportFormat::PylockToml
+        } else {
+            ExportFormat::RequirementsTxt
+        }
+    }))
+}
+
 /// Export the project's `uv.lock` in an alternate format.
 #[expect(clippy::fn_params_excessive_bools)]
 pub async fn export(
@@ -188,6 +221,12 @@ pub async fn export(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if multi_use
+        && resolve_export_format(format, output_file.as_deref())? != ExportFormat::PylockToml
+    {
+        bail!("`--multi-use` requires the `pylock.toml` export format");
+    }
+
     let batch = if let Some(path) = batch {
         if !preview.is_enabled(PreviewFeature::BatchExport) {
             warn_user!(
@@ -554,47 +593,13 @@ async fn render_export<'output>(
     target.validate_extras(extras)?;
     target.validate_groups(groups)?;
 
-    if output_file
-        .and_then(Path::file_name)
-        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
-    {
-        return Err(anyhow!(
-            "`pyproject.toml` is not a supported output format for `{}` (supported formats: {})",
-            "uv export".green(),
-            ExportFormat::value_variants()
-                .iter()
-                .filter_map(clap::ValueEnum::to_possible_value)
-                .map(|value| value.get_name().to_string())
-                .join(", ")
-        ));
-    }
+    let format = resolve_export_format(format, output_file)?;
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 
-    // Determine the output format.
-    let format = format.unwrap_or_else(|| {
-        if output_file
-            .and_then(Path::extension)
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
-        {
-            ExportFormat::RequirementsTxt
-        } else if output_file
-            .and_then(Path::file_name)
-            .and_then(OsStr::to_str)
-            .is_some_and(is_pylock_toml)
-        {
-            ExportFormat::PylockToml
-        } else {
-            ExportFormat::RequirementsTxt
-        }
-    });
-
-    if multi_use && format != ExportFormat::PylockToml {
-        bail!("`--multi-use` requires the `pylock.toml` export format");
-    }
-
-    // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
+    // SBOMs document all dependencies, including conflicts. Multi-use pylock exports reject
+    // declared conflicts when constructing the lockfile.
     if !multi_use && !matches!(format, ExportFormat::CycloneDX1_5) {
         detect_conflicts(&target, extras, groups)?;
     }
