@@ -19,8 +19,8 @@ use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Operator, Version, VersionSpecifiers};
 use uv_pep508::{
-    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement,
-    VersionOrUrl,
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueExtra, Pep508Url,
+    Requirement, VerbatimUrl, VersionOrUrl,
 };
 use uv_pypi_types::{
     BuildKind, Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls,
@@ -263,7 +263,7 @@ pub fn check_direct_build(
     #[derive(Deserialize)]
     #[serde(rename_all = "kebab-case")]
     struct PyProjectToml {
-        build_system: BuildSystem,
+        build_system: BuildSystem<VerbatimParsedUrl>,
     }
 
     let path = source_tree.join("pyproject.toml");
@@ -1168,11 +1168,14 @@ pub(crate) struct ToolUv {
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
+///
+/// The frontend resolves these dependencies. Only direct-build validation needs to classify URLs
+/// as distributions that uv can install.
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-struct BuildSystem {
+#[serde(rename_all = "kebab-case", bound(deserialize = ""))]
+struct BuildSystem<T: Pep508Url = VerbatimUrl> {
     /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
+    requires: Vec<SerdeVerbatim<Requirement<T>>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
@@ -2244,6 +2247,48 @@ mod tests {
             check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
             @"`build_system.requires` uses a URL requirement"
         );
+    }
+
+    #[test]
+    fn build_system_frontend_url() -> Result<(), Error> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let source = TempDir::new()?;
+        fs_err::write(
+            source.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["uv_build @ hg+https://example.com/uv-build"]
+                build-backend = "uv_build"
+            "#},
+        )?;
+        let output = TempDir::new()?;
+        let dist_info = crate::metadata(source.path(), output.path(), "0.13.1")?;
+        assert_snapshot!(
+            fs_err::read_to_string(output.path().join(dist_info).join("METADATA"))?,
+            @"
+            Metadata-Version: 2.3
+            Name: hello-world
+            Version: 0.1.0
+            "
+        );
+        assert_snapshot!(
+            check_direct_build(source.path(), "0.13.1", &marker_environment(), [])
+                .expect_err("direct builds require a URL supported by uv"),
+            @r#"
+            its `pyproject.toml` failed to parse: TOML parse error at line 6, column 12
+              |
+            6 | requires = ["uv_build @ hg+https://example.com/uv-build"]
+              |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            Unsupported URL prefix `hg` in URL `hg+https://example.com/uv-build` (Mercurial is not supported)
+            uv_build @ hg+https://example.com/uv-build
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "#
+        );
+        Ok(())
     }
 
     #[test]
