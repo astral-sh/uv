@@ -46,8 +46,8 @@ impl PubGrubPriorities {
                 PubGrubTiebreaker::from(u32::try_from(len).expect("Less than 2**32 packages"))
             });
 
-        // The root package and Python constraints have no explicit priority, the root package is
-        // always first and the Python version (range) is fixed.
+        // Virtual packages without a real package attached (such as the root package or Python
+        // constraints) have a fixed priority.
         let Some(name) = package.name_no_root() else {
             return;
         };
@@ -163,11 +163,8 @@ impl PubGrubPriorities {
     /// for the package.
     pub(crate) fn mark_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
-            // Not a correctness bug
-            debug_assert!(
-                false,
-                "URL packages must not be involved in conflict handling"
-            );
+            // Virtual packages without a real package attached (such as the root package or Python
+            // constraints) have a fixed priority.
             return false;
         };
 
@@ -196,11 +193,8 @@ impl PubGrubPriorities {
     /// marked as conflicting above the threshold.
     pub(crate) fn mark_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
-            // Not a correctness bug
-            debug_assert!(
-                false,
-                "URL packages must not be involved in conflict handling"
-            );
+            // Virtual packages without a real package attached (such as the root package or Python
+            // constraints) have a fixed priority.
             return false;
         };
 
@@ -257,7 +251,7 @@ pub(crate) enum PubGrubPriority {
     /// [`ForkUrls`].
     DirectUrl(Reverse<usize>),
 
-    /// The package is the root package.
+    /// The highest priority, reserved for packages whose priority is fixed.
     Root,
 }
 

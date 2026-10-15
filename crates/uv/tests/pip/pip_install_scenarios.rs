@@ -4039,6 +4039,95 @@ fn transitive_prerelease_redundant_stable_preference_plain_first() {
     context.assert_installed("c", "1.0.0");
 }
 
+/// The resolver reaches the backtracking threshold while rejecting newer releases with distinct incompatible Python requirements, then selects an older compatible release.
+///
+/// ```text
+/// python-greater-than-current-backtrack-many
+/// ├── environment
+/// │   └── python3.9
+/// ├── root
+/// │   └── requires a
+/// │       ├── satisfied by a-1.0.0
+/// │       ├── satisfied by a-2.0.0
+/// │       ├── satisfied by a-3.0.0
+/// │       ├── satisfied by a-4.0.0
+/// │       ├── satisfied by a-5.0.0
+/// │       ├── satisfied by a-6.0.0
+/// │       ├── satisfied by a-7.0.0
+/// │       ├── satisfied by a-8.0.0
+/// │       ├── satisfied by a-9.0.0
+/// │       ├── satisfied by a-10.0.0
+/// │       ├── satisfied by a-11.0.0
+/// │       ├── satisfied by a-12.0.0
+/// │       ├── satisfied by a-13.0.0
+/// │       ├── satisfied by a-14.0.0
+/// │       ├── satisfied by a-15.0.0
+/// │       ├── satisfied by a-16.0.0
+/// │       ├── satisfied by a-17.0.0
+/// │       ├── satisfied by a-18.0.0
+/// │       ├── satisfied by a-19.0.0
+/// │       └── satisfied by a-20.0.0
+/// └── a
+///     ├── a-1.0.0
+///     ├── a-2.0.0
+///     │   └── requires python>=3.10 (incompatible with environment)
+///     ├── a-3.0.0
+///     │   └── requires python>=3.10.1 (incompatible with environment)
+///     ├── a-4.0.0
+///     │   └── requires python>=3.10.2 (incompatible with environment)
+///     ├── a-5.0.0
+///     │   └── requires python>=3.10.3 (incompatible with environment)
+///     ├── a-6.0.0
+///     │   └── requires python>=3.10.4 (incompatible with environment)
+///     ├── a-7.0.0
+///     │   └── requires python>=3.10.5 (incompatible with environment)
+///     ├── a-8.0.0
+///     │   └── requires python>=3.10.6 (incompatible with environment)
+///     ├── a-9.0.0
+///     │   └── requires python>=3.10.7 (incompatible with environment)
+///     ├── a-10.0.0
+///     │   └── requires python>=3.10.8 (incompatible with environment)
+///     ├── a-11.0.0
+///     │   └── requires python>=3.10.9 (incompatible with environment)
+///     ├── a-12.0.0
+///     │   └── requires python>=3.10.10 (incompatible with environment)
+///     ├── a-13.0.0
+///     │   └── requires python>=3.10.11 (incompatible with environment)
+///     ├── a-14.0.0
+///     │   └── requires python>=3.10.12 (incompatible with environment)
+///     ├── a-15.0.0
+///     │   └── requires python>=3.10.13 (incompatible with environment)
+///     ├── a-16.0.0
+///     │   └── requires python>=3.10.14 (incompatible with environment)
+///     ├── a-17.0.0
+///     │   └── requires python>=3.10.15 (incompatible with environment)
+///     ├── a-18.0.0
+///     │   └── requires python>=3.10.16 (incompatible with environment)
+///     ├── a-19.0.0
+///     │   └── requires python>=3.10.17 (incompatible with environment)
+///     └── a-20.0.0
+///         └── requires python>=3.10.18 (incompatible with environment)
+/// ```
+#[test]
+fn python_greater_than_current_backtrack_many() {
+    let context = uv_test::test_context!("3.9");
+    let server =
+        PackseServer::new("requires_python/python-greater-than-current-backtrack-many.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        , @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    context.assert_installed("a", "1.0.0");
+}
+
 /// The user requires a package where recent versions require a Python version greater than the current version, but an older version is compatible.
 ///
 /// ```text
