@@ -129,10 +129,6 @@ jobs:
             --workspace \
             --profile ci-linux
 
-      - name: "Report Python archive cache"
-        if: always()
-        run: python3 scripts/report_python_archive_cache.py
-
       - name: "Prune superseded workspace artifacts"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
@@ -233,10 +229,6 @@ jobs:
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
             --profile ci-macos
-
-      - name: "Report Python archive cache"
-        if: always()
-        run: python3 scripts/report_python_archive_cache.py
 
       - name: "Prune superseded workspace artifacts"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
@@ -345,10 +337,6 @@ jobs:
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
-
-      - name: "Report Python archive cache"
-        if: always()
-        run: python scripts/report_python_archive_cache.py
 
       - name: "Prune superseded workspace artifacts"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
