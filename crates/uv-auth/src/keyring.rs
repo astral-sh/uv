@@ -103,7 +103,7 @@ impl KeyringProvider {
             }
             target
         } else {
-            url.to_string()
+            url.as_str().to_owned()
         };
 
         match &self.backend {
@@ -153,7 +153,7 @@ impl KeyringProvider {
             }
             target
         } else {
-            url.to_string()
+            url.as_str().to_owned()
         };
 
         match &self.backend {
