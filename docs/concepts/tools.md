@@ -178,18 +178,19 @@ uv selects a compatible wheel of the tool before reading its lock. Versions with
 wheel can be skipped, and a tool available only as a source distribution cannot be installed with
 `--locked`. Git sources are not supported for the tool itself. Once a wheel is selected, a missing
 or unusable lock is an error; uv does not try an older tool release to find a usable lock. Runtime
-dependency versions come from the lock unless explicitly overridden. Artifact hashes are required
-and checked against the lock. Selected locked artifacts must have a supported hash other than MD5.
-uv checks every supported non-MD5 hash for the selected artifact in the lock and its index entry.
-Hashes in artifact URLs are also checked, including MD5 hashes.
+dependency versions come from the lock unless explicitly overridden.
 
-Each locked dependency that is not excluded or replaced must use a wheel or source distribution
-listed by its configured package index for its locked name and version, with the filename recorded
-by the index. uv verifies this before accessing artifacts, including inactive entries. The
-configured index strategy determines which indexes can be used; a packaged lock cannot select an
-explicit index by itself. Cached index metadata can be used for this check, even after it expires.
-Local paths, VCS sources, and direct archives are not supported for retained locked dependencies.
-Offline installation requires cached index metadata; `--no-index` prevents this verification.
+For each locked dependency selected for the current environment and not excluded or replaced, every
+recorded wheel or source distribution must be listed by a configured package index for the locked
+name and version, with the filename recorded by that index. uv verifies these index entries before
+accessing any locked dependency artifact. The configured index strategy determines which indexes can
+be used; a packaged lock cannot authorize an index by itself. Local paths, Git sources, and direct
+archives are not supported for retained locked dependencies. Offline installation requires cached
+index metadata; `--no-index` prevents this verification.
+
+Selected locked artifacts must have a supported hash other than MD5. uv checks every supported
+non-MD5 hash for the selected artifact in the lock and its index entry. Hashes in artifact URLs are
+also checked, including MD5 hashes.
 
 If a dependency is built from a source distribution, its build requirements are resolved separately
 and are not pinned by the packaged lock. uv checks applicable lock, index, and explicitly supplied
