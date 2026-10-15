@@ -1059,8 +1059,11 @@ impl<'lock> PylockToml {
         Ok(Self {
             lock_version,
             created_by,
-            environments: (!target.lock().supported_environments().is_empty())
-                .then(|| target.lock().simplified_supported_environments()),
+            environments: if target.lock().supported_environments().is_empty() {
+                None
+            } else {
+                Some(target.lock().simplified_supported_environments())
+            },
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
