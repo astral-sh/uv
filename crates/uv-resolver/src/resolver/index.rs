@@ -8,7 +8,7 @@ use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::prioritized_distribution::RegistryVariantsJson;
-use crate::resolver::provider::VersionsResponse;
+use crate::resolver::provider::{VariantsJsonResponse, VersionsResponse};
 
 /// In-memory index of package metadata.
 #[derive(Default, Clone)]
@@ -25,8 +25,8 @@ struct SharedInMemoryIndex {
     /// A map from a concrete distribution to its metadata.
     distributions: DistributionMetadataIndex,
 
-    /// A map from an index variant metadata file to its contents.
-    variants_json: FxOnceMap<RegistryVariantsJson, Arc<[u8]>>,
+    /// A map from an index variant metadata file to its response.
+    variants_json: FxOnceMap<RegistryVariantsJson, Arc<VariantsJsonResponse>>,
 }
 
 pub(crate) type FxOnceMap<K, V> = RegisteredOnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -49,7 +49,9 @@ impl InMemoryIndex {
         &self.0.distributions
     }
 
-    pub(crate) fn variants_json(&self) -> &FxOnceMap<RegistryVariantsJson, Arc<[u8]>> {
+    pub(crate) fn variants_json(
+        &self,
+    ) -> &FxOnceMap<RegistryVariantsJson, Arc<VariantsJsonResponse>> {
         &self.0.variants_json
     }
 

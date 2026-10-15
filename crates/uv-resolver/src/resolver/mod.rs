@@ -77,11 +77,11 @@ use crate::resolver::indexes::Indexes;
 use crate::resolver::package_source::PackageSource;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
-    VersionsResponse, WheelMetadataResult,
+    VariantsJsonResponse, VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::Reporter;
-pub(crate) use crate::resolver::requests::RegisteredMetadata;
 use crate::resolver::requests::{MetadataRequest, MetadataRequests};
+pub(crate) use crate::resolver::requests::{RegisteredMetadata, RegisteredVariantsJson};
 use crate::resolver::requirements::{RequirementContext, RequirementExpander};
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
@@ -1706,17 +1706,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | CompatibleDist::IncompatibleWheel { sdist, .. } => Some(&sdist.index),
             CompatibleDist::CompatibleWheel { wheel, .. } => Some(&wheel.index),
         };
-        if let Some(index) = index
+        let variants_json = if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            && let Some(index) = index
             && let Some(variants_json) = candidate.prioritized().and_then(|prioritized| {
                 prioritized
                     .variants_json()
                     .iter()
                     .find(|variants_json| &variants_json.index == index)
-            })
-            && uv_preview::is_enabled(PreviewFeature::WheelVariants)
-        {
-            requests.enqueue_variants_json(variants_json)?;
-        }
+            }) {
+            Some(requests.request_variants_json(variants_json)?)
+        } else {
+            None
+        };
 
         let request = if matches!(&**package, PubGrubPackageInner::Package { .. })
             && self.dependency_mode.is_transitive()
@@ -1746,7 +1747,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         } else {
             None
         };
-        pins.insert(candidate, dist, request)
+        pins.insert(candidate, dist, variants_json, request)
     }
 
     /// Check if the distribution is incompatible with the Python requirement, and if so, return
@@ -1840,6 +1841,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 kind,
                 marker: _,
             } => {
+                if uv_preview::is_enabled(PreviewFeature::WheelVariants)
+                    && let Some(variants_json) = pins.variants_json(name, version)
+                    && let VariantsJsonResponse::Unavailable(reason) = &*variants_json.wait()
+                {
+                    return Ok(Dependencies::Unavailable(
+                        self.record_unavailable_metadata(name, version, reason),
+                    ));
+                }
+
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
                     return Ok(Dependencies::Unforkable(Vec::default()));
@@ -1867,21 +1877,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Unavailable(reason) => {
-                        let unavailable_version = UnavailableVersion::from(reason);
-                        let message = unavailable_version.singular_message();
-                        if let Some(err) = reason.source() {
-                            // Show the detailed error for metadata parse errors.
-                            warn!("{name} {message}: {err}");
-                        } else {
-                            warn!("{name} {message}");
-                        }
-                        let incomplete_packages = self.incomplete_packages.pin();
-                        let versions = incomplete_packages.get_or_insert(
-                            name.clone(),
-                            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
-                        );
-                        versions.pin().insert(version.clone(), reason.clone());
-                        return Ok(Dependencies::Unavailable(unavailable_version));
+                        return Ok(Dependencies::Unavailable(
+                            self.record_unavailable_metadata(name, version, reason),
+                        ));
                     }
                     MetadataResponse::Error(dist, err) => {
                         let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
@@ -2042,6 +2040,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         })
     }
 
+    fn record_unavailable_metadata(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        reason: &MetadataUnavailable,
+    ) -> UnavailableVersion {
+        let unavailable_version = UnavailableVersion::from(reason);
+        let message = unavailable_version.singular_message();
+        if let Some(error) = reason.source() {
+            warn!("{name} {message}: {error}");
+        } else {
+            warn!("{name} {message}");
+        }
+        let incomplete_packages = self.incomplete_packages.pin();
+        let versions = incomplete_packages.get_or_insert(
+            name.clone(),
+            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+        );
+        versions.pin().insert(version.clone(), reason.clone());
+        unavailable_version
+    }
+
     /// Fetch the metadata for a stream of packages and versions.
     async fn fetch<Provider: ResolverProvider>(
         self: Arc<Self>,
@@ -2094,12 +2114,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
                 Some(Response::VariantsJson {
                     variants_json,
-                    contents,
+                    response,
                 }) => {
                     trace!("Received variant metadata for: {}", variants_json.filename);
                     self.index
                         .variants_json()
-                        .done(variants_json, Arc::from(contents));
+                        .done(variants_json, Arc::new(response));
                 }
                 None => {}
             }
@@ -2116,7 +2136,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<Option<Response>, ResolveError> {
         match request {
             Request::VariantsJson(variants_json) => {
-                let contents = provider
+                let response = provider
                     .fetch_variants_json(
                         &variants_json.filename.name,
                         &variants_json.file,
@@ -2127,7 +2147,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .map_err(ResolveError::Client)?;
                 Ok(Some(Response::VariantsJson {
                     variants_json,
-                    contents,
+                    response,
                 }))
             }
             // Fetch package metadata from the registry.
@@ -3420,10 +3440,10 @@ enum Response {
         dist: InstalledDist,
         metadata: MetadataResponse,
     },
-    /// The contents of a variant metadata file.
+    /// The response to a variant metadata request.
     VariantsJson {
         variants_json: RegistryVariantsJson,
-        contents: Vec<u8>,
+        response: VariantsJsonResponse,
     },
 }
 
