@@ -994,6 +994,12 @@ mod tests {
         static PROMPTS: AtomicUsize = AtomicUsize::new(0);
 
         let server = start_test_server("user", "password").await;
+        let cache = CredentialsCache::new();
+        // A username discovered at another path in the same realm still needs a password.
+        cache.store_credentials(
+            &DisplaySafeUrl::parse(&format!("{}/read/simple/", server.uri()))?,
+            Credentials::basic(Some("reader".to_string()), None),
+        );
         Mock::given(method("GET"))
             .and(path_regex("/unavailable"))
             .and(basic_auth("user", "password"))
@@ -1008,6 +1014,7 @@ mod tests {
                 AuthMiddleware::new()
                     .with_netrc(None)
                     .with_text_store(None)
+                    .with_cache(cache)
                     .with_only_authenticated(true)
                     .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
                         PROMPTS.fetch_add(1, Ordering::SeqCst);
@@ -1127,12 +1134,7 @@ mod tests {
             .send()
             .await
             .expect_err("A prompt failure must prevent the request");
-        insta::assert_snapshot!(format!("{err:?}"), @"
-        Middleware(Failed to read username
-
-        Caused by:
-            terminal input failed)
-        ");
+        insta::assert_snapshot!(format!("{:#}", anyhow::Error::new(err)), @"Failed to read username: terminal input failed");
         assert!(
             server
                 .received_requests()
@@ -1693,17 +1695,25 @@ mod tests {
             ))),
         );
         let client = test_client_builder()
-            .with(AuthMiddleware::new().with_cache(cache).with_keyring(Some(
-                KeyringProvider::dummy([(
-                    format!(
-                        "{}:{}",
-                        base_url.host_str().unwrap(),
-                        base_url.port().unwrap()
-                    ),
-                    username,
-                    password,
-                )]),
-            )))
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(cache)
+                    .with_keyring(Some(KeyringProvider::dummy([(
+                        format!(
+                            "{}:{}",
+                            base_url.host_str().unwrap(),
+                            base_url.port().unwrap()
+                        ),
+                        username,
+                        password,
+                    )])))
+                    .with_only_authenticated(true)
+                    .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
+                        Err(CredentialsPromptError::ReadUsername(io::Error::other(
+                            "Should not prompt when keyring has credentials",
+                        )))
+                    }))),
+            )
             .build();
 
         assert_eq!(

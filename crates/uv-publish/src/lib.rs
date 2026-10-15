@@ -2250,7 +2250,8 @@ mod tests {
             .expect("Finalization failed");
     }
 
-    /// A rejected prompted password must terminate the upload after one authentication retry.
+    /// Entered credentials must survive cache updates for subsequent files. If they are rejected,
+    /// the upload must terminate without another authentication retry.
     #[tokio::test]
     async fn upload_rejected_prompt_credentials() {
         let server = MockServer::start().await;
@@ -2261,7 +2262,15 @@ mod tests {
             .mount(&server)
             .await;
         Mock::given(method("POST"))
-            .and(basic_auth("writer", "invalid"))
+            .and(basic_auth("writer", "secret"))
+            .respond_with(ResponseTemplate::new(200))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(basic_auth("writer", "secret"))
             .respond_with(ResponseTemplate::new(401))
             .expect(1)
             .mount(&server)
@@ -2271,7 +2280,7 @@ mod tests {
         let prompt = CredentialsPrompt::new(|| {
             Ok(Some(Credentials::basic(
                 Some("writer".to_string()),
-                Some("invalid".to_string()),
+                Some("secret".to_string()),
             )))
         });
         let client_builder = BaseClientBuilder::default()
@@ -2303,6 +2312,30 @@ mod tests {
         .pop()
         .expect("One distribution");
 
+        assert_matches!(
+            session
+                .upload(prepared, Arc::new(DummyReporter))
+                .await
+                .expect("Prompted credentials should authenticate the upload"),
+            UploadOutcome::Uploaded
+        );
+
+        // The next file's index check can reload read credentials into the shared cache.
+        client_builder.store_credentials(
+            &DisplaySafeUrl::parse(&server.uri()).expect("Valid registry URL"),
+            Credentials::basic(
+                Some("reader".to_string()),
+                Some("read-password".to_string()),
+            ),
+        );
+        let prepared = PublishSession::prepare(
+            vec!["../../test/links/ok-2.0.0-py3-none-any.whl".to_string()],
+            false,
+        )
+        .expect("Distribution should be found")
+        .pop()
+        .expect("One distribution");
+
         let err = session
             .upload(prepared, Arc::new(DummyReporter))
             .await
@@ -2315,7 +2348,7 @@ mod tests {
                 .await
                 .expect("Recorded requests")
                 .len(),
-            2
+            3
         );
         session
             .finalize(PublishOutcome::Failed)
