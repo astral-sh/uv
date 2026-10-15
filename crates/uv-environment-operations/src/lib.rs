@@ -1320,6 +1320,8 @@ pub struct EnvironmentSpecification<'lock> {
     requirements: RequirementsSpecification,
     /// The preferences to respect when resolving.
     preferences: Option<PreferenceLocation<'lock>>,
+    /// Hashes to verify while resolving the environment.
+    hash_strategy: Option<HashStrategy>,
 }
 
 impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
@@ -1327,11 +1329,18 @@ impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
         Self {
             requirements,
             preferences: None,
+            hash_strategy: None,
         }
     }
 }
 
 impl<'lock> EnvironmentSpecification<'lock> {
+    #[must_use]
+    pub fn with_hash_strategy(mut self, hash_strategy: HashStrategy) -> Self {
+        self.hash_strategy = Some(hash_strategy);
+        self
+    }
+
     /// Set the [`PreferenceLocation`] for the specification.
     #[must_use]
     pub fn with_preferences(self, preferences: PreferenceLocation<'lock>) -> Self {
@@ -1345,6 +1354,8 @@ impl<'lock> EnvironmentSpecification<'lock> {
 #[derive(Clone, Copy)]
 pub enum EnvironmentResolution {
     Specific,
+    /// Select compatible versions of the requested packages without resolving their dependencies.
+    Direct,
     Universal,
 }
 
@@ -1366,6 +1377,45 @@ pub async fn resolve_environment(
     printer: Printer,
     preview: Preview,
 ) -> Result<ResolverOutput, EnvironmentError> {
+    resolve_environment_with_hashes(
+        spec,
+        resolution_scope,
+        interpreter,
+        python_platform,
+        source_tree_editable_policy,
+        build_constraints,
+        settings,
+        client_builder,
+        state,
+        logger,
+        concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
+    )
+    .await
+    .map(|(output, _)| output)
+}
+
+/// Run dependency resolution, returning the hash strategy used by the resolver.
+pub async fn resolve_environment_with_hashes(
+    spec: EnvironmentSpecification<'_>,
+    resolution_scope: EnvironmentResolution,
+    interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
+    build_constraints: Constraints,
+    settings: &ResolverSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    logger: Box<dyn ResolveLogger>,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<(ResolverOutput, HashStrategy), EnvironmentError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettings {
@@ -1408,7 +1458,7 @@ pub async fn resolve_environment(
 
     // Determine the tags and marker environment to use for resolution.
     let (tags, resolver_environment) = match resolution_scope {
-        EnvironmentResolution::Specific => {
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => {
             let tags = uv_resolve_operations::resolution_tags(None, python_platform, interpreter)?;
             let marker_environment =
                 uv_resolve_operations::resolution_markers(None, python_platform, interpreter);
@@ -1420,7 +1470,9 @@ pub async fn resolve_environment(
         EnvironmentResolution::Universal => (None, ResolverEnvironment::universal(Vec::new())),
     };
     let python_requirement = match resolution_scope {
-        EnvironmentResolution::Specific => PythonRequirement::from_interpreter(interpreter),
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => {
+            PythonRequirement::from_interpreter(interpreter)
+        }
         EnvironmentResolution::Universal => PythonRequirement::from_requires_python(
             interpreter,
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version()),
@@ -1428,7 +1480,7 @@ pub async fn resolve_environment(
     };
 
     let python_platform = match resolution_scope {
-        EnvironmentResolution::Specific => python_platform,
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => python_platform,
         EnvironmentResolution::Universal => None,
     };
 
@@ -1471,7 +1523,14 @@ pub async fn resolve_environment(
         }
     };
 
+    let dependency_mode = match resolution_scope {
+        EnvironmentResolution::Direct => DependencyMode::Direct,
+        EnvironmentResolution::Specific | EnvironmentResolution::Universal => {
+            DependencyMode::Transitive
+        }
+    };
     let options = OptionsBuilder::new()
+        .dependency_mode(dependency_mode)
         .resolution_mode(*resolution)
         .prerelease(prerelease.clone())
         .fork_strategy(*fork_strategy)
@@ -1484,10 +1543,14 @@ pub async fn resolve_environment(
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
-    let hasher = match resolution_scope {
-        EnvironmentResolution::Specific => HashStrategy::default(),
-        EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
-    };
+    let hasher = spec
+        .hash_strategy
+        .unwrap_or_else(|| match resolution_scope {
+            EnvironmentResolution::Specific | EnvironmentResolution::Direct => {
+                HashStrategy::default()
+            }
+            EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
+        });
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
@@ -1499,7 +1562,7 @@ pub async fn resolve_environment(
     // a preference source.
     let reinstall = Reinstall::default();
     let upgrade = match resolution_scope {
-        EnvironmentResolution::Specific => Upgrade::default(),
+        EnvironmentResolution::Specific | EnvironmentResolution::Direct => Upgrade::default(),
         EnvironmentResolution::Universal => upgrade.clone(),
     };
 
@@ -1600,8 +1663,7 @@ pub async fn resolve_environment(
         logger,
         printer,
     )
-    .await?
-    .0)
+    .await?)
 }
 
 /// Sync a [`PythonEnvironment`] with a set of resolved requirements.
