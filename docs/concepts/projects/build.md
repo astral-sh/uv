@@ -57,19 +57,20 @@ Set `tool.uv.export-lock = true` to require a packaged lock with any build backe
 or set it to `false` to disable export. `UV_EXPORT_LOCK` overrides this setting. Explicit export
 also supports direct archives, Git dependencies, and local paths, although these sources cannot be
 used for [locked tool installation](../tools.md#using-a-packaged-lock). Distribution files must have
-hashes. Locks restricted to specific environments are not supported. For projects with dynamic
+hashes. If `uv.lock` restricts the supported environments, the packaged lock carries those
+restrictions and can only be installed in a matching environment. For projects with dynamic
 dependency declarations, automatic export is skipped and explicit export fails.
 
 Automatic export identifies PyPI sources by the index recorded in the local lock and trusts its
 artifact URLs; it does not query PyPI to verify them. It also checks optional dependencies and
 dependency groups for non-PyPI sources, even though they are not included in the packaged lock.
 
-Run `uv lock` before building. When export applies, the build fails if `uv.lock` is missing, stale,
-or unusable. Automatic export uses the lock to determine eligible sources, so a stale lock that
-refers to non-PyPI sources can cause export to be skipped. Explicitly enabling export requires a
-lock instead. When building a wheel from a source distribution, uv can carry its packaged lock into
-the wheel after checking the lock and distribution metadata. uv does not re-resolve the lock. A
-source distribution without a lock builds a wheel without one unless export is explicitly required.
+Run `uv lock` before building. Automatic export skips the lock if it is missing, stale, or unusable;
+explicitly required export fails instead. Automatic export uses the lock to determine eligible
+sources, so a stale lock that refers to non-PyPI sources can also cause export to be skipped. When
+building a wheel from a source distribution, uv can carry its packaged lock into the wheel after
+checking the lock and distribution metadata. uv does not re-resolve the lock. A source distribution
+without a lock builds a wheel without one unless export is explicitly required.
 
 The export is performed by `uv build`. Other frontends, including `python -m build`, do not include
 the lock automatically.
