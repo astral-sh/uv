@@ -78,16 +78,11 @@ versions of dependencies.
 
 ### Editable installation
 
-When the environment is synced, uv will install the project (and other workspace members) as
-_editable_ packages, such that re-syncing is not necessary for changes to be reflected in the
-environment.
+By default, the project and other workspace members are installed as editable packages, so changes
+to the source code are reflected in the environment without re-syncing. Use the `--no-editable`
+option to opt-out.
 
-To opt-out of this behavior, use the `--no-editable` option.
-
-!!! note
-
-    If the project does not define a build system, it will not be installed.
-    See the [build systems](./config.md#build-systems) documentation for details.
+See the [editable mode](./config.md#editable-mode) documentation for details.
 
 ### Handling of extraneous packages
 
