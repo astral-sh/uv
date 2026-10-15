@@ -407,6 +407,94 @@ async fn unavailable_variant_metadata_is_an_error() -> Result<()> {
     Ok(())
 }
 
+/// An ignored HTTP error for a version's variant metadata makes that version unavailable.
+#[tokio::test]
+async fn unavailable_variant_metadata_backtracks() -> Result<()> {
+    let server = MockServer::start().await;
+    let context = uv_test::test_context!("3.12").with_filter((server.uri(), "http://[LOCALHOST]"));
+    context.temp_dir.child("requirements.in").write_str("ok")?;
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(&formatdoc! {r#"
+        [[index]]
+        url = "{}/simple/"
+        default = true
+        ignore-error-codes = [403]
+        "#, server.uri()})?;
+    let simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "ok",
+        "files": [
+            {
+                "filename": "ok-1.0.0-py3-none-any.whl",
+                "url": format!("{}/files/ok-1.0.0-py3-none-any.whl", server.uri()),
+                "hashes": {},
+                "core-metadata": true,
+            },
+            {
+                "filename": "ok-2.0.0-py3-none-any.whl",
+                "url": format!("{}/files/ok-2.0.0-py3-none-any.whl", server.uri()),
+                "hashes": {},
+                "core-metadata": true,
+            },
+            {
+                "filename": "ok-2.0.0-variants.json",
+                "url": format!("{}/files/ok-2.0.0-variants.json", server.uri()),
+                "hashes": {},
+            },
+        ],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.3
+            Name: ok
+            Version: 1.0.0
+        "}))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-2.0.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.3
+            Name: ok
+            Version: 2.0.0
+        "}))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-2.0.0-variants.json"))
+        .respond_with(ResponseTemplate::new(403))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-header")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
 #[test]
 fn variant_wheels_cannot_be_installed() -> Result<()> {
     let context = uv_test::test_context!("3.12");
