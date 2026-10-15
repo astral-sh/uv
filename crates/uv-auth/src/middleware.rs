@@ -519,7 +519,7 @@ impl Middleware for AuthMiddleware {
             Ok(response)
         } else if !matches!(auth_policy, AuthPolicy::Never)
             && let Some(prompt) = &self.credentials_prompt
-            && let Some(credentials) = prompt.credentials().await.map_err(Error::Middleware)?
+            && let Some(credentials) = prompt.credentials().await.map_err(Error::middleware)?
         {
             // The request has not been sent, so its streaming body is still available.
             retry_request = credentials.authenticate(retry_request).await?;
@@ -916,7 +916,7 @@ fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> Displ
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
-    use std::io::Write;
+    use std::io::{self, Write};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use http::Method;
@@ -928,8 +928,8 @@ mod tests {
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::Index;
     use crate::credentials::Password;
+    use crate::{CredentialsPromptError, Index};
 
     use super::*;
 
@@ -1044,7 +1044,9 @@ mod tests {
                     .with_text_store(None)
                     .with_only_authenticated(true)
                     .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
-                        Err(anyhow!("Should not prompt for explicit credentials"))
+                        Err(CredentialsPromptError::ReadUsername(io::Error::other(
+                            "Should not prompt for explicit credentials",
+                        )))
                     }))),
             )
             .build();
@@ -1104,6 +1106,45 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    async fn test_credentials_prompt_error() -> Result<(), Error> {
+        let server = start_test_server("user", "password").await;
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_netrc(None)
+                    .with_text_store(None)
+                    .with_only_authenticated(true)
+                    .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
+                        Err(CredentialsPromptError::ReadUsername(io::Error::other(
+                            "terminal input failed",
+                        )))
+                    }))),
+            )
+            .build();
+
+        let err = client
+            .get(server.uri())
+            .send()
+            .await
+            .expect_err("A prompt failure must prevent the request");
+        insta::assert_snapshot!(format!("{err:?}"), @"
+        Middleware(Failed to read username
+
+        Caused by:
+            terminal input failed)
+        ");
+        assert!(
+            server
+                .received_requests()
+                .await
+                .expect("Recorded requests")
+                .is_empty()
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
     async fn test_credentials_prompt_auth_policy_never() -> Result<(), Error> {
         let server = start_test_server("user", "password").await;
         let indexes = indexes_for(&Url::parse(&server.uri())?, AuthPolicy::Never);
@@ -1115,7 +1156,9 @@ mod tests {
                     .with_indexes(indexes)
                     .with_only_authenticated(true)
                     .with_credentials_prompt(Some(CredentialsPrompt::new(|| {
-                        Err(anyhow!("Should not prompt when authentication is disabled"))
+                        Err(CredentialsPromptError::ReadUsername(io::Error::other(
+                            "Should not prompt when authentication is disabled",
+                        )))
                     }))),
             )
             .build();

@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 use tracing::{debug, info, trace};
-use uv_auth::{Credentials, CredentialsPrompt};
+use uv_auth::{Credentials, CredentialsPrompt, CredentialsPromptError};
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -418,16 +418,17 @@ async fn gather_credentials(
     Ok((publish_url, PublishingCredentials::Supplied(credentials)))
 }
 
-fn prompt_username_and_password() -> Result<Option<Credentials>> {
+fn prompt_username_and_password() -> Result<Option<Credentials>, CredentialsPromptError> {
     let term = Term::stderr();
     if !term.is_term() {
         return Ok(None);
     }
     let username_prompt = "Enter username ('__token__' if using a token): ";
     let password_prompt = "Enter password: ";
-    let username = uv_console::input(username_prompt, &term).context("Failed to read username")?;
-    let password =
-        uv_console::password(password_prompt, &term).context("Failed to read password")?;
+    let username =
+        uv_console::input(username_prompt, &term).map_err(CredentialsPromptError::ReadUsername)?;
+    let password = uv_console::password(password_prompt, &term)
+        .map_err(CredentialsPromptError::ReadPassword)?;
     Ok(Some(Credentials::basic(Some(username), Some(password))))
 }
 
