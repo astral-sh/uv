@@ -63,7 +63,7 @@ use uv_pypi_types::{
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_resolver_types::{
-    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse,
+    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse, PackageRole,
     ResolutionGraphNode, ResolverOutput, UniversalMarker,
 };
 use uv_small_str::SmallString;
@@ -2534,9 +2534,9 @@ impl Lock {
             // Git declarations can introduce direct sources needed by offline freshness checks.
             if metadata_free
                 && matches!(package.id.source, Source::Git(..))
-                && let Some(metadata) = dist.metadata.as_ref()
+                && let Some(metadata) = dist.metadata()
             {
-                package.metadata = PackageMetadata::from_distribution(metadata, root)?;
+                package.metadata = PackageMetadata::from_distribution(metadata, root, dist.role)?;
             }
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
@@ -6653,13 +6653,8 @@ impl Package {
         let metadata = if id.source.is_immutable() {
             PackageMetadata::default()
         } else {
-            PackageMetadata::from_distribution(
-                annotated_dist
-                    .metadata
-                    .as_ref()
-                    .expect("metadata is present"),
-                root,
-            )?
+            let metadata = annotated_dist.metadata().expect("metadata is present");
+            PackageMetadata::from_distribution(metadata, root, annotated_dist.role)?
         };
         Ok(Self {
             id,
@@ -7448,13 +7443,30 @@ struct PackageMetadata {
 }
 
 impl PackageMetadata {
-    fn from_distribution(metadata: &DistributionMetadata, root: &Path) -> Result<Self, LockError> {
+    fn from_distribution(
+        metadata: &DistributionMetadata,
+        root: &Path,
+        package_role: PackageRole,
+    ) -> Result<Self, LockError> {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
+        // We normally write dependency paths relative to the lockfile. For the current project and
+        // workspace members, preserve the user's choice of relative or absolute paths instead.
+        // Metadata from `tool.uv.dependency-metadata` already preserves that choice.
+        // Apply the path policy to the cloned requirements so shared metadata remains unchanged.
+        let relative_requirement = |requirement: &Requirement| {
+            let mut requirement = requirement.clone();
+            match package_role {
+                PackageRole::Project | PackageRole::WorkspaceMember => {
+                    requirement.set_force_relative(false);
+                }
+                PackageRole::Dependency => {}
+            }
+            requirement.relative_to(root)
+        };
         let requires_dist = metadata
             .requires_dist
             .iter()
-            .cloned()
-            .map(|requirement| requirement.relative_to(root))
+            .map(&relative_requirement)
             .collect::<Result<Vec<_>, _>>()
             .map(|requirements| {
                 normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
@@ -7466,8 +7478,7 @@ impl PackageMetadata {
             .map(|(group, requirements)| {
                 let requirements = requirements
                     .iter()
-                    .cloned()
-                    .map(|requirement| requirement.relative_to(root))
+                    .map(&relative_requirement)
                     .collect::<Result<Vec<_>, _>>()
                     .map(|requirements| {
                         normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
@@ -7590,8 +7601,7 @@ impl PackageId {
         // Omit versions for dynamic source trees.
         let version = if source.is_source_tree()
             && annotated_dist
-                .metadata
-                .as_ref()
+                .metadata()
                 .is_some_and(|metadata| metadata.dynamic)
         {
             None

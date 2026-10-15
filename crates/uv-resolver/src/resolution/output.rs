@@ -15,6 +15,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
+use uv_resolver_types::PackageRole;
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -65,6 +66,13 @@ pub(crate) fn from_state(
                 continue;
             };
             let package = &entry.key().package;
+            let package_role = if project == Some(&package.name) {
+                PackageRole::Project
+            } else if workspace_members.contains(&package.name) {
+                PackageRole::WorkspaceMember
+            } else {
+                PackageRole::Dependency
+            };
             let node = add_version(
                 &mut graph,
                 &mut diagnostics,
@@ -73,7 +81,7 @@ pub(crate) fn from_state(
                 index,
                 package,
                 selected,
-                project == Some(&package.name) || workspace_members.contains(&package.name),
+                package_role,
             );
             entry.insert(node);
         }
@@ -225,7 +233,7 @@ fn add_version(
     in_memory: &InMemoryIndex,
     package: &ResolutionPackage,
     selected: SelectedDistribution,
-    is_workspace_member: bool,
+    package_role: PackageRole,
 ) -> NodeIndex {
     let ResolutionPackage {
         name,
@@ -258,17 +266,10 @@ fn add_version(
         }),
     }
 
-    // We normally write dependency paths relative to the lockfile. For the current project and
-    // workspace members, preserve the user's choice of relative or absolute paths instead.
-    // Metadata from `tool.uv.dependency-metadata` already preserves that choice.
-    // Only change this copy, not shared metadata.
-    let metadata = if is_workspace_member {
-        metadata.map(|metadata| metadata.with_force_relative(false))
-    } else {
-        metadata
-    };
-
-    if let Some(metadata) = metadata.as_ref() {
+    if let Some(response) = metadata.as_ref()
+        && let MetadataResponse::Found(archive) = response.as_ref()
+    {
+        let metadata = &archive.metadata;
         // Validate the extra.
         if let Some(extra) = kind.extra() {
             if !metadata.provides_extra.contains(extra) {
@@ -298,6 +299,7 @@ fn add_version(
         kind: kind.clone(),
         hashes,
         metadata,
+        role: package_role,
         marker: UniversalMarker::TRUE,
     }))
 }
@@ -452,7 +454,7 @@ fn has_lower_bound(
             return true;
         }
 
-        let Some(metadata) = neighbor_dist.metadata.as_ref() else {
+        let Some(metadata) = neighbor_dist.metadata() else {
             // We can't check for lower bounds if we lack metadata.
             return true;
         };

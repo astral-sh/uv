@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::sync::Arc;
 
 use uv_distribution::Metadata;
 use uv_distribution_types::{
@@ -9,7 +10,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pypi_types::HashDigests;
 
-use crate::UniversalMarker;
+use crate::{MetadataResponse, UniversalMarker};
 
 /// The part of a package represented by a resolver graph node.
 #[derive(Debug, Clone, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -43,9 +44,20 @@ impl PackageNodeKind {
     }
 }
 
+/// The role of a package relative to the resolver manifest.
+#[derive(Debug, Clone, Copy)]
+pub enum PackageRole {
+    /// The project named in the resolver manifest.
+    Project,
+    /// A workspace member other than the manifest's project.
+    WorkspaceMember,
+    /// A dependency that is neither the manifest's project nor a workspace member.
+    Dependency,
+}
+
 /// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a
-/// specific distribution (e.g., a specific wheel), while the [`Metadata23`] refers to the metadata
-/// for the package-version pair.
+/// specific distribution (e.g., a specific wheel), while the [`Metadata`] describes
+/// the package-version pair.
 #[derive(Debug, Clone)]
 pub struct AnnotatedDist {
     pub dist: ResolvedDist,
@@ -53,7 +65,9 @@ pub struct AnnotatedDist {
     pub version: Version,
     pub kind: PackageNodeKind,
     pub hashes: HashDigests,
-    pub metadata: Option<Metadata>,
+    pub metadata: Option<Arc<MetadataResponse>>,
+    /// The role of this package relative to the resolver manifest.
+    pub role: PackageRole,
     /// The "full" marker for this distribution. It precisely describes all
     /// marker environments for which this distribution _can_ be installed.
     /// That is, when doing a traversal over all of the distributions in a
@@ -63,6 +77,17 @@ pub struct AnnotatedDist {
 }
 
 impl AnnotatedDist {
+    /// Returns the resolved metadata for this distribution, if available.
+    pub fn metadata(&self) -> Option<&Metadata> {
+        self.metadata.as_deref().and_then(|response| {
+            if let MetadataResponse::Found(archive) = response {
+                Some(&archive.metadata)
+            } else {
+                None
+            }
+        })
+    }
+
     /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
     /// dependency group).
     pub(crate) fn is_base(&self) -> bool {

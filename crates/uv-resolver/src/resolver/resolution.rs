@@ -4,7 +4,6 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 use tracing::{Level, trace};
 
-use uv_distribution::Metadata;
 use uv_distribution_types::{Dist, DistributionId, Identifier, IndexUrl, ResolvedDist};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -51,13 +50,13 @@ enum SelectedSource {
     Url {
         dist: ResolvedDist,
         metadata_id: DistributionId,
-        metadata: Metadata,
+        metadata: Arc<MetadataResponse>,
     },
     Registry {
         dist: ResolvedDist,
         metadata_id: DistributionId,
         /// Direct-only resolution need not fetch registry metadata.
-        metadata: Option<Metadata>,
+        metadata: Option<Arc<MetadataResponse>>,
     },
 }
 
@@ -74,7 +73,7 @@ impl SelectedDistribution {
             let response = index.distributions().get(&metadata_id).ok_or_else(|| {
                 ResolveError::UnregisteredTask(format!("{} @ {}", package.name, url.verbatim))
             })?;
-            let MetadataResponse::Found(archive) = &*response else {
+            let MetadataResponse::Found(_) = response.as_ref() else {
                 return Err(ResolveError::PackageUnavailable(package.name.clone()));
             };
             SelectedSource::Url {
@@ -86,20 +85,20 @@ impl SelectedDistribution {
                     version: Some(version.clone()),
                 },
                 metadata_id,
-                metadata: archive.metadata.clone(),
+                metadata: response,
             }
         } else {
             let (dist, metadata_id) =
                 pins.dist_and_id(&package.name, &version).ok_or_else(|| {
                     ResolveError::UnregisteredTask(format!("{}=={version}", package.name))
                 })?;
-            let metadata = index.distributions().get(metadata_id).and_then(|response| {
-                if let MetadataResponse::Found(archive) = &*response {
-                    Some(archive.metadata.clone())
-                } else {
-                    None
-                }
-            });
+            let metadata =
+                index.distributions().get(metadata_id).and_then(|response| {
+                    match response.as_ref() {
+                        MetadataResponse::Found(_) => Some(response),
+                        MetadataResponse::Unavailable(_) | MetadataResponse::Error(..) => None,
+                    }
+                });
             SelectedSource::Registry {
                 dist: dist.clone(),
                 metadata_id: metadata_id.clone(),
@@ -114,7 +113,7 @@ impl SelectedDistribution {
     }
 
     /// Move the selected artifact and metadata into the output graph.
-    pub(crate) fn into_parts(self) -> (Version, ResolvedDist, Option<Metadata>) {
+    pub(crate) fn into_parts(self) -> (Version, ResolvedDist, Option<Arc<MetadataResponse>>) {
         match self.source {
             SelectedSource::Url { dist, metadata, .. } => (self.version, dist, Some(metadata)),
             SelectedSource::Registry { dist, metadata, .. } => (self.version, dist, metadata),
