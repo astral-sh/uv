@@ -14,7 +14,6 @@ use insta::assert_snapshot;
 use serde_json::json;
 #[cfg(feature = "test-universal")]
 use sha2::{Digest, Sha256};
-use url::Url;
 #[cfg(feature = "test-universal")]
 use walkdir::WalkDir;
 #[cfg(feature = "test-universal")]
@@ -26,6 +25,7 @@ use wiremock::{
 #[cfg(feature = "test-universal")]
 use uv_fs::PythonExt;
 use uv_fs::{Simplified, create_symlink};
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::archive::{generate_source_archive, write_tar_gz};
@@ -11183,7 +11183,7 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
 
     let shared_dependency_alias = context.temp_dir.child("shared-dependency-alias");
     create_symlink(shared_dependency.path(), shared_dependency_alias.path())?;
-    let shared_dependency_url = Url::from_file_path(shared_dependency_alias.path())
+    let shared_dependency_url = SafeUrl::from_file_path(shared_dependency_alias.path())
         .map_err(|()| anyhow::anyhow!("shared dependency path is not a valid file URL"))?;
 
     intermediate
@@ -11254,7 +11254,7 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
             .join("test/links/ok-1.0.0-py3-none-any.whl"),
         wheel.path(),
     )?;
-    let wheel_url = Url::from_file_path(wheel.path())
+    let wheel_url = SafeUrl::from_file_path(wheel.path())
         .map_err(|()| anyhow::anyhow!("wheel path is not a valid file URL"))?;
 
     let source_archive = context
@@ -11267,7 +11267,7 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
             .join("test/links/basic_package-0.1.0.tar.gz"),
         source_archive.path(),
     )?;
-    let source_archive_url = Url::from_file_path(source_archive.path())
+    let source_archive_url = SafeUrl::from_file_path(source_archive.path())
         .map_err(|()| anyhow::anyhow!("source archive path is not a valid file URL"))?;
 
     let project = context.temp_dir.child("project");
@@ -11406,7 +11406,7 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
     "#})?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
 
     let active_child = context.temp_dir.child("active-child");
@@ -11421,7 +11421,7 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
             requires = ["hatchling"]
             build-backend = "hatchling.build"
         "#})?;
-    let active_child_url = Url::from_file_path(active_child.path())
+    let active_child_url = SafeUrl::from_file_path(active_child.path())
         .map_err(|()| anyhow::anyhow!("active child path is not a valid file URL"))?;
 
     let relative_child = context.temp_dir.child("relative-child");
@@ -11438,16 +11438,16 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
             requires = ["hatchling"]
             build-backend = "hatchling.build"
         "#})?;
-    let relative_child_url = Url::from_file_path(relative_child.path())
+    let relative_child_url = SafeUrl::from_file_path(relative_child.path())
         .map_err(|()| anyhow::anyhow!("relative child path is not a valid file URL"))?;
     let relative_child_alias = context.temp_dir.child("relative-child-alias");
     create_symlink(relative_child.path(), relative_child_alias.path())?;
-    let relative_child_alias_url = Url::from_file_path(relative_child_alias.path())
+    let relative_child_alias_url = SafeUrl::from_file_path(relative_child_alias.path())
         .map_err(|()| anyhow::anyhow!("relative child alias is not a valid file URL"))?;
 
     // Discover the ordinary parent through configured metadata to keep the baseline deterministic.
     let parent = context.temp_dir.child("parent");
-    let parent_url = Url::from_file_path(parent.path())
+    let parent_url = SafeUrl::from_file_path(parent.path())
         .map_err(|()| anyhow::anyhow!("parent path is not a valid file URL"))?;
 
     let project = indoc! {r#"
@@ -11693,9 +11693,9 @@ fn lock_ignored_dependency_metadata_paths() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
     "#})?;
-    let active_child_url = Url::from_file_path(active_child.path())
+    let active_child_url = SafeUrl::from_file_path(active_child.path())
         .map_err(|()| anyhow::anyhow!("active child path is not a valid file URL"))?;
-    let inactive_child_url = Url::from_file_path(inactive_child.path())
+    let inactive_child_url = SafeUrl::from_file_path(inactive_child.path())
         .map_err(|()| anyhow::anyhow!("inactive child path is not a valid file URL"))?;
 
     let parent = context.temp_dir.child("parent");
@@ -12886,8 +12886,8 @@ fn lock_mixed_hashes() -> Result<()> {
           </body>
         </html>
     "#,
-        Url::from_file_path(&wheel).unwrap().as_str(),
-        Url::from_file_path(&sdist).unwrap().as_str(),
+        SafeUrl::from_file_path(&wheel).unwrap().as_str(),
+        SafeUrl::from_file_path(&sdist).unwrap().as_str(),
     })?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -12901,10 +12901,10 @@ fn lock_mixed_hashes() -> Result<()> {
         [tool.uv]
         extra-index-url = ["{}"]
         "#,
-        Url::from_file_path(&root).unwrap().as_str()
+        SafeUrl::from_file_path(&root).unwrap().as_str()
     })?;
 
-    let index_url = Url::from_file_path(&root).unwrap().to_string();
+    let index_url = SafeUrl::from_file_path(&root).unwrap().to_string();
     let filters = [(index_url.as_str(), "file://[TMP]")]
         .into_iter()
         .chain(context.filters())
@@ -12982,8 +12982,8 @@ fn lock_mixed_hashes() -> Result<()> {
           </body>
         </html>
     "#,
-        Url::from_file_path(&wheel).unwrap().as_str(),
-        Url::from_file_path(&sdist).unwrap().as_str(),
+        SafeUrl::from_file_path(&wheel).unwrap().as_str(),
+        SafeUrl::from_file_path(&sdist).unwrap().as_str(),
     })?;
 
     // Lock again with `--refresh` to pick up the SHA512 hash from the updated index.
@@ -13744,8 +13744,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
           "dependency @ {} ; sys_platform != 'darwin'",
         ]
         "#,
-        Url::from_file_path(context.temp_dir.join("v1")).unwrap(),
-        Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
+        SafeUrl::from_file_path(context.temp_dir.join("v1")).unwrap(),
+        SafeUrl::from_file_path(context.temp_dir.join("v2")).unwrap(),
     })?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -17598,7 +17598,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
         [tool.uv.sources]
         tqdm = {{ index = "local" }}
         "#,
-        Url::from_file_path(context.temp_dir.join("links/")).unwrap()
+        SafeUrl::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
@@ -17695,7 +17695,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
         format = "flat"
         url = "{}"
         "#,
-        Url::from_file_path(context.temp_dir.join("links/")).unwrap()
+        SafeUrl::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
@@ -17788,7 +17788,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
         format = "flat"
         url = "{}"
         "#,
-        Url::from_file_path(context.temp_dir.join("links/")).unwrap()
+        SafeUrl::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
@@ -17902,8 +17902,8 @@ fn lock_local_index() -> Result<()> {
           </body>
         </html>
     "#,
-        Url::from_file_path(wheel).unwrap().as_str(),
-        Url::from_file_path(sdist).unwrap().as_str(),
+        SafeUrl::from_file_path(wheel).unwrap().as_str(),
+        SafeUrl::from_file_path(sdist).unwrap().as_str(),
     })?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -17917,7 +17917,7 @@ fn lock_local_index() -> Result<()> {
         [tool.uv]
         extra-index-url = ["{}"]
         "#,
-        Url::from_file_path(&root).unwrap().as_str()
+        SafeUrl::from_file_path(&root).unwrap().as_str()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
@@ -17928,7 +17928,7 @@ fn lock_local_index() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    let index = Url::from_file_path(&root).unwrap().to_string();
+    let index = SafeUrl::from_file_path(&root).unwrap().to_string();
     let filters = [(index.as_str(), "file://[TMP]")]
         .into_iter()
         .chain(context.filters())
@@ -18197,7 +18197,7 @@ fn lock_sources_archive() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["workspace @ {}"]
         "#,
-        Url::from_file_path(&workspace_archive).unwrap(),
+        SafeUrl::from_file_path(&workspace_archive).unwrap(),
     })?;
 
     uv_snapshot!( context.lock(), @"
@@ -19953,7 +19953,7 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
 
     let local = context.temp_dir.child("local");
     local.create_dir_all()?;
-    let local_url = Url::from_file_path(local.path())
+    let local_url = SafeUrl::from_file_path(local.path())
         .map_err(|()| anyhow::anyhow!("local path is not a valid file URL"))?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -24137,7 +24137,7 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir
@@ -24437,7 +24437,7 @@ fn lock_metadata_free_overridden_recursive_extra_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("extras/lock-without-metadata.toml");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    let child_url = Url::from_file_path(context.temp_dir.child("child").path())
+    let child_url = SafeUrl::from_file_path(context.temp_dir.child("child").path())
         .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
     pyproject_toml.write_str(&formatdoc! {r#"
         [project]
@@ -24619,7 +24619,7 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
             )
             return dist_info.name
         "#,
-            child_url = Url::from_file_path(context.temp_dir.child("child").path())
+            child_url = SafeUrl::from_file_path(context.temp_dir.child("child").path())
                 .map_err(|()| anyhow!("failed to construct a file URL for the local child"))?,
         })?;
 
@@ -46639,7 +46639,7 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
     );
     context.temp_dir.child(&filename).write_binary(&wheel)?;
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let source = Url::from_file_path(context.temp_dir.child(&filename).path())
+    let source = SafeUrl::from_file_path(context.temp_dir.child(&filename).path())
         .map_err(|()| anyhow!("invalid wheel path"))?;
 
     // The constrained local wheel requires a prerelease from the registry.
@@ -46711,7 +46711,7 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
 fn lock_resolution_inputs_dynamic_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let provider_url = Url::from_directory_path(context.temp_dir.child("provider").path())
+    let provider_url = SafeUrl::from_directory_path(context.temp_dir.child("provider").path())
         .map_err(|()| anyhow!("invalid provider directory"))?;
 
     // Select a local package whose backend provides its version.

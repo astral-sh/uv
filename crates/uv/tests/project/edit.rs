@@ -18,7 +18,6 @@ use serde_json::json;
 use std::path::Path;
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
-use url::Url;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -27,6 +26,7 @@ use wiremock::{
 #[cfg(feature = "test-git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use uv_test::package_server::PackageServer;
@@ -3037,7 +3037,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
     ");
 
     // Add a dependency using a file:// URL (also absolute).
-    let file_url = Url::from_file_path(file_url_dep.path()).unwrap();
+    let file_url = SafeUrl::from_file_path(file_url_dep.path()).unwrap();
     uv_snapshot!(context.filters(), context.add().arg(file_url.as_str()).current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -14202,7 +14202,7 @@ async fn add_redirect_cross_origin() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let mut redirect_url = SafeUrl::parse(&redirect_server.uri())?;
     let _ = redirect_url.set_username("public");
     let _ = redirect_url.set_password(Some("heron"));
 
@@ -14251,7 +14251,7 @@ async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    let redirect_url = Url::parse(&redirect_server.uri())?;
+    let redirect_url = SafeUrl::parse(&redirect_server.uri())?;
 
     uv_snapshot!(context.filters(), context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
     exit_code: 0 (success)
@@ -14313,7 +14313,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let mut redirect_url = SafeUrl::parse(&redirect_server.uri())?;
     let _ = redirect_url.set_username("public");
 
     uv_snapshot!(context.filters(), context.add().arg("--default-index")
@@ -14363,7 +14363,7 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
         .mount(&redirect_server)
         .await;
 
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let mut redirect_url = SafeUrl::parse(&redirect_server.uri())?;
     let _ = redirect_url.set_username("public");
 
     uv_snapshot!(context.filters(), context.pip_install()

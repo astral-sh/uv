@@ -286,6 +286,12 @@ impl SafeUrl {
     pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
         Ok(Self(Url::from_file_path(path)?, PhantomData))
     }
+
+    /// Convert an absolute directory path to a file URL with a trailing slash.
+    #[expect(clippy::result_unit_err)]
+    pub fn from_directory_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
+        Ok(Self(Url::from_directory_path(path)?, PhantomData))
+    }
 }
 
 impl<P: SerializationPolicy> SafeUrl<P> {

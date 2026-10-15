@@ -11,11 +11,11 @@ use sha2::{Digest, Sha256};
 #[cfg(feature = "test-git")]
 use std::process::Command;
 use tempfile::tempdir_in;
-use url::Url;
 use wiremock::matchers::{basic_auth, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::package_server::PackageServer;
 use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
@@ -13116,7 +13116,7 @@ fn lock_git_poetry_path_dependency() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir
@@ -13250,7 +13250,7 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
         .assert()
         .success();
 
-    let repository_url = Url::from_directory_path(repository.path())
+    let repository_url = SafeUrl::from_directory_path(repository.path())
         .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
     context
         .temp_dir
@@ -18493,7 +18493,7 @@ async fn sync_malware_check_keyring_auth() -> Result<()> {
         .success();
 
     let server = MockServer::start().await;
-    let mut malware_check_url = Url::parse(&server.uri())?;
+    let mut malware_check_url = SafeUrl::parse(&server.uri())?;
     malware_check_url
         .set_username("public")
         .map_err(|()| anyhow!("failed to set malware check URL username"))?;
@@ -19312,7 +19312,7 @@ fn project_build_hashes_add() -> Result<()> {
             "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
         ))?;
     let context = uv_test::test_context!("3.12");
-    let wheels = Url::from_directory_path(child.temp_dir.child("wheels").path())
+    let wheels = SafeUrl::from_directory_path(child.temp_dir.child("wheels").path())
         .map_err(|()| anyhow!("absolute wheels path"))?;
     let pyproject = formatdoc! {r#"
         [project]
@@ -19635,7 +19635,7 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
         .temp_dir
         .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
     let child_hash = hex::encode(Sha256::digest(context.read_bytes(child.path())));
-    let child_url = Url::from_file_path(child.path()).expect("absolute wheel path");
+    let child_url = SafeUrl::from_file_path(child.path()).expect("absolute wheel path");
     let (filename, wheel) = generate_wheel(
         &"build-dependency".parse()?,
         &"1.0.0".parse()?,
@@ -19651,8 +19651,9 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
         .child("wheels")
         .child(&filename)
         .write_binary(&wheel)?;
-    let parent_url = Url::from_file_path(context.temp_dir.child("wheels").child(filename).path())
-        .expect("absolute wheel path");
+    let parent_url =
+        SafeUrl::from_file_path(context.temp_dir.child("wheels").child(filename).path())
+            .expect("absolute wheel path");
     let pyproject = context.read("pyproject.toml").replace(
         "build-dependency==1.0.0",
         &format!("build-dependency @ {parent_url}#sha256={hash}"),
@@ -19690,7 +19691,7 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
 fn project_build_hashes_script() -> Result<()> {
     let (context, hash) = build_hash_project()?;
     let project_url =
-        Url::from_directory_path(context.temp_dir.path()).expect("absolute project path");
+        SafeUrl::from_directory_path(context.temp_dir.path()).expect("absolute project path");
     let script = context.temp_dir.child("script.py");
     script.write_str(&formatdoc! {r#"
         # /// script

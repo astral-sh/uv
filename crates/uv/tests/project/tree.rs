@@ -6,8 +6,8 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::{assert_json_snapshot, assert_snapshot};
-use url::Url;
 
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::TestContext;
@@ -2500,8 +2500,8 @@ fn repeated_version() -> Result<()> {
           "dependency @ {} ; sys_platform != 'darwin'",
         ]
         "#,
-        Url::from_file_path(context.temp_dir.join("v1")).unwrap(),
-        Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
+        SafeUrl::from_file_path(context.temp_dir.join("v1")).unwrap(),
+        SafeUrl::from_file_path(context.temp_dir.join("v2")).unwrap(),
     })?;
 
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
@@ -2848,7 +2848,7 @@ fn dep_and_group_extras_with_extra_only_dependency() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let leaf_url = Url::from_file_path(leaf.path())
+    let leaf_url = SafeUrl::from_file_path(leaf.path())
         .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
 
     let child = context.temp_dir.child("child");
@@ -2865,7 +2865,7 @@ fn dep_and_group_extras_with_extra_only_dependency() -> Result<()> {
         "#,
         leaf_url,
     })?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("failed to convert child path to URL"))?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2913,14 +2913,14 @@ fn dep_and_group_extras_with_different_extras_in_path() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let leaf_url = Url::from_file_path(leaf.path())
+    let leaf_url = SafeUrl::from_file_path(leaf.path())
         .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
 
     let a = context.temp_dir.child("a");
     fs_err::create_dir_all(a.path())?;
     let b = context.temp_dir.child("b");
     fs_err::create_dir_all(b.path())?;
-    let b_url = Url::from_file_path(b.path())
+    let b_url = SafeUrl::from_file_path(b.path())
         .map_err(|()| anyhow::anyhow!("failed to convert b path to URL"))?;
     a.child("pyproject.toml").write_str(&formatdoc! {
         r#"
@@ -2932,7 +2932,7 @@ fn dep_and_group_extras_with_different_extras_in_path() -> Result<()> {
         "#,
         b_url,
     })?;
-    let a_url = Url::from_file_path(a.path())
+    let a_url = SafeUrl::from_file_path(a.path())
         .map_err(|()| anyhow::anyhow!("failed to convert a path to URL"))?;
 
     b.child("pyproject.toml").write_str(&formatdoc! {
@@ -4217,7 +4217,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let leaf_url = Url::from_file_path(leaf.path())
+    let leaf_url = SafeUrl::from_file_path(leaf.path())
         .map_err(|()| anyhow::anyhow!("failed to convert leaf path to URL"))?;
 
     let child = context.temp_dir.child("child");
@@ -4233,7 +4233,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
         feature = ["leaf @ {leaf_url}"]
         "#,
     })?;
-    let child_url = Url::from_file_path(child.path())
+    let child_url = SafeUrl::from_file_path(child.path())
         .map_err(|()| anyhow::anyhow!("failed to convert child path to URL"))?;
 
     let test_dependency = context.temp_dir.child("test-dependency");
@@ -4246,7 +4246,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
         requires-python = ">=3.12"
         "#,
     )?;
-    let test_dependency_url = Url::from_file_path(test_dependency.path())
+    let test_dependency_url = SafeUrl::from_file_path(test_dependency.path())
         .map_err(|()| anyhow::anyhow!("failed to convert test dependency path to URL"))?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");

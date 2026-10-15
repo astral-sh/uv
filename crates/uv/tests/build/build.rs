@@ -11,7 +11,7 @@ use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::path::Path;
-use url::Url;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::package_server::PackageServer;
 use uv_test::packse::generate_wheel;
@@ -4140,7 +4140,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .temp_dir
         .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
     let wheel_url =
-        Url::from_file_path(wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
+        SafeUrl::from_file_path(wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
     let requirement = format!("build-dependency @ {wheel_url}");
     pyproject.write_str(&registry_pyproject.replace(
         "requirement = \"build-dependency==1.0.0\"",
@@ -4224,8 +4224,8 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
     let dynamic_hash = hex::encode(Sha256::digest(context.read_bytes(dynamic_wheel.path())));
     let context = context.with_filter((dynamic_hash.clone(), "[DYNAMIC_HASH]"));
-    let dynamic_url =
-        Url::from_file_path(dynamic_wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
+    let dynamic_url = SafeUrl::from_file_path(dynamic_wheel.path())
+        .map_err(|()| anyhow!("invalid wheel path"))?;
     let backend = context.read("backend.py").replace(
         "shutil.copyfile(source,",
         "import dynamic_dependency\n    shutil.copyfile(source,",

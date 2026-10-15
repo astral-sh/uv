@@ -13,7 +13,6 @@ use petgraph::graph::NodeIndex;
 use serde::Deserialize;
 use toml::Table as TomlTable;
 use toml_edit::{Array, ArrayOfTables, Item, Table, Value, value};
-use url::Url;
 
 use uv_client::{FileHashError, RegistryClient};
 use uv_configuration::{
@@ -1737,10 +1736,8 @@ impl PylockTomlVcs {
             let mut url = if let Some(url) = self.url.as_ref().map(SafeUrl::as_url) {
                 url.clone()
             } else if let Some(path) = self.path.as_ref() {
-                SafeUrl::from_url(
-                    Url::from_directory_path(install_path.join(path))
-                        .map_err(|()| PylockTomlErrorKind::PathToUrl)?,
-                )
+                SafeUrl::from_directory_path(install_path.join(path))
+                    .map_err(|()| PylockTomlErrorKind::PathToUrl)?
             } else {
                 return Err(PylockTomlErrorKind::VcsMissingPathUrl(name.clone()));
             };

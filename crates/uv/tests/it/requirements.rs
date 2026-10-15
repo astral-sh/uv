@@ -2,7 +2,6 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use std::path::Path;
-use url::Url;
 
 use uv_client::BaseClientBuilder;
 use uv_configuration::RequirementsInput;
@@ -34,8 +33,8 @@ fn parse_requirements_input() -> Result<()> {
     }
 
     let absolute_path = std::env::current_dir()?.join("requirements.txt");
-    let file_url =
-        Url::from_file_path(&absolute_path).expect("an absolute path should convert to a file URL");
+    let file_url = SafeUrl::from_file_path(&absolute_path)
+        .expect("an absolute path should convert to a file URL");
     assert_eq!(
         file_url.as_str().parse::<RequirementsInput>()?,
         RequirementsInput::Local(absolute_path.clone())

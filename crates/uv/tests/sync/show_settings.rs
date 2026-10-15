@@ -2,7 +2,7 @@ use std::process::Command;
 
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use url::Url;
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 
 use uv_test::{TestContext, capture_uv_snapshot, diff_uv_snapshot, uv_snapshot};
@@ -3125,7 +3125,8 @@ fn resolve_relative_indexes_with_directory() -> anyhow::Result<()> {
 
     let absolute_index = context.temp_dir.child("absolute-index");
     let absolute_find_links = context.temp_dir.child("absolute-find-links");
-    let file_url = Url::from_directory_path(context.temp_dir.child("file-index").path()).unwrap();
+    let file_url =
+        SafeUrl::from_directory_path(context.temp_dir.child("file-index").path()).unwrap();
 
     let show_settings = || {
         let mut command = add_shared_args(context.pip_install());
@@ -3815,7 +3816,7 @@ fn index_by_name_with_directory() -> anyhow::Result<()> {
     };
 
     let configured_index = configuration_directory.child("configured-index");
-    let configured_index = Url::from_file_path(configured_index.path()).map_err(|()| {
+    let configured_index = SafeUrl::from_file_path(configured_index.path()).map_err(|()| {
         anyhow::anyhow!("Failed to convert the configured index path to a file URL")
     })?;
     let configured_index = format!("internal={configured_index}");
