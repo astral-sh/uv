@@ -137,6 +137,27 @@ mod tests {
     }
 
     #[test]
+    fn mutation_guards_retain_policy_and_url_components() -> Result<(), Box<dyn Error>> {
+        let mut url = SafeUrl::parse(
+            "https://user:password@example.com/packages/?download=1#subdirectory=src",
+        )?
+        .with_policy(Stripped);
+        url.path_segments_mut()
+            .map_err(|()| "URL has no path segments")?
+            .pop_if_empty()
+            .push("file name.whl");
+        url.query_pairs_mut().append_pair("sig", "signed value");
+
+        assert_eq!(
+            url.as_str(),
+            "https://user:password@example.com/packages/file%20name.whl?download=1&sig=signed+value#subdirectory=src"
+        );
+        assert_snapshot!(url, @"https://user:****@example.com/packages/file%20name.whl?download=1&sig=****#subdirectory=src");
+        assert_snapshot!(serde_json::to_string(&url)?, @r#""https://example.com/packages/file%20name.whl?download=1&sig=signed+value#subdirectory=src""#);
+        Ok(())
+    }
+
+    #[test]
     fn method_serialization_respects_policy() -> Result<(), Box<dyn Error>> {
         let input = "https://user:password@example.com/file.whl?sig=abc%2Bdef%3D";
         let url = SafeUrl::parse(input)?;

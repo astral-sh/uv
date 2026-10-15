@@ -404,7 +404,7 @@ impl GatheredCredentials {
                 if let Some(username) = &username {
                     debug!("Fetching password from keyring");
                     if let Some(keyring_password) = provider
-                        .fetch(SafeUrl::ref_cast(&publish_url), Some(username))
+                        .fetch(&publish_url, Some(username))
                         .await
                         .as_ref()
                         .and_then(|credentials| credentials.password())

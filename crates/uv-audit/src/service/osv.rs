@@ -311,7 +311,7 @@ impl Osv {
                     .uncached()
                     .for_host(&url)
                     .raw_client()
-                    .post(url.as_ref())
+                    .post(url.as_str())
                     .json(&request)
                     .send()
                     .await?
@@ -404,7 +404,7 @@ impl Osv {
             .uncached()
             .for_host(&url)
             .raw_client()
-            .get(url.as_ref())
+            .get(url.as_str())
             .build()
             .map_err(reqwest_middleware::Error::Reqwest)?;
 
