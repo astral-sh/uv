@@ -89,5 +89,6 @@ Write-Output `
 	"CARGO_HOME=$($Drive)/.cargo" `
 	"UV_WORKSPACE=$($Drive)/uv" `
 	"UV_PYTHON_INSTALL_DIR=$($Drive)/uv-python" `
+	"UV_PYTHON_CACHE_DIR=$($Drive)/uv-python-cache" `
 	"PATH=$($Drive)/.cargo/bin;$env:PATH" `
 	>> $env:GITHUB_ENV
