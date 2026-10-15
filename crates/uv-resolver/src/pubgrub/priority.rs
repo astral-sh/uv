@@ -163,11 +163,8 @@ impl PubGrubPriorities {
     /// for the package.
     pub(crate) fn mark_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
-            // Not a correctness bug
-            debug_assert!(
-                false,
-                "URL packages must not be involved in conflict handling"
-            );
+            // Root, Python, and system packages have fixed priority. Python can be
+            // involved in conflicts through `Requires-Python` constraints.
             return false;
         };
 
@@ -196,11 +193,8 @@ impl PubGrubPriorities {
     /// marked as conflicting above the threshold.
     pub(crate) fn mark_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
         let Some(name) = package.name_no_root() else {
-            // Not a correctness bug
-            debug_assert!(
-                false,
-                "URL packages must not be involved in conflict handling"
-            );
+            // Root, Python, and system packages have fixed priority. Python can be
+            // involved in conflicts through `Requires-Python` constraints.
             return false;
         };
 
