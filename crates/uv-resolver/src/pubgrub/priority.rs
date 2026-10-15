@@ -105,7 +105,7 @@ impl PubGrubPriorities {
             | PubGrubPriority::ConflictEarly(Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
             | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
-            PubGrubPriority::Root => None,
+            PubGrubPriority::Fixed => None,
         }
     }
 
@@ -115,17 +115,16 @@ impl PubGrubPriorities {
         package: &PubGrubPackage,
     ) -> <UvDependencyProvider as DependencyProvider>::Priority {
         match &**package {
-            // There is only a single root package despite the value. The priorities on root don't
-            // matter for the resolution output, since the Pythons don't have dependencies
-            // themselves and are only used when the package is incompatible.
-            PubGrubPackageInner::Root(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(0)),
+            // The tiebreakers among fixed-priority packages don't affect resolution output: there
+            // is only one root package, and Python and system packages have no dependencies.
+            PubGrubPackageInner::Root(_) => (PubGrubPriority::Fixed, PubGrubTiebreaker::from(0)),
             PubGrubPackageInner::Python(PubGrubPython::Installed) => {
-                (PubGrubPriority::Root, PubGrubTiebreaker::from(1))
+                (PubGrubPriority::Fixed, PubGrubTiebreaker::from(1))
             }
             PubGrubPackageInner::Python(PubGrubPython::Target) => {
-                (PubGrubPriority::Root, PubGrubTiebreaker::from(2))
+                (PubGrubPriority::Fixed, PubGrubTiebreaker::from(2))
             }
-            PubGrubPackageInner::System(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(3)),
+            PubGrubPackageInner::System(_) => (PubGrubPriority::Fixed, PubGrubTiebreaker::from(3)),
             PubGrubPackageInner::Marker { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Group { name, .. }
@@ -252,7 +251,7 @@ pub(crate) enum PubGrubPriority {
     DirectUrl(Reverse<usize>),
 
     /// The highest priority, reserved for packages whose priority is fixed.
-    Root,
+    Fixed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
