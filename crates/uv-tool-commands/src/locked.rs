@@ -418,6 +418,10 @@ pub(super) async fn resolve(
         || !spec.excludes.is_empty()
     {
         for constraint in &spec.constraints {
+            // Registry constraint hashes apply to the selected package regardless of the range.
+            if let RequirementSource::Registry { .. } = constraint.requirement.source {
+                continue;
+            }
             if !constraint.hashes.is_empty() || constraint.requirement.hashes()?.is_some() {
                 check_hashed_source(&constraint.requirement)?;
             }
