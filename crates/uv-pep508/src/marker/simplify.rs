@@ -239,20 +239,139 @@ fn collect_dnf(
 /// The number of clause comparisons is quadratic. Most user-facing markers are simple; the
 /// indexed path reduces the cost of comparing larger ones.
 fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
-    if dnf.len() >= 8 && simplify_indexed(dnf) {
+    if dnf.len() <= 1 || (dnf.len() >= 8 && simplify_indexed(dnf)) {
         return;
     }
-    simplify_linear(dnf);
+    simplify_with_queries(dnf, LinearClauses);
 }
 
-/// Simplify a DNF using interned terms and bit sets, following [`simplify_linear`]'s removal order.
-/// Each removal affects later comparisons, so reordering them can change the resulting clauses.
-/// Returns `false` without modifying the DNF if a clause repeats a term or the index is too large.
+/// Remove terms and clauses in encounter order using the chosen clause comparisons.
+/// Each removal affects later comparisons, so this order determines the rendered expression.
+fn simplify_with_queries(dnf: &mut Vec<Vec<MarkerExpression>>, mut queries: impl ClauseQueries) {
+    for clause in 0..dnf.len() {
+        let mut removed = queries.prepare_clause(clause);
+        for term in 0..dnf[clause].len() {
+            if queries.has_subset_with_negated(dnf, clause, term, &removed) {
+                queries.remove_term(clause, term, &mut removed);
+            }
+        }
+        queries.finish_clause(dnf, clause, removed);
+    }
+
+    let mut redundant = SmallVec::<[usize; 8]>::new();
+    for clause in 0..dnf.len() {
+        if (0..dnf.len()).any(|other| {
+            other != clause
+                && redundant.binary_search(&other).is_err()
+                && queries.is_subset(dnf, other, clause)
+        }) {
+            redundant.push(clause);
+        }
+    }
+    if !redundant.is_empty() {
+        let mut redundant = redundant.into_iter().peekable();
+        let mut position = 0;
+        dnf.retain(|_| {
+            let keep = redundant.next_if_eq(&position).is_none();
+            position += 1;
+            keep
+        });
+    }
+}
+
+/// Clause comparisons and index updates used by the ordered simplification pass.
+trait ClauseQueries {
+    /// State needed to track removals while considering one clause.
+    type Removed;
+
+    /// Prepare optional candidate differences and the clause's removal state.
+    fn prepare_clause(&mut self, clause: usize) -> Self::Removed;
+    /// Test whether another clause is a subset after negating one term of the current clause.
+    /// Previously removed terms cannot justify another removal.
+    fn has_subset_with_negated(
+        &self,
+        dnf: &[Vec<MarkerExpression>],
+        clause: usize,
+        term: usize,
+        removed: &Self::Removed,
+    ) -> bool;
+    /// Update membership and cached differences after removing a term.
+    fn remove_term(&mut self, clause: usize, term: usize, removed: &mut Self::Removed);
+    /// Apply the marked removals to the clause and its index.
+    fn finish_clause(
+        &mut self,
+        dnf: &mut [Vec<MarkerExpression>],
+        clause: usize,
+        removed: Self::Removed,
+    );
+    /// Test whether the surviving terms of `left` are contained in `right`.
+    fn is_subset(&self, dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool;
+}
+
+/// Compare expressions directly without allocating an index.
+struct LinearClauses;
+
+impl ClauseQueries for LinearClauses {
+    type Removed = SmallVec<[usize; 8]>;
+
+    fn prepare_clause(&mut self, _clause: usize) -> Self::Removed {
+        SmallVec::new()
+    }
+
+    fn remove_term(&mut self, _clause: usize, term: usize, removed: &mut Self::Removed) {
+        removed.push(term);
+    }
+
+    #[inline]
+    fn finish_clause(
+        &mut self,
+        dnf: &mut [Vec<MarkerExpression>],
+        clause: usize,
+        removed: Self::Removed,
+    ) {
+        for term in removed.into_iter().rev() {
+            dnf[clause].remove(term);
+        }
+    }
+
+    #[inline]
+    fn has_subset_with_negated(
+        &self,
+        dnf: &[Vec<MarkerExpression>],
+        clause: usize,
+        term: usize,
+        removed: &Self::Removed,
+    ) -> bool {
+        let skipped = &dnf[clause][term];
+        dnf.iter().enumerate().any(|(other, expressions)| {
+            other != clause
+                && expressions.iter().all(|expression| {
+                    if expression == skipped {
+                        return false;
+                    }
+                    if is_negation(expression, skipped) {
+                        return true;
+                    }
+                    // Repeated terms match their first occurrence, even when a later one survives.
+                    dnf[clause]
+                        .iter()
+                        .position(|other| other == expression)
+                        .is_some_and(|position| !removed.contains(&position))
+                })
+        })
+    }
+
+    fn is_subset(&self, dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool {
+        dnf[left].iter().all(|term| dnf[right].contains(term))
+    }
+}
+
+/// Use interned terms when the clauses have no repeated terms and the index fits its budget.
+/// Returns `false` without changing the DNF when direct comparisons are needed.
 fn simplify_indexed(dnf: &mut Vec<Vec<MarkerExpression>>) -> bool {
     const MAX_INDEX_WORDS: usize = 32 * 1024 * 1024 / size_of::<u64>();
-
     let mut terms = IndexSet::<_, FxBuildHasher>::default();
-    let mut clauses: Vec<Vec<_>> = dnf
+    let clauses: Vec<Vec<_>> = dnf
         .iter()
         .map(|clause| {
             clause
@@ -261,12 +380,8 @@ fn simplify_indexed(dnf: &mut Vec<Vec<MarkerExpression>>) -> bool {
                 .collect()
         })
         .collect();
-
     let words = terms.len().div_ceil(64);
-    // A sparse expression can have far more distinct terms than terms per clause.
-    // Bound the dense index to 32 MiB and use the linear algorithm beyond that.
-    let index_words = dnf.len().saturating_mul(words);
-    if index_words > MAX_INDEX_WORDS {
+    if dnf.len().saturating_mul(words) > MAX_INDEX_WORDS {
         return false;
     }
     let negated: Vec<_> = terms
@@ -274,246 +389,206 @@ fn simplify_indexed(dnf: &mut Vec<Vec<MarkerExpression>>) -> bool {
         .map(|expression| negate_expression(expression).and_then(|term| terms.get_index_of(&term)))
         .collect();
     drop(terms);
-
-    // Every clause is empty, so at most one is needed.
     if words == 0 {
         dnf.truncate(1);
         return true;
     }
 
-    // Candidate setup pays off when many clauses reuse relatively few terms. Smaller or sparse
-    // expressions retain direct comparisons, which can stop as soon as a redundant term is found.
+    // Cache differences only when many clauses reuse relatively few terms.
     if clauses.len() >= 256 && clauses.len() > negated.len().saturating_mul(2) {
-        return simplify_candidates(dnf, clauses, &negated, words);
-    }
-
-    // Store each word across all clauses together so membership checks scan contiguous memory.
-    let clause_count = clauses.len();
-    let mut sets = vec![0u64; index_words];
-    for (i, clause) in clauses.iter().enumerate() {
-        for &term in clause {
-            let index = (term / 64) * clause_count + i;
-            // The linear algorithm tracks the first occurrence of a repeated term.
-            // A set cannot represent that distinction.
-            if sets[index] & (1 << (term % 64)) != 0 {
-                return false;
-            }
-            sets[index] |= 1 << (term % 64);
+        if let Some(queries) = IndexedClauses::<true>::new(clauses, &negated, words) {
+            simplify_with_queries(dnf, queries);
+            return true;
         }
+    } else if let Some(queries) = IndexedClauses::<false>::new(clauses, &negated, words) {
+        simplify_with_queries(dnf, queries);
+        return true;
     }
-    // One or two words are cheap to scan without consulting clause lengths.
-    let sparse_comparisons = words > 2;
-
-    // A term is redundant when another clause is a subset of this clause with that term negated.
-    for i in 0..clause_count {
-        let clause = &clauses[i];
-        for &skipped in clause {
-            let offset = (skipped / 64) * clause_count;
-            let skipped_word = &sets[offset..offset + clause_count];
-            let skipped_mask = 1 << (skipped % 64);
-            let redundant = clauses.iter().enumerate().any(|(j, other)| {
-                if i == j || skipped_word[j] & skipped_mask != 0 {
-                    return false;
-                }
-                // Short clauses use term lookups instead of scanning mostly empty words.
-                if sparse_comparisons && words > other.len().min(clause.len()) {
-                    other.iter().all(|&term| {
-                        negated[term] == Some(skipped)
-                            || sets[(term / 64) * clause_count + i] & (1 << (term % 64)) != 0
-                    })
-                } else {
-                    sets.chunks_exact(clause_count)
-                        .enumerate()
-                        .all(|(word, column)| {
-                            let mut missing = column[j] & !column[i];
-                            while missing != 0 {
-                                let term = word * 64 + missing.trailing_zeros() as usize;
-                                if negated[term] != Some(skipped) {
-                                    return false;
-                                }
-                                missing &= missing - 1;
-                            }
-                            true
-                        })
-                }
-            });
-            if redundant {
-                sets[offset + i] &= !skipped_mask;
-            }
-        }
-        let mut position = 0;
-        dnf[i].retain(|_| {
-            let term = clause[position];
-            position += 1;
-            sets[(term / 64) * clause_count + i] & (1 << (term % 64)) != 0
-        });
-        // Later comparisons use the surviving terms, including when a dense clause becomes sparse.
-        clauses[i].retain(|&term| sets[(term / 64) * clause_count + i] & (1 << (term % 64)) != 0);
-    }
-
-    // After removing terms, eliminate clauses that contain another surviving clause.
-    let mut redundant_clauses = vec![false; clause_count];
-    for (i, clause) in clauses.iter().enumerate() {
-        redundant_clauses[i] = clauses.iter().enumerate().any(|(j, other)| {
-            i != j
-                && !redundant_clauses[j]
-                && (!sparse_comparisons || other.len() <= clause.len())
-                && if sparse_comparisons && words > other.len() {
-                    other
-                        .iter()
-                        .all(|&term| sets[(term / 64) * clause_count + i] & (1 << (term % 64)) != 0)
-                } else {
-                    sets.chunks_exact(clause_count)
-                        .all(|column| column[j] & !column[i] == 0)
-                }
-        });
-    }
-
-    let mut position = 0;
-    dnf.retain(|_| {
-        let keep = !redundant_clauses[position];
-        position += 1;
-        keep
-    });
-    true
+    false
 }
 
-/// Cache viable clause differences when many clauses reuse relatively few terms.
-/// Update the differences after each removal so later checks cannot rely on removed terms.
-/// Returns `false` without modifying the DNF if repeated terms require [`simplify_linear`].
-fn simplify_candidates(
-    dnf: &mut Vec<Vec<MarkerExpression>>,
-    mut clauses: Vec<Vec<usize>>,
-    negated: &[Option<usize>],
+/// Interned clauses with optional cached differences. Cached comparisons store each clause
+/// contiguously; direct comparisons store the same word across clauses contiguously.
+struct IndexedClauses<'a, const CACHE: bool> {
+    clauses: Vec<Vec<usize>>,
+    negated: &'a [Option<usize>],
+    sets: Vec<u64>,
     words: usize,
-) -> bool {
-    // Store each clause contiguously so candidate differences scan adjacent words.
-    let clause_count = clauses.len();
-    let mut sets = vec![0u64; clause_count * words];
-    for (i, clause) in clauses.iter().enumerate() {
-        for &term in clause {
-            let index = i * words + term / 64;
-            // The linear algorithm tracks the first occurrence of a repeated term.
-            // A set cannot represent that distinction.
-            if sets[index] & (1 << (term % 64)) != 0 {
-                return false;
+    max_negations: usize,
+    candidates: Vec<(usize, SmallVec<[usize; 1]>)>,
+}
+
+impl<'a, const CACHE: bool> IndexedClauses<'a, CACHE> {
+    /// Build membership sets, rejecting clauses with repeated terms.
+    fn new(clauses: Vec<Vec<usize>>, negated: &'a [Option<usize>], words: usize) -> Option<Self> {
+        let mut index = Self {
+            sets: vec![0; clauses.len() * words],
+            clauses,
+            negated,
+            words,
+            max_negations: 0,
+            candidates: Vec::new(),
+        };
+        for (clause, terms) in index.clauses.iter().enumerate() {
+            for &term in terms {
+                let offset = index.offset(clause, term / 64);
+                let mask = 1 << (term % 64);
+                if index.sets[offset] & mask != 0 {
+                    return None;
+                }
+                index.sets[offset] |= mask;
             }
-            sets[index] |= 1 << (term % 64);
+        }
+        if CACHE {
+            let mut counts = vec![0usize; negated.len()];
+            for &term in negated.iter().flatten() {
+                counts[term] += 1;
+            }
+            index.max_negations = counts.into_iter().max().unwrap_or(0);
+        }
+        Some(index)
+    }
+
+    /// Locate a word in the layout selected for these comparisons.
+    fn offset(&self, clause: usize, word: usize) -> usize {
+        if CACHE {
+            clause * self.words + word
+        } else {
+            word * self.clauses.len() + clause
         }
     }
-    // One or two words are cheap to scan without consulting clause lengths.
-    let sparse_comparisons = words > 2;
 
-    // Terms in a candidate clause that are missing from the current clause must be
-    // negations of the term being removed.
-    let mut negation_counts = vec![0usize; negated.len()];
-    for &term in negated.iter().flatten() {
-        negation_counts[term] += 1;
+    /// Test membership without comparing marker expressions.
+    fn contains(&self, clause: usize, term: usize) -> bool {
+        self.sets[self.offset(clause, term / 64)] & (1 << (term % 64)) != 0
     }
-    let max_negations = negation_counts.into_iter().max().unwrap_or(0);
 
-    // A term is redundant when another clause is a subset of this clause with that term negated.
-    for i in 0..clause_count {
-        let clause = &clauses[i];
-        let mut candidates: Vec<(usize, SmallVec<[usize; 1]>)> = clauses
-            .iter()
-            .enumerate()
-            .filter(|(j, _)| *j != i)
-            .filter_map(|(j, other)| {
-                let mut missing = SmallVec::new();
-                if sparse_comparisons && words > other.len() {
-                    for &term in other {
-                        if sets[i * words + term / 64] & (1 << (term % 64)) == 0 {
-                            if missing.len() == max_negations {
-                                return None;
-                            }
-                            missing.push(term);
-                        }
-                    }
-                } else {
-                    let differences = sets[j * words..(j + 1) * words]
-                        .iter()
-                        .zip(&sets[i * words..(i + 1) * words])
-                        .map(|(&other, &this)| other & !this);
-                    let mut count = 0;
-                    for difference in differences.clone() {
-                        count += difference.count_ones() as usize;
-                        if count > max_negations {
-                            return None;
-                        }
-                    }
-                    for (word, mut difference) in differences.enumerate() {
-                        while difference != 0 {
-                            missing.push(word * 64 + difference.trailing_zeros() as usize);
-                            difference &= difference - 1;
-                        }
-                    }
+    /// Visit terms present in `left` but absent from `right`, stopping on failure.
+    fn all_missing_from(
+        &self,
+        left: usize,
+        right: usize,
+        mut predicate: impl FnMut(usize) -> bool,
+    ) -> bool {
+        if self.words > 2 && self.words > self.clauses[left].len().min(self.clauses[right].len()) {
+            return self.clauses[left]
+                .iter()
+                .all(|&term| self.contains(right, term) || predicate(term));
+        }
+        for word in 0..self.words {
+            let mut missing =
+                self.sets[self.offset(left, word)] & !self.sets[self.offset(right, word)];
+            while missing != 0 {
+                if !predicate(word * 64 + missing.trailing_zeros() as usize) {
+                    return false;
                 }
-                Some((j, missing))
-            })
-            .collect();
-        for &skipped in clause {
-            let offset = skipped / 64;
-            let skipped_mask = 1 << (skipped % 64);
-            let redundant = candidates.iter().any(|(j, missing)| {
-                sets[*j * words + offset] & skipped_mask == 0
-                    && missing.iter().all(|&term| negated[term] == Some(skipped))
-            });
-            if redundant {
-                sets[i * words + offset] &= !skipped_mask;
-                // Removed terms are no longer available to justify a later removal.
-                candidates.retain_mut(|(j, missing)| {
-                    if sets[*j * words + offset] & skipped_mask != 0 {
-                        if missing.len() == max_negations {
+                missing &= missing - 1;
+            }
+        }
+        true
+    }
+}
+
+impl<const CACHE: bool> ClauseQueries for IndexedClauses<'_, CACHE> {
+    type Removed = ();
+
+    fn prepare_clause(&mut self, clause: usize) {
+        if CACHE {
+            self.candidates = (0..self.clauses.len())
+                .filter(|&other| other != clause)
+                .filter_map(|other| {
+                    let mut missing = SmallVec::new();
+                    self.all_missing_from(other, clause, |term| {
+                        if missing.len() == self.max_negations {
                             return false;
                         }
-                        missing.push(skipped);
-                    }
-                    true
-                });
-            }
+                        missing.push(term);
+                        true
+                    })
+                    .then_some((other, missing))
+                })
+                .collect();
         }
-        let mut position = 0;
-        dnf[i].retain(|_| {
-            let term = clause[position];
-            position += 1;
-            sets[i * words + term / 64] & (1 << (term % 64)) != 0
-        });
-        // Later comparisons use the surviving terms, including when a dense clause becomes sparse.
-        clauses[i].retain(|&term| sets[i * words + term / 64] & (1 << (term % 64)) != 0);
     }
 
-    // After removing terms, eliminate clauses that contain another surviving clause.
-    let mut redundant_clauses = vec![false; clause_count];
-    for (i, clause) in clauses.iter().enumerate() {
-        redundant_clauses[i] = clauses.iter().enumerate().any(|(j, other)| {
-            i != j
-                && !redundant_clauses[j]
-                && (!sparse_comparisons || other.len() <= clause.len())
-                && if sparse_comparisons && words > other.len() {
-                    other
+    #[inline]
+    fn has_subset_with_negated(
+        &self,
+        _dnf: &[Vec<MarkerExpression>],
+        clause: usize,
+        term: usize,
+        _removed: &Self::Removed,
+    ) -> bool {
+        let skipped = self.clauses[clause][term];
+        let mask = 1 << (skipped % 64);
+        if CACHE {
+            self.candidates.iter().any(|(other, missing)| {
+                self.sets[*other * self.words + skipped / 64] & mask == 0
+                    && missing
                         .iter()
-                        .all(|&term| sets[i * words + term / 64] & (1 << (term % 64)) != 0)
-                } else {
-                    sets[j * words..(j + 1) * words]
-                        .iter()
-                        .zip(&sets[i * words..(i + 1) * words])
-                        .all(|(&other, &this)| other & !this == 0)
+                        .all(|&term| self.negated[term] == Some(skipped))
+            })
+        } else {
+            let offset = (skipped / 64) * self.clauses.len();
+            let column = &self.sets[offset..offset + self.clauses.len()];
+            (0..self.clauses.len()).any(|other| {
+                other != clause
+                    && column[other] & mask == 0
+                    && self
+                        .all_missing_from(other, clause, |term| self.negated[term] == Some(skipped))
+            })
+        }
+    }
+
+    fn remove_term(&mut self, clause: usize, term: usize, _removed: &mut Self::Removed) {
+        let skipped = self.clauses[clause][term];
+        let offset = self.offset(clause, skipped / 64);
+        self.sets[offset] &= !(1 << (skipped % 64));
+        if CACHE {
+            self.candidates.retain_mut(|(other, missing)| {
+                if self.sets[*other * self.words + skipped / 64] & (1 << (skipped % 64)) != 0 {
+                    if missing.len() == self.max_negations {
+                        return false;
+                    }
+                    missing.push(skipped);
                 }
+                true
+            });
+        }
+    }
+
+    fn finish_clause(
+        &mut self,
+        dnf: &mut [Vec<MarkerExpression>],
+        clause: usize,
+        _removed: Self::Removed,
+    ) {
+        let mut position = 0;
+        dnf[clause].retain(|_| {
+            let keep = self.contains(clause, self.clauses[clause][position]);
+            position += 1;
+            keep
+        });
+        let clause_count = self.clauses.len();
+        self.clauses[clause].retain(|&term| {
+            let offset = if CACHE {
+                clause * self.words + term / 64
+            } else {
+                (term / 64) * clause_count + clause
+            };
+            self.sets[offset] & (1 << (term % 64)) != 0
         });
     }
 
-    let mut position = 0;
-    dnf.retain(|_| {
-        let keep = !redundant_clauses[position];
-        position += 1;
-        keep
-    });
-    true
+    fn is_subset(&self, _dnf: &[Vec<MarkerExpression>], left: usize, right: usize) -> bool {
+        (self.words <= 2 || self.clauses[left].len() <= self.clauses[right].len())
+            && self.all_missing_from(left, right, |_| false)
+    }
 }
 
 /// Remove redundant terms, then redundant clauses, in encounter order without allocating an index.
 /// Repeated terms are matched by their first position, which a bit set cannot represent.
+#[cfg(test)]
 fn simplify_linear(dnf: &mut Vec<Vec<MarkerExpression>>) {
     for i in 0..dnf.len() {
         let clause = &dnf[i];
@@ -809,7 +884,8 @@ mod tests {
     use uv_pep440::{Operator, Version, VersionSpecifier};
 
     use super::{
-        collect_dnf, is_negation, negate_expression, simplify, simplify_indexed, simplify_linear,
+        LinearClauses, collect_dnf, is_negation, negate_expression, simplify, simplify_indexed,
+        simplify_linear, simplify_with_queries,
     };
     use crate::{MarkerExpression, MarkerTree, MarkerValueVersion};
 
@@ -889,11 +965,13 @@ mod tests {
             .map(|term| vec![term.clone()])
             .chain(iproduct!(&a, &b).map(|(a, b)| vec![a.clone(), b.clone()]))
             .collect();
-
         for (first, second, third) in iproduct!(&clauses, &clauses, &clauses) {
             let mut actual = vec![first.clone(), second.clone(), third.clone()];
             let mut expected = actual.clone();
+            let mut linear = actual.clone();
             simplify_linear(&mut expected);
+            simplify_with_queries(&mut linear, LinearClauses);
+            assert_eq!(linear, expected, "{first:?} or {second:?} or {third:?}");
             assert!(simplify_indexed(&mut actual));
             assert_eq!(actual, expected, "{first:?} or {second:?} or {third:?}");
         }
