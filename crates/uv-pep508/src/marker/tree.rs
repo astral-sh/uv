@@ -2091,8 +2091,8 @@ mod test {
                 "sys_platform == 'darwin' and platform_release >= '24'",
             ),
             (
-                "'cpy' in implementation_name and extra == 'a'",
-                "sys_platform == 'darwin' and 'cpy' in implementation_name",
+                "'python' in implementation_name and extra == 'a'",
+                "sys_platform == 'darwin' and 'python' in implementation_name",
             ),
         ] {
             assert_eq!(m(marker).resolve_extras(known.clone()), m(expected));
