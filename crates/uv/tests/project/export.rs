@@ -8,7 +8,7 @@ use insta::assert_snapshot;
 use std::collections::BTreeMap;
 #[cfg(all(unix, feature = "test-universal"))]
 use std::os::unix::fs::FileTypeExt;
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 use std::path::Path;
 use std::process::{Command, Stdio};
 #[cfg(all(unix, feature = "test-universal"))]
@@ -22,7 +22,7 @@ use uv_test::copy_dir_ignore;
 use uv_test::packse::PackseServer;
 use uv_test::packse::generate_wheel;
 use uv_test::packse::scenario::Scenario;
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{TestContext, apply_filters, uv_snapshot};
 
@@ -1837,7 +1837,7 @@ fn requirements_txt_frozen_invalid_git_path() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 #[test]
 fn requirements_txt_https_git_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1872,7 +1872,7 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
 
 /// SSH blocks too permissive key files, so we need to scope permissions for the file to the current
 /// user.
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
     #[cfg(unix)]
     {
@@ -1901,7 +1901,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 }
 
 /// Don't redact the username `git` in SSH URLs.
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 #[test]
 fn requirements_txt_ssh_git_username() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5547,7 +5547,7 @@ fn pep_751_filename() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 #[test]
 fn pep_751_https_git_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");

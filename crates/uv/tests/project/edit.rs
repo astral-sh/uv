@@ -1,11 +1,11 @@
 #![expect(clippy::disallowed_types)]
 
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 mod conditional_imports {
     pub(crate) use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 use conditional_imports::*;
 
 use anyhow::Result;
@@ -295,7 +295,7 @@ fn add_git() -> Result<()> {
 /// Add a Git requirement from a private repository, with credentials. The resolution should
 /// succeed, but the `pyproject.toml` should omit the credentials.
 #[test]
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 fn add_git_private_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -385,7 +385,7 @@ fn add_git_private_source() -> Result<()> {
 /// Add a Git requirement from a private repository, with credentials. Since `--raw-sources` is
 /// specified, the `pyproject.toml` should retain the credentials.
 #[test]
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 fn add_git_private_raw() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -471,7 +471,7 @@ fn add_git_private_raw() -> Result<()> {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -508,7 +508,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Resul
 }
 
 #[tokio::test]
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Result<()> {
     use uv_client::DEFAULT_RETRIES;
 

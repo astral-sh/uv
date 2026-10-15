@@ -18777,7 +18777,7 @@ async fn sync_malware_check_skips_inactive_extras_and_groups() {
 /// Regression test for #19419: `uv sync --frozen` must honor credentials
 /// declared in a workspace member's `[tool.uv.sources]`.
 #[test]
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
     use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 

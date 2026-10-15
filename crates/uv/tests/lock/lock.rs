@@ -33,7 +33,7 @@ use uv_test::archive::{generate_source_archive, write_tar_gz};
 use uv_test::package_server::PackageServer;
 #[cfg(feature = "test-universal")]
 use uv_test::packse::{PackseServer, generate_wheel_with_files, scenario::Scenario};
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
 #[cfg(feature = "test-universal")]
@@ -15239,7 +15239,7 @@ fn lock_index_url_username_change_no_update() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 #[test]
 fn lock_redact_git_pep508() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
@@ -15315,7 +15315,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 #[test]
 fn lock_redact_git_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
@@ -15394,7 +15394,7 @@ fn lock_redact_git_sources() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[cfg(all(feature = "test-universal", feature = "test-git-private"))]
 #[test]
 fn lock_redact_git_pep508_non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();

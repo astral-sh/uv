@@ -135,7 +135,13 @@ snapshots without re-running the test suite and for updating platform-specific s
 A subset of uv tests require both [Git](https://git-scm.com) and [Git LFS](https://git-lfs.com/) to
 execute properly.
 
-These tests can be disabled by turning off either `git` or `git-lfs` uv features.
+These tests can be disabled by turning off either the `test-git` or `test-git-lfs` uv features.
+
+Tests that access private Git repositories or their downloadable artifacts require
+`test-git-private`. These tests use bundled read-only credentials. To run public Git tests without
+accessing private repositories, use `--no-default-features` and enable the desired test features,
+including `test-git`, but omit `test-git-private`. All three features are enabled by
+`test-defaults`.
 
 ### Local testing
 

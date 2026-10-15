@@ -170,6 +170,7 @@ test-defaults = [
   "test-crates-io",
   "test-git",
   "test-git-lfs",
+  "test-git-private",
   "test-pypi",
   "test-r2",
   "test-python",
@@ -185,6 +186,8 @@ test-crates-io = []
 test-git = ["uv-test?/git"]
 # Introduces a testing dependency on Git LFS.
 test-git-lfs = ["test-git"]
+# Introduces a testing dependency on private Git repositories and their bundled credentials.
+test-git-private = ["test-git"]
 # Introduces a testing dependency on PyPI.
 test-pypi = ["uv-client/test-pypi"]
 # Introduces a testing dependency on R2.

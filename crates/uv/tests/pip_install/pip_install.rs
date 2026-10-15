@@ -32,7 +32,7 @@ use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
@@ -3890,7 +3890,7 @@ fn install_git_public_https_exact_commit() {
 
 /// Install a package from a private GitHub repository using a PAT
 #[test]
-#[cfg(all(not(windows), feature = "test-git"))]
+#[cfg(all(not(windows), feature = "test-git-private"))]
 fn install_git_private_https_pat() {
     use uv_test::decode_token;
 
@@ -3916,7 +3916,7 @@ fn install_git_private_https_pat() {
 /// Install a package from a private GitHub repository using a PAT
 /// Include a public GitHub repository too, to ensure that the authentication is not erroneously copied over.
 #[test]
-#[cfg(all(not(windows), feature = "test-git"))]
+#[cfg(all(not(windows), feature = "test-git-private"))]
 fn install_git_private_https_pat_mixed_with_public() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
     let token = decode_token(uv_test::READ_ONLY_GITHUB_TOKEN);
@@ -3941,7 +3941,7 @@ fn install_git_private_https_pat_mixed_with_public() {
 
 /// Install packages from multiple private GitHub repositories with separate PATS
 #[test]
-#[cfg(all(not(windows), feature = "test-git"))]
+#[cfg(all(not(windows), feature = "test-git-private"))]
 fn install_git_private_https_multiple_pat() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
     let token_1 = decode_token(uv_test::READ_ONLY_GITHUB_TOKEN);
@@ -3970,7 +3970,7 @@ fn install_git_private_https_multiple_pat() {
 
 /// Install a package from a private GitHub repository at a specific commit using a PAT
 #[test]
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 fn install_git_private_https_pat_at_ref() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
     let token = decode_token(uv_test::READ_ONLY_GITHUB_TOKEN);
@@ -4005,7 +4005,7 @@ fn install_git_private_https_pat_at_ref() {
 /// Install a package from a private GitHub repository using a PAT and username
 /// An arbitrary username is supported when using a PAT.
 #[test]
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 fn install_git_private_https_pat_and_username() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION).with_unset_git_credential_helper();
     let token = decode_token(uv_test::READ_ONLY_GITHUB_TOKEN);
@@ -4026,7 +4026,7 @@ fn install_git_private_https_pat_and_username() {
 
 /// Install a package from a private GitHub repository using a PAT
 #[test]
-#[cfg(all(not(windows), feature = "test-git"))]
+#[cfg(all(not(windows), feature = "test-git-private"))]
 fn install_git_private_https_pat_not_authorized() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
         .with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
@@ -4055,7 +4055,7 @@ fn install_git_private_https_pat_not_authorized() {
 /// Does not use `git`, instead installs a distribution artifact.
 /// Include a public GitHub repository too, to ensure that the authentication is not erroneously copied over.
 #[test]
-#[cfg(not(windows))]
+#[cfg(all(not(windows), feature = "test-git-private"))]
 fn install_github_artifact_private_https_pat_mixed_with_public() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
     let token = decode_token(uv_test::READ_ONLY_GITHUB_TOKEN);
@@ -4082,7 +4082,7 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
 /// Install packages from multiple private GitHub repositories with separate PATS
 /// Does not use `git`, instead installs a distribution artifact.
 #[test]
-#[cfg(not(windows))]
+#[cfg(all(not(windows), feature = "test-git-private"))]
 fn install_github_artifact_private_https_multiple_pat() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
     let token_1 = decode_token(uv_test::READ_ONLY_GITHUB_TOKEN);
@@ -4113,7 +4113,7 @@ fn install_github_artifact_private_https_multiple_pat() {
 /// It should fail gracefully, instead of silently hanging forever
 /// Regression test for <https://github.com/astral-sh/uv/issues/5107>
 #[test]
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-git-private")]
 fn install_git_private_https_interactive() {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
 

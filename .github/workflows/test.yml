@@ -219,7 +219,7 @@ jobs:
             -Z panic-abort-tests \
             -Z checksum-freshness \
             --no-default-features \
-            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
+            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,test-git-private,performance,test-crates-io,native-auth,apple-native \
             --workspace \
             --profile ci-macos
 
