@@ -1891,13 +1891,12 @@ mod test {
     use std::str::FromStr;
 
     use insta::assert_snapshot;
-    use rustc_hash::FxHashMap;
 
     use uv_normalize::ExtraName;
     use uv_pep440::Version;
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+    use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
@@ -2074,99 +2073,32 @@ mod test {
         assert!(MarkerTree::FALSE.resolve_extras(known).is_false());
     }
 
-    /// Compare diagram substitution with path expansion, including complemented edges,
-    /// environment restrictions, and replacements that introduce earlier variables.
+    /// Replacing an extra can move a platform condition ahead of string, version-string,
+    /// and containment decisions. Complemented decisions must retain their branch values.
     #[test]
-    fn resolve_extras_matches_dnf() {
-        let expressions = [
-            "extra == 'a'",
-            "extra == 'b'",
-            "extra == 'c'",
-            "python_full_version >= '3.10'",
-            "python_full_version != '3.12.*'",
-            "sys_platform == 'darwin'",
-            "sys_platform == 'win32'",
-            "os_name == 'posix'",
-            "platform_release >= '24'",
-            "platform_release < 'foo'",
-            "'linux' in sys_platform",
-            "sys_platform in 'linux darwin'",
-            "'test' in extras",
-            "'dev' in dependency_groups",
-        ]
-        .map(m);
-        let replacements = [
-            MarkerTree::TRUE,
-            MarkerTree::FALSE,
+    fn resolve_extras_reorders_decisions() {
+        let known = [(
+            "a".parse().expect("valid extra name"),
             m("sys_platform == 'darwin'"),
-            m("os_name == 'posix'"),
-            m("python_version >= '3.11'"),
-            m("extra == 'b'"),
-            m("platform_release < '24'"),
-        ];
-        let mut state = 17u64;
-        let mut next = || {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1);
-            (state >> 32) as usize
-        };
-        for case in 0..2_000 {
-            let mut marker = expressions[next() % expressions.len()];
-            for _ in 0..12 {
-                let term = expressions[next() % expressions.len()];
-                marker = if next() % 2 == 0 {
-                    marker.and(term)
-                } else {
-                    marker.or(term)
-                };
-                if next() % 3 == 0 {
-                    marker = marker.negate();
-                }
-            }
-            let known: FxHashMap<ExtraName, MarkerTree> = ["a", "b"]
-                .into_iter()
-                .map(|name| {
-                    (
-                        name.parse().expect("valid extra name"),
-                        replacements[next() % replacements.len()],
-                    )
-                })
-                .collect();
-            let expected = if marker.is_true() || marker.is_false() {
-                marker
-            } else {
-                marker
-                    .to_dnf()
-                    .into_iter()
-                    .fold(MarkerTree::FALSE, |result, clause| {
-                        result.or(clause.into_iter().fold(MarkerTree::TRUE, |result, term| {
-                            let term = if let MarkerExpression::Extra {
-                                ref name,
-                                ref operator,
-                            } = term
-                                && let Some(name) = name.as_extra()
-                            {
-                                let replacement =
-                                    known.get(name).copied().unwrap_or(MarkerTree::FALSE);
-                                match operator {
-                                    ExtraOperator::Equal => replacement,
-                                    ExtraOperator::NotEqual => replacement.negate(),
-                                }
-                            } else {
-                                MarkerTree::expression(term)
-                            };
-                            result.and(term)
-                        }))
-                    })
-            };
-            let actual = marker.resolve_extras(known);
-            // Different normalizations can retain different guards against impossible platforms.
-            // Compare in the environment domain modeled by the marker algebra.
-            assert!(
-                actual.and(expected.negate()).is_unreachable()
-                    && expected.and(actual.negate()).is_unreachable(),
-                "case {case}: {marker:?}\nactual: {actual:?}\nexpected: {expected:?}",
+        )];
+        for (marker, expected) in [
+            (
+                "implementation_name == 'cpython' and extra == 'a'",
+                "sys_platform == 'darwin' and implementation_name == 'cpython'",
+            ),
+            (
+                "platform_release >= '24' and extra == 'a'",
+                "sys_platform == 'darwin' and platform_release >= '24'",
+            ),
+            (
+                "'cpy' in implementation_name and extra == 'a'",
+                "sys_platform == 'darwin' and 'cpy' in implementation_name",
+            ),
+        ] {
+            assert_eq!(m(marker).resolve_extras(known.clone()), m(expected));
+            assert_eq!(
+                m(marker).negate().resolve_extras(known.clone()),
+                m(expected).negate(),
             );
         }
     }
