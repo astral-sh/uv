@@ -237,7 +237,7 @@ fn collect_dnf(
 /// trees, this seems to be sufficient in practice.
 ///
 /// The number of clause comparisons is quadratic. Interned terms make each comparison cheaper;
-/// dense bit sets and sparse term lists keep index storage proportional to the DNF.
+/// every clause uses a bit set, with inline storage for small indexes.
 fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
     if dnf.len() <= 1 {
         return;
@@ -251,43 +251,34 @@ fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
         return;
     }
 
-    // Dense storage is bounded by the number of terms already present in the DNF.
-    // One or two words per clause are also cheap when the terms fit in a small universe.
-    let index_words = clauses.len().saturating_mul(words);
-    let dense = words <= 2 || index_words <= clauses.iter().map(SmallVec::len).sum();
-    if dense {
-        let mut sets: SmallVec<[u64; 8]> = smallvec![0; index_words];
-        let clause_count = clauses.len();
-        // Candidate differences scan whole clauses; direct comparisons scan the same word
-        // across clauses. Choose the memory layout before entering either comparison loop.
-        if clause_count >= 256 && clause_count > negated.len().saturating_mul(2) {
-            let index = DenseIndex::<true> {
-                sets: &mut sets,
-                words,
-                clause_count,
-            };
-            simplify_indexed::<_, true>(dnf, clauses, &negated, index);
-        } else {
-            let index = DenseIndex::<false> {
-                sets: &mut sets,
-                words,
-                clause_count,
-            };
-            simplify_indexed::<_, false>(dnf, clauses, &negated, index);
-        }
+    let clause_count = clauses.len();
+    let mut sets: SmallVec<[u64; 8]> = smallvec![0; clause_count.saturating_mul(words)];
+    // Candidate differences scan whole clauses; direct comparisons scan the same word
+    // across clauses. Choose the memory layout before entering either comparison loop.
+    if clause_count >= 256 && clause_count > negated.len().saturating_mul(2) {
+        let index = BitSetIndex::<true> {
+            sets: &mut sets,
+            words,
+            clause_count,
+        };
+        simplify_indexed(dnf, clauses, &negated, index);
     } else {
-        let index = SparseIndex(vec![SmallVec::new(); clauses.len()]);
-        simplify_indexed::<_, false>(dnf, clauses, &negated, index);
+        let index = BitSetIndex::<false> {
+            sets: &mut sets,
+            words,
+            clause_count,
+        };
+        simplify_indexed(dnf, clauses, &negated, index);
     }
 }
 
 /// Simplify interned clauses in encounter order using the chosen membership index.
 /// `CACHE` reuses viable differences when many clauses share relatively few terms.
-fn simplify_indexed<I: TermIndex, const CACHE: bool>(
+fn simplify_indexed<const CACHE: bool>(
     dnf: &mut Vec<Vec<MarkerExpression>>,
     mut clauses: SmallVec<[SmallVec<[usize; 4]>; 4]>,
     negated: &[Option<usize>],
-    mut index: I,
+    mut index: BitSetIndex<'_, CACHE>,
 ) {
     let repeated: SmallVec<[bool; 8]> = clauses
         .iter()
@@ -473,31 +464,14 @@ impl InternedDnf {
     }
 }
 
-/// Membership queries shared by dense bit sets and sparse, sorted term IDs.
-trait TermIndex {
-    /// Test whether a term is available in a clause.
-    fn contains(&self, clause: usize, term: usize) -> bool;
-    /// Make a term available, returning whether it was absent.
-    fn insert(&mut self, clause: usize, term: usize) -> bool;
-    /// Stop using a term to justify later removals from this clause.
-    fn remove(&mut self, clause: usize, term: usize);
-    /// Test terms in `left` but absent from `right`, stopping on failure.
-    fn all_missing_from(
-        &self,
-        left: usize,
-        right: usize,
-        predicate: impl FnMut(usize) -> bool,
-    ) -> bool;
-}
-
 /// Bit sets laid out by clause for cached differences, or by word for direct comparisons.
-struct DenseIndex<'a, const ROW_MAJOR: bool> {
+struct BitSetIndex<'a, const ROW_MAJOR: bool> {
     sets: &'a mut [u64],
     words: usize,
     clause_count: usize,
 }
 
-impl<const ROW_MAJOR: bool> DenseIndex<'_, ROW_MAJOR> {
+impl<const ROW_MAJOR: bool> BitSetIndex<'_, ROW_MAJOR> {
     /// Locate a clause's word in the chosen layout.
     fn offset(&self, clause: usize, word: usize) -> usize {
         if ROW_MAJOR {
@@ -506,13 +480,13 @@ impl<const ROW_MAJOR: bool> DenseIndex<'_, ROW_MAJOR> {
             word * self.clause_count + clause
         }
     }
-}
 
-impl<const ROW_MAJOR: bool> TermIndex for DenseIndex<'_, ROW_MAJOR> {
+    /// Test whether a term is available in a clause.
     fn contains(&self, clause: usize, term: usize) -> bool {
         self.sets[self.offset(clause, term / 64)] & (1 << (term % 64)) != 0
     }
 
+    /// Make a term available, returning whether it was absent.
     fn insert(&mut self, clause: usize, term: usize) -> bool {
         let offset = self.offset(clause, term / 64);
         let mask = 1 << (term % 64);
@@ -521,11 +495,13 @@ impl<const ROW_MAJOR: bool> TermIndex for DenseIndex<'_, ROW_MAJOR> {
         absent
     }
 
+    /// Stop using a term to justify later removals from this clause.
     fn remove(&mut self, clause: usize, term: usize) {
         let offset = self.offset(clause, term / 64);
         self.sets[offset] &= !(1 << (term % 64));
     }
 
+    /// Test terms in `left` but absent from `right`, stopping on failure.
     fn all_missing_from(
         &self,
         left: usize,
@@ -544,42 +520,6 @@ impl<const ROW_MAJOR: bool> TermIndex for DenseIndex<'_, ROW_MAJOR> {
             }
         }
         true
-    }
-}
-
-/// Sorted term IDs keep storage proportional to the DNF when clauses share few terms.
-struct SparseIndex(Vec<SmallVec<[usize; 4]>>);
-
-impl TermIndex for SparseIndex {
-    fn contains(&self, clause: usize, term: usize) -> bool {
-        self.0[clause].binary_search(&term).is_ok()
-    }
-
-    fn insert(&mut self, clause: usize, term: usize) -> bool {
-        match self.0[clause].binary_search(&term) {
-            Ok(_) => false,
-            Err(position) => {
-                self.0[clause].insert(position, term);
-                true
-            }
-        }
-    }
-
-    fn remove(&mut self, clause: usize, term: usize) {
-        if let Ok(position) = self.0[clause].binary_search(&term) {
-            self.0[clause].remove(position);
-        }
-    }
-
-    fn all_missing_from(
-        &self,
-        left: usize,
-        right: usize,
-        mut predicate: impl FnMut(usize) -> bool,
-    ) -> bool {
-        self.0[left]
-            .iter()
-            .all(|&term| self.contains(right, term) || predicate(term))
     }
 }
 
@@ -1031,8 +971,8 @@ mod tests {
                 vec![not_a.clone(), b.clone()],
                 vec![not_b.clone(), c.clone()],
             ];
-            // Distinct padding terms exercise sparse storage; repeated padding exercises
-            // the dense index and, at 256 clauses, cached differences.
+            // Distinct padding terms span several bitset words; repeated padding exercises
+            // cached differences at 256 clauses.
             for index in 3..count {
                 let name = if count == 130 { index } else { 0 };
                 actual.push(vec![expression(&format!("extra == 'unrelated-{name}'"))]);
