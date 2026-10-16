@@ -38,6 +38,7 @@ fn collect_cover(
                 dnf.push(path.clone());
             }
         }
+        Cover::Guard(guard) => collect_dnf(MarkerTree(*guard), dnf, path),
         Cover::Branches(branches) => {
             for (guard, suffix) in branches.iter() {
                 if guard.is_true() {

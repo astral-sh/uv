@@ -1962,6 +1962,42 @@ mod test {
         assert!(MarkerTree::FALSE.to_dnf().is_empty());
     }
 
+    /// Cross-variable platform exclusions must not invalidate the extraction bounds.
+    #[test]
+    fn isop_platform_exclusions() {
+        let variables = [
+            m("os_name == 'nt'"),
+            m("sys_platform == 'linux'"),
+            m("extra == 'a'"),
+        ];
+        let minterms: Vec<_> = (0..8)
+            .map(|assignment| {
+                variables
+                    .iter()
+                    .enumerate()
+                    .fold(MarkerTree::TRUE, |clause, (index, variable)| {
+                        clause.and(if assignment & (1 << index) == 0 {
+                            variable.negate()
+                        } else {
+                            *variable
+                        })
+                    })
+            })
+            .collect();
+        for truth_table in 1..255 {
+            let marker = minterms
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| truth_table & (1 << index) != 0)
+                .fold(MarkerTree::FALSE, |marker, (_, minterm)| {
+                    marker.or(*minterm)
+                });
+            if let Some(rendered) = marker.try_to_string() {
+                assert_eq!(m(&rendered), marker, "truth table {truth_table}");
+            }
+        }
+    }
+
     /// Range decisions have more than two branches and may use both open and closed bounds.
     /// Exercise every function over a three-way range partition and one Boolean variable.
     #[test]
@@ -3683,6 +3719,23 @@ mod test {
 
     fn implies(antecedent: &str, consequent: &str) -> bool {
         m(antecedent).implies(m(consequent)).is_true()
+    }
+
+    /// Adding Python bounds must keep version decisions before extras in the diagram.
+    #[test]
+    fn complexified_extras() {
+        let marker = m("sys_platform == 'linux' or (sys_platform == 'darwin' and extra == 'foo')")
+            .complexify_python_versions(Bound::Included(&Version::new([3, 11])), Bound::Unbounded);
+        assert_eq!(
+            marker,
+            m(
+                "python_full_version >= '3.11' and (sys_platform == 'linux' or (sys_platform == 'darwin' and extra == 'foo'))"
+            )
+        );
+        assert_eq!(
+            m(&marker.try_to_string().expect("nontrivial marker")),
+            marker
+        );
     }
 
     #[test]
