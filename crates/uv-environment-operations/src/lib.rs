@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
@@ -389,33 +390,121 @@ fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
     is_centralized_environment_path(&target, cache) || is_centralized_environment_path(path, cache)
 }
 
+/// The paths used to discover and, if needed, recreate a project environment.
+#[derive(Debug)]
+pub enum ProjectEnvironmentRoot {
+    Directory(PathBuf),
+    /// Replace the redirect file while retaining its target.
+    Redirect {
+        reference: PathBuf,
+        target: PathBuf,
+    },
+    /// Replace the reference while retaining the cached target, which may have been pruned.
+    CacheReference {
+        reference: PathBuf,
+        target: PathBuf,
+    },
+}
+
+impl ProjectEnvironmentRoot {
+    fn from_path(path: PathBuf, cache: &Cache) -> Self {
+        if let Ok(target) = fs_err::read_link(&path) {
+            let target = path.parent().unwrap_or(Path::new("")).join(target);
+            if is_centralized_environment_path(&target, cache) {
+                return Self::CacheReference {
+                    reference: path,
+                    target,
+                };
+            }
+        }
+        Self::Directory(path)
+    }
+
+    /// Return the environment to inspect, if it has not been pruned.
+    pub fn discovery_path(&self) -> Option<&Path> {
+        match self {
+            Self::Directory(path) => Some(path),
+            Self::Redirect { target, .. } => Some(target),
+            Self::CacheReference { target, .. } => {
+                uv_fs::is_virtualenv_base(target).then_some(target.as_path())
+            }
+        }
+    }
+
+    /// Check that the reference still selects the environment inspected during discovery.
+    pub fn validate(&self) -> Result<(), EnvironmentError> {
+        let (reference, unchanged) = match self {
+            Self::Directory(_) => return Ok(()),
+            Self::Redirect { reference, target } => (
+                reference,
+                read_venv_redirect(reference).is_ok_and(|current| current == *target),
+            ),
+            Self::CacheReference { reference, target } => (
+                reference,
+                read_venv_redirect(reference).is_ok_and(|current| current == *target)
+                    || fs_err::read_link(reference).is_ok_and(|current| {
+                        reference.parent().unwrap_or(Path::new("")).join(current) == *target
+                    }),
+            ),
+        };
+        if !unchanged {
+            return Err(EnvironmentError::InvalidProjectEnvironmentDir(
+                reference.clone(),
+                "the environment reference changed or could not be read; retry the command"
+                    .to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Resolve the project environment root, following a redirect file if present.
-/// A pruned cache environment returns `None`; initialization replaces its reference.
 pub fn project_environment_root(
     path: &Path,
     cache: &Cache,
-) -> Result<Option<PathBuf>, EnvironmentError> {
-    if !path.is_file() {
-        return Ok(Some(path.to_path_buf()));
-    }
-
-    let target = read_venv_redirect(path)?;
+) -> Result<ProjectEnvironmentRoot, EnvironmentError> {
+    let target = match read_venv_redirect(path) {
+        Ok(target) => target,
+        Err(err) => {
+            let root = ProjectEnvironmentRoot::from_path(path.to_path_buf(), cache);
+            if let ProjectEnvironmentRoot::CacheReference { .. } = root {
+                return Ok(root);
+            }
+            if err.kind() == io::ErrorKind::NotFound || path.is_dir() {
+                return Ok(root);
+            }
+            return Err(err.into());
+        }
+    };
+    let cached = is_centralized_environment_path(&target, cache);
     if !uv_fs::is_virtualenv_base(&target) {
-        if is_centralized_environment_path(&target, cache) {
-            return Ok(None);
+        if cached {
+            return Ok(ProjectEnvironmentRoot::CacheReference {
+                reference: path.to_path_buf(),
+                target,
+            });
         }
         return Err(EnvironmentError::InvalidProjectEnvironmentDir(
             target,
             "no `pyvenv.cfg` file was found".to_string(),
         ));
     }
-
     if !uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles) {
         warn_user_once!(
             "Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning."
         );
     }
-    Ok(Some(target))
+    Ok(if cached {
+        ProjectEnvironmentRoot::CacheReference {
+            reference: path.to_path_buf(),
+            target,
+        }
+    } else {
+        ProjectEnvironmentRoot::Redirect {
+            reference: path.to_path_buf(),
+            target,
+        }
+    })
 }
 
 /// Return whether `path` refers to an environment in the current cache's environment bucket.
@@ -606,7 +695,10 @@ impl<'a> ProjectEnvironmentTarget<'a> {
 #[expect(clippy::large_enum_variant)]
 pub enum ProjectInterpreter {
     /// A compatible interpreter from outside the project, to create a new virtual environment.
-    Interpreter(CompatibleProjectPython),
+    Interpreter {
+        interpreter: CompatibleProjectPython,
+        root: ProjectEnvironmentRoot,
+    },
     /// An existing project environment, which may be incompatible under `--no-sync`.
     Environment(PythonEnvironment),
 }
@@ -623,27 +715,38 @@ impl ProjectInterpreter {
             .explicit_path()
             .map_or_else(|| install_path.join(".venv"), Path::to_path_buf);
         let root = if selection.is_default() {
-            let Ok(Some(root)) = project_environment_root(&root, cache) else {
+            let Ok(root) = project_environment_root(&root, cache) else {
                 return Ok(None);
             };
             root
         } else {
-            root
+            ProjectEnvironmentRoot::from_path(root, cache)
+        };
+        let Some(path) = root.discovery_path() else {
+            return Ok(None);
         };
         let centralized = centralized_environments_enabled(&selection, cache)
-            || is_centralized_environment_reference(&root, cache);
-        let root = if centralized {
-            fs_err::canonicalize(&root).unwrap_or(root)
+            || match &root {
+                ProjectEnvironmentRoot::Directory(_) | ProjectEnvironmentRoot::Redirect { .. } => {
+                    false
+                }
+                ProjectEnvironmentRoot::CacheReference { .. } => true,
+            };
+        let path = if centralized {
+            fs_err::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
         } else {
-            root
+            path.to_path_buf()
         };
-
-        existing_project_environment(
-            &root,
+        let environment = existing_project_environment(
+            &path,
             centralized,
             ProjectEnvironmentPolicy::Optional,
             cache,
-        )
+        )?;
+        if root.validate().is_err() {
+            return Ok(None);
+        }
+        Ok(environment)
     }
 
     /// Discover an interpreter for a workspace or frozen lockfile.
@@ -669,25 +772,48 @@ impl ProjectInterpreter {
             ProjectEnvironmentSelection::from_install_path(target.install_path(), active);
         let centralized = centralized_environments_enabled(&environment_selection, cache);
 
+        let project_environment_path = environment_selection
+            .explicit_path()
+            .map_or_else(|| target.install_path().join(".venv"), Path::to_path_buf);
+        let root = if centralized {
+            Some(read_venv_redirect(&project_environment_path).map_or_else(
+                |_| ProjectEnvironmentRoot::from_path(project_environment_path.clone(), cache),
+                |target| ProjectEnvironmentRoot::Redirect {
+                    reference: project_environment_path.clone(),
+                    target,
+                },
+            ))
+        } else if environment_selection.is_default() {
+            let root = project_environment_root(&project_environment_path, cache);
+            match policy {
+                ProjectEnvironmentPolicy::Optional => root.ok(),
+                ProjectEnvironmentPolicy::Compatible | ProjectEnvironmentPolicy::Preserve => {
+                    Some(root?)
+                }
+            }
+        } else {
+            Some(ProjectEnvironmentRoot::from_path(
+                project_environment_path.clone(),
+                cache,
+            ))
+        };
+
         // Prefer `.venv`'s interpreter to keep its compatible cached environment selected; derive
         // the cache root instead of trusting the link target.
         if centralized {
-            let project_environment_path = target.install_path().join(".venv");
-            if let Ok(candidate) = PythonEnvironment::from_root(
-                read_venv_redirect(&project_environment_path)
-                    .ok()
-                    .as_deref()
-                    .unwrap_or(&project_environment_path),
-                cache,
-            ) {
-                let root = centralized_environment_root(
+            if let Some(path) = root
+                .as_ref()
+                .and_then(ProjectEnvironmentRoot::discovery_path)
+                && let Ok(candidate) = PythonEnvironment::from_root(path, cache)
+            {
+                let environment_root = centralized_environment_root(
                     target,
                     candidate.interpreter(),
                     upgrade_policy,
                     cache,
                 );
                 if let Some(environment) = discover_project_environment(
-                    &root,
+                    &environment_root,
                     python_request,
                     python_preference,
                     python_arch,
@@ -696,36 +822,27 @@ impl ProjectInterpreter {
                     centralized,
                     cache,
                 )? {
+                    if let Some(root) = root.as_ref() {
+                        root.validate()?;
+                    }
                     return Ok(Self::Environment(environment));
                 }
             }
-        } else {
-            let project_environment_path = environment_selection
-                .explicit_path()
-                .map_or_else(|| target.install_path().join(".venv"), Path::to_path_buf);
-            let root = if environment_selection.is_default() {
-                let root = project_environment_root(&project_environment_path, cache);
-                match policy {
-                    ProjectEnvironmentPolicy::Optional => root.ok().flatten(),
-                    ProjectEnvironmentPolicy::Compatible | ProjectEnvironmentPolicy::Preserve => {
-                        root?
-                    }
-                }
-            } else {
-                Some(project_environment_path)
-            };
-            if let Some(root) = root
-                && let Some(environment) = discover_project_environment(
-                    &root,
-                    python_request,
-                    python_preference,
-                    python_arch,
-                    requires_python,
-                    policy,
-                    centralized,
-                    cache,
-                )?
-            {
+        } else if let Some(root) = root.as_ref()
+            && let Some(path) = root.discovery_path()
+        {
+            let environment = discover_project_environment(
+                path,
+                python_request,
+                python_preference,
+                python_arch,
+                requires_python,
+                policy,
+                centralized,
+                cache,
+            )?;
+            root.validate()?;
+            if let Some(environment) = environment {
                 return Ok(Self::Environment(environment));
             }
         }
@@ -748,10 +865,10 @@ impl ProjectInterpreter {
         .await?;
 
         if centralized {
-            let root =
+            let environment_root =
                 centralized_environment_root(target, python.interpreter(), upgrade_policy, cache);
             if let Some(environment) = discover_project_environment(
-                &root,
+                &environment_root,
                 python_request,
                 python_preference,
                 python_arch,
@@ -760,8 +877,15 @@ impl ProjectInterpreter {
                 centralized,
                 cache,
             )? {
+                if let Some(root) = root.as_ref() {
+                    root.validate()?;
+                }
                 return Ok(Self::Environment(environment));
             }
+        }
+
+        if let Some(root) = root.as_ref() {
+            root.validate()?;
         }
 
         let managed = python.source().is_managed();
@@ -787,13 +911,26 @@ impl ProjectInterpreter {
             )?;
         }
 
-        Ok(Self::Interpreter(project_python.validate(interpreter)?))
+        let root = if centralized {
+            ProjectEnvironmentRoot::Directory(centralized_environment_root(
+                target,
+                &interpreter,
+                upgrade_policy,
+                cache,
+            ))
+        } else {
+            root.unwrap_or(ProjectEnvironmentRoot::Directory(project_environment_path))
+        };
+        Ok(Self::Interpreter {
+            interpreter: project_python.validate(interpreter)?,
+            root,
+        })
     }
 
     /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         match self {
-            Self::Interpreter(interpreter) => interpreter.into_interpreter(),
+            Self::Interpreter { interpreter, .. } => interpreter.into_interpreter(),
             Self::Environment(environment) => environment.into_interpreter(),
         }
     }
@@ -963,20 +1100,16 @@ impl ProjectEnvironment {
             }
 
             // Otherwise, create a virtual environment with the discovered interpreter.
-            ProjectInterpreter::Interpreter(interpreter) => {
+            ProjectInterpreter::Interpreter { interpreter, root } => {
+                root.validate()?;
                 let requested = interpreter.into_requested_interpreter();
                 let upgrade_policy = UpgradePolicy::from_request(requested.request());
                 let interpreter = requested.into_interpreter();
-                let root = if centralized {
-                    centralized_environment_root(target, &interpreter, upgrade_policy, cache)
-                } else {
-                    environment_selection
-                        .explicit_path()
-                        .map_or_else(|| target.install_path().join(".venv"), Path::to_path_buf)
+                let (root, environment_reference) = match root {
+                    ProjectEnvironmentRoot::Directory(root) => (root, false),
+                    ProjectEnvironmentRoot::Redirect { reference, .. }
+                    | ProjectEnvironmentRoot::CacheReference { reference, .. } => (reference, true),
                 };
-                let environment_reference = !centralized
-                    && (is_centralized_environment_reference(&root, cache)
-                        || (environment_selection.is_default() && root.is_file()));
 
                 // Avoid removing things that are not virtual environments and are outside the
                 // environment cache.
@@ -1057,7 +1190,7 @@ impl ProjectEnvironment {
                 if replace_environment {
                     // Remove environment references directly to preserve their targets.
                     let removed = if environment_reference {
-                        match uv_fs::remove_virtualenv(&root) {
+                        match uv_fs::remove_symlink(&root) {
                             Ok(()) => true,
                             Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
                             Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
@@ -1101,9 +1234,13 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove(
-                        uv_virtualenv::RemovalReason::ManagedEnvironment,
-                    ),
+                    if environment_reference {
+                        uv_virtualenv::OnExisting::Fail
+                    } else {
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        )
+                    },
                     uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,

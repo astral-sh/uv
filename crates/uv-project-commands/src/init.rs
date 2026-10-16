@@ -46,8 +46,10 @@ use uv_workspace::{
 
 /// Find an existing environment in the directory being initialized, including a `.venv` redirect.
 fn find_existing_environment(path: &Path, cache: &Cache) -> Option<PythonEnvironment> {
-    let root = project_environment_root(&path.join(".venv"), cache).ok()??;
-    PythonEnvironment::from_root(root, cache).ok()
+    let root = project_environment_root(&path.join(".venv"), cache).ok()?;
+    let environment = PythonEnvironment::from_root(root.discovery_path()?, cache).ok()?;
+    root.validate().ok()?;
+    Some(environment)
 }
 
 /// Add one or more packages to the project requirements.

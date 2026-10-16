@@ -1,10 +1,16 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+#[cfg(unix)]
+use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
+#[cfg(unix)]
+use std::time::Duration;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -746,6 +752,146 @@ fn sync_invalid_venv_redirect_file() -> Result<()> {
     Ok(())
 }
 
+/// A redirect changed by the queried interpreter must not produce a successful sync.
+#[test]
+#[cfg(unix)]
+fn sync_venv_redirect_changed_during_discovery() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    let external = context.temp_dir.child("external");
+    let cached = context.cache_dir.child("environments-v2/other");
+    context
+        .venv()
+        .arg(external.path())
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    context
+        .venv()
+        .arg(cached.path())
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    cached.child("keep").touch()?;
+    let redirect = context.temp_dir.child(".venv");
+    redirect.write_str("external\n")?;
+    let cached_redirect = format!("{}\n", cached.path().display());
+    context
+        .temp_dir
+        .child("cached-target")
+        .write_str(&cached_redirect)?;
+
+    // Change the redirect while uv inspects the originally selected interpreter.
+    let python = external.child("bin/python");
+    fs_err::rename(python.path(), external.child("bin/python-real").path())?;
+    let wrapper = indoc! {r#"
+        #!/bin/sh
+        cp "${0%/*}/../../cached-target" "${0%/*}/../../.venv"
+        exec "${0%/*}/python-real" "$@"
+    "#};
+    python.write_str(wrapper)?;
+    fs_err::set_permissions(python.path(), PermissionsExt::from_mode(0o755))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--python").arg("3.11")
+        .arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because the environment reference changed or could not be read; retry the command
+    ");
+
+    assert_eq!(fs_err::read_to_string(redirect.path())?, cached_redirect);
+    assert!(cached.child("keep").is_file());
+    uv_snapshot!(context.filters(), Command::new(external.child("bin/python-real").path()).arg("--version"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.12.[X]
+    ");
+    redirect.write_str("external\n")?;
+    // Change the wrapper's size so interpreter discovery queries it again.
+    python.write_str(&format!("{wrapper}\n"))?;
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--python").arg("3.12")
+        .arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because the environment reference changed or could not be read; retry the command
+    ");
+    Ok(())
+}
+
+/// A directory substituted for a cached reference must retain its contents.
+#[test]
+#[cfg(unix)]
+fn sync_cached_redirect_replaced_during_discovery() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    let cached = context.cache_dir.child("environments-v2/other");
+    context
+        .venv()
+        .arg(cached.path())
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    let redirect = context.temp_dir.child(".venv");
+    redirect.write_str(&format!("{}\n", cached.path().display()))?;
+
+    // Replace the cached reference with a real directory while uv inspects the environment.
+    let python = cached.child("bin/python");
+    fs_err::rename(python.path(), cached.child("bin/python-real").path())?;
+    python.write_str(indoc! {r#"
+        #!/bin/sh
+        if [ -f "$TEST_PROJECT/.venv" ]; then
+            mv "$TEST_PROJECT/.venv" "$TEST_PROJECT/original-reference"
+            mkdir "$TEST_PROJECT/.venv"
+            echo important > "$TEST_PROJECT/.venv/important-data"
+        fi
+        exec "${0%/*}/python-real" "$@"
+    "#})?;
+    fs_err::set_permissions(python.path(), PermissionsExt::from_mode(0o755))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--python").arg("3.11")
+        .arg("--preview-features").arg("venv-redirect-files")
+        .env("TEST_PROJECT", context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because the environment reference changed or could not be read; retry the command
+    ");
+    assert!(context.temp_dir.child("original-reference").is_file());
+    assert!(context.temp_dir.child(".venv/important-data").is_file());
+    assert!(uv_fs::is_virtualenv_base(cached.path()));
+    Ok(())
+}
+
+/// A FIFO at `.venv` must not block centralized environment discovery.
+#[test]
+#[cfg(unix)]
+fn sync_centralized_environment_fifo() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    write_project(&context, ">=3.12", &[])?;
+    context
+        .assert_command("import os; os.mkfifo('.venv')")
+        .success();
+
+    assert_cmd::Command::from_std(context.sync())
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .timeout(Duration::from_secs(30))
+        .assert()
+        .success();
+    assert!(uv_fs::is_virtualenv_base(
+        context.temp_dir.child(".venv").path()
+    ));
+    Ok(())
+}
+
 #[cfg(windows)]
 #[test]
 fn sync_centralized_env_replaces_existing_empty_directory() -> Result<()> {
@@ -908,6 +1054,18 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
         .success();
     // Record the cache target so the final sync can verify it remains reusable.
     let cache_target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
+
+    // A compatible cache link is reused without enabling centralized environments.
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(
+        fs_err::read_link(context.temp_dir.child(".venv").path())?,
+        cache_target
+    );
 
     let override_environment = context.temp_dir.child("override");
     uv_fs::create_symlink(&cache_target, override_environment.path())?;

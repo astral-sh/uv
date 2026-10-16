@@ -1,7 +1,9 @@
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+#[cfg(unix)]
+use fs_err::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -9,9 +11,6 @@ use std::os::windows::io::AsRawHandle;
 
 #[cfg(target_os = "linux")]
 use std::time::{Duration, UNIX_EPOCH};
-
-#[cfg(feature = "tokio")]
-use std::io::Read;
 
 #[cfg(feature = "tokio")]
 use encoding_rs_io::DecodeReaderBytes;
@@ -960,7 +959,20 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
 
 /// Read the path in a `.venv` redirect file (PEP 832), relative to the file's directory.
 pub fn read_venv_redirect(path: &Path) -> io::Result<PathBuf> {
-    let contents = fs_err::read_to_string(path)?;
+    let mut options = fs_err::OpenOptions::new();
+    options.read(true);
+    // A redirect may be replaced with a FIFO before it is opened.
+    #[cfg(unix)]
+    options.custom_flags(rustix::fs::OFlags::NONBLOCK.bits().cast_signed());
+    let mut file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the redirect is not a regular file",
+        ));
+    }
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
     let line = contents
         .strip_suffix("\r\n")
         .or_else(|| contents.strip_suffix('\n'))
