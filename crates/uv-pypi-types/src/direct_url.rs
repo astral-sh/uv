@@ -2,9 +2,11 @@ use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use uv_git_types::GitUrl;
+use uv_redacted::policy::Stripped;
 use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{HashAlgorithm, Hashes};
@@ -12,7 +14,7 @@ use crate::{HashAlgorithm, Hashes};
 /// Metadata for a distribution that was installed via a direct URL.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/direct-url-data-structure/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case", untagged)]
 pub enum DirectUrl {
     /// The direct URL is a local directory. For example:
@@ -20,7 +22,7 @@ pub enum DirectUrl {
     /// {"url": "file:///home/user/project", "dir_info": {}}
     /// ```
     LocalDirectory {
-        url: String,
+        url: SafeUrl<Stripped>,
         dir_info: DirInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<Box<Path>>,
@@ -30,11 +32,8 @@ pub enum DirectUrl {
     /// {"archive_info": {"hash": "sha256=75909db2664838d015e3d9139004ee16711748a52c8f336b52882266540215d8", "hashes": {"sha256": "75909db2664838d015e3d9139004ee16711748a52c8f336b52882266540215d8"}}, "url": "https://files.pythonhosted.org/packages/b8/8b/31273bf66016be6ad22bb7345c37ff350276cfd46e389a0c2ac5da9d9073/wheel-0.41.2-py3-none-any.whl"}
     /// ```
     ArchiveUrl {
-        /// The URL without parsed information (such as the Git revision or subdirectory).
-        ///
-        /// For example, for `pip install git+https://github.com/tqdm/tqdm@cc372d09dcd5a5eabdc6ed4cf365bdb0be004d44#subdirectory=.`,
-        /// the URL is `https://github.com/tqdm/tqdm`.
-        url: String,
+        /// The archive URL without a subdirectory fragment.
+        url: SafeUrl<Stripped>,
         archive_info: ArchiveInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<Box<Path>>,
@@ -54,15 +53,33 @@ pub enum DirectUrl {
 }
 
 /// The repository URL and VCS information for a `direct_url.json` source.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// The URL's VCS prefix matches the kind in [`VcsInfo`], for example `git+https://...`.
+/// Serialized metadata omits the prefix and sensitive userinfo, while retaining the complete query.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VcsUrl {
-    url: String,
+    url: SafeUrl<Stripped>,
     vcs_info: VcsInfo,
 }
 
 impl VcsUrl {
-    /// Return the repository URL in its `direct_url.json` form.
-    pub fn url(&self) -> &str {
+    /// Parse a transport URL from `direct_url.json` with its VCS information.
+    ///
+    /// The VCS kind is added as a prefix before parsing, for example `https://...` becomes
+    /// `git+https://...` for Git.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the prefixed URL is invalid or has ambiguous credentials.
+    fn parse(url: &str, vcs_info: VcsInfo) -> Result<Self, SafeUrlError> {
+        Ok(Self {
+            url: SafeUrl::parse(&format!("{}+{url}", vcs_info.vcs))?.with_policy(Stripped),
+            vcs_info,
+        })
+    }
+
+    /// Return the repository URL with its VCS prefix.
+    pub fn url(&self) -> &SafeUrl<Stripped> {
         &self.url
     }
 
@@ -73,9 +90,16 @@ impl VcsUrl {
 }
 
 impl From<&GitUrl> for VcsUrl {
+    /// Build the metadata URL from the repository URL with a `git+` prefix; revisions and derived
+    /// metadata are stored separately.
     fn from(value: &GitUrl) -> Self {
+        // A `GitUrl` may contain a repository URL accepted without the ambiguous-credential check.
+        // Reapplying the check when adding `git+` would reject those URLs.
+        let url = SafeUrl::parse_relaxed(&format!("git+{}", value.url().as_str()))
+            .expect("Git URL is invalid")
+            .with_policy(Stripped);
         Self {
-            url: value.url().to_string(),
+            url,
             vcs_info: VcsInfo {
                 vcs: VcsKind::Git,
                 commit_id: value.precise().as_ref().map(ToString::to_string),
@@ -83,6 +107,21 @@ impl From<&GitUrl> for VcsUrl {
                 git_lfs: value.lfs().enabled().then_some(true),
             },
         }
+    }
+}
+
+impl Serialize for VcsUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Strip credentials before removing the VCS prefix to retain the passwordless
+        // `git` username for `git+https` URLs.
+        let url = self.url.without_credentials();
+        let mut state = serializer.serialize_struct("VcsUrl", 2)?;
+        state.serialize_field("url", &url.as_str()[self.vcs_info.vcs.as_str().len() + 1..])?;
+        state.serialize_field("vcs_info", &self.vcs_info)?;
+        state.end()
     }
 }
 
@@ -112,9 +151,69 @@ pub enum DirectUrlError {
 /// Git addresses. Distinguishing URL errors lets callers ignore an unusable origin without
 /// ignoring malformed metadata or read errors.
 pub fn read_direct_url_json(reader: impl Read) -> Result<(DirectUrl, SafeUrl), DirectUrlError> {
-    let metadata: DirectUrl = serde_json::from_reader(reader)?;
-    let url = SafeUrl::try_from(&metadata)?;
+    let metadata: unparsed::DirectUrl = serde_json::from_reader(reader)?;
+    let metadata = match metadata {
+        unparsed::DirectUrl::LocalDirectory {
+            url,
+            dir_info,
+            subdirectory,
+        } => DirectUrl::LocalDirectory {
+            url: SafeUrl::parse(&url)?.with_policy(Stripped),
+            dir_info,
+            subdirectory,
+        },
+        unparsed::DirectUrl::ArchiveUrl {
+            url,
+            archive_info,
+            subdirectory,
+        } => DirectUrl::ArchiveUrl {
+            url: SafeUrl::parse(&url)?.with_policy(Stripped),
+            archive_info,
+            subdirectory,
+        },
+        unparsed::DirectUrl::VcsUrl {
+            url,
+            vcs_info,
+            subdirectory,
+            path,
+        } => DirectUrl::VcsUrl {
+            url: VcsUrl::parse(&url, vcs_info)?,
+            subdirectory,
+            path,
+        },
+    };
+    let url = SafeUrl::from(&metadata);
     Ok((metadata, url))
+}
+
+mod unparsed {
+    use std::path::{Path, PathBuf};
+
+    use serde::Deserialize;
+
+    use super::{ArchiveInfo, DirInfo, VcsInfo};
+
+    /// Direct URL metadata with an unparsed URL, so schema and URL errors can be handled separately.
+    #[derive(Deserialize)]
+    #[serde(rename_all = "snake_case", untagged)]
+    pub(super) enum DirectUrl {
+        LocalDirectory {
+            url: String,
+            dir_info: DirInfo,
+            subdirectory: Option<Box<Path>>,
+        },
+        ArchiveUrl {
+            url: String,
+            archive_info: ArchiveInfo,
+            subdirectory: Option<Box<Path>>,
+        },
+        VcsUrl {
+            url: String,
+            vcs_info: VcsInfo,
+            subdirectory: Option<Box<Path>>,
+            path: Option<PathBuf>,
+        },
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -154,39 +253,43 @@ pub enum VcsKind {
     Svn,
 }
 
-impl std::fmt::Display for VcsKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl VcsKind {
+    fn as_str(self) -> &'static str {
         match self {
-            Self::Git => write!(f, "git"),
-            Self::Hg => write!(f, "hg"),
-            Self::Bzr => write!(f, "bzr"),
-            Self::Svn => write!(f, "svn"),
+            Self::Git => "git",
+            Self::Hg => "hg",
+            Self::Bzr => "bzr",
+            Self::Svn => "svn",
         }
     }
 }
 
-impl TryFrom<&DirectUrl> for SafeUrl {
-    type Error = SafeUrlError;
+impl std::fmt::Display for VcsKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
-    fn try_from(value: &DirectUrl) -> Result<Self, Self::Error> {
+impl From<&DirectUrl> for SafeUrl {
+    fn from(value: &DirectUrl) -> Self {
         match value {
             DirectUrl::LocalDirectory {
                 url,
                 subdirectory,
                 dir_info: _,
             } => {
-                let mut url = Self::parse(url)?;
+                let mut url = url.as_url().clone();
                 if let Some(subdirectory) = subdirectory {
                     url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
                 }
-                Ok(url)
+                url
             }
             DirectUrl::ArchiveUrl {
                 url,
                 subdirectory,
                 archive_info,
             } => {
-                let mut url = Self::parse(url)?;
+                let mut url = url.as_url().clone();
                 let mut fragments = Vec::new();
                 if let Some(subdirectory) = subdirectory {
                     fragments.push(format!("subdirectory={}", subdirectory.display()));
@@ -211,7 +314,7 @@ impl TryFrom<&DirectUrl> for SafeUrl {
                 if !fragments.is_empty() {
                     url.set_fragment(Some(&fragments.join("&")));
                 }
-                Ok(url)
+                url
             }
             DirectUrl::VcsUrl {
                 url,
@@ -219,7 +322,7 @@ impl TryFrom<&DirectUrl> for SafeUrl {
                 path,
             } => {
                 let vcs_info = url.vcs_info();
-                let mut url = Self::parse(&format!("{}+{}", vcs_info.vcs, url.url()))?;
+                let mut url = url.url().as_url().clone();
                 if let Some(commit_id) = &vcs_info.commit_id {
                     let path = format!("{}@{commit_id}", url.path());
                     url.set_path(&path);
@@ -241,8 +344,127 @@ impl TryFrom<&DirectUrl> for SafeUrl {
                 if !frags.is_empty() {
                     url.set_fragment(Some(&frags.join("&")));
                 }
-                Ok(url)
+                url
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use super::{DirectUrl, VcsInfo, VcsKind, VcsUrl, read_direct_url_json};
+    use uv_redacted::SafeUrl;
+
+    #[test]
+    fn archive_serialization_strips_userinfo_and_retains_query() -> Result<()> {
+        let (metadata, _) = read_direct_url_json(
+            br#"{"url":"https://user:password@example.com/project.whl?sig=signature&download=1","archive_info":{}}"#.as_slice(),
+        )?;
+
+        assert_eq!(SafeUrl::from(&metadata).password(), Some("password"));
+        insta::assert_json_snapshot!(metadata, @r#"
+        {
+          "url": "https://example.com/project.whl?sig=signature&download=1",
+          "archive_info": {}
+        }
+        "#);
+        insta::assert_snapshot!(format!("{metadata:?}"), @r#"ArchiveUrl { url: SafeUrl { scheme: "https", cannot_be_a_base: false, username: "user", password: Some("****"), host: Some(Domain("example.com")), port: None, path: "/project.whl", query: Some("sig=****&download=1"), fragment: None }, archive_info: ArchiveInfo { hash: None, hashes: None }, subdirectory: None }"#);
+        Ok(())
+    }
+
+    #[test]
+    fn vcs_serialization_strips_userinfo_and_retains_query() -> Result<()> {
+        let (metadata, _) = read_direct_url_json(
+            br#"{"url":"https://user:password@example.com/project.git?sig=signature&download=1","vcs_info":{"vcs":"git","commit_id":"abcdef","requested_revision":"main","git_lfs":true},"subdirectory":"src","path":"dist/project.whl"}"#.as_slice(),
+        )?;
+
+        assert_eq!(SafeUrl::from(&metadata).password(), Some("password"));
+        assert_eq!(
+            SafeUrl::from(&metadata).as_str(),
+            "git+https://user:password@example.com/project.git@abcdef?sig=signature&download=1#subdirectory=src&lfs=true&path=dist/project.whl"
+        );
+        insta::assert_json_snapshot!(metadata, @r#"
+        {
+          "url": "https://example.com/project.git?sig=signature&download=1",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "abcdef",
+            "requested_revision": "main",
+            "git_lfs": true
+          },
+          "subdirectory": "src",
+          "path": "dist/project.whl"
+        }
+        "#);
+        Ok(())
+    }
+
+    #[test]
+    fn vcs_serialization_retains_passwordless_git_username() -> Result<()> {
+        let (metadata, _) = read_direct_url_json(
+            br#"{"url":"https://git@example.com/project.git","vcs_info":{"vcs":"git"}}"#.as_slice(),
+        )?;
+        insta::assert_json_snapshot!(metadata, @r#"
+        {
+          "url": "https://git@example.com/project.git",
+          "vcs_info": {
+            "vcs": "git"
+          }
+        }
+        "#);
+        Ok(())
+    }
+
+    #[test]
+    fn vcs_url_round_trip_retains_kind() -> Result<()> {
+        let metadata = DirectUrl::VcsUrl {
+            url: VcsUrl::parse(
+                "https://example.com/repo",
+                VcsInfo {
+                    vcs: VcsKind::Hg,
+                    commit_id: Some("abcdef".to_string()),
+                    requested_revision: Some("default".to_string()),
+                    git_lfs: None,
+                },
+            )?,
+            subdirectory: None,
+            path: None,
+        };
+        insta::assert_json_snapshot!(metadata, @r#"
+        {
+          "url": "https://example.com/repo",
+          "vcs_info": {
+            "vcs": "hg",
+            "commit_id": "abcdef",
+            "requested_revision": "default"
+          }
+        }
+        "#);
+
+        let json = serde_json::to_vec(&metadata)?;
+        let (reconstructed, url) = read_direct_url_json(json.as_slice())?;
+        assert_eq!(reconstructed, metadata);
+        assert_eq!(url.as_str(), "hg+https://example.com/repo@abcdef");
+        Ok(())
+    }
+
+    #[test]
+    fn vcs_url_uses_prefixed_parsing_rules() -> Result<()> {
+        for (transport, expected) in [
+            (
+                "http://EXAMPLE.com:80/repo",
+                "git+http://EXAMPLE.com:80/repo",
+            ),
+            ("https:example.com", "git+https:example.com"),
+            (":foo", "git+:foo"),
+        ] {
+            let json = serde_json::json!({"url": transport, "vcs_info": {"vcs": "git"}});
+            let (metadata, _) = read_direct_url_json(json.to_string().as_bytes())?;
+            assert_eq!(SafeUrl::from(&metadata).as_str(), expected);
+            assert_eq!(serde_json::to_value(metadata)?, json);
+        }
+        Ok(())
     }
 }

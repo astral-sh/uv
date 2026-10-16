@@ -9,6 +9,7 @@ use uv_git_types::{GitUrl, GitUrlParseError};
 use uv_pep508::{
     Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
 };
+use uv_redacted::policy::Stripped;
 use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsUrl};
@@ -564,7 +565,7 @@ impl From<&ParsedUrl> for DirectUrl {
 impl From<&ParsedPathUrl> for DirectUrl {
     fn from(value: &ParsedPathUrl) -> Self {
         Self::ArchiveUrl {
-            url: value.url.to_string(),
+            url: value.url.clone().with_policy(Stripped),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
@@ -577,7 +578,7 @@ impl From<&ParsedPathUrl> for DirectUrl {
 impl From<&ParsedDirectoryUrl> for DirectUrl {
     fn from(value: &ParsedDirectoryUrl) -> Self {
         Self::LocalDirectory {
-            url: value.url.to_string(),
+            url: value.url.clone().with_policy(Stripped),
             dir_info: DirInfo {
                 editable: value.editable,
             },
@@ -589,8 +590,7 @@ impl From<&ParsedDirectoryUrl> for DirectUrl {
 impl From<&ParsedArchiveUrl> for DirectUrl {
     fn from(value: &ParsedArchiveUrl) -> Self {
         Self::ArchiveUrl {
-            // Query parameters identify the source, so only strip username and password credentials.
-            url: value.url.without_credentials().as_str().to_owned(),
+            url: value.url.clone().with_policy(Stripped),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
@@ -692,7 +692,8 @@ impl From<ParsedGitDirectoryUrl> for SafeUrl {
 mod tests {
     use anyhow::Result;
 
-    use crate::{DirectUrl, parsed_url::ParsedUrl};
+    use crate::{DirectUrl, ParsedGitDirectoryUrl, parsed_url::ParsedUrl};
+    use uv_git_types::{GitLfs, GitReference, GitUrl};
     use uv_redacted::SafeUrl;
 
     #[test]
@@ -744,14 +745,123 @@ mod tests {
     }
 
     #[test]
+    fn direct_url_archive_serialization() -> Result<()> {
+        let parsed_url = ParsedUrl::try_from(SafeUrl::parse(
+            "https://user:password@example.com/project-1.0-py3-none-any.whl?sig=signature#subdirectory=src",
+        )?)?;
+        let direct_url = DirectUrl::from(&parsed_url);
+        insta::assert_json_snapshot!(direct_url, @r#"
+        {
+          "url": "https://example.com/project-1.0-py3-none-any.whl?sig=signature",
+          "archive_info": {},
+          "subdirectory": "src"
+        }
+        "#);
+        Ok(())
+    }
+
+    #[test]
+    fn direct_url_git_metadata_preserves_repository_url() -> Result<()> {
+        let repository = SafeUrl::parse(
+            "https://user:password@example.com/project@team.git?sig=signature#origin",
+        )?;
+        let parsed_url = ParsedGitDirectoryUrl::from_source(
+            GitUrl::from_fields(
+                repository,
+                GitReference::Tag("v1".to_string()),
+                None,
+                GitLfs::Enabled,
+            )?,
+            Some(std::path::PathBuf::from("src").into_boxed_path()),
+        );
+        let metadata = DirectUrl::from(&parsed_url);
+        insta::assert_json_snapshot!(metadata, @r#"
+        {
+          "url": "https://example.com/project@team.git?sig=signature#origin",
+          "vcs_info": {
+            "vcs": "git",
+            "requested_revision": "v1",
+            "git_lfs": true
+          },
+          "subdirectory": "src"
+        }
+        "#);
+        assert_eq!(
+            SafeUrl::from(&metadata).as_str(),
+            "git+https://user:password@example.com/project@team.git@v1?sig=signature#subdirectory=src&lfs=true"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn direct_url_git_metadata_with_colon_in_path() -> Result<()> {
+        // A colon in the repository path and `@` before a revision must not be
+        // mistaken for ambiguous credentials when constructing metadata.
+        let repository = SafeUrl::parse("https://example.com/team:repo.git")?;
+        let parsed_url = ParsedGitDirectoryUrl::from_source(
+            GitUrl::from_fields(
+                repository,
+                GitReference::Tag("v1".to_string()),
+                None,
+                GitLfs::Disabled,
+            )?,
+            None,
+        );
+        let metadata = DirectUrl::from(&parsed_url);
+        insta::assert_json_snapshot!(metadata, @r#"
+        {
+          "url": "https://example.com/team:repo.git",
+          "vcs_info": {
+            "vcs": "git",
+            "requested_revision": "v1"
+          }
+        }
+        "#);
+        assert_eq!(
+            SafeUrl::from(&metadata).as_str(),
+            "git+https://example.com/team:repo.git@v1"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn direct_url_git_metadata_preserves_deserialized_repository_url() -> Result<()> {
+        // `SafeUrl` deserialization parses URLs without the ambiguous-credential check.
+        let repository: SafeUrl =
+            serde_json::from_str(r#""https://example.com/team:repo@group.git""#)?;
+        let parsed_url = ParsedGitDirectoryUrl::from_source(
+            GitUrl::from_fields(
+                repository,
+                GitReference::Tag("v1".to_string()),
+                None,
+                GitLfs::Disabled,
+            )?,
+            None,
+        );
+        let metadata = DirectUrl::from(&parsed_url);
+        insta::assert_json_snapshot!(metadata, @r#"
+        {
+          "url": "https://example.com/team:repo@group.git",
+          "vcs_info": {
+            "vcs": "git",
+            "requested_revision": "v1"
+          }
+        }
+        "#);
+        Ok(())
+    }
+
+    #[test]
     fn direct_url_preserves_git_repository_url() -> Result<()> {
         for expected in [
             "git+ssh://git@github.com/pallets/flask.git",
             "git+ssh://git@github.com/pallets/flask.git#path=dist/flask-1.0-py3-none-any.whl",
+            "git+ssh://git@github.com/pallets/flask.git@v2.0#subdirectory=src",
+            "git+ssh://git@github.com/pallets/flask.git@v2.0#path=dist/flask-1.0-py3-none-any.whl",
         ] {
             let expected = SafeUrl::parse(expected)?;
             let parsed_url = ParsedUrl::try_from(expected.clone())?;
-            let actual = SafeUrl::try_from(&DirectUrl::from(&parsed_url))?;
+            let actual = SafeUrl::from(&DirectUrl::from(&parsed_url));
             assert_eq!(expected, actual);
         }
 
