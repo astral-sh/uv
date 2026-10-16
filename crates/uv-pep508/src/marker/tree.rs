@@ -13,7 +13,7 @@ use version_ranges::Ranges;
 use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
-use super::algebra::{Edges, INTERNER, NodeId, Variable};
+use super::algebra::{Edges, INTERNER, InternerShared, NodeId, Variable};
 use super::simplify;
 #[cfg(test)]
 use crate::Pep508ErrorSource;
@@ -884,6 +884,11 @@ impl MarkerTree {
 
     /// Returns the underlying [`MarkerTreeKind`] of the root node.
     pub fn kind(self) -> MarkerTreeKind<'static> {
+        self.kind_with(&INTERNER.shared)
+    }
+
+    /// Inspect a node using the storage that owns its index, including temporary cover nodes.
+    pub(crate) fn kind_with<'a>(self, interner: &'a InternerShared<'_>) -> MarkerTreeKind<'a> {
         if self.is_true() {
             return MarkerTreeKind::True;
         }
@@ -892,7 +897,7 @@ impl MarkerTree {
             return MarkerTreeKind::False;
         }
 
-        let node = INTERNER.shared.node(self.0);
+        let node = interner.node(self.0);
         match &node.var {
             Variable::Version(key) => {
                 let Edges::Version { edges: ref map } = node.children else {
