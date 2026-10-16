@@ -5,6 +5,7 @@ pub mod graph_ops;
 mod metadata;
 mod options;
 mod output;
+pub mod selection;
 pub mod universal_marker;
 
 pub use distribution::{AnnotatedDist, PackageNodeKind, PackageRole};

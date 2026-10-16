@@ -90,6 +90,8 @@ mod inputs;
 mod installable;
 mod map;
 mod requirements;
+#[cfg(test)]
+mod selection_tests;
 mod serialize;
 mod tree;
 #[cfg(test)]
