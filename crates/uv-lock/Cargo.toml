@@ -69,5 +69,7 @@ url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
+uv-performance-memory-allocator = { workspace = true }
+
 insta = { workspace = true }
 toml = { workspace = true }

@@ -3,7 +3,8 @@
 //! The adapter deliberately requires declarations alongside resolved edges. Existing lockfiles
 //! can omit these declarations, so this is not a fallback for the production reader.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use petgraph::graph::NodeIndex;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -14,21 +15,29 @@ use uv_resolver_types::{ConflictMarker, UniversalMarker};
 
 use super::{DependencyContext, Lock};
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-enum Section {
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+pub(super) enum Section {
     Production,
     Extra(ExtraName),
     Group(GroupName),
 }
 
 /// Retain original requests separately from the guards choosing their resolved target versions.
-fn activation_graph(lock: &Lock) -> (ActivationGraph, BTreeMap<(usize, Section), NodeIndex>) {
+pub(super) fn activation_graph(
+    lock: &Lock,
+) -> (ActivationGraph, BTreeMap<(usize, Section), NodeIndex>) {
     let mut graph = ActivationGraph::default();
     let mut nodes = BTreeMap::new();
     for (index, package) in lock.packages.iter().enumerate() {
         let production = graph.graph.add_node(ActivationNode::default());
         nodes.insert((index, Section::Production), production);
-        for extra in &package.metadata.provides_extra {
+        for extra in package
+            .metadata
+            .provides_extra
+            .iter()
+            .chain(package.optional_dependencies.keys())
+            .collect::<BTreeSet<_>>()
+        {
             let node = graph.graph.add_node(ActivationNode {
                 requests: vec![ConflictItem::from((package.id.name.clone(), extra.clone()))],
                 requires_choice: false,
@@ -36,7 +45,7 @@ fn activation_graph(lock: &Lock) -> (ActivationGraph, BTreeMap<(usize, Section),
             graph.graph.add_edge(node, production, MarkerTree::TRUE);
             nodes.insert((index, Section::Extra(extra.clone())), node);
         }
-        for group in package.metadata.dependency_groups.keys() {
+        for group in package.dependency_groups.keys() {
             let node = graph.graph.add_node(ActivationNode {
                 requests: vec![ConflictItem::from((package.id.name.clone(), group.clone()))],
                 requires_choice: false,
@@ -86,16 +95,26 @@ fn activation_graph(lock: &Lock) -> (ActivationGraph, BTreeMap<(usize, Section),
             graph.graph.add_edge(*parent, request, condition);
 
             // The fixtures use a single requirement per package name in each environment.
-            // A production adapter must also match source and version requirements here.
+            // Source and version filters keep separate declarations from sharing candidates.
             let mut candidates = BTreeMap::new();
             for dependency in context.dependencies(package) {
-                if dependency.package_id.name != requirement.name {
+                if dependency.package_id.name != requirement.name
+                    || !Lock::package_satisfies_requirement(
+                        &lock.packages[dependency.index.0],
+                        requirement,
+                        Path::new("."),
+                    )
+                    .expect("fixture requirement source")
+                {
                     continue;
                 }
                 let guard = candidates
                     .entry(dependency.index.0)
                     .or_insert(MarkerTree::FALSE);
                 *guard = guard.or(dependency.complexified_marker.combined());
+            }
+            if requirement.name == package.id.name {
+                candidates.insert(*index, MarkerTree::TRUE);
             }
             for (target, guard) in candidates {
                 let choice = graph.graph.add_node(ActivationNode::default());
