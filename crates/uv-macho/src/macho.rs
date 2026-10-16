@@ -4,14 +4,8 @@ use std::ops::Range;
 use crate::Error;
 use crate::bytes::{array, slice};
 use crate::format::{
-    CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, HEADER_SIZE, Header, LC_BUILD_VERSION,
-    LC_CODE_SIGNATURE, LC_DATA_IN_CODE, LC_DYLD_CHAINED_FIXUPS, LC_DYLD_EXPORTS_TRIE, LC_DYLD_INFO,
-    LC_DYLD_INFO_ONLY, LC_DYLIB_CODE_SIGN_DRS, LC_DYSYMTAB, LC_FUNCTION_STARTS, LC_ID_DYLIB,
-    LC_LAZY_LOAD_DYLIB, LC_LINKER_OPTIMIZATION_HINT, LC_LOAD_DYLIB, LC_LOAD_UPWARD_DYLIB,
-    LC_LOAD_WEAK_DYLIB, LC_REEXPORT_DYLIB, LC_ROUTINES_64, LC_RPATH, LC_SEGMENT_64,
-    LC_SEGMENT_SPLIT_INFO, LC_SOURCE_VERSION, LC_SUB_CLIENT, LC_SUB_FRAMEWORK, LC_SUB_LIBRARY,
-    LC_SUB_UMBRELLA, LC_SYMTAB, LC_UUID, LC_VERSION_MIN_MACOSX, MH_DYLIB, MH_MAGIC_64,
-    S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECT_INFO_PLIST, SECTION_TYPE,
+    CPU_TYPE_ARM64, CPU_TYPE_X86_64, Command, CommandKind, HEADER_SIZE, Header, MH_DYLIB,
+    MH_MAGIC_64, S_GB_ZEROFILL, S_THREAD_LOCAL_ZEROFILL, S_ZEROFILL, SECT_INFO_PLIST, SECTION_TYPE,
     SEG_LINKEDIT, SEG_TEXT, Section, Segment,
 };
 
@@ -65,30 +59,30 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
     let mut segments = FileRegions::default();
     let mut virtual_segments = Vec::new();
     let mut sections = FileRegions::default();
-    let mut references = Vec::new();
+    let mut file_bounds = None;
 
     for (index, command) in commands.iter().enumerate() {
         match command.kind {
-            LC_ID_DYLIB => {
+            CommandKind::InstallId => {
                 if install_id.replace(index).is_some() {
                     return Err(Error::Malformed("invalid or duplicate LC_ID_DYLIB"));
                 }
             }
 
-            LC_CODE_SIGNATURE => {
-                let data_offset = u32::from_le_bytes(array(command.data, 8)?);
-                let data_size = u32::from_le_bytes(array(command.data, 12)?);
+            CommandKind::CodeSignature => {
+                let data = command.linkedit_data()?;
                 if signature_command.replace(index).is_some() {
                     return Err(Error::Malformed("invalid or duplicate LC_CODE_SIGNATURE"));
                 }
 
-                if data_size > 0 {
-                    let offset = data_offset as usize;
-                    signature = Some((offset, slice(image, offset, data_size as usize)?));
+                if !data.is_empty() {
+                    let offset = usize::try_from(data.start)?;
+                    let size = usize::try_from(data.end - data.start)?;
+                    signature = Some((offset, slice(image, offset, size)?));
                 }
             }
 
-            LC_VERSION_MIN_MACOSX => {
+            CommandKind::MinimumVersion => {
                 if minimum_version
                     .replace(u32::from_le_bytes(array(command.data, 8)?))
                     .is_some()
@@ -97,7 +91,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                 }
             }
 
-            LC_BUILD_VERSION => {
+            CommandKind::BuildVersion => {
                 let platform = u32::from_le_bytes(array(command.data, 8)?);
                 if platform != 1 {
                     return Err(Error::UnsupportedValue {
@@ -114,7 +108,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                 }
             }
 
-            LC_SEGMENT_64 => {
+            CommandKind::Segment => {
                 let segment = Segment::parse(command.data)?;
                 let segment_offset = usize::try_from(segment.fileoff)?;
                 let segment_data =
@@ -164,7 +158,7 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                         ));
                     }
 
-                    references.push((section.reloff, u64::from(section.nreloc) * 8));
+                    extend_file_bounds(&mut file_bounds, [section.relocations]);
 
                     let section_type = section.flags & SECTION_TYPE;
                     if section_type == S_ZEROFILL
@@ -197,10 +191,18 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
                     }
                 }
             }
-            _ => {}
+            CommandKind::SymbolTable => {
+                extend_file_bounds(&mut file_bounds, command.symbol_tables()?);
+            }
+            CommandKind::DynamicSymbolTable => {
+                extend_file_bounds(&mut file_bounds, command.dynamic_symbol_tables()?);
+            }
+            CommandKind::DyldInfo => extend_file_bounds(&mut file_bounds, command.dyld_info()?),
+            CommandKind::LinkeditData => {
+                extend_file_bounds(&mut file_bounds, [command.linkedit_data()?]);
+            }
+            CommandKind::String | CommandKind::NoFileData => {}
         }
-
-        file_references(command, &mut references)?;
     }
 
     install_id.ok_or(Error::Malformed("missing LC_ID_DYLIB"))?;
@@ -243,14 +245,10 @@ pub(crate) fn parse(image: &[u8]) -> Result<(), Error> {
         image.len()
     };
 
-    for (offset, size) in references {
-        // Empty tables do not reference file data, regardless of their offset.
-        if size == 0 {
-            continue;
-        }
-
-        let offset = offset as usize;
-        let data = slice(image, offset, usize::try_from(size)?)?;
+    if let Some(range) = file_bounds {
+        let offset = usize::try_from(range.start)?;
+        let size = usize::try_from(range.end - range.start)?;
+        let data = slice(image, offset, size)?;
         if offset < command_end || offset + data.len() > code_limit {
             return Err(Error::Malformed(
                 "file data overlaps load commands or the signature",
@@ -301,63 +299,23 @@ impl FileRegions {
     }
 }
 
-/// Collect file offsets and byte lengths for symbol tables and dyld metadata.
-fn file_references(command: &Command<'_>, references: &mut Vec<(u32, u64)>) -> Result<(), Error> {
-    // Each table has adjacent offset/count fields. Convert entry counts to byte
-    // lengths here; the layout reader checks the resulting file ranges together.
-    let fields: &[(usize, u64)] = match command.kind {
-        LC_SYMTAB => &[(8, 16), (16, 1)], // nlist_64 entries, then string bytes
-        LC_DYSYMTAB => &[
-            (32, 8),  // dylib_table_of_contents
-            (40, 56), // dylib_module_64
-            (48, 4),  // dylib_reference
-            (56, 4),  // indirect symbols
-            (64, 8),  // external relocations
-            (72, 8),  // local relocations
-        ],
-        // Rebase, bind, weak bind, lazy bind, and export bytes.
-        LC_DYLD_INFO | LC_DYLD_INFO_ONLY => &[(8, 1), (16, 1), (24, 1), (32, 1), (40, 1)],
-        LC_SEGMENT_SPLIT_INFO
-        | LC_FUNCTION_STARTS
-        | LC_DATA_IN_CODE
-        | LC_DYLIB_CODE_SIGN_DRS
-        | LC_LINKER_OPTIMIZATION_HINT
-        | LC_DYLD_EXPORTS_TRIE
-        | LC_DYLD_CHAINED_FIXUPS => &[(8, 1)],
-        LC_SEGMENT_64
-        | LC_ID_DYLIB
-        | LC_CODE_SIGNATURE
-        | LC_UUID
-        | LC_LOAD_DYLIB
-        | LC_LOAD_WEAK_DYLIB
-        | LC_REEXPORT_DYLIB
-        | LC_LOAD_UPWARD_DYLIB
-        | LC_LAZY_LOAD_DYLIB
-        | LC_RPATH
-        | LC_ROUTINES_64
-        | LC_VERSION_MIN_MACOSX
-        | LC_BUILD_VERSION
-        | LC_SOURCE_VERSION
-        | LC_SUB_FRAMEWORK
-        | LC_SUB_UMBRELLA
-        | LC_SUB_CLIENT
-        | LC_SUB_LIBRARY => &[],
-        _ => {
-            return Err(Error::UnsupportedValue {
-                field: "load command with file references",
-                value: u64::from(command.kind),
-            });
+/// Extend the bounds to contain every nonempty file range.
+fn extend_file_bounds(
+    bounds: &mut Option<Range<u64>>,
+    ranges: impl IntoIterator<Item = Range<u64>>,
+) {
+    for range in ranges {
+        // Empty tables do not reference file data, regardless of their offset.
+        if range.is_empty() {
+            continue;
         }
-    };
-
-    for &(field, entry_size) in fields {
-        references.push((
-            u32::from_le_bytes(array(command.data, field)?),
-            u64::from(u32::from_le_bytes(array(command.data, field + 4)?)) * entry_size,
-        ));
+        if let Some(bounds) = bounds {
+            bounds.start = bounds.start.min(range.start);
+            bounds.end = bounds.end.max(range.end);
+        } else {
+            *bounds = Some(range);
+        }
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
