@@ -12,8 +12,6 @@ use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git_types::GitReference;
 use uv_normalize::PackageName;
-#[cfg(test)]
-use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl};
 use uv_redacted::DisplaySafeUrl;
 
@@ -41,7 +39,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
         // Extract the packages from the lock file.
-        let ExportableRequirements(nodes) = ExportableRequirements::from_lock(
+        let ExportableRequirements(mut nodes) = ExportableRequirements::from_lock(
             target,
             prune,
             extras,
@@ -50,45 +48,16 @@ impl<'lock> RequirementsTxtExport<'lock> {
             install_options,
         )?;
 
-        Ok(Self::new(nodes, editable, hashes))
-    }
-
-    /// Format already validated package reachability without repeating dependency traversal.
-    #[cfg(test)]
-    pub(in crate::lock) fn from_selection(
-        packages: impl IntoIterator<Item = (&'lock Package, MarkerTree)>,
-        editable: Option<EditableMode>,
-        hashes: bool,
-    ) -> Self {
-        Self::new(
-            packages
-                .into_iter()
-                .map(|(package, marker)| ExportableRequirement {
-                    package,
-                    marker,
-                    dependents: Vec::new(),
-                })
-                .collect(),
-            editable,
-            hashes,
-        )
-    }
-
-    fn new(
-        mut nodes: Vec<ExportableRequirement<'lock>>,
-        editable: Option<EditableMode>,
-        hashes: bool,
-    ) -> Self {
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
         nodes.sort_unstable_by(|a, b| {
             RequirementComparator::from(a.package).cmp(&RequirementComparator::from(b.package))
         });
 
-        Self {
+        Ok(Self {
             nodes,
             hashes,
             editable,
-        }
+        })
     }
 }
 
