@@ -4106,18 +4106,18 @@ fn python_install_compile_bytecode_upgrade() {
         .with_filtered_latest_python_versions();
 
     // An upgrade should also compile bytecode
-    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.14.0 in [TIME]
-     + cpython-3.14.0-[PLATFORM] (python3.14)
+    Installed Python 3.13.0 in [TIME]
+     + cpython-3.13.0-[PLATFORM] (python3.13)
     ");
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--compile-bytecode").arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--compile-bytecode").arg("3.13"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.14.[LATEST] in [TIME]
-     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }
