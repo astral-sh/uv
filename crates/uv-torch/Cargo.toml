@@ -16,7 +16,6 @@ uv-pep440 = { workspace = true }
 uv-platform-tags = { workspace = true }
 
 clap = { workspace = true, optional = true }
-either = { workspace = true }
 fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
