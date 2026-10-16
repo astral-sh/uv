@@ -31,3 +31,5 @@ mod remote_metadata;
 mod retry;
 mod rkyvutil;
 mod tls;
+#[cfg(test)]
+mod variants_json_tests;

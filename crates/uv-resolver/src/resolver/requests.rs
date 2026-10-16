@@ -12,10 +12,8 @@ use uv_pep440::Version;
 use crate::prioritized_distribution::RegistryVariantsJson;
 use crate::pubgrub::Range;
 use crate::resolved::ResolvedDistRef;
-use crate::resolver::index::FxRegisteredEntry;
-use crate::resolver::{
-    InMemoryIndex, MetadataResponse, Request, VariantsJsonResponse, VersionsResponse,
-};
+use crate::resolver::index::{FxRegisteredEntry, ParsedVariantsJsonResponse};
+use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};
 
 /// A blocking solver-side handle for requesting metadata from the asynchronous fetcher.
@@ -93,11 +91,11 @@ impl RegisteredMetadata<'_> {
 /// Index-level variant metadata registered for a selected package version.
 #[derive(Clone, Debug)]
 pub(crate) struct RegisteredVariantsJson<'index>(
-    FxRegisteredEntry<'index, RegistryVariantsJson, Arc<VariantsJsonResponse>>,
+    FxRegisteredEntry<'index, RegistryVariantsJson, Arc<ParsedVariantsJsonResponse>>,
 );
 
 impl RegisteredVariantsJson<'_> {
-    pub(crate) fn wait(&self) -> Arc<VariantsJsonResponse> {
+    pub(crate) fn wait(&self) -> Arc<ParsedVariantsJsonResponse> {
         self.0.wait_blocking()
     }
 }
