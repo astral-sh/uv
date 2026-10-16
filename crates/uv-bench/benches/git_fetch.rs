@@ -95,11 +95,17 @@ fn git_fetch(criterion: &mut Criterion<WallTime>) {
             ("git_fetch_warm_commit", fixture.commit, None),
             ("git_fetch_warm_reference", named_reference, None),
         ] {
-            group.bench_function(BenchmarkId::new(name, fixture.name), |bencher| {
+            // Reuse the populated cache across warmup and samples, while only preparing
+            // benchmarks selected by Criterion's filter.
+            let cache = LazyCell::new(|| {
                 let precise = git_url(&repository, fixture.commit, Some(commit));
-                let git = git_url(&repository, reference, locked);
                 let cache = tempfile::tempdir().expect("Failed to create Git cache");
                 fetch(&runtime, &precise, cache.path(), settings);
+                cache
+            });
+            group.bench_function(BenchmarkId::new(name, fixture.name), |bencher| {
+                let git = git_url(&repository, reference, locked);
+                let cache = LazyCell::force(&cache);
                 bencher.iter(|| black_box(fetch(&runtime, &git, cache.path(), settings)));
             });
         }
