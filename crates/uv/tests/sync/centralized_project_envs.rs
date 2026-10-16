@@ -974,6 +974,18 @@ fn sync_replaces_environment_links_without_removing_cached_targets() -> Result<(
     // Record the cache target so the final sync can verify it remains reusable.
     let cache_target = fs_err::read_link(context.temp_dir.child(".venv").path())?;
 
+    // A compatible cache link is reused without enabling centralized environments.
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(
+        fs_err::read_link(context.temp_dir.child(".venv").path())?,
+        cache_target
+    );
+
     let override_environment = context.temp_dir.child("override");
     uv_fs::create_symlink(&cache_target, override_environment.path())?;
     context
