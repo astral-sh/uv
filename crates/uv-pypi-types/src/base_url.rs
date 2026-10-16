@@ -36,6 +36,10 @@ impl std::fmt::Display for BaseUrl {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "Compares internal serialization with the `url` crate wire format"
+)]
 mod tests {
     use std::error::Error;
 

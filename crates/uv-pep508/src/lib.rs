@@ -27,6 +27,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 #[cfg(feature = "unsafe-url")]
+#[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
 use url::Url;
 
 use uv_cache_key::{CacheKey, CacheKeyHasher};
@@ -339,6 +340,7 @@ pub trait Pep508Url: Display + Debug + Sized {
 }
 
 #[cfg(feature = "unsafe-url")]
+#[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
 impl Pep508Url for Url {
     type Err = url::ParseError;
 
@@ -1088,6 +1090,7 @@ mod tests {
 
     use insta::assert_snapshot;
     #[cfg(feature = "unsafe-url")]
+    #[expect(clippy::disallowed_types, reason = "Exercises the opt-in raw URL API")]
     use url::Url;
 
     use uv_normalize::{ExtraName, InvalidNameError, PackageName};
@@ -1520,6 +1523,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "unsafe-url")]
+    #[expect(clippy::disallowed_types, reason = "Exercises the opt-in raw URL API")]
     fn raw_url_requirement() {
         let requirement = Requirement::<Url>::from_str(
             "demo @ https://user:password@EXAMPLE.COM/demo.whl?sig=signature",
@@ -1530,6 +1534,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "unsafe-url")]
+    #[expect(clippy::disallowed_types, reason = "Exercises the opt-in raw URL API")]
     fn raw_url_error() {
         let error = Requirement::<Url>::from_str("demo @ not-a-url").unwrap_err();
         assert_snapshot!(error, @"

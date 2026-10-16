@@ -1,3 +1,8 @@
+#![expect(
+    clippy::disallowed_types,
+    reason = "`SafeUrl` wraps `url::Url` and exposes conversions for external APIs"
+)]
+
 use ref_cast::RefCast;
 use serde::Deserialize;
 use std::borrow::Cow;
