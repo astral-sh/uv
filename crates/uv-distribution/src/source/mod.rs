@@ -23,9 +23,10 @@ use tracing::{Instrument, debug, info_span, instrument, warn};
 use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
+use uv_cache_key::cache_digest;
 use uv_client::{
     BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
-    RegistryClient, RetryState,
+    RegistryClient, RetryState, validate_archive_filename,
 };
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
@@ -336,10 +337,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
-                // For direct URLs, cache directly under the hash of the URL itself.
-                let cache_shard = self.build_context.cache().shard(
-                    CacheBucket::SourceDistributions,
-                    WheelCache::Url(&dist.url).root(),
+                let cache_shard = url_cache_shard(
+                    self.build_context.cache(),
+                    &dist.url,
+                    dist.header_filename.as_deref(),
                 );
 
                 self.url(
@@ -393,10 +394,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
-                // For direct URLs, cache directly under the hash of the URL itself.
-                let cache_shard = self.build_context.cache().shard(
-                    CacheBucket::SourceDistributions,
-                    WheelCache::Url(resource.url).root(),
+                let cache_shard = url_cache_shard(
+                    self.build_context.cache(),
+                    resource.url,
+                    resource.header_filename,
                 );
 
                 self.url(
@@ -497,10 +498,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
-                // For direct URLs, cache directly under the hash of the URL itself.
-                let cache_shard = self.build_context.cache().shard(
-                    CacheBucket::SourceDistributions,
-                    WheelCache::Url(&dist.url).root(),
+                let cache_shard = url_cache_shard(
+                    self.build_context.cache(),
+                    &dist.url,
+                    dist.header_filename.as_deref(),
                 );
 
                 self.url_metadata(
@@ -552,10 +553,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
-                // For direct URLs, cache directly under the hash of the URL itself.
-                let cache_shard = self.build_context.cache().shard(
-                    CacheBucket::SourceDistributions,
-                    WheelCache::Url(resource.url).root(),
+                let cache_shard = url_cache_shard(
+                    self.build_context.cache(),
+                    resource.url,
+                    resource.header_filename,
                 );
 
                 self.url_metadata(
@@ -2839,6 +2840,31 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hash_policy: ArchiveHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
+        let header_filename = match source {
+            BuildableSource::Dist(SourceDist::DirectUrl(dist)) => dist
+                .header_filename
+                .as_deref()
+                .map(|filename| (dist.url.raw(), filename)),
+            BuildableSource::Url(SourceUrl::Direct(resource)) => resource
+                .header_filename
+                .map(|filename| (resource.url, filename)),
+            BuildableSource::Dist(
+                SourceDist::Registry(_)
+                | SourceDist::Path(_)
+                | SourceDist::Directory(_)
+                | SourceDist::GitPath(_)
+                | SourceDist::GitDirectory(_),
+            )
+            | BuildableSource::Url(
+                SourceUrl::Path(_)
+                | SourceUrl::Directory(_)
+                | SourceUrl::GitPath(_)
+                | SourceUrl::GitDirectory(_),
+            ) => None,
+        };
+        if let Some((url, expected)) = header_filename {
+            validate_archive_filename(url, response.headers(), expected)?;
+        }
         let reader = response
             .bytes_stream()
             .map_err(std::io::Error::other)
@@ -3296,6 +3322,20 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
     }
 
     Ok(removal)
+}
+
+/// Scope source revisions to the URL and, when needed, the server-provided filename.
+pub(crate) fn url_cache_shard(
+    cache: &Cache,
+    url: &SafeUrl,
+    header_filename: Option<&str>,
+) -> CacheShard {
+    let mut root = WheelCache::Url(url).root();
+    if let Some(filename) = header_filename {
+        // Keep the URL shard at the same depth so package cleanup can locate built metadata.
+        root.set_extension(cache_digest(&filename));
+    }
+    cache.shard(CacheBucket::SourceDistributions, root)
 }
 
 /// The result of extracting statically available metadata from a source distribution.

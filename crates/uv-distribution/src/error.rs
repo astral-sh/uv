@@ -7,7 +7,7 @@ use tokio::task::JoinError;
 use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
-use uv_distribution_filename::{WheelFilename, WheelFilenameError};
+use uv_distribution_filename::{ExtensionError, WheelFilename, WheelFilenameError};
 use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
 use uv_fs::Simplified;
 use uv_git::GitError;
@@ -54,6 +54,10 @@ pub enum Error {
     Client(#[from] uv_client::Error),
     #[error(transparent)]
     ClientBuild(#[from] uv_client::ClientBuildError),
+    #[error(transparent)]
+    Distribution(#[from] uv_distribution_types::Error),
+    #[error("Invalid archive filename in `Content-Disposition` header for `{0}`")]
+    ArchiveFilename(SafeUrl, #[source] ExtensionError),
 
     // Cache writing error
     #[error("Failed to read from the distribution cache")]
@@ -299,6 +303,8 @@ impl Error {
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
             | Self::NonFileUrl(_)
+            | Self::Distribution(_)
+            | Self::ArchiveFilename(..)
             | Self::WheelFilename(_)
             | Self::WheelMetadataNameMismatch { .. }
             | Self::WheelMetadataVersionMismatch { .. }
