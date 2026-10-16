@@ -43,7 +43,6 @@ clap_complete_command = { workspace = true }
 jiff = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
-url = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }

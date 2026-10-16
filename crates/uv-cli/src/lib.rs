@@ -1290,7 +1290,7 @@ fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
 /// `file://` URL.
 fn parse_file_path(input: &str) -> Result<PathBuf, String> {
     if input.starts_with("file://") {
-        let url = match url::Url::from_str(input) {
+        let url = match SafeUrl::parse_relaxed(input) {
             Ok(url) => url,
             Err(err) => return Err(err.to_string()),
         };

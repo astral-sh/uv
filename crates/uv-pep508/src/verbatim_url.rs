@@ -1009,10 +1009,10 @@ mod tests {
         let url = SafeUrl::parse("https://github.com/").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("").unwrap_err();
+        let url = SafeUrl::parse_relaxed("").unwrap_err();
         assert_eq!(url.to_string(), "relative URL without a base");
 
-        let url = Url::parse("github.com/user/repo.git").unwrap_err();
+        let url = SafeUrl::parse_relaxed("github.com/user/repo.git").unwrap_err();
         assert_eq!(url.to_string(), "relative URL without a base");
 
         let url = SafeUrl::parse("https://github.com/user/repo/extra.git").unwrap();
